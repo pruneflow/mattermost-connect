@@ -1,0 +1,78 @@
+Structure côté backend:
+
+backend/
+│
+├── migrations/
+│   ├── 20230101000000_initial_schema.js     # Migration initiale pour la table users
+│   └── 20250327_mattermost_spaces.js        # Migration pour la table mattermost_spaces
+│
+├── seeds/
+│   # (Potentiellement des fichiers de seed de données, actuellement vide)
+│
+├── tests/				      # Voir fichier test-structure-backend.txt
+├── src/
+│   ├── services/
+│   │   ├── index.js                         # Point d'entrée des services
+│   │   │
+│   │   ├── users/
+│   │   │   ├── users.class.js               # Classe de service pour les utilisateurs
+│   │   │   ├── users.hooks.js               # Hooks pour le service utilisateurs
+│   │   │   └── users.service.js             # Configuration du service utilisateurs
+│   │   │
+│   │   ├── mattermost-spaces/
+│   │   │   ├── mattermost-spaces.class.js   # Classe de service pour les espaces Mattermost
+│   │   │   ├── mattermost-spaces.hooks.js   # Hooks pour le service des espaces
+│   │   │   ├── mattermost-spaces.service.js # Configuration du service des espaces
+│   │   │   └── mattermost-spaces.utils.js   # Utilitaires pour les espaces Mattermost
+│   │   │
+│   │   ├── mattermost-integration/
+│   │   │   └── mattermost-integration.js    # Service d'intégration Mattermost
+│   │   │
+│   │   ├── tokens/
+│   │   │   ├── tokens.class.js              # Classe de service pour les tokens
+│   │   │   ├── tokens.hooks.js              # Hooks pour le service des tokens
+│   │   │   └── tokens.service.js            # Configuration du service des tokens
+│   │   │
+│   │   ├── statistics/
+│   │   │   ├── statistics.class.js          # Classe de service pour les statistiques
+│   │   │   ├── statistics.hooks.js          # Hooks pour le service des statistiques
+│   │   │   └── statistics.service.js        # Configuration du service des statistiques
+│   │   │
+│   │   ├── team-members/
+│   │   │   ├── team-members.class.js        # Classe de service pour les membres d'équipe
+│   │   │   ├── team-members.hooks.js        # Hooks pour le service des membres
+│   │   │   └── team-members.service.js      # Configuration du service des membres
+│   │   ├── team-members-bulk/
+│   │   │   ├── team-members-bulk.class.js        # Classe de service pour les membres d'équipe
+│   │   │   ├── team-members-bulk.hooks.js        # Hooks pour le service des membres
+│   │   │   └── team-members-bulk.service.js      # Configuration du service des membres
+│   │   └── channels/
+│   │       ├── channels.class.js            # Classe de service pour les canaux
+│   │       ├── channels.hooks.js            # Hooks pour le service des canaux
+│   │       └── channels.service.js          # Configuration du service des canaux
+│   │
+│   ├── models/
+│   │   ├── users.js                         # Modèle Objection.js pour les utilisateurs
+│   │   ├── mattermost-spaces.js             # Modèle Objection.js pour les espaces
+│   │   └── knex.js                          # Configuration Knex pour les modèles
+│   │
+│   ├── authentication.js                    # Configuration de l'authentification
+│   ├── app.js                               # Configuration principale de l'application
+│   ├── app.hooks.js                         # Hooks globaux de l'application
+│   ├── channels.js                          # Configuration des canaux Feathers
+│   ├── index.js                             # Point d'entrée principal du serveur
+│   ├── knex.js                              # Configuration Knex pour la base de données
+│   └── logger.js                            # Configuration du logger Winston
+│
+├── config/
+│   ├── default.json                         # Configuration par défaut
+│   └── production.json                      # Configuration de production
+│
+├── .env                                     # Variables d'environnement
+├── .env.example                             # Exemple de variables d'environnement
+├── .gitignore                               # Fichier Git pour ignorer certains fichiers
+├── knexfile.js                              # Configuration Knex pour les migrations
+├── jest.config.js                           # Configuration de Jest
+├── .eslintrc.json                           # Configuration ESLint
+├── package.json                             # Définition des dépendances et scripts
+└── README.md                                # Documentation du projet

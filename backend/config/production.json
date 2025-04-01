@@ -1,0 +1,7 @@
+{
+  "host": "api.votredomaine.com",
+  "port": "PORT",
+  "cors": {
+    "origins": ["https://votredomaine.com"]
+  }
+}

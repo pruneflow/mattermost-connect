@@ -1,0 +1,41 @@
+Structure des tests côté backend:
+
+tests/
+│
+├── setup/
+│   ├── mock-app.js
+│   └── setupTests.js
+│
+├── mocks/
+│   └── feathers-config.mock.js
+│
+├── models/
+│   ├── mattermost-spaces.test.js
+│   └── users.test.js
+│
+├── services/
+│   ├── mattermost-integration/
+│   │   └── mattermost-integration.test.js
+│   │
+│   ├── mattermost-spaces/
+│   │   ├── mattermost-spaces.class.test.js
+│   │   ├── mattermost-spaces.hooks.test.js
+│   │   └── mattermost-spaces.utils.test.js
+│   │
+│   ├── tokens/
+│   │   └── tokens.service.test.js
+│   │
+│   ├── statistics/
+│   │   └── statistics.test.js
+│   │
+│   ├── team-members/
+│   │   └── team-members.test.js
+│   │
+│   ├── channels/
+│   │   └── channels.test.js
+│   │
+│   └── users/
+│       └── users.test.js
+│
+└── integration/
+    └── token-generation.test.js

@@ -1,0 +1,60 @@
+{
+  "name": "mattermost-admin-api",
+  "description": "Interface d'administration pour Mattermost",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "migrate": "knex migrate:latest",
+    "migrate:make": "knex migrate:make",
+    "migrate:rollback": "knex migrate:rollback",
+    "lint": "eslint src/. tests/. --config .eslintrc.json"
+  },
+  "dependencies": {
+    "@feathersjs/authentication": "^5.0.0",
+    "@feathersjs/authentication-local": "^5.0.0",
+    "@feathersjs/authentication-oauth": "^5.0.0",
+    "@feathersjs/configuration": "^5.0.0",
+    "@feathersjs/errors": "^5.0.0",
+    "@feathersjs/express": "^5.0.0",
+    "@feathersjs/feathers": "^5.0.0",
+    "feathers-mailer": "^4.1.0",
+    "nodemailer": "^6.9.9",
+    "nodemailer-smtp-transport": "^2.7.4",
+    "email-templates": "^11.1.1",
+    "pug": "^3.0.2",
+    "juice": "^9.1.0",
+    "@feathersjs/socketio": "^5.0.0",
+    "@feathersjs/transport-commons": "^5.0.0",
+    "axios": "^1.8.4",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "feathers-hooks-common": "^6.1.5",
+    "feathers-objection": "^7.6.0",
+    "helmet": "^7.0.0",
+    "knex": "^3.0.0",
+    "objection": "^3.1.1",
+    "pg": "^8.11.3",
+    "winston": "^3.10.0"
+  },
+  "devDependencies": {
+    "crypto": "1.0.1",
+    "eslint": "^9.23.0",
+    "jest": "^29.6.4",
+    "nodemon": "^3.0.1",
+    "prettier": "3.5.3"
+  }
+}
