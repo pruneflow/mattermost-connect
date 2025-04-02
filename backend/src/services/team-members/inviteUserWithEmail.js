@@ -26,6 +26,22 @@ module.exports = async function inviteUserWithEmail(
       throw new Error("Service d'intégration Mattermost non disponible");
     }
 
+    const spacesService = app.service("/api/mattermost-spaces");
+    let space = await spacesService.get(spaceId);
+    let apiToken = space.apiToken;
+
+    if (!apiToken) {
+      try {
+        // Utiliser la fonction d'aide pour s'assurer qu'un token existe
+        const updatedSpace = await ensureSpaceHasToken(app, space);
+        apiToken = updatedSpace.apiToken;
+      } catch (tokenError) {
+        throw new Error(
+          `Ce bot n'a pas de token API et la génération a échoué: ${tokenError.message}`,
+        );
+      }
+    }
+
     // Récupérer les informations de l'équipe pour avoir le nom d'affichage
     const teamInfo = await mattermostIntegration._getTeam(teamId);
 
@@ -56,8 +72,11 @@ module.exports = async function inviteUserWithEmail(
       // Vérifier si l'utilisateur est déjà membre de l'équipe
       try {
         const teamMemberResponse =
-          await mattermostIntegration._checkTeamMembership(teamId, userId);
-
+          await mattermostIntegration._checkTeamMembershipWithToken(
+            teamId,
+            userId,
+            apiToken,
+          );
         // Si on arrive ici, l'utilisateur est déjà membre
         logger.info(
           `L'utilisateur ${userId} est déjà membre de l'équipe ${teamId}`,
@@ -70,6 +89,7 @@ module.exports = async function inviteUserWithEmail(
           await mattermostIntegration.addUserToChannel(
             defaultChannelId,
             userId,
+            apiToken,
           );
           logger.info(
             `Utilisateur ${userId} ajouté au canal par défaut ${defaultChannelId}`,
@@ -92,7 +112,11 @@ module.exports = async function inviteUserWithEmail(
       }
 
       // Ajouter l'utilisateur à l'équipe
-      await mattermostIntegration._addUserToTeam(teamId, userId);
+      await mattermostIntegration._addUserToTeamWithToken(
+        teamId,
+        userId,
+        apiToken,
+      );
 
       logger.info(`Utilisateur ${userId} ajouté à l'équipe ${teamId}`);
 
@@ -105,6 +129,7 @@ module.exports = async function inviteUserWithEmail(
           await mattermostIntegration.addUserToChannel(
             defaultChannelId,
             userId,
+            apiToken,
           );
           logger.info(
             `Utilisateur ${userId} ajouté au canal par défaut ${defaultChannelId}`,
@@ -134,7 +159,10 @@ module.exports = async function inviteUserWithEmail(
         // Si l'invite_id n'existe pas ou est vide, en générer un nouveau
         if (!inviteId) {
           inviteId =
-            await mattermostIntegration._regenerateTeamInviteId(teamId);
+            await mattermostIntegration._regenerateTeamInviteIdWithToken(
+              teamId,
+              apiToken,
+            );
         }
       } catch (error) {
         logger.error(

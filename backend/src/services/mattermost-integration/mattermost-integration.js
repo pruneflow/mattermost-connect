@@ -38,76 +38,6 @@ class MattermostIntegration {
     }
   }
 
-  // Vérifier si un utilisateur est membre d'une équipe
-  async _checkTeamMembership(teamId, userId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-          },
-        },
-      );
-
-      return response.data;
-    } catch (error) {
-      // Propager l'erreur pour que l'appelant puisse vérifier le statut 404
-      throw error;
-    }
-  }
-
-  // Ajouter un utilisateur à une équipe
-  async _addUserToTeam(teamId, userId) {
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/api/v4/teams/${teamId}/members`,
-        {
-          team_id: teamId,
-          user_id: userId,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      return response.data;
-    } catch (error) {
-      logger.error(
-        `Erreur lors de l'ajout de l'utilisateur ${userId} à l'équipe ${teamId}:`,
-        error,
-      );
-      throw error;
-    }
-  }
-
-  // Régénérer l'ID d'invitation d'une équipe
-  async _regenerateTeamInviteId(teamId) {
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/api/v4/teams/${teamId}/regenerate_invite_id`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      return response.data.invite_id;
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la régénération de l'ID d'invitation pour l'équipe ${teamId}:`,
-        error,
-      );
-      throw error;
-    }
-  }
-
   // Initialiser un nouvel espace pour un client
   async createClientSpace(clientData) {
     try {
@@ -235,48 +165,6 @@ class MattermostIntegration {
     }
   }
 
-  // Récupérer les informations d'un espace
-  async getSpaceInfo(teamId) {
-    try {
-      const team = await this._getTeam(teamId);
-      return {
-        teamId: team.id,
-        teamName: team.name,
-        displayName: team.display_name,
-        description: team.description,
-        inviteUrl: `${this.baseUrl}/signup_user_complete/?id=${team.invite_id}`,
-      };
-    } catch (error) {
-      logger.error(
-        "Erreur lors de la récupération des informations de l'espace",
-        error,
-      );
-
-      throw error;
-    }
-  }
-
-  // Mettre à jour un espace client
-  async updateClientSpace(teamId, updateData) {
-    try {
-      const updatedTeam = await this._updateTeam(teamId, {
-        display_name: updateData.displayName,
-        description: updateData.description,
-      });
-
-      return {
-        teamId: updatedTeam.id,
-        teamName: updatedTeam.name,
-        displayName: updatedTeam.display_name,
-        description: updatedTeam.description,
-      };
-    } catch (error) {
-      logger.error("Erreur lors de la mise à jour de l'espace client", error);
-
-      throw error;
-    }
-  }
-
   // Supprimer un espace client
   async deleteClientSpace(teamId) {
     try {
@@ -284,8 +172,32 @@ class MattermostIntegration {
         `Suppression de l'équipe ${teamId} et de ses ressources associées`,
       );
 
+      // Chercher d'abord le token du bot associé à cet espace
+      let botToken = null;
+      try {
+        const spacesService = this.app.service("/api/mattermost-spaces");
+        const spaces = await spacesService.find({
+          query: {
+            config: { teamId },
+          },
+          paginate: false,
+        });
+
+        if (spaces && spaces.length > 0 && spaces[0].apiToken) {
+          botToken = spaces[0].apiToken;
+        }
+      } catch (error) {
+        console.debug("error", error);
+        logger.warn(
+          `Impossible de trouver un token pour l'équipe ${teamId}, utilisation du token admin`,
+        );
+      }
+
       // 1. Récupérer tous les canaux de l'équipe
-      const channels = await this.getTeamChannels(teamId);
+      const channels = botToken
+        ? await this.getTeamChannelsWithToken(teamId, botToken)
+        : await this.getTeamChannels(teamId);
+
       logger.info(`${channels.length} canaux trouvés pour l'équipe ${teamId}`);
 
       // 2. Archiver tous les canaux un par un
@@ -295,7 +207,9 @@ class MattermostIntegration {
           logger.info(
             `Tentative d'archivage du canal ${channel.id} (${channel.name})`,
           );
-          const result = await this.archiveChannel(channel.id);
+          const result = botToken
+            ? await this.archiveChannelWithToken(channel.id, botToken)
+            : await this.archiveChannel(channel.id);
           archiveResults.push(result);
 
           // Si l'archivage a échoué à cause d'un canal protégé, le logger mais continuer
@@ -322,7 +236,7 @@ class MattermostIntegration {
       }
 
       // 3. Supprimer l'équipe après avoir archivé tous les canaux
-      await this._deleteTeam(teamId);
+      await this._deleteTeam(teamId, botToken);
       logger.info(`Équipe ${teamId} supprimée avec succès`);
 
       return {
@@ -335,114 +249,44 @@ class MattermostIntegration {
     }
   }
 
-  // Méthodes privées pour interagir avec l'API Mattermost
-
-  // Créer une équipe Mattermost
-  async _createTeam(teamData) {
-    // Nettoyer les données d'équipe
-    const cleanTeamData = { ...teamData };
-    if (cleanTeamData.id) {
-      logger.warn("ID détecté dans les données d'équipe - suppression");
-      delete cleanTeamData.id;
-    }
-
-    logger.debug("Tentative de création d'équipe Mattermost:", {
-      baseUrl: this.baseUrl,
-      teamData: cleanTeamData,
-      headerAuthLength: this.adminToken ? this.adminToken.length : 0,
-    });
-
+  // Récupérer une équipe Mattermost
+  async _getTeam(teamId, token = null) {
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/api/v4/teams`,
-        cleanTeamData,
+      const authToken = token || this.adminToken;
+
+      const response = await axios.get(
+        `${this.baseUrl}/api/v4/teams/${teamId}`,
         {
           headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
           },
         },
       );
+
       return response.data;
     } catch (error) {
-      logger.error("Erreur lors de la création de l'équipe Mattermost:", {
-        message: error.message,
-        status: error.response ? error.response.status : "Sans réponse",
-        data: error.response ? error.response.data : "Pas de données",
-        url: `${this.baseUrl}/api/v4/teams`,
-      });
+      logger.error(
+        `Erreur lors de la récupération de l'équipe Mattermost: ${error.message}`,
+      );
 
-      // Si l'équipe existe déjà, générer un nouveau nom et réessayer
+      // Si l'accès est refusé avec le token fourni et qu'il n'est pas le token admin,
+      // essayer avec le token admin
       if (
         error.response &&
-        error.response.data &&
-        (error.response.data.id === "app.team.save.existing.app_error" ||
-          error.response.data.id ===
-            "store.sql_team.save.domain_exists.app_error")
+        error.response.status === 403 &&
+        token &&
+        token !== this.adminToken
       ) {
-        logger.info(
-          `L'équipe ${cleanTeamData.name} existe déjà, génération d'un nouveau nom...`,
-        );
-
-        // Générer un nouveau nom d'équipe avec le même nom de base
-        const newName = this._generateTeamName(cleanTeamData.display_name);
-        cleanTeamData.name = newName;
-
-        logger.info(`Nouvel essai avec le nom d'équipe: ${newName}`);
-
-        // Récursion - réessayer avec le nouveau nom
-        return this._createTeam(cleanTeamData);
+        logger.warn(`Tentative de récupération avec token admin...`);
+        return this._getTeam(teamId, this.adminToken);
       }
 
       throw error;
     }
   }
 
-  // Récupérer une équipe Mattermost
-  async _getTeam(teamId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v4/teams/${teamId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la récupération de l'équipe Mattermost: ${error.message}`,
-      );
-      throw error;
-    }
-  }
-
-  // Mettre à jour une équipe Mattermost
-  async _updateTeam(teamId, teamData) {
-    try {
-      const response = await axios.put(
-        `${this.baseUrl}/api/v4/teams/${teamId}`,
-        teamData,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la mise à jour de l'équipe Mattermost: ${error.message}`,
-      );
-
-      throw error;
-    }
-  }
-
   // Supprimer une équipe Mattermost
-  async _deleteTeam(teamId) {
+  async _deleteTeam(teamId, token = null) {
     try {
       // Vérifier si l'équipe existe avant d'essayer de la supprimer
       try {
@@ -457,16 +301,20 @@ class MattermostIntegration {
       }
 
       // L'équipe existe, procéder à la suppression
+      // Si un token est fourni, l'utiliser, sinon utiliser le token admin
+      const authToken = token || this.adminToken;
+
       const response = await axios.delete(
         `${this.baseUrl}/api/v4/teams/${teamId}`,
         {
           headers: {
-            Authorization: `Bearer ${this.adminToken}`,
+            Authorization: `Bearer ${authToken}`,
           },
         },
       );
 
-      return response.data;
+      logger.info(`Équipe ${teamId} supprimée avec succès`);
+      return response.data || { success: true };
     } catch (error) {
       logger.error(
         `Erreur lors de la suppression de l'équipe Mattermost: ${error.message}`,
@@ -475,17 +323,19 @@ class MattermostIntegration {
       // Si l'erreur est due à un problème d'autorisation, essayer une approche alternative
       if (error.response && error.response.status === 403) {
         logger.warn(
-          `Tentative de soft delete pour l'équipe ${teamId} (manque de permissions pour hard delete)`,
+          `Tentative de soft delete pour l'équipe ${teamId} (manque de permissions)`,
         );
 
         try {
           // Essayer une méthode de "soft delete" en désactivant l'équipe
+          const authToken = token || this.adminToken;
+
           await axios.patch(
             `${this.baseUrl}/api/v4/teams/${teamId}`,
             { allow_open_invite: false, allow_team_listing: false },
             {
               headers: {
-                Authorization: `Bearer ${this.adminToken}`,
+                Authorization: `Bearer ${authToken}`,
                 "Content-Type": "application/json",
               },
             },
@@ -498,6 +348,12 @@ class MattermostIntegration {
             `Échec du soft delete de l'équipe ${teamId}:`,
             softDeleteError,
           );
+
+          // Si le soft delete échoue aussi avec le token fourni, essayer avec le token admin
+          if (token && token !== this.adminToken) {
+            logger.warn(`Tentative de suppression avec token admin...`);
+            return this._deleteTeam(teamId, this.adminToken);
+          }
         }
       }
 
@@ -505,79 +361,7 @@ class MattermostIntegration {
     }
   }
 
-  // Créer un canal Mattermost
-  async _createChannel(channelData) {
-    // Nettoyer les données du canal
-    const cleanChannelData = { ...channelData };
-    if (cleanChannelData.id) {
-      logger.warn("ID détecté dans les données de channel - suppression");
-      delete cleanChannelData.id;
-    }
-
-    // Ajouter un suffixe unique au nom du canal pour garantir l'unicité
-    const originalName = cleanChannelData.name;
-    if (!cleanChannelData.name.includes("-unique-")) {
-      const uniqueSuffix = `-unique-${Date.now().toString().slice(-6)}`;
-      cleanChannelData.name = `${originalName}${uniqueSuffix}`.substring(0, 22); // Limiter à 22 caractères (limite Mattermost)
-    }
-
-    logger.debug("Tentative de création de channel Mattermost:", {
-      baseUrl: this.baseUrl,
-      channelData: cleanChannelData,
-      headerAuthLength: this.adminToken ? this.adminToken.length : 0,
-    });
-
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/api/v4/channels`,
-        cleanChannelData,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      logger.error("Erreur lors de la création de la channel Mattermost:", {
-        message: error.message,
-        status: error.response ? error.response.status : "Sans réponse",
-        data: error.response ? error.response.data : "Pas de données",
-        url: `${this.baseUrl}/api/v4/channels`,
-      });
-
-      // Si le canal existe déjà, générer un nouveau nom et réessayer
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.id ===
-          "store.sql_channel.save_channel.exists.app_error"
-      ) {
-        logger.info(
-          `Le canal ${cleanChannelData.name} existe déjà, génération d'un nouveau nom...`,
-        );
-
-        // Générer un nouveau nom avec un suffixe différent
-        const newUniqueSuffix = `-unique-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-        cleanChannelData.name = `${originalName}${newUniqueSuffix}`.substring(
-          0,
-          22,
-        );
-
-        logger.info(
-          `Nouvel essai avec le nom de canal: ${cleanChannelData.name}`,
-        );
-
-        // Réessayer avec le nouveau nom
-        return this._createChannel(cleanChannelData);
-      }
-
-      throw error;
-    }
-  }
-
-  async addUserToChannel(channelId, userId) {
+  async addUserToChannel(channelId, userId, apiToken) {
     try {
       const response = await axios.post(
         `${this.baseUrl}/api/v4/channels/${channelId}/members`,
@@ -586,7 +370,7 @@ class MattermostIntegration {
         },
         {
           headers: {
-            Authorization: `Bearer ${this.adminToken}`,
+            Authorization: `Bearer ${apiToken}`,
             "Content-Type": "application/json",
           },
         },
@@ -607,9 +391,9 @@ class MattermostIntegration {
   async _generateToken(teamId) {
     try {
       logger.info(`Génération d'un token API pour l'équipe ${teamId}`);
-
+      const team = await this._getTeam(teamId);
       // 1. Vérifier si un bot existe déjà pour cette équipe
-      const botUsername = `bot-${teamId}`;
+      const botUsername = `bot-${team.name}`;
       const botEmail = `${botUsername}@mattermost-admin.local`;
 
       let botUserId;
@@ -710,95 +494,24 @@ class MattermostIntegration {
       throw error;
     }
   }
-
-  // Méthode utilitaire pour générer un mot de passe sécurisé
-  _generateSecurePassword() {
-    const length = 24;
-    const charset =
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=";
-    let password = "";
-    for (let i = 0; i < length; i++) {
-      const randomIndex = Math.floor(Math.random() * charset.length);
-      password += charset[randomIndex];
-    }
-    return password;
-  }
-
-  // Méthode pour créer un canal dans une équipe
-  async createChannel(channelData) {
-    // Nettoyer les données du canal
-    const cleanChannelData = { ...channelData };
-    if (cleanChannelData.id) {
-      logger.warn("ID détecté dans les données de channel - suppression");
-      delete cleanChannelData.id;
-    }
-
-    // Ajouter un suffixe unique au nom du canal si nécessaire
-    const originalName = cleanChannelData.name;
-    if (!cleanChannelData.name.includes("-unique-")) {
-      const uniqueSuffix = `-unique-${Date.now().toString().slice(-6)}`;
-      cleanChannelData.name = `${originalName}${uniqueSuffix}`.substring(0, 22); // Limiter à 22 caractères (limite Mattermost)
-    }
-
-    logger.debug("Tentative de création de channel Mattermost:", {
-      baseUrl: this.baseUrl,
-      channelData: cleanChannelData,
-      headerAuthLength: this.adminToken ? this.adminToken.length : 0,
-    });
-
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/api/v4/channels`,
-        cleanChannelData,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      logger.error("Erreur lors de la création du canal Mattermost:", {
-        message: error.message,
-        status: error.response ? error.response.status : "Sans réponse",
-        data: error.response ? error.response.data : "Pas de données",
-        url: `${this.baseUrl}/api/v4/channels`,
-      });
-
-      // Si le canal existe déjà, générer un nouveau nom et réessayer
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.id ===
-          "store.sql_channel.save_channel.exists.app_error"
-      ) {
-        logger.info(
-          `Le canal ${cleanChannelData.name} existe déjà, génération d'un nouveau nom...`,
-        );
-
-        // Générer un nouveau nom avec un suffixe différent
-        const newUniqueSuffix = `-unique-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-        cleanChannelData.name = `${originalName}${newUniqueSuffix}`.substring(
-          0,
-          22,
-        );
-
-        logger.info(
-          `Nouvel essai avec le nom de canal: ${cleanChannelData.name}`,
-        );
-
-        // Réessayer avec le nouveau nom
-        return this._createChannel(cleanChannelData);
-      }
-
-      throw error;
-    }
-  }
-
   // Méthode pour obtenir les canaux d'une équipe
   async getTeamChannels(teamId) {
     try {
+      // Vérifier d'abord si nous avons un espace associé à cette équipe
+      const spacesService = this.app.service("/api/mattermost-spaces");
+      const spaces = await spacesService.find({
+        query: {
+          config: { teamId },
+        },
+        paginate: false,
+      });
+
+      // Si nous avons un espace avec un token, utiliser ce token
+      if (spaces && spaces.length > 0 && spaces[0].apiToken) {
+        return this.getTeamChannelsWithToken(teamId, spaces[0].apiToken);
+      }
+
+      // Sinon, utiliser le token admin
       const response = await axios.get(
         `${this.baseUrl}/api/v4/teams/${teamId}/channels`,
         {
@@ -808,6 +521,7 @@ class MattermostIntegration {
         },
       );
 
+      logger.debug(`Canaux récupérés pour l'équipe ${teamId} avec token admin`);
       return response.data;
     } catch (error) {
       logger.error(
@@ -914,14 +628,57 @@ class MattermostIntegration {
   }
 
   // Méthode pour restaurer un canal archivé
-  async restoreChannel(channelId) {
+  async restoreChannel(channelId, token = null) {
     try {
-      await axios.post(
+      // Si un token est fourni, l'utiliser, sinon chercher le token approprié
+      let authToken = token;
+
+      if (!authToken) {
+        // Essayer de trouver l'espace associé au canal
+        try {
+          // D'abord, obtenir les informations du canal pour connaître l'équipe
+          const channelInfo = await axios.get(
+            `${this.baseUrl}/api/v4/channels/${channelId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${this.adminToken}`,
+              },
+            },
+          );
+
+          const teamId = channelInfo.data.team_id;
+
+          // Ensuite, trouver l'espace associé à cette équipe
+          const spacesService = this.app.service("/api/mattermost-spaces");
+          const spaces = await spacesService.find({
+            query: {
+              config: { teamId },
+            },
+            paginate: false,
+          });
+
+          // Si nous avons un espace avec un token, utiliser ce token
+          if (spaces && spaces.length > 0 && spaces[0].apiToken) {
+            authToken = spaces[0].apiToken;
+          }
+        } catch (error) {
+          logger.warn(
+            `Impossible de trouver un token pour le canal ${channelId}, utilisation du token admin`,
+          );
+        }
+
+        // Si aucun token n'a été trouvé, utiliser le token admin
+        if (!authToken) {
+          authToken = this.adminToken;
+        }
+      }
+
+      const response = await axios.post(
         `${this.baseUrl}/api/v4/channels/${channelId}/restore`,
         {},
         {
           headers: {
-            Authorization: `Bearer ${this.adminToken}`,
+            Authorization: `Bearer ${authToken}`,
             "Content-Type": "application/json",
           },
         },
@@ -939,237 +696,19 @@ class MattermostIntegration {
         status: error.response ? error.response.status : "Sans réponse",
       });
 
-      throw error;
-    }
-  }
-
-  // Méthode pour mettre à jour un canal
-  async updateChannel(channelId, channelData) {
-    try {
-      const response = await axios.put(
-        `${this.baseUrl}/api/v4/channels/${channelId}/patch`,
-        channelData,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      logger.info(`Canal ${channelId} mis à jour avec succès`);
-
-      return response.data;
-    } catch (error) {
-      logger.error(`Erreur lors de la mise à jour du canal ${channelId}:`, {
-        message: error.message,
-        status: error.response ? error.response.status : "Sans réponse",
-      });
-
-      throw error;
-    }
-  }
-
-  // Méthode pour obtenir les membres d'une équipe
-  async getTeamMembers(teamId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v4/teams/${teamId}/members`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-          },
-          params: {
-            per_page: 200, // Augmenter si nécessaire pour les grandes équipes
-          },
-        },
-      );
-
-      // Récupérer les détails des utilisateurs
-      const userIds = response.data.map((member) => member.user_id);
-      const userDetails = await Promise.all(
-        userIds.map((userId) => this._getUserInfo(userId)),
-      );
-
-      // Combiner les informations de manière correcte en préservant les rôles
-      return response.data.map((member, index) => {
-        const user = userDetails[index];
-
-        // Gérer correctement la fusion des rôles
-        const userRoles = user.roles || "";
-        const memberRoles = member.roles || "";
-
-        // Créer un ensemble de rôles uniques (set)
-        const combinedRolesSet = new Set([
-          ...userRoles.split(" ").filter((r) => r),
-          ...memberRoles.split(" ").filter((r) => r),
-        ]);
-
-        // Convertir le set en chaîne de caractères pour les rôles combinés
-        const combinedRoles = Array.from(combinedRolesSet).join(" ");
-
-        return {
-          ...user,
-          ...member,
-          // Remplacer le champ roles par notre version combinée
-          roles: combinedRoles,
-        };
-      });
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la récupération des membres de l'équipe ${teamId}:`,
-        {
-          message: error.message,
-          status: error.response ? error.response.status : "Sans réponse",
-        },
-      );
-
-      throw error;
-    }
-  }
-
-  // Méthode pour mettre à jour le rôle d'un utilisateur dans une équipe
-  async updateUserRole(teamId, userId, isAdmin) {
-    try {
-      // Récupérer les détails actuels du membre
-      const memberResponse = await axios.get(
-        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-          },
-        },
-      );
-
-      const currentRoles = memberResponse.data.roles;
-
-      // Déterminer les nouveaux rôles
-      let newRoles;
-      if (isAdmin) {
-        // Ajouter le rôle d'administrateur d'équipe
-        newRoles = currentRoles.includes("team_admin")
-          ? currentRoles
-          : `${currentRoles} team_admin`.trim();
-      } else {
-        // Supprimer le rôle d'administrateur d'équipe
-        newRoles = currentRoles.replace("team_admin", "").trim();
-      }
-
-      // Mettre à jour les rôles du membre
-      await axios.put(
-        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}/schemeRoles`,
-        {
-          scheme_admin: isAdmin,
-          scheme_user: true, // Toujours un utilisateur normal
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      logger.info(
-        `Rôle mis à jour pour l'utilisateur ${userId} dans l'équipe ${teamId}, isAdmin: ${isAdmin}`,
-      );
-
-      return {
-        teamId,
-        userId,
-        isAdmin,
-        roles: newRoles,
-      };
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la mise à jour du rôle de l'utilisateur ${userId} dans l'équipe ${teamId}:`,
-        {
-          message: error.message,
-          status: error.response ? error.response.status : "Sans réponse",
-          data: error.response ? error.response.data : "Pas de données",
-        },
-      );
-
-      throw error;
-    }
-  }
-
-  // Méthode pour supprimer un utilisateur d'une équipe
-  async removeUserFromTeam(teamId, userId) {
-    try {
-      // Vérifier si l'utilisateur est le bot administrateur
-      const teamMembers = await this.getTeamMembers(teamId);
-      const targetMember = teamMembers.find(
-        (member) => member.user_id === userId,
-      );
-
-      // Vérifier si c'est un bot et s'il est administrateur de l'équipe
+      // Si l'accès est refusé avec le token fourni et ce n'est pas le token admin,
+      // essayer avec le token admin
       if (
-        targetMember &&
-        targetMember.props &&
-        targetMember.props.is_bot === "true" &&
-        targetMember.roles &&
-        targetMember.roles.includes("team_admin")
+        error.response &&
+        error.response.status === 403 &&
+        token &&
+        token !== this.adminToken
       ) {
-        throw new Error(
-          "Impossible de supprimer le bot administrateur de l'équipe",
-        );
+        logger.warn(`Tentative de restauration avec token admin...`);
+        return this.restoreChannel(channelId, this.adminToken);
       }
 
-      // Si ce n'est pas le bot, procéder à la suppression
-      await axios.delete(
-        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-          },
-        },
-      );
-
-      logger.info(`Utilisateur ${userId} supprimé de l'équipe ${teamId}`);
-
-      return {
-        success: true,
-      };
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la suppression de l'utilisateur ${userId} de l'équipe ${teamId}:`,
-        {
-          message: error.message,
-          status: error.response ? error.response.status : "Sans réponse",
-          data: error.response ? error.response.data : "Pas de données",
-        },
-      );
-
       throw error;
-    }
-  }
-
-  // Méthode pour obtenir les informations d'un utilisateur
-  async _getUserInfo(userId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v4/users/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminToken}`,
-          },
-        },
-      );
-
-      return response.data;
-    } catch (error) {
-      logger.error(
-        `Erreur lors de la récupération des informations de l'utilisateur ${userId}:`,
-        error,
-      );
-      return {
-        id: userId,
-        username: "Inconnu",
-        email: "Inconnu",
-        first_name: "Inconnu",
-        last_name: "Inconnu",
-      };
     }
   }
 
@@ -1316,7 +855,7 @@ class MattermostIntegration {
   async updateChannelWithToken(channelId, channelData, token) {
     try {
       const response = await axios.put(
-        `${this.baseUrl}/api/v4/channels/${channelId}`,
+        `${this.baseUrl}/api/v4/channels/${channelId}/patch`,
         channelData,
         {
           headers: {
@@ -1461,6 +1000,236 @@ class MattermostIntegration {
         first_name: "Inconnu",
         last_name: "Inconnu",
       };
+    }
+  }
+
+  // Méthode pour obtenir les membres d'une équipe avec token du bot
+  async getTeamMembersWithToken(teamId, token) {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/v4/teams/${teamId}/members`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          params: {
+            per_page: 200,
+          },
+        },
+      );
+
+      // Récupérer les détails des utilisateurs avec le token du bot
+      const userIds = response.data.map((member) => member.user_id);
+      const userDetails = await Promise.all(
+        userIds.map((userId) => this._getUserInfoWithToken(userId, token)),
+      );
+
+      // Combiner les informations
+      return response.data.map((member, index) => {
+        const user = userDetails[index];
+        const userRoles = user.roles || "";
+        const memberRoles = member.roles || "";
+        const combinedRolesSet = new Set([
+          ...userRoles.split(" ").filter((r) => r),
+          ...memberRoles.split(" ").filter((r) => r),
+        ]);
+        const combinedRoles = Array.from(combinedRolesSet).join(" ");
+
+        return {
+          ...user,
+          ...member,
+          roles: combinedRoles,
+        };
+      });
+    } catch (error) {
+      logger.error(
+        `Erreur lors de la récupération des membres de l'équipe ${teamId} avec token bot:`,
+        {
+          message: error.message,
+          status: error.response ? error.response.status : "Sans réponse",
+        },
+      );
+      throw error;
+    }
+  }
+
+  // Méthode pour mettre à jour le rôle d'un utilisateur avec token du bot
+  async updateUserRoleWithToken(teamId, userId, isAdmin, token) {
+    try {
+      // Récupérer les détails actuels du membre
+      const memberResponse = await axios.get(
+        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const currentRoles = memberResponse.data.roles;
+
+      // Mettre à jour les rôles du membre
+      await axios.put(
+        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}/schemeRoles`,
+        {
+          scheme_admin: isAdmin,
+          scheme_user: true,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      // Déterminer les nouveaux rôles
+      let newRoles;
+      if (isAdmin) {
+        newRoles = currentRoles.includes("team_admin")
+          ? currentRoles
+          : `${currentRoles} team_admin`.trim();
+      } else {
+        newRoles = currentRoles.replace("team_admin", "").trim();
+      }
+
+      logger.info(
+        `Rôle mis à jour pour l'utilisateur ${userId} dans l'équipe ${teamId}, isAdmin: ${isAdmin} (avec token bot)`,
+      );
+
+      return {
+        teamId,
+        userId,
+        isAdmin,
+        roles: newRoles,
+      };
+    } catch (error) {
+      logger.error(`Erreur lors de la mise à jour du rôle avec token bot:`, {
+        message: error.message,
+        status: error.response ? error.response.status : "Sans réponse",
+      });
+      throw error;
+    }
+  }
+
+  // Méthode pour supprimer un utilisateur d'une équipe avec token du bot
+  async removeUserFromTeamWithToken(teamId, userId, token) {
+    try {
+      // Vérifier si l'utilisateur est le bot administrateur
+      const teamMembers = await this.getTeamMembersWithToken(teamId, token);
+      const targetMember = teamMembers.find(
+        (member) => member.user_id === userId,
+      );
+
+      // Vérifier si c'est un bot et s'il est administrateur de l'équipe
+      if (
+        targetMember &&
+        targetMember.props &&
+        targetMember.props.is_bot === "true" &&
+        targetMember.roles &&
+        targetMember.roles.includes("team_admin")
+      ) {
+        throw new Error(
+          "Impossible de supprimer le bot administrateur de l'équipe",
+        );
+      }
+
+      // Si ce n'est pas le bot, procéder à la suppression
+      await axios.delete(
+        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      logger.info(
+        `Utilisateur ${userId} supprimé de l'équipe ${teamId} avec token bot`,
+      );
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      logger.error(
+        `Erreur lors de la suppression de l'utilisateur avec token bot:`,
+        {
+          message: error.message,
+          status: error.response ? error.response.status : "Sans réponse",
+        },
+      );
+      throw error;
+    }
+  }
+
+  // Méthode pour vérifier si un utilisateur est membre d'une équipe avec token bot
+  async _checkTeamMembershipWithToken(teamId, userId, token) {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/v4/teams/${teamId}/members/${userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      // Propager l'erreur pour que l'appelant puisse vérifier le statut 404
+      throw error;
+    }
+  }
+
+  // Méthode pour ajouter un utilisateur à une équipe avec token bot
+  async _addUserToTeamWithToken(teamId, userId, token) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/v4/teams/${teamId}/members`,
+        {
+          team_id: teamId,
+          user_id: userId,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error(
+        `Erreur lors de l'ajout de l'utilisateur à l'équipe avec token bot:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  // Méthode pour régénérer l'ID d'invitation d'une équipe avec token bot
+  async _regenerateTeamInviteIdWithToken(teamId, token) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/v4/teams/${teamId}/regenerate_invite_id`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      return response.data.invite_id;
+    } catch (error) {
+      logger.error(
+        `Erreur lors de la régénération de l'ID d'invitation avec token bot:`,
+        error,
+      );
+      throw error;
     }
   }
 }

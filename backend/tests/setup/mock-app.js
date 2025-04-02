@@ -34,12 +34,6 @@ const createMockMattermostIntegration = () => ({
     description: "Updated description",
   }),
   deleteClientSpace: jest.fn().mockResolvedValue({ success: true }),
-  _createTeam: jest.fn().mockResolvedValue({
-    id: "team123",
-    name: "test-team",
-    display_name: "Test Team",
-    invite_id: "invite123",
-  }),
   _createChannel: jest.fn().mockResolvedValue({
     id: "channel123",
     name: "test-channel",

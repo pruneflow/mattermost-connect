@@ -44,9 +44,9 @@ describe("Channels Service", () => {
       },
     ]);
 
-    app.mattermostIntegration._getUserInfo = jest
+    app.mattermostIntegration._getUserInfoWithToken = jest
       .fn()
-      .mockImplementation(async (userId) => {
+      .mockImplementation(async (userId, token) => {
         if (userId === "user1") {
           return {
             id: "user1",

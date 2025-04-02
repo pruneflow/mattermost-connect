@@ -2,6 +2,7 @@
 const errors = require("@feathersjs/errors");
 const logger = require("../../logger");
 const inviteUserWithEmail = require("./inviteUserWithEmail");
+const ensureSpaceHasToken = require("../channels/ensure-token");
 
 exports.TeamMembers = class TeamMembers {
   constructor(options) {
@@ -40,6 +41,19 @@ exports.TeamMembers = class TeamMembers {
         );
       }
 
+      let apiToken = space.apiToken;
+      if (!apiToken) {
+        try {
+          // Utiliser la fonction d'aide pour s'assurer qu'un token existe
+          const updatedSpace = await ensureSpaceHasToken(this.app, space);
+          apiToken = updatedSpace.apiToken;
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API et la génération a échoué: ${tokenError.message}`,
+          );
+        }
+      }
+
       // Récupérer le service d'intégration Mattermost
       const mattermostIntegration = this.app.get("mattermostIntegration");
       if (!mattermostIntegration) {
@@ -49,7 +63,10 @@ exports.TeamMembers = class TeamMembers {
       }
 
       // Récupérer les membres de l'équipe
-      const members = await mattermostIntegration.getTeamMembers(teamId);
+      const members = await mattermostIntegration.getTeamMembersWithToken(
+        teamId,
+        apiToken,
+      );
 
       // Récupérer les informations du propriétaire
       // Pour faire la correspondance, nous devons obtenir l'email du propriétaire
@@ -215,6 +232,20 @@ exports.TeamMembers = class TeamMembers {
         );
       }
 
+      // Vérifier si le bot a un token API et en générer un si nécessaire
+      let apiToken = space.apiToken;
+      if (!apiToken) {
+        try {
+          // Utiliser la fonction d'aide pour s'assurer qu'un token existe
+          const updatedSpace = await ensureSpaceHasToken(this.app, space);
+          apiToken = updatedSpace.apiToken;
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API et la génération a échoué: ${tokenError.message}`,
+          );
+        }
+      }
+
       const mattermostIntegration = this.app.get("mattermostIntegration");
       if (!mattermostIntegration) {
         throw new errors.GeneralError(
@@ -231,7 +262,10 @@ exports.TeamMembers = class TeamMembers {
       }
 
       // Récupérer les informations de l'utilisateur pour vérifier s'il s'agit d'un bot ou d'un administrateur système
-      const members = await mattermostIntegration.getTeamMembers(teamId);
+      const members = await mattermostIntegration.getTeamMembersWithToken(
+        teamId,
+        apiToken,
+      );
       const member = members.find((m) => m.user_id === id);
 
       if (!member) {
@@ -256,10 +290,11 @@ exports.TeamMembers = class TeamMembers {
       }
 
       // Mise à jour du rôle
-      const result = await mattermostIntegration.updateUserRole(
+      const result = await mattermostIntegration.updateUserRoleWithToken(
         teamId,
         id,
         isAdmin,
+        apiToken,
       );
 
       return {
@@ -317,6 +352,20 @@ exports.TeamMembers = class TeamMembers {
         );
       }
 
+      // Vérifier si le bot a un token API et en générer un si nécessaire
+      let apiToken = space.apiToken;
+      if (!apiToken) {
+        try {
+          // Utiliser la fonction d'aide pour s'assurer qu'un token existe
+          const updatedSpace = await ensureSpaceHasToken(this.app, space);
+          apiToken = updatedSpace.apiToken;
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API et la génération a échoué: ${tokenError.message}`,
+          );
+        }
+      }
+
       // VÉRIFICATION CRITIQUE : Est-ce que l'utilisateur à supprimer est le bot?
       // Vérifier d'abord si l'ID du bot existe dans la configuration
       if (space.config && space.config.botId && id === space.config.botId) {
@@ -335,7 +384,10 @@ exports.TeamMembers = class TeamMembers {
       // Vérification basée sur le nom d'utilisateur, au cas où l'ID ne serait pas disponible
       if (space.config && space.config.botUsername) {
         try {
-          const userInfo = await mattermostIntegration._getUserInfo(id);
+          const userInfo = await mattermostIntegration._getUserInfoWithToken(
+            id,
+            apiToken,
+          );
           if (userInfo && userInfo.username === space.config.botUsername) {
             throw new errors.BadRequest(
               "Le bot administrateur ne peut pas être supprimé, il est nécessaire au fonctionnement de l'espace.",
@@ -352,7 +404,10 @@ exports.TeamMembers = class TeamMembers {
       }
 
       // Vérifier si l'utilisateur est un administrateur système
-      const members = await mattermostIntegration.getTeamMembers(teamId);
+      const members = await mattermostIntegration.getTeamMembersWithToken(
+        teamId,
+        apiToken,
+      );
       const member = members.find((m) => m.user_id === id);
 
       if (member && member.roles && member.roles.includes("system_admin")) {
@@ -362,7 +417,11 @@ exports.TeamMembers = class TeamMembers {
       }
 
       // Si on arrive ici, l'utilisateur à supprimer n'est pas le bot ni un admin système
-      await mattermostIntegration.removeUserFromTeam(teamId, id);
+      await mattermostIntegration.removeUserFromTeamWithToken(
+        teamId,
+        id,
+        apiToken,
+      );
 
       return {
         success: true,
