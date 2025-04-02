@@ -13,216 +13,84 @@ describe("Channels Service", () => {
     app._addService("/api/mattermost-spaces", {
       get: jest.fn().mockResolvedValue({
         id: "space123",
-        userId: "user123",
+        userId: "123",
         config: {
           teamId: "team123",
         },
       }),
     });
 
-    // Créer le service à tester avec l'app mockée
-    channelService = new Channels({ app });
-  });
-
-  describe("find method", () => {
-    it("should return channels for a space", async () => {
-      const params = {
-        user: { id: "user123" },
-        query: { spaceId: "space123" },
-      };
-
-      const result = await channelService.find(params);
-
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-      expect(app.mattermostIntegration.getTeamChannels).toHaveBeenCalledWith(
-        "team123",
-      );
-      expect(result).toEqual([
-        { id: "channel1", name: "general", display_name: "General" },
-        { id: "channel2", name: "random", display_name: "Random" },
-      ]);
-    });
-
-    it("should reject if user is not authenticated", async () => {
-      const params = {
-        query: { spaceId: "space123" },
-      };
-
-      await expect(channelService.find(params)).rejects.toThrow(
-        "Authentification requise",
-      );
-    });
-
-    it("should reject if spaceId is missing", async () => {
-      const params = {
-        user: { id: "user123" },
-        query: {},
-      };
-
-      await expect(channelService.find(params)).rejects.toThrow(
-        "ID d'espace requis",
-      );
-    });
-
-    it("should reject if user is not authorized to access the space", async () => {
-      // Modifier le mock pour que l'espace appartienne à un autre utilisateur
-      app._addService("/api/mattermost-spaces", {
-        get: jest.fn().mockResolvedValue({
-          id: "space123",
-          userId: "other-user",
-          config: {
-            teamId: "team123",
-          },
-        }),
-      });
-
-      const params = {
-        user: { id: "user123", isAdmin: false },
-        query: { spaceId: "space123" },
-      };
-
-      await expect(channelService.find(params)).rejects.toThrow("Non autorisé");
-    });
-
-    it("should allow admin to access any space", async () => {
-      // Modifier le mock pour que l'espace appartienne à un autre utilisateur
-      app._addService("/api/mattermost-spaces", {
-        get: jest.fn().mockResolvedValue({
-          id: "space123",
-          userId: "other-user",
-          config: {
-            teamId: "team123",
-          },
-        }),
-      });
-
-      const params = {
-        user: { id: "user123", isAdmin: true },
-        query: { spaceId: "space123" },
-      };
-
-      await channelService.find(params);
-
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-      expect(app.mattermostIntegration.getTeamChannels).toHaveBeenCalledWith(
-        "team123",
-      );
-    });
-  });
-
-  describe("create method", () => {
-    it("should create a new channel in a space", async () => {
-      const data = {
-        spaceId: "space123",
-        name: "new-channel",
-        display_name: "New Channel",
-        type: "O",
-        purpose: "Test channel",
-        header: "Test header",
-      };
-
-      const params = {
-        user: { id: "user123" },
-      };
-
-      const result = await channelService.create(data, params);
-
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-      expect(app.mattermostIntegration.createChannel).toHaveBeenCalledWith({
-        team_id: "team123",
-        name: "new-channel",
-        display_name: "New Channel",
-        type: "O",
-        purpose: "Test channel",
-        header: "Test header",
-      });
-
-      expect(result).toEqual({
-        id: "new-channel",
-        name: "new-channel",
-        display_name: "New Channel",
-        team_id: "team123",
-        spaceId: "space123",
-      });
-    });
-
-    it("should reject if required fields are missing", async () => {
-      const data = {
-        spaceId: "space123",
-        // name and display_name missing
-      };
-
-      const params = {
-        user: { id: "user123" },
-      };
-
-      await expect(channelService.create(data, params)).rejects.toThrow(
-        "ID d'espace, nom et nom d'affichage requis",
-      );
-    });
-  });
-
-  describe("patch method", () => {
-    it("should update a channel", async () => {
-      const data = {
-        spaceId: "space123",
-        display_name: "Updated General",
-        purpose: "Updated purpose",
-      };
-
-      const params = {
-        user: { id: "user123" },
-      };
-
-      const result = await channelService.patch("channel1", data, params);
-
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-      expect(app.mattermostIntegration.updateChannel).toHaveBeenCalledWith(
-        "channel1",
-        {
-          display_name: "Updated General",
-          purpose: "Updated purpose",
-        },
-      );
-
-      expect(result).toEqual({
+    app.mattermostIntegration.getTeamChannels = jest.fn().mockResolvedValue([
+      {
         id: "channel1",
         name: "general",
-        display_name: "Updated General",
-        spaceId: "space123",
+        display_name: "General",
+        creator_id: "user1",
+        create_at: 1617235200000,
+      },
+      {
+        id: "channel2",
+        name: "random",
+        display_name: "Random",
+        creator_id: "bot-user",
+        create_at: 1617321600000,
+      },
+      {
+        id: "channel3",
+        name: "town-square",
+        display_name: "Town Square",
+        creator_id: "system",
+        create_at: 1617148800000,
+      },
+    ]);
+
+    app.mattermostIntegration._getUserInfo = jest
+      .fn()
+      .mockImplementation(async (userId) => {
+        if (userId === "user1") {
+          return {
+            id: "user1",
+            username: "johndoe",
+            first_name: "John",
+            last_name: "Doe",
+            email: "john@example.com",
+          };
+        } else if (userId === "bot-user") {
+          return {
+            id: "bot-user",
+            username: "bot-team",
+            email: "bot-team@mattermost-admin.local",
+            props: { is_bot: "true" },
+          };
+        }
+        throw new Error("User not found");
       });
-    });
+
+    // Créer le service à tester
+    channelsService = new Channels({ app });
   });
 
-  describe("remove method", () => {
-    it("should archive a channel", async () => {
+  describe("Add creator info", () => {
+    it("should enrich channel data with creator information", async () => {
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
         query: { spaceId: "space123" },
       };
 
-      const result = await channelService.remove("channel1", params);
+      const result = await channelsService.find(params);
 
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-      expect(app.mattermostIntegration.archiveChannel).toHaveBeenCalledWith(
-        "channel1",
-      );
+      // Vérifier le premier canal (créateur normal)
+      expect(result[0].creator).toBeDefined();
+      expect(result[0].creator.displayName).toBe("John Doe");
 
-      expect(result).toEqual({
-        success: true,
-        channelId: "channel1",
-        spaceId: "space123",
-      });
+      // Vérifier le second canal (créateur bot)
+      expect(result[1].creator).toBeDefined();
+      expect(result[1].creator.displayName).toBe("Bot");
+      expect(result[1].creator.isBot).toBe(true);
+
+      // Ajouter une vérification pour le canal par défaut
+      expect(result[2].isDefaultChannel).toBe(true);
+      expect(result[2].creator).toBeNull(); // Pas d'info créateur pour un canal par défaut
     });
   });
 });

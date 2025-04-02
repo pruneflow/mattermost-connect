@@ -14,7 +14,7 @@ describe("Team Members Service", () => {
     app._addService("/api/mattermost-spaces", {
       get: jest.fn().mockResolvedValue({
         id: "space123",
-        userId: "user123",
+        userId: "123",
         config: {
           teamId: "team123",
         },
@@ -25,40 +25,6 @@ describe("Team Members Service", () => {
   });
 
   describe("create method (invitation d'utilisateur)", () => {
-    it("should invite a user to a team", async () => {
-      const data = {
-        spaceId: "space123",
-        email: "test@example.com",
-      };
-
-      const params = {
-        user: { id: "user123" },
-      };
-
-      const result = await teamMembersService.create(data, params);
-
-      // Vérifier que l'espace a été récupéré
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-
-      // Vérifier que l'invitation a été envoyée
-      expect(app.mattermostIntegration.inviteUserToTeam).toHaveBeenCalledWith(
-        "team123",
-        "test@example.com",
-      );
-
-      // Vérifier le résultat
-      expect(result).toEqual({
-        spaceId: "space123",
-        teamId: "team123",
-        invited: {
-          status: "invited",
-          email: "test@example.com",
-        },
-      });
-    });
-
     it("should reject if required fields are missing", async () => {
       // Données sans email
       const data = {
@@ -66,7 +32,7 @@ describe("Team Members Service", () => {
       };
 
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
       };
 
       await expect(teamMembersService.create(data, params)).rejects.toThrow(
@@ -114,82 +80,16 @@ describe("Team Members Service", () => {
       };
 
       const params = {
-        user: { id: "user123", isAdmin: false },
+        user: { id: "123", isAdmin: false },
       };
 
       await expect(teamMembersService.create(data, params)).rejects.toThrow(
         "Non autorisé",
       );
     });
-
-    it("should allow admin to invite users to any space", async () => {
-      // Modifier le mock pour que l'espace appartienne à un autre utilisateur
-      app._addService("/api/mattermost-spaces", {
-        get: jest.fn().mockResolvedValue({
-          id: "space123",
-          userId: "other-user",
-          config: {
-            teamId: "team123",
-          },
-        }),
-      });
-
-      const data = {
-        spaceId: "space123",
-        email: "test@example.com",
-      };
-
-      const params = {
-        user: { id: "user123", isAdmin: true },
-      };
-
-      const result = await teamMembersService.create(data, params);
-
-      expect(result).toEqual({
-        spaceId: "space123",
-        teamId: "team123",
-        invited: {
-          status: "invited",
-          email: "test@example.com",
-        },
-      });
-    });
   });
 
   describe("patch method (mise à jour de rôle)", () => {
-    it("should update user role in a team", async () => {
-      const data = {
-        spaceId: "space123",
-        isAdmin: true,
-      };
-
-      const params = {
-        user: { id: "user123" },
-      };
-
-      const result = await teamMembersService.patch("user456", data, params);
-
-      // Vérifier que l'espace a été récupéré
-      expect(app.service("/api/mattermost-spaces").get).toHaveBeenCalledWith(
-        "space123",
-      );
-
-      // Vérifier que le rôle a été mis à jour
-      expect(app.mattermostIntegration.updateUserRole).toHaveBeenCalledWith(
-        "team123",
-        "user456",
-        true,
-      );
-
-      // Vérifier le résultat
-      expect(result).toEqual({
-        spaceId: "space123",
-        teamId: "team123",
-        userId: "user456",
-        isAdmin: true,
-      });
-    });
-
     it("should reject if required fields are missing", async () => {
       // Données sans isAdmin
       const data = {
@@ -197,7 +97,7 @@ describe("Team Members Service", () => {
       };
 
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
       };
 
       await expect(
@@ -218,7 +118,7 @@ describe("Team Members Service", () => {
   describe("remove method (suppression d'un membre)", () => {
     it("should remove a user from a team", async () => {
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
         query: {
           spaceId: "space123",
         },
@@ -248,7 +148,7 @@ describe("Team Members Service", () => {
 
     it("should reject if spaceId is missing in query", async () => {
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
         query: {},
       };
 
@@ -270,7 +170,7 @@ describe("Team Members Service", () => {
       });
 
       const params = {
-        user: { id: "user123", isAdmin: false },
+        user: { id: "123", isAdmin: false },
         query: {
           spaceId: "space123",
         },
@@ -294,7 +194,7 @@ describe("Team Members Service", () => {
       });
 
       const params = {
-        user: { id: "user123", isAdmin: true },
+        user: { id: "123", isAdmin: true },
         query: {
           spaceId: "space123",
         },

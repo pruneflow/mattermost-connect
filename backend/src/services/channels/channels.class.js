@@ -51,8 +51,84 @@ exports.Channels = class Channels {
 
       // Récupérer les canaux
       const channels = await mattermostIntegration.getTeamChannels(teamId);
+      // Créer un ensemble des IDs des créateurs pour éviter les doublons
+      const creatorIds = new Set();
+      channels.forEach((channel) => {
+        if (channel.creator_id) {
+          creatorIds.add(channel.creator_id);
+        }
+      });
 
-      return channels;
+      // Récupérer les informations des créateurs en une seule opération
+      const creatorInfo = {};
+      if (creatorIds.size > 0) {
+        // Convertir le Set en array pour le parcourir
+        const creatorIdsArray = Array.from(creatorIds);
+
+        // Obtenir les informations de chaque créateur
+        await Promise.all(
+          creatorIdsArray.map(async (userId) => {
+            try {
+              const userInfo = await mattermostIntegration._getUserInfo(userId);
+
+              // Déterminer si c'est un bot
+              const isBot =
+                userInfo.username?.startsWith("bot-") ||
+                userInfo.email?.includes("@mattermost-admin.local") ||
+                (userInfo.props && userInfo.props.is_bot === "true");
+
+              // Stocker les informations nécessaires
+              creatorInfo[userId] = {
+                username: userInfo.username || "Unknown",
+                displayName: isBot
+                  ? "Bot"
+                  : userInfo.first_name && userInfo.last_name
+                    ? `${userInfo.first_name} ${userInfo.last_name}`
+                    : userInfo.username || "Unknown User",
+                isBot: isBot,
+              };
+            } catch (error) {
+              logger.warn(
+                `Impossible d'obtenir les informations de l'utilisateur ${userId}`,
+                error,
+              );
+              // Valeur par défaut en cas d'erreur
+              creatorInfo[userId] = {
+                username: "Unknown",
+                displayName: "Unknown User",
+                isBot: false,
+              };
+            }
+          }),
+        );
+      }
+
+      // Enrichir les données des canaux avec les informations des créateurs
+      return channels.map((channel) => {
+        const isDefaultChannel =
+          channel.name === "town-square" || channel.name === "off-topic";
+
+        return {
+          ...channel,
+          // Convertir les timestamps de Mattermost en dates standard
+          create_at: channel.create_at
+            ? new Date(channel.create_at).toISOString()
+            : null,
+          update_at: channel.update_at
+            ? new Date(channel.update_at).toISOString()
+            : null,
+          delete_at: channel.delete_at
+            ? new Date(channel.delete_at).toISOString()
+            : null,
+          // Ajouter les informations du créateur
+          creator:
+            !isDefaultChannel && channel.creator_id
+              ? creatorInfo[channel.creator_id]
+              : null,
+          // Ajouter un indicateur pour les canaux par défaut
+          isDefaultChannel: isDefaultChannel,
+        };
+      });
     } catch (error) {
       logger.error("Erreur lors de la récupération des canaux", error);
       throw error;

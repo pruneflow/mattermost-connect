@@ -1,7 +1,7 @@
 // tests/services/users.test.js
-const { createMockApp } = require("../setup/mock-app");
+const { createMockApp } = require("../../setup/mock-app");
 const { hashPassword } = require("@feathersjs/authentication-local").hooks;
-const usersHooksModule = require("../../src/services/users/users.hooks");
+const usersHooksModule = require("../../../src/services/users/users.hooks");
 
 describe("Users Hooks", () => {
   let app;
@@ -18,7 +18,7 @@ describe("Users Hooks", () => {
         app,
         type: "after",
         result: {
-          id: "user123",
+          id: "123",
           email: "test@example.com",
           companyName: "Test Company",
         },
@@ -30,17 +30,17 @@ describe("Users Hooks", () => {
         create: jest.fn().mockResolvedValue({
           id: "space123",
           name: "Espace de Test Company",
-          userId: "user123",
+          userId: "123",
         }),
       });
 
       // Appliquer le hook
-      await usersHooksModule.createDefaultSpace(context);
+      await usersHooksModule.after.create[0](context);
 
       // Vérifier que le service des espaces a été appelé
       expect(app.service("/api/mattermost-spaces").find).toHaveBeenCalledWith({
         query: {
-          userId: "user123",
+          userId: "123",
         },
         paginate: false,
       });
@@ -48,7 +48,7 @@ describe("Users Hooks", () => {
       // Vérifier que l'espace a été créé
       expect(app.service("/api/mattermost-spaces").create).toHaveBeenCalledWith(
         {
-          userId: "user123",
+          userId: "123",
           name: "Espace de Test Company",
         },
         expect.objectContaining({
@@ -64,7 +64,7 @@ describe("Users Hooks", () => {
         app,
         type: "after",
         result: {
-          id: "user123",
+          id: "123",
           email: "test@example.com",
         },
       };
@@ -74,13 +74,13 @@ describe("Users Hooks", () => {
         find: jest
           .fn()
           .mockResolvedValue([
-            { id: "existing-space", name: "Existing Space", userId: "user123" },
+            { id: "existing-space", name: "Existing Space", userId: "123" },
           ]),
         create: jest.fn(),
       });
 
       // Appliquer le hook
-      await usersHooksModule.createDefaultSpace(context);
+      await usersHooksModule.after.create[0](context);
 
       // Vérifier que le service a vérifié les espaces existants
       expect(app.service("/api/mattermost-spaces").find).toHaveBeenCalled();
@@ -97,7 +97,7 @@ describe("Users Hooks", () => {
         app,
         type: "after",
         result: {
-          id: "user123",
+          id: "123",
           email: "test@example.com",
         },
       };
@@ -109,7 +109,7 @@ describe("Users Hooks", () => {
       });
 
       // Appliquer le hook - ne devrait pas échouer
-      const result = await usersHooksModule.createDefaultSpace(context);
+      const result = await usersHooksModule.after.create[0](context);
 
       // Vérifier que le contexte est retourné malgré l'erreur
       expect(result).toBe(context);
@@ -123,16 +123,16 @@ describe("Users Hooks", () => {
         id: "current",
         params: {
           user: {
-            id: "user123",
+            id: "123",
           },
         },
       };
 
       // Appliquer le hook
-      const result = await usersHooksModule.getCurrentUser(context);
+      const result = await usersHooksModule.before.get[1](context);
 
       // Vérifier que l'ID a été remplacé
-      expect(result.id).toBe("user123");
+      expect(result.id).toBe("123");
     });
 
     it("should reject if no user is authenticated", async () => {
@@ -143,7 +143,7 @@ describe("Users Hooks", () => {
       };
 
       // Appliquer le hook - devrait échouer
-      await expect(usersHooksModule.getCurrentUser(context)).rejects.toThrow(
+      await expect(usersHooksModule.before.get[1](context)).rejects.toThrow(
         "Non authentifié",
       );
     });
@@ -151,16 +151,16 @@ describe("Users Hooks", () => {
     it('should pass through if id is not "current"', async () => {
       // Configurer le contexte avec un ID spécifique
       const context = {
-        id: "user123",
+        id: "123",
         params: {},
       };
 
       // Appliquer le hook
-      const result = await usersHooksModule.getCurrentUser(context);
+      const result = await usersHooksModule.before.get[1](context);
 
       // Vérifier que le contexte est inchangé
       expect(result).toBe(context);
-      expect(result.id).toBe("user123");
+      expect(result.id).toBe("123");
     });
   });
 
@@ -169,14 +169,14 @@ describe("Users Hooks", () => {
       // Configurer le contexte pour simuler un changement de mot de passe
       const context = {
         app,
-        id: "user123",
+        id: "123",
         data: {
           password: "newPassword",
           oldPassword: "currentPassword",
         },
         params: {
           user: {
-            id: "user123",
+            id: "123",
           },
         },
       };
@@ -184,7 +184,7 @@ describe("Users Hooks", () => {
       // Configurer les services
       app._addService("/api/users", {
         get: jest.fn().mockResolvedValue({
-          id: "user123",
+          id: "123",
           email: "test@example.com",
           password: "hashedCurrentPassword",
         }),
@@ -194,14 +194,14 @@ describe("Users Hooks", () => {
         strategies: {
           local: {
             authenticate: jest.fn().mockResolvedValue({
-              id: "user123",
+              id: "123",
             }),
           },
         },
       });
 
       // Appliquer le hook
-      const result = await usersHooksModule.verifyOldPassword(context);
+      const result = await usersHooksModule.before.update[2](context);
 
       // Vérifier que l'authentification a été vérifiée
       expect(
@@ -222,14 +222,14 @@ describe("Users Hooks", () => {
       // Configurer le contexte
       const context = {
         app,
-        id: "user123",
+        id: "123",
         data: {
           password: "newPassword",
           oldPassword: "wrongPassword",
         },
         params: {
           user: {
-            id: "user123",
+            id: "123",
           },
         },
       };
@@ -237,7 +237,7 @@ describe("Users Hooks", () => {
       // Configurer les services
       app._addService("/api/users", {
         get: jest.fn().mockResolvedValue({
-          id: "user123",
+          id: "123",
           email: "test@example.com",
         }),
       });
@@ -252,7 +252,7 @@ describe("Users Hooks", () => {
       });
 
       // Appliquer le hook - devrait échouer
-      await expect(usersHooksModule.verifyOldPassword(context)).rejects.toThrow(
+      await expect(usersHooksModule.before.update[2](context)).rejects.toThrow(
         "Mot de passe actuel incorrect",
       );
     });
@@ -261,19 +261,19 @@ describe("Users Hooks", () => {
       // Configurer le contexte sans changement de mot de passe
       const context = {
         app,
-        id: "user123",
+        id: "123",
         data: {
           firstName: "Updated",
         },
         params: {
           user: {
-            id: "user123",
+            id: "123",
           },
         },
       };
 
       // Appliquer le hook
-      const result = await usersHooksModule.verifyOldPassword(context);
+      const result = await usersHooksModule.before.update[2](context);
 
       // Vérifier que le contexte est inchangé
       expect(result).toBe(context);
@@ -290,14 +290,14 @@ describe("Users Hooks", () => {
         },
         params: {
           user: {
-            id: "user123",
+            id: "123",
             isAdmin: false,
           },
         },
       };
 
       // Appliquer le hook - devrait échouer
-      await expect(usersHooksModule.verifyOldPassword(context)).rejects.toThrow(
+      await expect(usersHooksModule.before.update[2](context)).rejects.toThrow(
         "Non autorisé à modifier ce compte",
       );
     });
@@ -313,7 +313,7 @@ describe("Users Hooks", () => {
         },
         params: {
           user: {
-            id: "user123",
+            id: "123",
             isAdmin: true,
           },
         },
@@ -339,7 +339,7 @@ describe("Users Hooks", () => {
       });
 
       // Appliquer le hook
-      const result = await usersHooksModule.verifyOldPassword(context);
+      const result = await usersHooksModule.before.update[2](context);
 
       // Vérifier que le service a été appelé pour obtenir l'utilisateur
       expect(app.service("/api/users").get).toHaveBeenCalledWith(

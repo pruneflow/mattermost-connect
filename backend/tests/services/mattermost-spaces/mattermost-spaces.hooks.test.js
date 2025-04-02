@@ -18,12 +18,12 @@ describe("MattermostSpaces Utils", () => {
       context = {
         id: "space123",
         params: {
-          user: { id: "user123", isAdmin: false },
+          user: { id: "123", isAdmin: false },
         },
         service: {
           get: jest.fn().mockResolvedValue({
             id: "space123",
-            userId: "user123",
+            userId: "123",
           }),
         },
       };
@@ -85,12 +85,12 @@ describe("MattermostSpaces Utils", () => {
       context = {
         id: "space123",
         params: {
-          user: { id: "user123", isAdmin: false },
+          user: { id: "123", isAdmin: false },
         },
         service: {
           get: jest.fn().mockResolvedValue({
             id: "space123",
-            userId: "user123",
+            userId: "123",
           }),
         },
       };
@@ -157,7 +157,7 @@ describe("MattermostSpaces Utils", () => {
           }),
           service: jest.fn().mockReturnValue({
             get: jest.fn().mockResolvedValue({
-              id: "user123",
+              id: "123",
               firstName: "Test",
               lastName: "User",
               companyName: "Test Company",
@@ -165,7 +165,7 @@ describe("MattermostSpaces Utils", () => {
           }),
         },
         params: {
-          user: { id: "user123" },
+          user: { id: "123" },
         },
         data: {
           name: "Test Space",

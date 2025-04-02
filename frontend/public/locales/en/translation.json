@@ -26,6 +26,42 @@
       "companyRequired": "Company name is required"
     }
   },
+  "channels": {
+    "title": "Channel Management",
+    "subtitle": "{{count}} channels in this space",
+    "selectSpace": "Select a space",
+    "search": "Search channel",
+    "noChannels": "No channels found in this space.",
+    "defaultChannel": "Default channel",
+    "types": {
+      "O": "Public",
+      "P": "Private",
+      "D": "Direct Message",
+      "G": "Group"
+    },
+    "details": {
+      "header": "Header",
+      "noHeader": "No header defined",
+      "purpose": "Purpose",
+      "noPurpose": "No purpose defined",
+      "created": "Created on",
+      "creator": "Created by",
+      "members": "Members",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "archived": "Archived"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error loading: {{message}}",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create"
+  },
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome",
@@ -35,7 +71,8 @@
       "spaces": "Mattermost Spaces",
       "stats": "Statistics",
       "settings": "Settings",
-      "members": "Members"
+      "members": "Members",
+      "channels": "Channels"
     },
     "comingSoon": {
       "stats": "Statistics for your spaces will be available soon.",
@@ -257,13 +294,5 @@
     "activeUsers": "Active Users",
     "lastActivity": "Last Activity",
     "noStatisticsAvailable": "No statistics available. Create your first space to get started."
-  },
-  "common": {
-    "loading": "Loading...",
-    "error": "Error loading: {{message}}",
-    "retry": "Retry",
-    "cancel": "Cancel",
-    "save": "Save",
-    "create": "Create"
   }
 }

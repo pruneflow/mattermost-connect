@@ -12,7 +12,7 @@ describe("Token Generation", () => {
     app._addService("/api/mattermost-spaces", {
       get: jest.fn().mockResolvedValue({
         id: "space123",
-        userId: "user123",
+        userId: "123",
         config: {
           teamId: "team123",
         },
@@ -30,7 +30,7 @@ describe("Token Generation", () => {
   describe("create method", () => {
     it("should generate a token for a valid space", async () => {
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
       };
 
       const data = {
@@ -73,7 +73,7 @@ describe("Token Generation", () => {
     it("should reject if spaceId is missing", async () => {
       const data = {}; // Pas de spaceId
       const params = {
-        user: { id: "user123" },
+        user: { id: "123" },
       };
 
       await expect(tokensService.create(data, params)).rejects.toThrow(
@@ -94,10 +94,10 @@ describe("Token Generation", () => {
       });
 
       const data = { spaceId: "space123" };
-      const params = { user: { id: "user123", isAdmin: false } };
+      const params = { user: { id: "123", isAdmin: false } };
 
       await expect(tokensService.create(data, params)).rejects.toThrow(
-        "Non autorisé",
+        "Vous n'êtes pas autorisé à gérer cet espace",
       );
     });
 
@@ -114,7 +114,7 @@ describe("Token Generation", () => {
       });
 
       const data = { spaceId: "space123" };
-      const params = { user: { id: "user123", isAdmin: true } };
+      const params = { user: { id: "123", isAdmin: true } };
 
       const result = await tokensService.create(data, params);
 
@@ -129,13 +129,13 @@ describe("Token Generation", () => {
       app._addService("/api/mattermost-spaces", {
         get: jest.fn().mockResolvedValue({
           id: "space123",
-          userId: "user123",
+          userId: "123",
           config: null,
         }),
       });
 
       const data = { spaceId: "space123" };
-      const params = { user: { id: "user123" } };
+      const params = { user: { id: "123" } };
 
       await expect(tokensService.create(data, params)).rejects.toThrow(
         "Cet espace n'a pas d'équipe Mattermost associée",
@@ -147,7 +147,7 @@ describe("Token Generation", () => {
       app._addService("/api/mattermost-spaces", {
         get: jest.fn().mockResolvedValue({
           id: "space123",
-          userId: "user123",
+          userId: "123",
           config: {
             // pas de teamId
           },
@@ -155,7 +155,7 @@ describe("Token Generation", () => {
       });
 
       const data = { spaceId: "space123" };
-      const params = { user: { id: "user123" } };
+      const params = { user: { id: "123" } };
 
       await expect(tokensService.create(data, params)).rejects.toThrow(
         "Cet espace n'a pas d'équipe Mattermost associée",
@@ -171,7 +171,7 @@ describe("Token Generation", () => {
       );
 
       const data = { spaceId: "space123" };
-      const params = { user: { id: "user123" } };
+      const params = { user: { id: "123" } };
 
       await expect(tokensService.create(data, params)).rejects.toThrow(
         "Erreur API",

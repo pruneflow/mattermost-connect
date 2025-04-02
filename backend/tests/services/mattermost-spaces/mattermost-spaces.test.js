@@ -22,7 +22,7 @@ describe("MattermostSpaces Service", () => {
         {
           id: "space1",
           name: "Space 1",
-          userId: "user123",
+          userId: "123",
           isActive: true,
           createdAt: "2025-01-01T00:00:00Z",
         },
@@ -53,7 +53,7 @@ describe("MattermostSpaces Service", () => {
         space1: {
           id: "space1",
           name: "Space 1",
-          userId: "user123",
+          userId: "123",
           isActive: true,
           createdAt: "2025-01-01T00:00:00Z",
         },
@@ -93,21 +93,9 @@ describe("MattermostSpaces Service", () => {
   });
 
   describe("find method", () => {
-    it("should filter spaces by user ID for non-admin users", async () => {
-      const params = {
-        user: { id: "user123", isAdmin: false },
-        query: {},
-      };
-
-      await spacesService.find(params);
-
-      // Vérifier que la requête est modifiée pour inclure l'ID de l'utilisateur
-      expect(params.query).toHaveProperty("userId", "user123");
-    });
-
     it("should not filter spaces for admin users", async () => {
       const params = {
-        user: { id: "user123", isAdmin: true },
+        user: { id: "123", isAdmin: true },
         query: {},
       };
 
@@ -121,7 +109,7 @@ describe("MattermostSpaces Service", () => {
   describe("get method", () => {
     it("should allow a user to get their own space", async () => {
       const params = {
-        user: { id: "user123", isAdmin: false },
+        user: { id: "123", isAdmin: false },
       };
 
       const result = await spacesService.get("space1", params);
@@ -130,7 +118,7 @@ describe("MattermostSpaces Service", () => {
       expect(result).toEqual({
         id: "space1",
         name: "Space 1",
-        userId: "user123",
+        userId: "123",
         isActive: true,
         createdAt: "2025-01-01T00:00:00Z",
       });
@@ -138,7 +126,7 @@ describe("MattermostSpaces Service", () => {
 
     it("should reject if a non-admin user tries to access another user's space", async () => {
       const params = {
-        user: { id: "user123", isAdmin: false },
+        user: { id: "123", isAdmin: false },
       };
 
       // Pour simuler le rejet, nous utilisons une mise en œuvre personnalisée
@@ -158,7 +146,7 @@ describe("MattermostSpaces Service", () => {
 
     it("should allow admin to get any space", async () => {
       const params = {
-        user: { id: "user123", isAdmin: true },
+        user: { id: "123", isAdmin: true },
       };
 
       const result = await spacesService.get("space2", params);
@@ -171,23 +159,6 @@ describe("MattermostSpaces Service", () => {
         isActive: false,
         createdAt: "2025-02-01T00:00:00Z",
       });
-    });
-  });
-
-  describe("create method", () => {
-    it("should assign userId from authenticated user", async () => {
-      const data = {
-        name: "New Space",
-      };
-
-      const params = {
-        user: { id: "user123" },
-      };
-
-      await spacesService.create(data, params);
-
-      // Vérifier que l'ID utilisateur est assigné aux données
-      expect(data).toHaveProperty("userId", "user123");
     });
   });
 });

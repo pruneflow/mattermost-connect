@@ -16,12 +16,12 @@ describe("MattermostSpaces Utils", () => {
       context = {
         id: "space123",
         params: {
-          user: { id: "user123", isAdmin: false },
+          user: { id: "123", isAdmin: false },
         },
         service: {
           get: jest.fn().mockResolvedValue({
             id: "space123",
-            userId: "user123",
+            userId: "123",
           }),
         },
         app,
@@ -83,12 +83,12 @@ describe("MattermostSpaces Utils", () => {
       context = {
         id: "space123",
         params: {
-          user: { id: "user123", isAdmin: false },
+          user: { id: "123", isAdmin: false },
         },
         service: {
           get: jest.fn().mockResolvedValue({
             id: "space123",
-            userId: "user123",
+            userId: "123",
           }),
         },
         app,
@@ -138,7 +138,7 @@ describe("MattermostSpaces Utils", () => {
       context = {
         app,
         params: {
-          user: { id: "user123" },
+          user: { id: "123" },
         },
         data: {
           name: "Test Space",
@@ -148,7 +148,7 @@ describe("MattermostSpaces Utils", () => {
       // Configurer les services spécifiques pour ce test
       app._addService("/api/users", {
         get: jest.fn().mockResolvedValue({
-          id: "user123",
+          id: "123",
           firstName: "Test",
           lastName: "User",
           companyName: "Test Company",
@@ -190,7 +190,7 @@ describe("MattermostSpaces Utils", () => {
       // Modifier la réponse du service des utilisateurs
       app._addService("/api/users", {
         get: jest.fn().mockResolvedValue({
-          id: "user123",
+          id: "123",
           firstName: "Test",
           lastName: "User",
           // pas de companyName
@@ -209,7 +209,7 @@ describe("MattermostSpaces Utils", () => {
       // Modifier la réponse du service des utilisateurs
       app._addService("/api/users", {
         get: jest.fn().mockResolvedValue({
-          id: "user123",
+          id: "123",
           // pas de firstName, lastName ou companyName
         }),
       });

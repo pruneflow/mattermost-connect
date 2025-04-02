@@ -4,7 +4,7 @@ import { channelsService } from "../api/channels";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const useChannels = (spaceId) => {
+export const useChannels = (spaceId) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -33,7 +33,7 @@ const useChannels = (spaceId) => {
     queryKey: ["channels", spaceId],
     queryFn: () => channelsService.getChannels(spaceId),
     enabled: !!spaceId, // Ne s'exécute que si spaceId est défini
-    staleTime: 60000, // 1 minute avant de considérer les données comme périmées
+    staleTime: 30000, // 1 minute avant de considérer les données comme périmées
   });
 
   // Mutation pour créer un canal

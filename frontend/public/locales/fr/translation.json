@@ -26,6 +26,36 @@
       "companyRequired": "Le nom de l'entreprise est requis"
     }
   },
+  "channels": {
+    "title": "Gestion des canaux",
+    "subtitle": "{{count}} canaux dans cet espace",
+    "selectSpace": "Sélectionner un espace",
+    "search": "Rechercher un canal",
+    "noChannels": "Aucun canal n'a été trouvé dans cet espace.",
+    "defaultChannel": "Canal par défaut",
+    "types": {
+      "O": "Public",
+      "P": "Privé",
+      "D": "Message direct",
+      "G": "Groupe"
+    },
+    "details": {
+      "header": "En-tête",
+      "noHeader": "Aucun en-tête défini",
+      "purpose": "Objectif",
+      "noPurpose": "Aucun objectif défini",
+      "created": "Créé le",
+      "creator": "Créé par"
+    }
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur lors du chargement: {{message}}",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "create": "Créer"
+  },
   "dashboard": {
     "title": "Tableau de bord",
     "welcome": "Bienvenue",
@@ -35,7 +65,8 @@
       "spaces": "Espaces Mattermost",
       "stats": "Statistiques",
       "settings": "Paramètres",
-      "members": "Membres"
+      "members": "Membres",
+      "channels": "Canaux"
     },
     "comingSoon": {
       "stats": "Les statistiques de vos espaces seront disponibles prochainement.",
@@ -258,12 +289,4 @@
     "lastActivity": "Dernière activité",
     "noStatisticsAvailable": "Aucune statistique disponible. Créez votre premier espace pour commencer."
   },
-  "common": {
-    "loading": "Chargement...",
-    "error": "Erreur lors du chargement: {{message}}",
-    "retry": "Réessayer",
-    "cancel": "Annuler",
-    "save": "Enregistrer",
-    "create": "Créer"
-  }
 }

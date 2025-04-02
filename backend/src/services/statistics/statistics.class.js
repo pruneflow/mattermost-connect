@@ -76,11 +76,13 @@ exports.Statistics = class Statistics {
           },
         });
 
+        const totalSpacesGlobal = (allSpaces && allSpaces.total) || 0;
+
         // Ajouter les statistiques d'administration
         stats.adminStats = {
           totalUsers: usersCount.total,
-          totalSpacesGlobal: allSpaces.total,
-          averageSpacesPerUser: allSpaces.total / (usersCount.total || 1),
+          totalSpacesGlobal: totalSpacesGlobal,
+          averageSpacesPerUser: totalSpacesGlobal / (usersCount.total || 1),
         };
       }
 

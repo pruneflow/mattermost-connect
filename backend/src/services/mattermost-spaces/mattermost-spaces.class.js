@@ -16,10 +16,8 @@ exports.MattermostSpaces = class MattermostSpaces extends Service {
 
     // Si un utilisateur est connecté et n'est pas admin, limitez la recherche à ses espaces
     if (user && !user.isAdmin) {
-      params.query = {
-        ...params.query,
-        userId: user.id,
-      };
+      params.query = params.query || {};
+      params.query.userId = user.id;
     }
 
     return super.find(params);
@@ -51,7 +49,7 @@ exports.MattermostSpaces = class MattermostSpaces extends Service {
 
     // Attribuer automatiquement l'espace à l'utilisateur connecté
     if (user) {
-      data.userId = user.id;
+      data = { ...data, userId: user.id };
     }
 
     console.debug("data", data);

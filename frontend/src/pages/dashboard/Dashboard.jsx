@@ -14,6 +14,7 @@ import {
 } from "../../components/dashboard";
 
 import StatisticsPanel from "../../components/statistics/StatisticsPanel";
+import ChannelsPanel from "../../components/channels/ChannelsPanel";
 import UserSettings from "../../components/settings/UserSettings";
 import { TeamMembersPanel } from "../../components/team-members";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,6 +87,10 @@ const Dashboard = () => {
     {
       label: t("dashboard.tabs.members"),
       content: <TeamMembersPanel selectedSpace={selectedSpace} />,
+    },
+    {
+      label: t("dashboard.tabs.channels"),
+      content: <ChannelsPanel selectedSpace={selectedSpace} />,
     },
     {
       label: t("dashboard.tabs.stats"),
