@@ -47,11 +47,62 @@
       "created": "Created on",
       "creator": "Created by",
       "members": "Members",
-      "actions": "Actions"
+      "actions": "Actions",
+      "close": "Close channel details"
     },
     "status": {
       "active": "Active",
       "archived": "Archived"
+    },
+    "create": {
+      "title": "Create a new channel",
+      "button": "New channel",
+      "success": "Channel created successfully",
+      "error": "Error creating channel: {{message}}"
+    },
+    "edit": {
+      "title": "Edit channel",
+      "tooltip": "Edit this channel",
+      "success": "Channel updated successfully",
+      "error": "Error updating channel: {{message}}"
+    },
+    "archive": {
+      "title": "Archive channel",
+      "tooltip": "Archive this channel",
+      "defaultTooltip": "Default channels cannot be archived",
+      "message": "Are you sure you want to archive the channel {{name}}? This action is irreversible.",
+      "defaultMessage": "Channel {{name}} is a default channel and cannot be archived.",
+      "confirm": "Archive",
+      "success": "Channel archived successfully",
+      "error": "Error archiving channel {{name}}: {{message}}"
+    },
+    "form": {
+      "instructions": "Create a channel to allow your team to communicate about a specific topic.",
+      "name": "Channel name",
+      "nameHelp": "Only lowercase letters, numbers, hyphens and underscores. Max 22 characters.",
+      "nameRequired": "Channel name is required",
+      "nameMinLength": "Name must contain at least 2 characters",
+      "nameMaxLength": "Name cannot exceed 22 characters",
+      "nameFormat": "Name can only contain lowercase letters, numbers, hyphens and underscores",
+      "displayName": "Display name",
+      "displayNameRequired": "Display name is required",
+      "displayNameMinLength": "Display name must contain at least 2 characters",
+      "displayNameMaxLength": "Display name cannot exceed 64 characters",
+      "typeLabel": "Channel type",
+      "typeRequired": "Channel type is required",
+      "invalidType": "Invalid channel type",
+      "publicHelp": "Public channels are visible to all members of the space.",
+      "privateHelp": "Private channels are only visible to invited members.",
+      "purpose": "Purpose",
+      "purposeHelp": "A short description of how this channel will be used (visible in lists).",
+      "purposeMaxLength": "Purpose cannot exceed 250 characters",
+      "header": "Header",
+      "headerHelp": "Text that will appear in the channel header. Can contain links and formatting.",
+      "headerMaxLength": "Header cannot exceed 1024 characters",
+      "create": "Create channel",
+      "channelInfo": "Channel ID: {{name}}",
+      "channelType": "Type",
+      "defaultChannelWarning": "This is a default channel. Some properties cannot be changed."
     }
   },
   "common": {

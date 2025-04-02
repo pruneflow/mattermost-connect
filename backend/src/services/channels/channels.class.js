@@ -1,6 +1,7 @@
 // src/services/channels/channels.class.js
 const errors = require("@feathersjs/errors");
 const logger = require("../../logger");
+const ensureSpaceHasToken = require("./ensure-token");
 
 exports.Channels = class Channels {
   constructor(options) {
@@ -22,9 +23,9 @@ exports.Channels = class Channels {
         throw new errors.BadRequest("ID d'espace requis");
       }
 
-      // Récupérer l'espace pour vérifier les autorisations
+      // Récupérer l'espace pour vérifier les autorisations et obtenir le token du bot
       const spacesService = this.app.service("/api/mattermost-spaces");
-      const space = await spacesService.get(spaceId);
+      let space = await spacesService.get(spaceId);
 
       // Vérifier que l'utilisateur a accès à cet espace
       if (space.userId !== params.user.id && !params.user.isAdmin) {
@@ -41,6 +42,18 @@ exports.Channels = class Channels {
         );
       }
 
+      // Vérifier si le bot a un token API
+      if (!space.apiToken) {
+        // Tenter de générer un token automatiquement
+        try {
+          space = await ensureSpaceHasToken(this.app, space);
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API. Veuillez en générer un pour cet espace. Erreur: ${tokenError.message}`,
+          );
+        }
+      }
+
       // Récupérer le service d'intégration Mattermost
       const mattermostIntegration = this.app.get("mattermostIntegration");
       if (!mattermostIntegration) {
@@ -49,8 +62,12 @@ exports.Channels = class Channels {
         );
       }
 
-      // Récupérer les canaux
-      const channels = await mattermostIntegration.getTeamChannels(teamId);
+      // Récupérer les canaux en utilisant le token du bot de l'espace
+      const channels = await mattermostIntegration.getTeamChannelsWithToken(
+        teamId,
+        space.apiToken,
+      );
+
       // Créer un ensemble des IDs des créateurs pour éviter les doublons
       const creatorIds = new Set();
       channels.forEach((channel) => {
@@ -59,7 +76,7 @@ exports.Channels = class Channels {
         }
       });
 
-      // Récupérer les informations des créateurs en une seule opération
+      // Récupérer les informations des créateurs
       const creatorInfo = {};
       if (creatorIds.size > 0) {
         // Convertir le Set en array pour le parcourir
@@ -69,7 +86,12 @@ exports.Channels = class Channels {
         await Promise.all(
           creatorIdsArray.map(async (userId) => {
             try {
-              const userInfo = await mattermostIntegration._getUserInfo(userId);
+              // Utiliser le token du bot pour obtenir les infos des utilisateurs
+              const userInfo =
+                await mattermostIntegration._getUserInfoWithToken(
+                  userId,
+                  space.apiToken,
+                );
 
               // Déterminer si c'est un bot
               const isBot =
@@ -151,9 +173,9 @@ exports.Channels = class Channels {
         );
       }
 
-      // Récupérer l'espace pour vérifier les autorisations
+      // Récupérer l'espace pour vérifier les autorisations et obtenir le token du bot
       const spacesService = this.app.service("/api/mattermost-spaces");
-      const space = await spacesService.get(spaceId);
+      let space = await spacesService.get(spaceId);
 
       // Vérifier que l'utilisateur a accès à cet espace
       if (space.userId !== params.user.id && !params.user.isAdmin) {
@@ -170,6 +192,18 @@ exports.Channels = class Channels {
         );
       }
 
+      // Vérifier si le bot a un token API
+      if (!space.apiToken) {
+        // Tenter de générer un token automatiquement
+        try {
+          space = await ensureSpaceHasToken(this.app, space);
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API. Veuillez en générer un pour cet espace. Erreur: ${tokenError.message}`,
+          );
+        }
+      }
+
       // Récupérer le service d'intégration Mattermost
       const mattermostIntegration = this.app.get("mattermostIntegration");
       if (!mattermostIntegration) {
@@ -178,7 +212,7 @@ exports.Channels = class Channels {
         );
       }
 
-      // Créer le canal
+      // Créer le canal en utilisant le token du bot
       const channelData = {
         team_id: teamId,
         name: name.toLowerCase().replace(/[^a-z0-9-_]/g, "-"),
@@ -188,7 +222,10 @@ exports.Channels = class Channels {
         header,
       };
 
-      const channel = await mattermostIntegration.createChannel(channelData);
+      const channel = await mattermostIntegration.createChannelWithToken(
+        channelData,
+        space.apiToken,
+      );
 
       return {
         ...channel,
@@ -216,13 +253,25 @@ exports.Channels = class Channels {
 
       // Récupérer l'espace pour vérifier les autorisations
       const spacesService = this.app.service("/api/mattermost-spaces");
-      const space = await spacesService.get(spaceId);
+      let space = await spacesService.get(spaceId);
 
       // Vérifier que l'utilisateur a accès à cet espace
       if (space.userId !== params.user.id && !params.user.isAdmin) {
         throw new errors.Forbidden(
           "Non autorisé à modifier des canaux dans cet espace",
         );
+      }
+
+      // Vérifier si le bot a un token API
+      if (!space.apiToken) {
+        // Tenter de générer un token automatiquement
+        try {
+          space = await ensureSpaceHasToken(this.app, space);
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API. Veuillez en générer un pour cet espace. Erreur: ${tokenError.message}`,
+          );
+        }
       }
 
       // Récupérer le service d'intégration Mattermost
@@ -239,10 +288,11 @@ exports.Channels = class Channels {
       if (purpose !== undefined) updateData.purpose = purpose;
       if (header !== undefined) updateData.header = header;
 
-      // Mettre à jour le canal
-      const updatedChannel = await mattermostIntegration.updateChannel(
+      // Mettre à jour le canal en utilisant le token du bot
+      const updatedChannel = await mattermostIntegration.updateChannelWithToken(
         id,
         updateData,
+        space.apiToken,
       );
 
       return {
@@ -271,13 +321,25 @@ exports.Channels = class Channels {
 
       // Récupérer l'espace pour vérifier les autorisations
       const spacesService = this.app.service("/api/mattermost-spaces");
-      const space = await spacesService.get(spaceId);
+      let space = await spacesService.get(spaceId);
 
       // Vérifier que l'utilisateur a accès à cet espace
       if (space.userId !== params.user.id && !params.user.isAdmin) {
         throw new errors.Forbidden(
           "Non autorisé à archiver des canaux dans cet espace",
         );
+      }
+
+      // Vérifier si le bot a un token API
+      if (!space.apiToken) {
+        // Tenter de générer un token automatiquement
+        try {
+          space = await ensureSpaceHasToken(this.app, space);
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API. Veuillez en générer un pour cet espace. Erreur: ${tokenError.message}`,
+          );
+        }
       }
 
       // Récupérer le service d'intégration Mattermost
@@ -288,8 +350,11 @@ exports.Channels = class Channels {
         );
       }
 
-      // Archiver le canal
-      const result = await mattermostIntegration.archiveChannel(id);
+      // Archiver le canal en utilisant le token du bot
+      const result = await mattermostIntegration.archiveChannelWithToken(
+        id,
+        space.apiToken,
+      );
 
       return {
         ...result,

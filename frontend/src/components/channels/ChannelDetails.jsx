@@ -9,7 +9,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Avatar,
+  IconButton,
 } from "@mui/material";
 import {
   Forum as PublicChannelIcon,
@@ -18,10 +18,11 @@ import {
   Today as DateIcon,
   Description as DescriptionIcon,
   Check as DefaultIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 
-const ChannelDetails = ({ channel }) => {
+const ChannelDetails = ({ channel, onClose }) => {
   const { t } = useTranslation();
 
   if (!channel) return null;
@@ -36,9 +37,24 @@ const ChannelDetails = ({ channel }) => {
     channel.type === "O" ? PublicChannelIcon : PrivateChannelIcon;
 
   return (
-    <Paper sx={{ p: 3, height: "100%" }}>
+    <Paper sx={{ p: 3, height: "100%", position: "relative" }}>
+      {/* Bouton de fermeture en haut à droite */}
+      <IconButton
+        onClick={onClose}
+        sx={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          zIndex: 1,
+        }}
+        aria-label={t("channels.details.close")}
+        size="small"
+      >
+        <CloseIcon fontSize="small" />
+      </IconButton>
+
       {/* En-tête avec nom et type */}
-      <Box display="flex" alignItems="center" mb={2}>
+      <Box display="flex" alignItems="center" mb={2} pr={6}>
         <ChannelTypeIcon
           sx={{
             mr: 1,

@@ -71,14 +71,14 @@ export const useChannels = (spaceId) => {
       queryClient.invalidateQueries({ queryKey: ["channels", spaceId] });
       setSnackbar({
         open: true,
-        message: t("channels.update.success"),
+        message: t("channels.edit.success"),
         severity: "success",
       });
     },
     onError: (error) => {
       setSnackbar({
         open: true,
-        message: t("channels.update.error", { message: error.message }),
+        message: t("channels.edit.error", { message: error.message }),
         severity: "error",
       });
     },

@@ -947,7 +947,7 @@ class MattermostIntegration {
   async updateChannel(channelId, channelData) {
     try {
       const response = await axios.put(
-        `${this.baseUrl}/api/v4/channels/${channelId}`,
+        `${this.baseUrl}/api/v4/channels/${channelId}/patch`,
         channelData,
         {
           headers: {
@@ -1206,6 +1206,262 @@ class MattermostIntegration {
 
     logger.debug("Nom d'équipe généré:", name);
     return name;
+  }
+  // Voici les méthodes à ajouter au fichier mattermost-integration.js
+
+  // Méthode pour obtenir les canaux d'une équipe avec le token du bot
+  async getTeamChannelsWithToken(teamId, token) {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/v4/teams/${teamId}/channels`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error(
+        `Erreur lors de la récupération des canaux de l'équipe ${teamId} avec token bot:`,
+        {
+          message: error.message,
+          status: error.response ? error.response.status : "Sans réponse",
+        },
+      );
+
+      throw error;
+    }
+  }
+
+  // Méthode pour créer un canal avec le token du bot
+  async createChannelWithToken(channelData, token) {
+    // Nettoyer les données du canal
+    const cleanChannelData = { ...channelData };
+    if (cleanChannelData.id) {
+      logger.warn("ID détecté dans les données de channel - suppression");
+      delete cleanChannelData.id;
+    }
+
+    // Ajouter un suffixe unique au nom du canal si nécessaire
+    const originalName = cleanChannelData.name;
+    if (!cleanChannelData.name.includes("-unique-")) {
+      const uniqueSuffix = `-unique-${Date.now().toString().slice(-6)}`;
+      cleanChannelData.name = `${originalName}${uniqueSuffix}`.substring(0, 22); // Limiter à 22 caractères (limite Mattermost)
+    }
+
+    logger.debug(
+      "Tentative de création de channel Mattermost avec token bot:",
+      {
+        baseUrl: this.baseUrl,
+        channelData: cleanChannelData,
+      },
+    );
+
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/v4/channels`,
+        cleanChannelData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      logger.error(
+        "Erreur lors de la création du canal Mattermost avec token bot:",
+        {
+          message: error.message,
+          status: error.response ? error.response.status : "Sans réponse",
+          data: error.response ? error.response.data : "Pas de données",
+          url: `${this.baseUrl}/api/v4/channels`,
+        },
+      );
+
+      // Si le canal existe déjà, générer un nouveau nom et réessayer
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.id ===
+          "store.sql_channel.save_channel.exists.app_error"
+      ) {
+        logger.info(
+          `Le canal ${cleanChannelData.name} existe déjà, génération d'un nouveau nom...`,
+        );
+
+        // Générer un nouveau nom avec un suffixe différent
+        const newUniqueSuffix = `-unique-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+        cleanChannelData.name = `${originalName}${newUniqueSuffix}`.substring(
+          0,
+          22,
+        );
+
+        logger.info(
+          `Nouvel essai avec le nom de canal: ${cleanChannelData.name}`,
+        );
+
+        // Réessayer avec le nouveau nom
+        return this.createChannelWithToken(cleanChannelData, token);
+      }
+
+      throw error;
+    }
+  }
+
+  // Méthode pour mettre à jour un canal avec le token du bot
+  async updateChannelWithToken(channelId, channelData, token) {
+    try {
+      const response = await axios.put(
+        `${this.baseUrl}/api/v4/channels/${channelId}`,
+        channelData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      logger.info(`Canal ${channelId} mis à jour avec succès avec token bot`);
+
+      return response.data;
+    } catch (error) {
+      logger.error(
+        `Erreur lors de la mise à jour du canal ${channelId} avec token bot:`,
+        {
+          message: error.message,
+          status: error.response ? error.response.status : "Sans réponse",
+        },
+      );
+
+      throw error;
+    }
+  }
+
+  // Méthode pour archiver un canal avec le token du bot
+  async archiveChannelWithToken(channelId, token) {
+    try {
+      // Vérifier si le canal existe et récupérer ses informations
+      try {
+        const channelInfo = await axios.get(
+          `${this.baseUrl}/api/v4/channels/${channelId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        // Si le canal est déjà archivé, rien à faire
+        if (channelInfo.data.delete_at !== 0) {
+          logger.info(`Canal ${channelId} déjà archivé.`);
+          return {
+            success: true,
+            channelId,
+            alreadyArchived: true,
+          };
+        }
+
+        // Vérifier si c'est un canal par défaut
+        const channelName = channelInfo.data.name;
+        if (channelName === "town-square" || channelName === "off-topic") {
+          logger.warn(
+            `Canal ${channelId} (${channelName}) est un canal par défaut et ne peut pas être archivé.`,
+          );
+          return {
+            success: false,
+            channelId,
+            isDefaultChannel: true,
+            message: "Les canaux par défaut ne peuvent pas être archivés",
+          };
+        }
+      } catch (error) {
+        // Si le canal n'existe pas, considérer l'opération comme réussie
+        if (error.response && error.response.status === 404) {
+          logger.warn(`Canal ${channelId} non trouvé, rien à archiver.`);
+          return {
+            success: true,
+            channelId,
+            notFound: true,
+          };
+        }
+        throw error; // Propager les autres erreurs
+      }
+
+      // Le canal existe et n'est pas archivé, procéder à l'archivage
+      try {
+        await axios.delete(`${this.baseUrl}/api/v4/channels/${channelId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        logger.info(`Canal ${channelId} archivé avec succès avec token bot`);
+
+        return {
+          success: true,
+          channelId,
+        };
+      } catch (archiveError) {
+        // Si erreur 400, c'est probablement un canal protégé
+        if (archiveError.response && archiveError.response.status === 400) {
+          logger.warn(
+            `Impossible d'archiver le canal ${channelId} (probablement protégé): ${archiveError.message}`,
+          );
+          return {
+            success: false,
+            channelId,
+            isProtected: true,
+            message: "Ce canal ne peut pas être archivé (canal protégé)",
+            error: archiveError.message,
+          };
+        }
+        throw archiveError;
+      }
+    } catch (error) {
+      logger.error(
+        `Erreur lors de l'archivage du canal ${channelId} avec token bot:`,
+        {
+          message: error.message,
+          status: error.response ? error.response.status : "Sans réponse",
+          data: error.response ? error.response.data : null,
+        },
+      );
+
+      throw error;
+    }
+  }
+
+  // Méthode pour obtenir les informations d'un utilisateur avec token du bot
+  async _getUserInfoWithToken(userId, token) {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/v4/users/${userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error(
+        `Erreur lors de la récupération des informations de l'utilisateur ${userId} avec token bot:`,
+        error,
+      );
+      return {
+        id: userId,
+        username: "Inconnu",
+        email: "Inconnu",
+        first_name: "Inconnu",
+        last_name: "Inconnu",
+      };
+    }
   }
 }
 

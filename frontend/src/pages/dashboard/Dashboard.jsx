@@ -14,7 +14,7 @@ import {
 } from "../../components/dashboard";
 
 import StatisticsPanel from "../../components/statistics/StatisticsPanel";
-import ChannelsPanel from "../../components/channels/ChannelsPanel";
+import { ChannelsPanel } from "../../components/channels";
 import UserSettings from "../../components/settings/UserSettings";
 import { TeamMembersPanel } from "../../components/team-members";
 import { useQueryClient } from "@tanstack/react-query";

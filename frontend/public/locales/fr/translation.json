@@ -45,7 +45,64 @@
       "purpose": "Objectif",
       "noPurpose": "Aucun objectif défini",
       "created": "Créé le",
-      "creator": "Créé par"
+      "creator": "Créé par",
+      "members": "Membres",
+      "actions": "Actions",
+      "close": "Fermer les détails du canal"
+    },
+    "status": {
+      "active": "Actif",
+      "archived": "Archivé"
+    },
+    "create": {
+      "title": "Créer un nouveau canal",
+      "button": "Nouveau canal",
+      "success": "Canal créé avec succès",
+      "error": "Erreur lors de la création du canal: {{message}}"
+    },
+    "edit": {
+      "title": "Modifier le canal",
+      "tooltip": "Modifier ce canal",
+      "success": "Canal mis à jour avec succès",
+      "error": "Erreur lors de la mise à jour du canal: {{message}}"
+    },
+    "archive": {
+      "title": "Archiver le canal",
+      "tooltip": "Archiver ce canal",
+      "defaultTooltip": "Les canaux par défaut ne peuvent pas être archivés",
+      "message": "Êtes-vous sûr de vouloir archiver le canal {{name}}? Cette action est irréversible.",
+      "defaultMessage": "Le canal {{name}} est un canal par défaut et ne peut pas être archivé.",
+      "confirm": "Archiver",
+      "success": "Canal archivé avec succès",
+      "error": "Erreur lors de l'archivage du canal {{name}}: {{message}}"
+    },
+    "form": {
+      "instructions": "Créez un canal pour permettre à votre équipe de communiquer autour d'un sujet spécifique.",
+      "name": "Nom du canal",
+      "nameHelp": "Uniquement des lettres minuscules, chiffres, tirets et underscores. Max 22 caractères.",
+      "nameRequired": "Le nom du canal est requis",
+      "nameMinLength": "Le nom doit contenir au moins 2 caractères",
+      "nameMaxLength": "Le nom ne peut pas dépasser 22 caractères",
+      "nameFormat": "Le nom ne peut contenir que des lettres minuscules, chiffres, tirets et underscores",
+      "displayName": "Nom d'affichage",
+      "displayNameRequired": "Le nom d'affichage est requis",
+      "displayNameMinLength": "Le nom d'affichage doit contenir au moins 2 caractères",
+      "displayNameMaxLength": "Le nom d'affichage ne peut pas dépasser 64 caractères",
+      "typeLabel": "Type de canal",
+      "typeRequired": "Le type de canal est requis",
+      "invalidType": "Type de canal invalide",
+      "publicHelp": "Les canaux publics sont visibles par tous les membres de l'espace.",
+      "privateHelp": "Les canaux privés sont visibles uniquement par les membres invités.",
+      "purpose": "Objectif",
+      "purposeHelp": "Une brève description de l'utilisation de ce canal (visible dans les listes).",
+      "purposeMaxLength": "L'objectif ne peut pas dépasser 250 caractères",
+      "header": "En-tête",
+      "headerHelp": "Texte qui apparaîtra dans l'en-tête du canal. Peut contenir des liens et des formattages.",
+      "headerMaxLength": "L'en-tête ne peut pas dépasser 1024 caractères",
+      "create": "Créer le canal",
+      "channelInfo": "Identifiant du canal: {{name}}",
+      "channelType": "Type",
+      "defaultChannelWarning": "Ce canal est un canal par défaut. Certaines propriétés ne peuvent pas être modifiées."
     }
   },
   "common": {
