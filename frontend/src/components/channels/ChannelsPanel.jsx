@@ -1,6 +1,14 @@
 // src/components/channels/ChannelsPanel.jsx
 import { useState, useEffect } from "react";
-import { Box, Typography, Paper, Snackbar, Alert } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Paper,
+  Snackbar,
+  Alert,
+  FormControlLabel,
+  Switch,
+} from "@mui/material";
 import { useTranslation } from "react-i18next";
 import SpaceSelector from "./SpaceSelector";
 import ChannelsList from "./ChannelsList";
@@ -10,6 +18,7 @@ import { LoadingState, ErrorState } from "../common";
 import { useChannels } from "../../hooks/useChannels";
 import { useMattermostSpaces } from "../../hooks/useMattermostSpaces";
 import useDialogControls from "../../hooks/useDialogControls";
+import { doesSpaceExists } from "../../spaceUtils.js";
 
 export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
   // Hooks pour les espaces et les canaux
@@ -26,6 +35,7 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
     "create",
     "edit",
     "archive",
+    "restore",
   ]);
 
   const {
@@ -33,21 +43,38 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
     isLoading,
     error,
     refetch,
+    showArchived,
+    setShowArchived,
     createChannelMutation,
     updateChannelMutation,
     archiveChannelMutation,
+    restoreChannelMutation,
     snackbar,
     closeSnackbar,
-  } = useChannels(activeSpaceId);
+  } = useChannels(
+    doesSpaceExists(activeSpaceId, spaces) ? activeSpaceId : spaces[0]?.id,
+  );
 
-  // Mettre à jour l'espace actif lorsque l'espace sélectionné change
+  // Mettre à jour activeSpaceId lorsque externalSelectedSpace change
   useEffect(() => {
-    if (externalSelectedSpace?.id) {
-      setActiveSpaceId(externalSelectedSpace.id);
+    if (externalSelectedSpace && spaces && spaces.length > 0) {
+      let externalSpaceExists = false;
+      console.debug("spaces", spaces);
+      if (
+        spaces &&
+        spaces.find((space) => space.id === externalSelectedSpace.id)
+      ) {
+        externalSpaceExists = true;
+      }
+      setActiveSpaceId(
+        externalSpaceExists ? externalSelectedSpace.id : spaces[0].id,
+      );
       setSelectedChannelId(null);
       setSelectedChannel(null);
+      // Force refetch des membres avec le nouvel espace
+      if (refetch) void refetch();
     }
-  }, [externalSelectedSpace]);
+  }, [externalSelectedSpace, refetch, spaces]);
 
   // Mettre à jour le canal sélectionné quand la sélection ou les canaux changent
   useEffect(() => {
@@ -84,6 +111,11 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
   const handleArchiveChannel = (channel) => {
     setSelectedChannel(channel);
     openDialog("archive");
+  };
+
+  const handleRestoreChannel = (channel) => {
+    setSelectedChannel(channel);
+    openDialog("restore");
   };
 
   // Gestionnaires pour les soumissions de formulaires
@@ -130,6 +162,21 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
     }
   };
 
+  const handleRestoreConfirm = () => {
+    if (selectedChannel && selectedChannel.isArchived) {
+      restoreChannelMutation.mutate(selectedChannel.id, {
+        onSuccess: () => {
+          closeDialog("restore");
+          // Rafraîchir la sélection après restauration
+          refetch();
+        },
+      });
+    } else {
+      // Simplement fermer le dialogue si le canal n'est pas archivé
+      closeDialog("restore");
+    }
+  };
+
   // Afficher l'état de chargement
   if (isLoading) {
     return <LoadingState />;
@@ -167,9 +214,29 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
 
       {activeSpaceId && spaces.length > 0 && (
         <>
-          <Typography variant="body1" paragraph>
-            {t("channels.subtitle", { count: channels?.length || 0 })}
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="body1">
+              {t("channels.subtitle", { count: channels?.length || 0 })}
+            </Typography>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={t("channels.showArchived")}
+            />
+          </Box>
 
           <Box sx={{ display: "flex", gap: 3 }}>
             {/* Liste des canaux - la largeur s'ajuste en fonction de la présence du panneau de détails */}
@@ -186,6 +253,8 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
                 onAddClick={handleAddChannel}
                 onEditClick={handleEditChannel}
                 onArchiveClick={handleArchiveChannel}
+                onRestoreClick={handleRestoreChannel}
+                showArchived={showArchived}
               />
             </Box>
 
@@ -225,15 +294,19 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
             createDialogOpen={dialogState.create}
             editDialogOpen={dialogState.edit}
             archiveDialogOpen={dialogState.archive}
+            restoreDialogOpen={dialogState.restore}
             createMutation={createChannelMutation}
             updateMutation={updateChannelMutation}
             archiveMutation={archiveChannelMutation}
+            restoreMutation={restoreChannelMutation}
             onCreateClose={() => closeDialog("create")}
             onEditClose={() => closeDialog("edit")}
             onArchiveClose={() => closeDialog("archive")}
+            onRestoreClose={() => closeDialog("restore")}
             onCreateSubmit={handleCreateSubmit}
             onUpdateSubmit={handleUpdateSubmit}
             onArchiveConfirm={handleArchiveConfirm}
+            onRestoreConfirm={handleRestoreConfirm}
           />
         </>
       )}
@@ -256,4 +329,5 @@ export const ChannelsPanel = ({ selectedSpace: externalSelectedSpace }) => {
     </Box>
   );
 };
+
 export default ChannelsPanel;

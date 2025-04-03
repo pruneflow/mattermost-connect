@@ -33,11 +33,23 @@
     "search": "Rechercher un canal",
     "noChannels": "Aucun canal n'a été trouvé dans cet espace.",
     "defaultChannel": "Canal par défaut",
+    "showArchived": "Afficher les canaux archivés",
+    "archived": "Archivé",
+    "archivedSection": "Canaux archivés ({{count}})",
+    "noSearchResults": "Aucun canal trouvé correspondant à '{{search}}'",
     "types": {
       "O": "Public",
       "P": "Privé",
       "D": "Message direct",
       "G": "Groupe"
+    },
+    "restore": {
+      "title": "Restaurer le canal",
+      "tooltip": "Restaurer ce canal",
+      "message": "Êtes-vous sûr de vouloir restaurer le canal {{name}}?",
+      "confirm": "Restaurer",
+      "success": "Canal restauré avec succès",
+      "error": "Erreur lors de la restauration du canal: {{message}}"
     },
     "details": {
       "header": "En-tête",

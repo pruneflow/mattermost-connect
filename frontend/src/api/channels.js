@@ -55,4 +55,39 @@ export const channelsService = {
       throw error;
     }
   },
+
+  // Récupérer tous les canaux, y compris les archivés
+  getArchivedChannels: async (spaceId) => {
+    try {
+      const response = await api.get("/channels", {
+        params: {
+          spaceId,
+          includeArchived: true,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(
+        "Erreur lors de la récupération des canaux archivés:",
+        error,
+      );
+      throw error;
+    }
+  },
+
+  // Restaurer un canal archivé
+  restoreChannel: async (channelId, spaceId) => {
+    try {
+      const response = await api.post(`/channels/${channelId}/restore`, {
+        spaceId,
+      });
+      return response.data;
+    } catch (error) {
+      console.error(
+        `Erreur lors de la restauration du canal ${channelId}:`,
+        error,
+      );
+      throw error;
+    }
+  },
 };

@@ -17,7 +17,7 @@ exports.Channels = class Channels {
     }
 
     try {
-      const { spaceId } = params.query || {};
+      const { spaceId, includeArchived = false } = params.query || {};
 
       if (!spaceId) {
         throw new errors.BadRequest("ID d'espace requis");
@@ -66,6 +66,7 @@ exports.Channels = class Channels {
       const channels = await mattermostIntegration.getTeamChannelsWithToken(
         teamId,
         space.apiToken,
+        { includeDeleted: includeArchived }, // Nouveau paramètre
       );
 
       // Créer un ensemble des IDs des créateurs pour éviter les doublons
@@ -362,6 +363,68 @@ exports.Channels = class Channels {
       };
     } catch (error) {
       logger.error(`Erreur lors de l'archivage du canal ${id}`, error);
+      throw error;
+    }
+  }
+
+  // Nouvelle méthode à ajouter dans channels.class.js
+  async restoreChannel(id, params) {
+    // Vérifier si l'utilisateur est authentifié
+    if (!params.user) {
+      throw new errors.NotAuthenticated("Authentification requise");
+    }
+    console.debug("params", params);
+    try {
+      const { spaceId } = params.query || {};
+
+      if (!spaceId) {
+        throw new errors.BadRequest("ID d'espace requis");
+      }
+
+      // Vérifier que l'utilisateur a accès à cet espace
+      const spacesService = this.app.service("/api/mattermost-spaces");
+      let space = await spacesService.get(spaceId);
+
+      // Vérifier que l'utilisateur a accès à cet espace
+      if (space.userId !== params.user.id && !params.user.isAdmin) {
+        throw new errors.Forbidden(
+          "Non autorisé à restaurer des canaux dans cet espace",
+        );
+      }
+
+      // Récupérer le token API
+      let apiToken = space.apiToken;
+      if (!apiToken) {
+        try {
+          space = await ensureSpaceHasToken(this.app, space);
+          apiToken = space.apiToken;
+        } catch (tokenError) {
+          throw new errors.GeneralError(
+            `Ce bot n'a pas de token API. Veuillez en générer un pour cet espace. Erreur: ${tokenError.message}`,
+          );
+        }
+      }
+
+      // Récupérer le service d'intégration Mattermost
+      const mattermostIntegration = this.app.get("mattermostIntegration");
+      if (!mattermostIntegration) {
+        throw new errors.GeneralError(
+          "Service d'intégration Mattermost non disponible",
+        );
+      }
+
+      // Restaurer le canal
+      const result = await mattermostIntegration.restoreChannelWithToken(
+        id,
+        apiToken,
+      );
+
+      return {
+        ...result,
+        spaceId,
+      };
+    } catch (error) {
+      logger.error(`Erreur lors de la restauration du canal ${id}`, error);
       throw error;
     }
   }

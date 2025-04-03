@@ -33,11 +33,23 @@
     "search": "Search channel",
     "noChannels": "No channels found in this space.",
     "defaultChannel": "Default channel",
+    "showArchived": "Show archived channels",
+    "archived": "Archived",
+    "archivedSection": "Archived Channels ({{count}})",
+    "noSearchResults": "No channels found matching '{{search}}'",
     "types": {
       "O": "Public",
       "P": "Private",
       "D": "Direct Message",
       "G": "Group"
+    },
+    "restore": {
+      "title": "Restore channel",
+      "tooltip": "Restore this channel",
+      "message": "Are you sure you want to restore the channel {{name}}?",
+      "confirm": "Restore",
+      "success": "Channel restored successfully",
+      "error": "Error restoring channel: {{message}}"
     },
     "details": {
       "header": "Header",

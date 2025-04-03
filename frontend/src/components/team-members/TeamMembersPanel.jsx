@@ -21,13 +21,9 @@ import BulkInviteForm from "./BulkInviteForm";
 import MemberList from "./MemberList";
 import NotificationSnackbar from "../common/NotificationSnackbar";
 import { LoadingState, ErrorState } from "../common";
+import { doesSpaceExists } from "../../spaceUtils.js";
 
 const TeamMembersPanel = ({ selectedSpace: externalSelectedSpace }) => {
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const [activeSpaceId, setActiveSpaceId] = useState(externalSelectedSpace?.id);
-  const [inviteTabValue, setInviteTabValue] = useState(0);
-
   // Récupération de tous les espaces disponibles
   const {
     spaces,
@@ -35,6 +31,13 @@ const TeamMembersPanel = ({ selectedSpace: externalSelectedSpace }) => {
     error: spaceError,
     refetch: refetchSpaces,
   } = useMattermostSpaces();
+  const { t } = useTranslation();
+  const { user } = useAuth();
+
+  const [activeSpaceId, setActiveSpaceId] = useState(
+    externalSelectedSpace?.id || spaces[0]?.id,
+  );
+  const [inviteTabValue, setInviteTabValue] = useState(0);
 
   const {
     members,
@@ -48,7 +51,9 @@ const TeamMembersPanel = ({ selectedSpace: externalSelectedSpace }) => {
     removeMemberMutation,
     snackbar,
     closeSnackbar,
-  } = useTeamMembers(activeSpaceId);
+  } = useTeamMembers(
+    doesSpaceExists(activeSpaceId, spaces) ? activeSpaceId : spaces[0]?.id,
+  );
 
   // Lors du montage, refetch des espaces pour s'assurer d'avoir les données à jour
   useEffect(() => {
@@ -57,13 +62,22 @@ const TeamMembersPanel = ({ selectedSpace: externalSelectedSpace }) => {
 
   // Mettre à jour activeSpaceId lorsque externalSelectedSpace change
   useEffect(() => {
-    // Mettre à jour activeSpaceId lorsque externalSelectedSpace change
-    if (externalSelectedSpace) {
-      setActiveSpaceId(externalSelectedSpace.id);
+    if (externalSelectedSpace && spaces && spaces.length > 0) {
+      let externalSpaceExists = false;
+      console.debug("spaces", spaces);
+      if (
+        spaces &&
+        spaces.find((space) => space.id === externalSelectedSpace.id)
+      ) {
+        externalSpaceExists = true;
+      }
+      setActiveSpaceId(
+        externalSpaceExists ? externalSelectedSpace.id : spaces[0].id,
+      );
       // Force refetch des membres avec le nouvel espace
       if (refetch) void refetch();
     }
-  }, [externalSelectedSpace, refetch]);
+  }, [externalSelectedSpace, refetch, spaces]);
 
   // Auto-sélection du premier espace si nécessaire
   useEffect(() => {

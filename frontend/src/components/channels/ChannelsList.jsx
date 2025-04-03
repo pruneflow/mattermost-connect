@@ -1,4 +1,4 @@
-// src/components/channels/EnhancedChannelsList.jsx
+// src/components/channels/ChannelsList.jsx
 import { useState } from "react";
 import {
   List,
@@ -16,6 +16,7 @@ import {
   IconButton,
   Tooltip,
   Button,
+  Badge,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -23,8 +24,10 @@ import {
   Lock as PrivateChannelIcon,
   Edit as EditIcon,
   Archive as ArchiveIcon,
+  Restore as RestoreIcon,
   Add as AddIcon,
   Person as DirectMessageIcon,
+  FilterList as FilterIcon,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 
@@ -38,6 +41,8 @@ export const ChannelsList = ({
   onAddClick,
   onEditClick,
   onArchiveClick,
+  onRestoreClick,
+  showArchived = false,
 }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
@@ -49,6 +54,17 @@ export const ChannelsList = ({
         channel.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         channel.name.toLowerCase().includes(searchTerm.toLowerCase()),
     ) || [];
+
+  // Séparers les canaux actifs et archivés pour affichage
+  const archivedChannels = filteredChannels.filter(
+    (channel) => channel.isArchived,
+  );
+  const activeChannels = filteredChannels.filter(
+    (channel) => !channel.isArchived,
+  );
+
+  // Déterminer le nombre de canaux archivés pour badge
+  const archivedCount = archivedChannels.length;
 
   // Déterminer l'icône appropriée en fonction du type de canal
   const getChannelIcon = (channel) => {
@@ -115,7 +131,8 @@ export const ChannelsList = ({
 
       {/* Liste des canaux */}
       <List sx={{ overflow: "auto", maxHeight: "500px" }}>
-        {filteredChannels.map((channel) => (
+        {/* Afficher en priorité les canaux actifs */}
+        {activeChannels.map((channel) => (
           <ListItem
             key={channel.id}
             disablePadding
@@ -210,6 +227,114 @@ export const ChannelsList = ({
             </ListItemButton>
           </ListItem>
         ))}
+
+        {/* Section pour les canaux archivés, visible seulement si showArchived est activé */}
+        {showArchived && archivedChannels.length > 0 && (
+          <>
+            <Box sx={{ py: 1, px: 2, bgcolor: "rgba(0, 0, 0, 0.08)" }}>
+              <Typography variant="subtitle2" color="textSecondary">
+                {t("channels.archivedSection", {
+                  count: archivedChannels.length,
+                })}
+              </Typography>
+            </Box>
+
+            {archivedChannels.map((channel) => (
+              <ListItem
+                key={channel.id}
+                disablePadding
+                secondaryAction={
+                  <Box>
+                    <Tooltip title={t("channels.restore.tooltip")}>
+                      <IconButton
+                        edge="end"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRestoreClick(channel);
+                        }}
+                        size="small"
+                        color="primary"
+                      >
+                        <RestoreIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                }
+                sx={{
+                  bgcolor: "rgba(0, 0, 0, 0.03)",
+                  borderLeft: "4px solid",
+                  borderColor: "grey.400",
+                }}
+              >
+                <ListItemButton
+                  selected={selectedChannelId === channel.id}
+                  onClick={() => onChannelSelect(channel.id)}
+                  sx={{ pr: 10 }}
+                >
+                  <ListItemIcon sx={{ opacity: 0.7 }}>
+                    {getChannelIcon(channel)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <Typography
+                          component="span"
+                          fontWeight={
+                            selectedChannelId === channel.id ? "bold" : "normal"
+                          }
+                          sx={{ opacity: 0.7 }}
+                        >
+                          {channel.display_name}
+                        </Typography>
+
+                        <Chip
+                          size="small"
+                          label={t("channels.archived")}
+                          color="default"
+                          sx={{ ml: 1, height: 20, fontSize: "0.7rem" }}
+                        />
+
+                        <Chip
+                          size="small"
+                          label={t(`channels.types.${channel.type}`)}
+                          color={channel.type === "O" ? "primary" : "secondary"}
+                          variant="outlined"
+                          sx={{
+                            ml: 1,
+                            height: 20,
+                            fontSize: "0.7rem",
+                            opacity: 0.7,
+                          }}
+                        />
+                      </Box>
+                    }
+                    secondary={channel.purpose || channel.header}
+                    primaryTypographyProps={{
+                      fontWeight:
+                        selectedChannelId === channel.id ? "bold" : "normal",
+                    }}
+                    secondaryTypographyProps={{
+                      sx: { opacity: 0.7 },
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </>
+        )}
+
+        {/* Message quand il n'y a pas de résultats */}
+        {filteredChannels.length === 0 && (
+          <ListItem>
+            <ListItemText
+              primary={
+                <Typography align="center" color="textSecondary">
+                  {t("channels.noSearchResults", { search: searchTerm })}
+                </Typography>
+              }
+            />
+          </ListItem>
+        )}
       </List>
     </Paper>
   );

@@ -627,87 +627,32 @@ class MattermostIntegration {
     }
   }
 
-  // Méthode pour restaurer un canal archivé
-  async restoreChannel(channelId, token = null) {
+  // Ajouter une méthode pour restaurer un canal
+  async restoreChannelWithToken(channelId, token) {
     try {
-      // Si un token est fourni, l'utiliser, sinon chercher le token approprié
-      let authToken = token;
-
-      if (!authToken) {
-        // Essayer de trouver l'espace associé au canal
-        try {
-          // D'abord, obtenir les informations du canal pour connaître l'équipe
-          const channelInfo = await axios.get(
-            `${this.baseUrl}/api/v4/channels/${channelId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${this.adminToken}`,
-              },
-            },
-          );
-
-          const teamId = channelInfo.data.team_id;
-
-          // Ensuite, trouver l'espace associé à cette équipe
-          const spacesService = this.app.service("/api/mattermost-spaces");
-          const spaces = await spacesService.find({
-            query: {
-              config: { teamId },
-            },
-            paginate: false,
-          });
-
-          // Si nous avons un espace avec un token, utiliser ce token
-          if (spaces && spaces.length > 0 && spaces[0].apiToken) {
-            authToken = spaces[0].apiToken;
-          }
-        } catch (error) {
-          logger.warn(
-            `Impossible de trouver un token pour le canal ${channelId}, utilisation du token admin`,
-          );
-        }
-
-        // Si aucun token n'a été trouvé, utiliser le token admin
-        if (!authToken) {
-          authToken = this.adminToken;
-        }
-      }
-
       const response = await axios.post(
         `${this.baseUrl}/api/v4/channels/${channelId}/restore`,
         {},
         {
           headers: {
-            Authorization: `Bearer ${authToken}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         },
       );
 
-      logger.info(`Canal ${channelId} restauré avec succès`);
+      logger.info(`Canal ${channelId} restauré avec succès avec token bot`);
 
       return {
         success: true,
         channelId,
+        channel: response.data,
       };
     } catch (error) {
-      logger.error(`Erreur lors de la restauration du canal ${channelId}:`, {
-        message: error.message,
-        status: error.response ? error.response.status : "Sans réponse",
-      });
-
-      // Si l'accès est refusé avec le token fourni et ce n'est pas le token admin,
-      // essayer avec le token admin
-      if (
-        error.response &&
-        error.response.status === 403 &&
-        token &&
-        token !== this.adminToken
-      ) {
-        logger.warn(`Tentative de restauration avec token admin...`);
-        return this.restoreChannel(channelId, this.adminToken);
-      }
-
+      logger.error(
+        `Erreur lors de la restauration du canal ${channelId} avec token bot:`,
+        error,
+      );
       throw error;
     }
   }
@@ -749,27 +694,49 @@ class MattermostIntegration {
   // Voici les méthodes à ajouter au fichier mattermost-integration.js
 
   // Méthode pour obtenir les canaux d'une équipe avec le token du bot
-  async getTeamChannelsWithToken(teamId, token) {
+  async getTeamChannelsWithToken(teamId, token, options = {}) {
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/v4/teams/${teamId}/channels`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      const { includeDeleted = false } = options;
 
-      return response.data;
+      // URL de base pour récupérer les canaux
+      let url = `${this.baseUrl}/api/v4/teams/${teamId}/channels`;
+
+      // Si on veut inclure les canaux supprimés, on utilise une autre méthode API
+      if (includeDeleted) {
+        url = `${this.baseUrl}/api/v4/teams/${teamId}/channels/deleted`;
+      }
+
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      // Si on a demandé les canaux archivés, les ajouter aux canaux actifs
+      let allChannels = response.data;
+
+      if (includeDeleted) {
+        // Marquer ces canaux comme archivés
+        allChannels = allChannels.map((channel) => ({
+          ...channel,
+          isArchived: true,
+        }));
+
+        // Récupérer aussi les canaux actifs pour avoir une liste complète
+        const activeChannels = await this.getTeamChannelsWithToken(
+          teamId,
+          token,
+          { includeDeleted: false },
+        );
+        allChannels = [...activeChannels, ...allChannels];
+      }
+
+      return allChannels;
     } catch (error) {
       logger.error(
         `Erreur lors de la récupération des canaux de l'équipe ${teamId} avec token bot:`,
-        {
-          message: error.message,
-          status: error.response ? error.response.status : "Sans réponse",
-        },
+        error,
       );
-
       throw error;
     }
   }

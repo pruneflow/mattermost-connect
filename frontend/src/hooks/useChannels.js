@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 export const useChannels = (spaceId) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const [showArchived, setShowArchived] = useState(false);
 
   // État pour les notifications
   const [snackbar, setSnackbar] = useState({
@@ -30,8 +31,11 @@ export const useChannels = (spaceId) => {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["channels", spaceId],
-    queryFn: () => channelsService.getChannels(spaceId),
+    queryKey: ["channels", spaceId, showArchived],
+    queryFn: () =>
+      showArchived
+        ? channelsService.getArchivedChannels(spaceId)
+        : channelsService.getChannels(spaceId),
     enabled: !!spaceId, // Ne s'exécute que si spaceId est défini
     staleTime: 30000, // 1 minute avant de considérer les données comme périmées
   });
@@ -105,14 +109,38 @@ export const useChannels = (spaceId) => {
     },
   });
 
+  // Mutation pour restaurer un canal
+  const restoreChannelMutation = useMutation({
+    mutationFn: (channelId) =>
+      channelsService.restoreChannel(channelId, spaceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["channels", spaceId] });
+      setSnackbar({
+        open: true,
+        message: t("channels.restore.success"),
+        severity: "success",
+      });
+    },
+    onError: (error) => {
+      setSnackbar({
+        open: true,
+        message: t("channels.restore.error", { message: error.message }),
+        severity: "error",
+      });
+    },
+  });
+
   return {
     channels: channels || [],
     isLoading,
     error,
     refetch,
+    showArchived,
+    setShowArchived,
     createChannelMutation,
     updateChannelMutation,
     archiveChannelMutation,
+    restoreChannelMutation,
     snackbar,
     closeSnackbar,
   };
