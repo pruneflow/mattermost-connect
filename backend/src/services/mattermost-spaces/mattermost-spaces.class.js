@@ -52,8 +52,6 @@ exports.MattermostSpaces = class MattermostSpaces extends Service {
       data = { ...data, userId: user.id };
     }
 
-    console.debug("data", data);
-
     return super.create(data, params);
   }
 };

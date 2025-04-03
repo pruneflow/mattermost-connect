@@ -202,7 +202,6 @@ class MattermostIntegration {
           botToken = spaces[0].apiToken;
         }
       } catch (error) {
-        console.debug("error", error);
         logger.warn(
           `Impossible de trouver un token pour l'équipe ${teamId}, utilisation du token admin`,
         );
@@ -1212,6 +1211,152 @@ class MattermostIntegration {
         error,
       );
       throw error;
+    }
+  }
+
+  // Dans la classe MattermostIntegration, ajouter cette méthode
+
+  async createUser(userData) {
+    try {
+      // Valider les données utilisateur
+      this._validateUserData(userData);
+
+      // Générer un username unique
+      const username = this._generateUniqueUsername(userData);
+
+      // Préparer les données pour l'API Mattermost
+      const mattermostUserData = {
+        email: userData.email,
+        username: username,
+        first_name: userData.first_name || "",
+        last_name: userData.last_name || "",
+        password: userData.password,
+
+        // Options supplémentaires avec des valeurs par défaut sécurisées
+        auth_service: "",
+        locale: "fr", // Language par défaut
+        props: {
+          is_bot: "false", // Explicitement un utilisateur standard
+          marketing_opt_in: "false",
+        },
+
+        // Désactiver certaines options par défaut
+        enable_marketing_emails: false,
+      };
+
+      // Appel à l'API Mattermost pour créer l'utilisateur
+      const response = await axios.post(
+        `${this.baseUrl}/api/v4/users`,
+        mattermostUserData,
+        {
+          headers: {
+            Authorization: `Bearer ${this.adminToken}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      // Log de création
+      logger.info(`Utilisateur Mattermost créé : ${userData.email}`);
+
+      return response.data;
+    } catch (error) {
+      // Gestion détaillée des erreurs
+      this._handleUserCreationError(error, userData);
+    }
+  }
+
+  // Méthode de validation des données utilisateur
+  _validateUserData(userData) {
+    if (!userData.email) {
+      throw new Error("Email est requis pour la création du compte Mattermost");
+    }
+
+    if (!userData.password || userData.password.length < 8) {
+      throw new Error("Mot de passe invalide. Minimum 8 caractères.");
+    }
+
+    // Validation de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userData.email)) {
+      throw new Error("Format d'email invalide");
+    }
+  }
+
+  // Générer un username unique
+  _generateUniqueUsername(userData) {
+    // Créer un username base
+    const baseUsername =
+      userData.username ||
+      `${(userData.first_name || "").toLowerCase()}${(userData.last_name || "").toLowerCase()}`;
+
+    // Ajouter un identifiant unique
+    const uniqueSuffix = Date.now().toString().slice(-6);
+
+    // Nettoyer et limiter à 22 caractères (limite Mattermost)
+    const cleanUsername = baseUsername
+      .normalize("NFD") // Décomposer les caractères accentués
+      .replace(/[\u0300-\u036f]/g, "") // Supprimer les accents
+      .replace(/[^a-z0-9]/gi, "") // Supprimer les caractères non alphanumériques
+      .toLowerCase()
+      .substring(0, 16); // Limiter la longueur
+
+    return `${cleanUsername}-${uniqueSuffix}`;
+  }
+
+  // Gestion avancée des erreurs de création
+  _handleUserCreationError(error, userData) {
+    // Log détaillé de l'erreur
+    logger.error(`Erreur création utilisateur Mattermost : ${userData.email}`, {
+      errorMessage: error.message,
+      errorResponse: error.response?.data,
+      userData: {
+        email: userData.email,
+        username: userData.username,
+      },
+    });
+
+    // Cas spécifiques d'erreurs
+    if (error.response) {
+      switch (error.response.status) {
+        case 400:
+          // Email ou username déjà existant
+          if (
+            error.response.data.id ===
+            "store.sql_user.save_user.email_exists.app_error"
+          ) {
+            throw new Error(
+              "Un utilisateur avec cet email existe déjà dans Mattermost",
+            );
+          }
+          if (
+            error.response.data.id ===
+            "store.sql_user.save_user.username_exists.app_error"
+          ) {
+            throw new Error("Ce nom d'utilisateur est déjà utilisé");
+          }
+          break;
+
+        case 401:
+          throw new Error(
+            "Erreur d'authentification. Vérifiez le token admin.",
+          );
+
+        case 403:
+          throw new Error(
+            "Permissions insuffisantes pour créer un utilisateur",
+          );
+
+        default:
+          throw new Error(
+            `Erreur inattendue lors de la création de l'utilisateur : ${error.message}`,
+          );
+      }
+    } else {
+      // Erreur de réseau ou autre
+      throw new Error(
+        `Impossible de communiquer avec Mattermost : ${error.message}`,
+      );
     }
   }
 }

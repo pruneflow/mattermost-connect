@@ -1,9 +1,7 @@
 const { authenticate } = require("@feathersjs/authentication").hooks;
 const { iff, isProvider, preventChanges } = require("feathers-hooks-common");
 const utils = require("./mattermost-spaces.utils");
-
-// Au lieu de définir restrictUserId comme ceci
-// const restrictUserId = preventChanges("userId");
+const { syncUserToMattermostSpace } = require("./mattermost-spaces.utils");
 
 module.exports = {
   before: {
@@ -30,7 +28,18 @@ module.exports = {
     all: [],
     find: [],
     get: [],
-    create: [],
+    create: [
+      async (context) => {
+        if (context.result) {
+          const userService = context.app.service("/api/users");
+          const user = await userService.get(context.result.userId);
+
+          // Synchroniser l'utilisateur avec l'espace Mattermost
+          await syncUserToMattermostSpace(context.app, context.result, user);
+        }
+        return context;
+      },
+    ],
     update: [],
     patch: [],
     remove: [utils.deleteMattermostSpace],

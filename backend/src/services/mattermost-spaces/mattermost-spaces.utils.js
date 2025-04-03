@@ -207,3 +207,46 @@ exports.formatMattermostSpaceData = (spaceData) => {
 
   return formatted;
 };
+
+// Ajout d'une méthode pour ajouter l'utilisateur à l'équipe et aux canaux après création
+exports.syncUserToMattermostSpace = async (app, space, user) => {
+  try {
+    const mattermostIntegration = app.get("mattermostIntegration");
+
+    // Rechercher l'utilisateur Mattermost
+    const mattermostUsers = await mattermostIntegration._searchUserByEmail(
+      user.email,
+    );
+    const mattermostUser = mattermostUsers[0];
+
+    if (!mattermostUser) {
+      logger.warn(`Utilisateur Mattermost non trouvé pour ${user.email}`);
+      return;
+    }
+
+    // Ajouter l'utilisateur à l'équipe
+    await mattermostIntegration._addUserToTeamWithToken(
+      space.config.teamId,
+      mattermostUser.id,
+      space.apiToken,
+    );
+
+    // Ajouter l'utilisateur au canal par défaut si défini
+    if (space.config.defaultChannelId) {
+      await mattermostIntegration.addUserToChannel(
+        space.config.defaultChannelId,
+        mattermostUser.id,
+        space.apiToken,
+      );
+    }
+
+    logger.info(
+      `Utilisateur ${user.email} synchronisé avec l'espace Mattermost ${space.name}`,
+    );
+  } catch (error) {
+    logger.error(
+      "Erreur lors de la synchronisation de l'utilisateur à l'espace Mattermost",
+      error,
+    );
+  }
+};

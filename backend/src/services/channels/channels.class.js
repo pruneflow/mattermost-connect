@@ -373,7 +373,6 @@ exports.Channels = class Channels {
     if (!params.user) {
       throw new errors.NotAuthenticated("Authentification requise");
     }
-    console.debug("params", params);
     try {
       const { spaceId } = params.query || {};
 

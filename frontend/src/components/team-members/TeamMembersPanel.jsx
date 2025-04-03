@@ -64,7 +64,6 @@ const TeamMembersPanel = ({ selectedSpace: externalSelectedSpace }) => {
   useEffect(() => {
     if (externalSelectedSpace && spaces && spaces.length > 0) {
       let externalSpaceExists = false;
-      console.debug("spaces", spaces);
       if (
         spaces &&
         spaces.find((space) => space.id === externalSelectedSpace.id)
@@ -221,8 +220,8 @@ const TeamMembersPanel = ({ selectedSpace: externalSelectedSpace }) => {
           <MemberList
             members={members.map((member) => ({
               ...member,
-              isCurrentUser: member.id === user.id,
-              isOwner: member.id === currentSpace.userId,
+              isCurrentUser: member.email === user.email,
+              isOwner: member.isOwner,
             }))}
             isLoading={isLoadingMembers}
             error={memberError}

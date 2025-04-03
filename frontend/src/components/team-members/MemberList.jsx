@@ -115,7 +115,6 @@ const MemberList = ({
     const memberIsSystemAdmin = isSystemAdmin(member);
     const memberIsTeamAdmin =
       member.isAdmin || member.roles?.includes("team_admin");
-
     // Correspond au filtre de rôle
     let matchesRole = true;
     switch (filterRole) {
