@@ -2,8 +2,8 @@ const logger = require("./logger");
 const app = require("./app");
 const http = require("http");
 
-const port = app.get("port");
-const host = app.get("host");
+const port = process.env.PORT || app.get("port") || 3030;
+const host = process.env.HOST || app.get("host") || "localhost";
 
 const server = http.createServer(app);
 

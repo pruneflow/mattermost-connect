@@ -4,6 +4,8 @@ const helmet = require("helmet");
 const cors = require("cors");
 const logger = require("./logger");
 
+const { processConfig } = require("./config-handler");
+
 const feathers = require("@feathersjs/feathers");
 const configuration = require("@feathersjs/configuration");
 const express = require("@feathersjs/express");
@@ -20,13 +22,20 @@ const app = express(feathers());
 
 // Load app configuration
 app.configure(configuration());
+
+// Process configuration with environment variables
+const processedConfig = processConfig(app.settings);
+// Override the configuration with processed values
+Object.keys(processedConfig).forEach((key) => {
+  app.set(key, processedConfig[key]);
+});
+
 // Enable security, CORS, compression, favicon and body parsing
 app.use(helmet());
 
-const corsOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",")
+const corsOrigins = processedConfig.cors?.origins
+  ? processedConfig.cors?.origins.split(",")
   : ["http://localhost:3000"];
-
 // Utiliser la configuration dans app.js
 app.use(
   cors({

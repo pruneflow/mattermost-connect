@@ -5,12 +5,27 @@ class MattermostIntegration {
   constructor(app) {
     this.app = app;
     this.config = app.get("mattermost") || {};
-    this.baseUrl = this.config.baseUrl || "http://localhost:8065";
-    this.adminToken = this.config.adminToken || "";
 
-    logger.info(
-      "Service Mattermost en mode production - connexion à " + this.baseUrl,
-    );
+    // Vérifier les variables d'environnement pour la configuration Mattermost
+    this.baseUrl =
+      this.config.baseUrl === "MATTERMOST_BASE_URL" &&
+      process.env.MATTERMOST_BASE_URL
+        ? process.env.MATTERMOST_BASE_URL
+        : this.config.baseUrl || "http://localhost:8065";
+
+    this.adminToken =
+      this.config.adminToken === "MATTERMOST_ADMIN_TOKEN" &&
+      process.env.MATTERMOST_ADMIN_TOKEN
+        ? process.env.MATTERMOST_ADMIN_TOKEN
+        : this.config.adminToken || "";
+
+    if (!this.adminToken) {
+      logger.warn(
+        "Mattermost admin token is not configured. Some functionality may be limited.",
+      );
+    }
+
+    logger.info("Service Mattermost initialisé - connexion à " + this.baseUrl);
   }
   // Rechercher un utilisateur par email
   async _searchUserByEmail(email) {

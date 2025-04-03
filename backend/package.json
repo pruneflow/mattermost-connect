@@ -20,7 +20,9 @@
     "migrate": "knex migrate:latest",
     "migrate:make": "knex migrate:make",
     "migrate:rollback": "knex migrate:rollback",
-    "lint": "eslint src/. tests/. --config .eslintrc.json"
+    "lint": "eslint src/. tests/. --config .eslintrc.json",
+    "test-env": "node scripts/test-env.js",
+    "gen-prod-env": "node scripts/generate-prod-env.js"
   },
   "dependencies": {
     "@feathersjs/authentication": "^5.0.0",

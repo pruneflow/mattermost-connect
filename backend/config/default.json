@@ -1,8 +1,8 @@
 {
   "host": "localhost",
-  "port": 3030,
+  "port": "PORT",
   "public": "../public/",
-  "defaultEmail": "support@nocode.com",
+  "defaultEmail": "DEFAULT_EMAIL",
   "paginate": {
     "default": 10,
     "max": 50
@@ -10,16 +10,16 @@
   "authentication": {
     "entity": "user",
     "service": "api/users",
-    "secret": "1a5586000a587388a7dc155550d7aa0c9865288283da9055a36abffjdkosjfldskjfklsdfjsldkfjdslkfjsdlf89qdfjkdlsjflksdjfsdfsdfsd5f4sdf4sdf654sd6f54sdf654sdf6d6cq7zezq87rc8t7re46eq4rc6qr4e6tsv4ez",
+    "secret": "JWT_SECRET",
     "authStrategies": ["jwt", "local"],
     "jwtOptions": {
       "header": {
         "typ": "access"
       },
-      "audience": "https://yourdomain.com",
-      "issuer": "feathers",
+      "audience": "JWT_AUDIENCE",
+      "issuer": "JWT_ISSUER",
       "algorithm": "HS256",
-      "expiresIn": "1d"
+      "expiresIn": "JWT_EXPIRES_IN"
     },
     "local": {
       "usernameField": "email",
@@ -27,30 +27,33 @@
     }
   },
   "postgres": {
-    "client": "pg",
+    "client": "DB_CLIENT",
     "connection": {
-      "host": "localhost",
-      "user": "axelor",
-      "password": "lmdpdlaa",
-      "database": "mattermost_admin"
+      "host": "DB_HOST",
+      "user": "DB_USER",
+      "password": "DB_PASSWORD",
+      "database": "DB_DATABASE"
     }
   },
   "mattermost": {
-    "baseUrl": "http://localhost:8065",
-    "adminToken": "jsrodqoogirdd8tymftmb8549c"
+    "baseUrl": "MATTERMOST_BASE_URL",
+    "adminToken": "MATTERMOST_ADMIN_TOKEN"
   },
-   "mailer": {
+  "mailer": {
     "transporter": {
-      "host": "sandbox.smtp.mailtrap.io",
-      "port": "2525",
-      "secureConnection": "false",
+      "host": "MAILER_HOST",
+      "port": "MAILER_PORT",
+      "secureConnection": "MAILER_SECURE",
       "auth": {
-        "user": "43f448ea5e3a6e" ,
-        "pass": "f375eff3b00bc4"
+        "user": "MAILER_USER",
+        "pass": "MAILER_PASS"
       },
       "tls": {
         "ciphers": "SSLv3"
       }
     }
+  },
+  "cors": {
+    "origins": "CORS_ORIGINS"
   }
 }
