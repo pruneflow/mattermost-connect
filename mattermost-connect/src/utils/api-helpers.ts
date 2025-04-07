@@ -1,25 +1,50 @@
-// src/utils/api.js
+// src/utils/api-helpers.ts
 
 /**
- * Utilitaires pour faciliter l'utilisation de l'API Mattermost
+ * Authentication parameters for Mattermost login
+ */
+export interface AuthParams {
+  /** Mattermost server URL */
+  serverUrl: string;
+
+  /** Username or email */
+  username: string;
+
+  /** User password */
+  password: string;
+}
+
+/**
+ * Token validation parameters
+ */
+export interface TokenValidationParams {
+  /** Mattermost server URL */
+  serverUrl: string;
+
+  /** Token to validate */
+  token: string;
+}
+
+/**
+ * API utilities for working with Mattermost
  */
 export const MattermostAPI = {
   /**
-   * Créer un token utilisateur à partir des identifiants
-   * @param {Object} params - Paramètres d'authentification
-   * @param {string} params.serverUrl - URL du serveur Mattermost
-   * @param {string} params.username - Nom d'utilisateur ou email
-   * @param {string} params.password - Mot de passe
-   * @returns {Promise<string>} Token d'accès personnel
+   * Creates a user token from credentials
+   *
+   * @param params - Authentication parameters
+   * @returns A Promise resolving to the personal access token
    */
-  createUserToken: async ({ serverUrl, username, password }) => {
-    // Normaliser l'URL du serveur
+  createUserToken: async (params: AuthParams): Promise<string> => {
+    const { serverUrl, username, password } = params;
+
+    // Normalize server URL
     const baseUrl = serverUrl.endsWith("/")
       ? serverUrl.slice(0, -1)
       : serverUrl;
 
     try {
-      // Étape 1: Se connecter et obtenir le token de session
+      // Step 1: Login and obtain session token
       const loginResponse = await fetch(`${baseUrl}/api/v4/users/login`, {
         method: "POST",
         headers: {
@@ -34,19 +59,22 @@ export const MattermostAPI = {
       if (!loginResponse.ok) {
         const error = await loginResponse.json().catch(() => ({}));
         throw new Error(
-          error.message ||
-            `Échec de l'authentification: ${loginResponse.status}`,
+          error.message || `Authentication failed: ${loginResponse.status}`,
         );
       }
 
-      // Récupérer l'ID de l'utilisateur
+      // Get user ID
       const user = await loginResponse.json();
       const userId = user.id;
 
-      // Récupérer le token de session depuis les en-têtes
+      // Get session token from headers
       const sessionToken = loginResponse.headers.get("Token");
 
-      // Étape 2: Créer un token d'accès personnel (PAT)
+      if (!sessionToken) {
+        throw new Error("No session token returned from server");
+      }
+
+      // Step 2: Create a personal access token (PAT)
       const tokenResponse = await fetch(
         `${baseUrl}/api/v4/users/${userId}/tokens`,
         {
@@ -64,35 +92,35 @@ export const MattermostAPI = {
       if (!tokenResponse.ok) {
         const error = await tokenResponse.json().catch(() => ({}));
         throw new Error(
-          error.message ||
-            `Échec de la création du token: ${tokenResponse.status}`,
+          error.message || `Token creation failed: ${tokenResponse.status}`,
         );
       }
 
-      // Retourner le token
+      // Return the token
       const tokenData = await tokenResponse.json();
       return tokenData.token;
     } catch (error) {
-      console.error("Erreur lors de la création du token utilisateur:", error);
+      console.error("Error creating user token:", error);
       throw error;
     }
   },
 
   /**
-   * Vérifier la validité d'un token API
-   * @param {Object} params - Paramètres de vérification
-   * @param {string} params.serverUrl - URL du serveur Mattermost
-   * @param {string} params.token - Token à vérifier
-   * @returns {Promise<boolean>} True si le token est valide
+   * Validates if a token is valid
+   *
+   * @param params - Token validation parameters
+   * @returns A Promise resolving to a boolean indicating if token is valid
    */
-  validateToken: async ({ serverUrl, token }) => {
-    // Normaliser l'URL du serveur
+  validateToken: async (params: TokenValidationParams): Promise<boolean> => {
+    const { serverUrl, token } = params;
+
+    // Normalize server URL
     const baseUrl = serverUrl.endsWith("/")
       ? serverUrl.slice(0, -1)
       : serverUrl;
 
     try {
-      // Tenter de récupérer les informations de l'utilisateur avec ce token
+      // Try to get user info with this token
       const response = await fetch(`${baseUrl}/api/v4/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -101,20 +129,21 @@ export const MattermostAPI = {
 
       return response.ok;
     } catch (error) {
-      console.error("Erreur lors de la validation du token:", error);
+      console.error("Error validating token:", error);
       return false;
     }
   },
 
   /**
-   * Récupère les équipes auxquelles l'utilisateur a accès
-   * @param {Object} params - Paramètres
-   * @param {string} params.serverUrl - URL du serveur Mattermost
-   * @param {string} params.token - Token d'authentification
-   * @returns {Promise<Array>} Liste des équipes
+   * Gets teams the user has access to
+   *
+   * @param params - Parameters with serverUrl and token
+   * @returns A Promise resolving to an array of teams
    */
-  getUserTeams: async ({ serverUrl, token }) => {
-    // Normaliser l'URL du serveur
+  getUserTeams: async (params: TokenValidationParams): Promise<any[]> => {
+    const { serverUrl, token } = params;
+
+    // Normalize server URL
     const baseUrl = serverUrl.endsWith("/")
       ? serverUrl.slice(0, -1)
       : serverUrl;
@@ -129,28 +158,29 @@ export const MattermostAPI = {
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(
-          error.message ||
-            `Échec de la récupération des équipes: ${response.status}`,
+          error.message || `Failed to get teams: ${response.status}`,
         );
       }
 
       return response.json();
     } catch (error) {
-      console.error("Erreur lors de la récupération des équipes:", error);
+      console.error("Error getting teams:", error);
       throw error;
     }
   },
 
   /**
-   * Récupère les canaux d'une équipe accessibles par l'utilisateur
-   * @param {Object} params - Paramètres
-   * @param {string} params.serverUrl - URL du serveur Mattermost
-   * @param {string} params.token - Token d'authentification
-   * @param {string} params.teamId - ID de l'équipe
-   * @returns {Promise<Array>} Liste des canaux
+   * Gets channels in a team accessible by the user
+   *
+   * @param params - Parameters with serverUrl, token, and teamId
+   * @returns A Promise resolving to an array of channels
    */
-  getTeamChannels: async ({ serverUrl, token, teamId }) => {
-    // Normaliser l'URL du serveur
+  getTeamChannels: async (
+    params: TokenValidationParams & { teamId: string },
+  ): Promise<any[]> => {
+    const { serverUrl, token, teamId } = params;
+
+    // Normalize server URL
     const baseUrl = serverUrl.endsWith("/")
       ? serverUrl.slice(0, -1)
       : serverUrl;
@@ -168,14 +198,13 @@ export const MattermostAPI = {
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(
-          error.message ||
-            `Échec de la récupération des canaux: ${response.status}`,
+          error.message || `Failed to get channels: ${response.status}`,
         );
       }
 
       return response.json();
     } catch (error) {
-      console.error("Erreur lors de la récupération des canaux:", error);
+      console.error("Error getting channels:", error);
       throw error;
     }
   },

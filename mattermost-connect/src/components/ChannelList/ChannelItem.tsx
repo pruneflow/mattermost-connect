@@ -1,0 +1,160 @@
+// src/components/ChannelList/ChannelItem.tsx
+import React from "react";
+import { Channel } from "../../types";
+
+// Material-UI Components
+import {
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Badge,
+  SxProps,
+  Theme,
+} from "@mui/material";
+
+// Material-UI Icons
+import {
+  Tag as TagIcon,
+  LockOutlined as PrivateIcon,
+  Person as PersonIcon,
+  Group as GroupIcon,
+  Bookmark as FavoriteIcon,
+  FiberManualRecord as StatusIcon,
+} from "@mui/icons-material";
+
+/**
+ * Props for the ChannelItem component
+ */
+export interface ChannelItemProps {
+  /** Channel data object */
+  channel: Channel;
+
+  /** Whether this channel is currently selected */
+  isSelected?: boolean;
+
+  /** Click handler for the channel item */
+  onClick?: () => void;
+
+  /** Additional styling for the root element */
+  sx?: SxProps<Theme>;
+
+  /** Additional styling for the button element */
+  buttonSx?: SxProps<Theme>;
+
+  /** Additional styling for the selected state */
+  selectedSx?: SxProps<Theme>;
+
+  /** Additional styling for the icon */
+  iconSx?: SxProps<Theme>;
+}
+
+/**
+ * A component that renders a single channel item in the channel list
+ */
+const ChannelItem: React.FC<ChannelItemProps> = ({
+  channel,
+  isSelected = false,
+  onClick,
+  sx,
+  buttonSx,
+  selectedSx,
+  iconSx,
+}) => {
+  // Determine which icon to use based on channel type
+  const getChannelIcon = () => {
+    const isFavorite = channel.is_favorite;
+
+    if (isFavorite) {
+      return <FavoriteIcon color="primary" fontSize="small" />;
+    }
+
+    switch (channel.type) {
+      case "P":
+        return <PrivateIcon fontSize="small" />;
+      case "D":
+        return <PersonIcon fontSize="small" />;
+      case "G":
+        return <GroupIcon fontSize="small" />;
+      default:
+        return <TagIcon fontSize="small" />;
+    }
+  };
+
+  // Used to display user status in direct messages
+  const isDirectMessage = channel.type === "D";
+
+  // Unread mentions if available
+  const hasUnread = Boolean(channel.mention_count);
+
+  return (
+    <ListItemButton
+      selected={isSelected}
+      onClick={onClick}
+      sx={{
+        px: 2,
+        py: 1,
+        borderRadius: 1,
+        mx: 0.5,
+        "&.Mui-selected": {
+          backgroundColor: (theme) => theme.palette.action.selected,
+          color: "primary.main",
+          "&:hover": {
+            backgroundColor: (theme) => theme.palette.action.hover,
+          },
+          ...(selectedSx as any),
+        },
+        ...(buttonSx as any),
+        ...(sx as any),
+      }}
+    >
+      <ListItemIcon
+        sx={{
+          minWidth: 36,
+          color: isSelected ? "primary.main" : "action.active",
+          ...(iconSx as any),
+        }}
+      >
+        {getChannelIcon()}
+      </ListItemIcon>
+
+      <ListItemText
+        primary={
+          <div style={{ display: "flex", alignItems: "center" }}>
+            {channel.display_name}
+
+            {/* Status indicator for direct messages */}
+            {isDirectMessage && (
+              <StatusIcon
+                sx={{
+                  ml: 0.5,
+                  width: 8,
+                  height: 8,
+                  color: "success.main",
+                }}
+              />
+            )}
+          </div>
+        }
+        slotProps={{
+          primary: {
+            variant: "body2",
+            noWrap: true,
+            fontWeight: hasUnread || isSelected ? 600 : 400,
+            color: hasUnread || isSelected ? "text.primary" : "text.secondary",
+          },
+        }}
+      />
+
+      {/* Mention badge */}
+      {hasUnread && (
+        <Badge
+          badgeContent={channel.mention_count}
+          color="primary"
+          sx={{ ml: 1 }}
+        />
+      )}
+    </ListItemButton>
+  );
+};
+
+export default ChannelItem;

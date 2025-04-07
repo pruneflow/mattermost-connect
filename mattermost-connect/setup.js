@@ -67,7 +67,7 @@ if (command === "build") {
 if (command === "demo") {
   // Installer les dépendances dans le projet de démonstration
   console.log("Installation des dépendances de la démo...");
-  run("cd examples/demo && pnpm install");
+  run("pnpm build && cd examples/demo && pnpm install");
   console.log("Lancement de l'application démo...");
   run("pnpm --filter mattermost-connect-demo start");
 } else if (command === "dev") {

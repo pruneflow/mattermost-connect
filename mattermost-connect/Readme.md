@@ -1,40 +1,187 @@
 # MattermostConnect
 
-Une bibliothèque de composants React pour intégrer des fonctionnalités Mattermost dans n'importe quelle application web.
+A modern React component library for integrating Mattermost features into any web application, built with Material-UI and TypeScript.
 
-## Caractéristiques
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-4.9%2B-blue)
+![React](https://img.shields.io/badge/React-17%2B-61dafb)
+![Material-UI](https://img.shields.io/badge/Material--UI-5.14%2B-0081cb)
 
-- 🔄 **Deux modes d'intégration**: Direct (avec token utilisateur) ou Proxy (via notre service)
-- 🧩 **Composants modulaires**: Utilisez uniquement ce dont vous avez besoin
-- 💬 **Communication en temps réel**: Support WebSocket pour les mises à jour instantanées
-- 🎨 **Personnalisable**: Thème facilement adaptable à votre application
-- 🔒 **Sécurisé**: Gestion appropriée des jetons d'authentification
+## Features
 
-## Installation
+- 🔄 **Two integration modes**: Direct (with user token) or Proxy (via your service)
+- 🧩 **Modular components**: Use only what you need
+- 💬 **Real-time communication**: WebSocket support for instant updates
+- 🎨 **Material-UI based**: Modern UI with full customization options
+- 🔒 **Secure**: Proper token management
+- 📱 **Responsive design**: Works on all devices
+- 🌐 **TypeScript support**: Full type definitions included
+
+# Guide d'installation et de développement
+
+## Installation initiale
+
+Pour installer les dépendances sans exécuter le build automatiquement (ce qui échouerait sans les dépendances) :
 
 ```bash
-npm install mattermost-connect
-# ou
-yarn add mattermost-connect
+# Installer les dépendances
+pnpm install
+
+# Construire la bibliothèque manuellement
+pnpm run build
 ```
 
-## Démarrage rapide
+## Structure du projet
 
-### Mode Direct - Connexion avec un token
+Le projet est organisé comme suit :
 
-```jsx
+- `src/` : Code source de la bibliothèque
+    - `components/` : Composants UI React
+    - `context/` : Context provider et hooks
+    - `services/` : Services de communication avec Mattermost
+    - `types/` : Définitions TypeScript
+    - `utils/` : Utilitaires et helpers
+    - `theme/` : Configuration du thème Material-UI
+- `examples/` : Applications d'exemple
+    - `demo/` : Application de démonstration
+
+## Commandes disponibles
+
+- `pnpm run build` : Construit la bibliothèque
+- `pnpm run dev` : Lance le build en mode watch
+- `pnpm run clean` : Nettoie le dossier de build
+- `pnpm run lint` : Vérifie le code avec ESLint
+- `pnpm run format` : Formate le code avec Prettier
+- `pnpm run typecheck` : Vérifie les types TypeScript
+- `pnpm run demo` : Lance l'application de démonstration
+- `pnpm run test` : Exécute les tests
+
+## Exécuter la démo
+
+Pour lancer l'application de démonstration :
+
+1. Construisez d'abord la bibliothèque :
+   ```bash
+   pnpm run build
+   ```
+
+2. Installez les dépendances de la démo :
+   ```bash
+   cd examples/demo
+   pnpm install
+   ```
+
+3. Lancez l'application démo :
+   ```bash
+   pnpm start
+   ```
+
+## Développement
+
+Pour travailler sur la bibliothèque en mode développement :
+
+1. Lancez le build en mode watch dans un terminal :
+   ```bash
+   pnpm run dev
+   ```
+
+2. Dans un autre terminal, lancez l'application démo :
+   ```bash
+   cd examples/demo
+   pnpm start
+   ```
+
+Les modifications au code source seront automatiquement recompilées et l'application démo se mettra à jour.
+
+## Troubleshooting
+
+### Erreurs de build lors de l'installation
+
+Si vous rencontrez des erreurs lors de l'installation avec `pnpm install`, assurez-vous de suivre la procédure :
+1. Installation des dépendances : `pnpm install`
+2. Construction manuelle : `pnpm run build`
+
+Le script `prepublishOnly` a été configuré pour ne s'exécuter que lors de la publication du package, pas lors de l'installation.
+
+### Problèmes avec React comme dépendance
+
+Cette bibliothèque utilise React comme "peer dependency", ce qui signifie que votre application doit fournir sa propre version de React. Si vous rencontrez des erreurs liées à des versions incompatibles de React, assurez-vous que votre application utilise React 17 ou supérieur.
+
+## Quick Start
+
+### Direct Mode - Connection with a user token
+
+```tsx
+import React from 'react';
+import { 
+  MattermostProvider, 
+  ChannelList, 
+  ChannelViewer, 
+  MessageComposer, 
+  MattermostThemeProvider 
+} from 'mattermost-connect';
+
+const App = () => {
+  const [selectedChannelId, setSelectedChannelId] = React.useState('');
+  
+  return (
+    <MattermostThemeProvider>
+      <MattermostProvider
+        serverUrl="https://mattermost.example.com"
+        token="your_personal_access_token"
+      >
+        <div style={{ display: 'flex', height: '100vh' }}>
+          {/* Channel List */}
+          <div style={{ width: 280, borderRight: '1px solid #eee' }}>
+            <ChannelList
+              teamId="your_team_id"
+              selectedChannelId={selectedChannelId}
+              onSelectChannel={(channel) => setSelectedChannelId(channel.id)}
+            />
+          </div>
+          
+          {/* Channel Viewer */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <ChannelViewer
+                channelId={selectedChannelId}
+                showHeader={true}
+              />
+            </div>
+            
+            {/* Message Composer */}
+            <MessageComposer
+              channelId={selectedChannelId}
+              placeholder="Type a message..."
+              allowAttachments={true}
+            />
+          </div>
+        </div>
+      </MattermostProvider>
+    </MattermostThemeProvider>
+  );
+};
+
+export default App;
+```
+
+### Proxy Mode - Connection via an intermediary service
+
+```tsx
 import React from 'react';
 import { MattermostProvider, ChannelViewer } from 'mattermost-connect';
 
 const App = () => {
   return (
     <MattermostProvider
-      serverUrl="https://mattermost.example.com"
-      token="votre_token_ici"
+      proxyUrl="https://your-proxy-service.com"
+      clientId="your_client_id"
+      userId="user_id_in_your_system"
     >
-      <div style={{ height: '500px' }}>
-        <ChannelViewer channelId="ID_DU_CANAL" />
-      </div>
+      <ChannelViewer
+        channelId="channel_id"
+        showHeader={true}
+      />
     </MattermostProvider>
   );
 };
@@ -42,53 +189,30 @@ const App = () => {
 export default App;
 ```
 
-### Mode Proxy - Connexion via un service intermédiaire
+## Authentication Utilities (Direct Mode)
 
-```jsx
-import React from 'react';
-import { MattermostProvider, ChannelViewer } from 'mattermost-connect';
+For direct mode authentication, use the `MattermostAPI` utility:
 
-const App = () => {
-  return (
-    <MattermostProvider
-      proxyUrl="https://votre-proxy.example.com"
-      clientId="votre_client_id"
-      userId="id_utilisateur_application"
-    >
-      <div style={{ height: '500px' }}>
-        <ChannelViewer channelId="ID_DU_CANAL" />
-      </div>
-    </MattermostProvider>
-  );
-};
-
-export default App;
-```
-
-## Utilitaires d'authentification (Mode Direct)
-
-Pour faciliter l'authentification en mode direct, utilisez l'utilitaire `MattermostAPI` :
-
-```jsx
+```tsx
 import { MattermostAPI } from 'mattermost-connect';
 
-// Obtenir un token à partir de l'email et du mot de passe
+// Get a token from email and password
 const getToken = async () => {
   try {
     const token = await MattermostAPI.createUserToken({
       serverUrl: 'https://mattermost.example.com',
       username: 'user@example.com',
-      password: 'mot_de_passe'
+      password: 'password'
     });
     
-    console.log('Token obtenu :', token);
+    console.log('Token obtained:', token);
     return token;
   } catch (error) {
-    console.error('Erreur d\'authentification :', error);
+    console.error('Authentication error:', error);
   }
 };
 
-// Vérifier si un token est valide
+// Check if a token is valid
 const checkToken = async (token) => {
   const isValid = await MattermostAPI.validateToken({
     serverUrl: 'https://mattermost.example.com',
@@ -99,45 +223,40 @@ const checkToken = async (token) => {
 };
 ```
 
-## Composants disponibles
+## Components
 
-### ChannelViewer
+### MattermostProvider
 
-Affiche les messages d'un canal Mattermost.
+The core provider component that manages the connection and state.
 
-```jsx
-<ChannelViewer 
-  channelId="ID_DU_CANAL"
-  readOnly={false}
-  showHeader={true}
-  loadMessageCount={50}
-  autoScrollToBottom={true}
-/>
-```
-
-### MessageComposer
-
-Permet aux utilisateurs d'envoyer des messages dans un canal.
-
-```jsx
-<MessageComposer 
-  channelId="ID_DU_CANAL"
-  placeholder="Écrivez un message..."
-  allowAttachments={true}
-  showSendButton={true}
-  onMessageSent={(message) => console.log('Message envoyé', message)}
-/>
+```tsx
+<MattermostProvider
+  // Direct mode
+  serverUrl="https://mattermost.example.com"
+  token="your_token"
+  
+  // OR Proxy mode
+  proxyUrl="https://proxy.example.com"
+  clientId="client_id"
+  userId="user_id"
+  
+  // Options
+  enableWebsocket={true}
+  refreshInterval={30000}
+>
+  {/* Your components */}
+</MattermostProvider>
 ```
 
 ### ChannelList
 
-Affiche la liste des canaux disponibles pour une équipe.
+Displays a list of channels from a Mattermost team.
 
-```jsx
-<ChannelList 
-  teamId="ID_DE_L_EQUIPE"
-  selectedChannelId="ID_CANAL_SELECTIONNE"
-  onSelectChannel={(channel) => console.log('Canal sélectionné', channel)}
+```tsx
+<ChannelList
+  teamId="team_id"
+  selectedChannelId="selected_channel_id"
+  onSelectChannel={(channel) => console.log('Selected channel:', channel)}
   showPrivateChannels={true}
   showDirectMessages={true}
   showSearch={true}
@@ -145,106 +264,155 @@ Affiche la liste des canaux disponibles pour une équipe.
 />
 ```
 
-## Personnalisation
+### ChannelViewer
 
-MattermostConnect utilise des variables CSS pour permettre une personnalisation facile :
+Displays messages from a channel.
 
-```css
-:root {
-  /* Couleurs générales */
-  --mattermost-border-color: #ccc;
-  --mattermost-bg-color: #fff;
-  --mattermost-text-color: #333;
-  
-  /* En-tête de canal */
-  --mattermost-header-bg: #f5f5f5;
-  --mattermost-header-color: #333;
-  
-  /* Messages */
-  --mattermost-avatar-bg: #1c58d9;
-  --mattermost-avatar-color: white;
-  --mattermost-author-color: #333;
-  --mattermost-message-color: #333;
-  
-  /* Éléments d'action */
-  --mattermost-primary-bg: #1c58d9;
-  --mattermost-primary-color: white;
-  --mattermost-button-bg: #f5f5f5;
-  --mattermost-button-color: #333;
-  
-  /* Autres éléments configurables... */
-}
+```tsx
+<ChannelViewer
+  channelId="channel_id"
+  showHeader={true}
+  readOnly={false}
+  autoScrollToBottom={true}
+  loadMessageCount={50}
+/>
 ```
 
-## Usage avancé
+### MessageComposer
 
-### Utilisation du hook useMattermost
+Allows users to compose and send messages.
 
-Le hook `useMattermost` vous donne accès à toutes les fonctionnalités du service Mattermost :
+```tsx
+<MessageComposer
+  channelId="channel_id"
+  placeholder="Type a message..."
+  allowAttachments={true}
+  showSendButton={true}
+  maxHeight={150}
+  onMessageSent={(message) => console.log('Message sent:', message)}
+/>
+```
 
-```jsx
+## Customization
+
+### Using the Theme Provider
+
+MattermostConnect includes a theme provider based on Material-UI that you can customize:
+
+```tsx
+import { MattermostThemeProvider, createDefaultTheme } from 'mattermost-connect';
+import { createTheme } from '@mui/material/styles';
+
+// Create your custom theme by extending the default theme
+const myTheme = createTheme({
+  ...createDefaultTheme(),
+  palette: {
+    primary: {
+      main: '#ff5722', // Your custom primary color
+    },
+    // Override other colors as needed
+  }
+});
+
+// Use the custom theme
+<MattermostThemeProvider theme={myTheme}>
+  {/* Your components */}
+</MattermostThemeProvider>
+```
+
+### Component-Level Styling
+
+Each component accepts the following styling props:
+
+- `className`: CSS class name for the root element
+- `style`: Inline styles for the root element
+- `sx`: Material-UI's [sx prop](https://mui.com/system/getting-started/the-sx-prop/) for advanced styling
+- Component-specific styling props (check each component's prop types)
+
+Example:
+
+```tsx
+<ChannelList
+  sx={{
+    borderRight: '1px solid',
+    borderColor: 'divider',
+    bgcolor: '#f7f9fa',
+  }}
+  selectedChannelSx={{
+    bgcolor: 'rgba(25, 118, 210, 0.15)',
+    fontWeight: 'bold',
+  }}
+/>
+```
+
+## Using the Hook
+
+For advanced use cases, you can use the `useMattermost` hook to access all functionality:
+
+```tsx
 import { useMattermost } from 'mattermost-connect';
 
 const MyComponent = () => {
   const { 
     isConnected, 
     currentUser, 
-    service, 
-    error, 
-    mode 
+    getChannel, 
+    postMessage,
+    error,
+    mode
   } = useMattermost();
   
-  const sendCustomMessage = async () => {
+  const sendMessage = async () => {
     if (isConnected) {
       try {
-        await service.postMessage('channel_id', 'Message personnalisé');
+        await postMessage('channel_id', 'Hello from my custom component!');
       } catch (err) {
-        console.error('Erreur :', err);
+        console.error('Error:', err);
       }
     }
   };
   
   return (
     <div>
-      <p>Connecté: {isConnected ? 'Oui' : 'Non'}</p>
-      <p>Utilisateur: {currentUser?.username}</p>
+      <p>Connected: {isConnected ? 'Yes' : 'No'}</p>
+      <p>User: {currentUser?.username}</p>
       <p>Mode: {mode}</p>
-      <button onClick={sendCustomMessage}>Envoyer message personnalisé</button>
+      <button onClick={sendMessage}>Send custom message</button>
     </div>
   );
 };
 ```
 
-## Modes de fonctionnement
+## Operating Modes
 
-### Mode Direct
+### Direct Mode
 
-Le mode direct établit une connexion directe avec un serveur Mattermost en utilisant un token d'API utilisateur.
+Direct mode establishes a direct connection with a Mattermost server using a user API token.
 
-**Avantages :**
-- Fonctionne avec n'importe quel serveur Mattermost existant
-- Indépendance totale de notre infrastructure
-- Implémentation immédiate sans configuration supplémentaire
+**Advantages:**
+- Works with any existing Mattermost server
+- Independent of additional infrastructure
+- Immediate implementation without extra configuration
 
-**Configuration requise :**
-- URL du serveur Mattermost
-- Token d'API valide pour un utilisateur
+**Required configuration:**
+- Mattermost server URL
+- Valid API token for a user
 
-### Mode Proxy
+### Proxy Mode
 
-Le mode proxy utilise notre service intermédiaire pour gérer la communication avec Mattermost, en masquant les tokens et en simplifiant l'authentification.
+Proxy mode uses your intermediary service to manage communication with Mattermost, hiding tokens and simplifying authentication.
 
-**Avantages :**
-- Pas de gestion de tokens côté client
-- Sécurité améliorée (tokens jamais exposés au frontend)
-- Intégration avec notre outil d'administration
-- Fonctionnalités avancées (analytics, permissions granulaires)
+**Advantages:**
+- No token management on the client side
+- Enhanced security (tokens never exposed to frontend)
+- Integration with your administration tool
+- Advanced features (analytics, granular permissions)
 
-**Configuration requise :**
-- URL de notre service proxy
-- ID client pour votre application
-- ID utilisateur dans votre système
+**Required configuration:**
+- Your proxy service URL
+- Client ID for your application
+- User ID in your system (optional)
 
-## Licence
+## License
 
 MIT

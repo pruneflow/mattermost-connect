@@ -1,50 +1,59 @@
+// rollup.config.js
 import resolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
-import babel from "@rollup/plugin-babel";
+import typescript from "@rollup/plugin-typescript";
 import terser from "@rollup/plugin-terser";
+import json from "@rollup/plugin-json";
 import peerDepsExternal from "rollup-plugin-peer-deps-external";
-import postcss from "rollup-plugin-postcss";
+import { dts } from "rollup-plugin-dts";
 import { readFileSync } from "fs";
 
-// Lire le package.json
+// Read package.json
 const pkg = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 );
 
-export default {
-  input: "src/index.js",
-  output: [
-    {
-      file: pkg.main,
-      format: "cjs",
-      sourcemap: true,
-    },
-    {
-      file: pkg.module,
-      format: "esm",
-      sourcemap: true,
-    },
-  ],
-  plugins: [
-    peerDepsExternal(),
-    resolve(),
-    commonjs(),
-    babel({
-      babelHelpers: "bundled",
-      exclude: "node_modules/**",
-      presets: [
-        "@babel/preset-env",
-        ["@babel/preset-react", { runtime: "automatic" }],
-      ],
-    }),
-    postcss({
-      extensions: [".css"],
-      minimize: true,
-      inject: {
-        insertAt: "top",
+export default [
+  // JavaScript/TypeScript build
+  {
+    input: "src/index.ts",
+    output: [
+      {
+        file: pkg.main,
+        format: "cjs",
+        sourcemap: true,
       },
-    }),
-    terser(),
-  ],
-  external: Object.keys(pkg.peerDependencies || {}),
-};
+      {
+        file: pkg.module,
+        format: "esm",
+        sourcemap: true,
+      },
+    ],
+    plugins: [
+      peerDepsExternal(), // Automatically externalize peerDependencies
+      resolve({
+        extensions: [".js", ".jsx", ".ts", ".tsx"],
+      }),
+      commonjs(),
+      json(),
+      typescript({
+        tsconfig: "./tsconfig.json",
+        exclude: ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+        noEmitOnError: false, // Ne pas arrêter le build en cas d'erreur TypeScript
+      }),
+      terser(), // Minify the output
+    ],
+    external: [
+      ...Object.keys(pkg.dependencies || {}),
+      ...Object.keys(pkg.peerDependencies || {}),
+      "react/jsx-runtime",
+    ],
+  },
+  // TypeScript declarations
+  {
+    input: "dist/types/index.d.ts",
+    output: [{ file: "dist/index.d.ts", format: "es" }],
+    plugins: [dts()],
+    external: [/\.css$/],
+  },
+];
