@@ -1,0 +1,3 @@
+packages:
+  - '.'            # Le package principal (mattermost-connect)
+  - 'examples/*'   # Les exemples
