@@ -115,100 +115,98 @@ const TeamGrid: React.FC<TeamGridProps> = ({
 
           return (
             <Grid size={{ xs: 6, sm: 4, md: 3 }} key={team.id}>
-              <Item>
-                <Card
-                  elevation={isSelected ? 3 : 1}
-                  sx={{
-                    borderRadius: 2,
-                    position: "relative",
-                    border: isSelected ? 2 : 0,
-                    borderColor: "primary.main",
-                    transition: "all 0.2s ease-in-out",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      boxShadow: 3,
-                    },
-                    ...(isSelected ? (selectedTeamSx as any) : {}),
-                    ...(teamItemSx as any),
-                  }}
+              <Card
+                elevation={isSelected ? 3 : 1}
+                sx={{
+                  borderRadius: 2,
+                  position: "relative",
+                  border: isSelected ? 2 : 0,
+                  borderColor: "primary.main",
+                  transition: "all 0.2s ease-in-out",
+                  "&:hover": {
+                    transform: "translateY(-4px)",
+                    boxShadow: 3,
+                  },
+                  ...(isSelected ? (selectedTeamSx as any) : {}),
+                  ...(teamItemSx as any),
+                }}
+              >
+                <CardActionArea
+                  onClick={() => onSelectTeam(team)}
+                  sx={{ height: "100%" }}
                 >
-                  <CardActionArea
-                    onClick={() => onSelectTeam(team)}
-                    sx={{ height: "100%" }}
-                  >
-                    <CardContent sx={{ textAlign: "center", pt: 3, pb: 2 }}>
-                      {showIcons && (
-                        <Avatar
-                          sx={{
-                            width: 64,
-                            height: 64,
-                            bgcolor: generateColorFromString(team.name),
-                            fontSize: "1.5rem",
-                            mb: 2,
-                            mx: "auto",
-                          }}
-                        >
-                          {getTeamInitials(team)}
-                        </Avatar>
-                      )}
-
-                      <Typography
-                        variant="h6"
-                        component="div"
-                        gutterBottom
+                  <CardContent sx={{ textAlign: "center", pt: 3, pb: 2 }}>
+                    {showIcons && (
+                      <Avatar
                         sx={{
-                          fontWeight: 600,
-                          minHeight: showDescriptions ? 32 : "auto",
+                          width: 64,
+                          height: 64,
+                          bgcolor: generateColorFromString(team.name),
+                          fontSize: "1.5rem",
+                          mb: 2,
+                          mx: "auto",
                         }}
                       >
-                        {formatTeamName(team.display_name)}
-                      </Typography>
+                        {getTeamInitials(team)}
+                      </Avatar>
+                    )}
 
-                      {showDescriptions && team.description && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            height: 40,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                          }}
-                        >
-                          {team.description}
-                        </Typography>
-                      )}
-
-                      {showMemberCount && team.member_count && (
-                        <Tooltip title="Members">
-                          <Chip
-                            icon={<MembersIcon />}
-                            label={team.member_count}
-                            size="small"
-                            sx={{ mt: 1 }}
-                          />
-                        </Tooltip>
-                      )}
-                    </CardContent>
-                  </CardActionArea>
-
-                  {/* Selected indicator */}
-                  {isSelected && (
-                    <Box
+                    <Typography
+                      variant="h6"
+                      component="div"
+                      gutterBottom
                       sx={{
-                        position: "absolute",
-                        top: 8,
-                        right: 8,
-                        zIndex: 1,
+                        fontWeight: 600,
+                        minHeight: showDescriptions ? 32 : "auto",
                       }}
                     >
-                      <CheckIcon color="primary" fontSize="small" />
-                    </Box>
-                  )}
-                </Card>
-              </Item>
+                      {formatTeamName(team.display_name)}
+                    </Typography>
+
+                    {showDescriptions && team.description && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          height: 40,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                      >
+                        {team.description}
+                      </Typography>
+                    )}
+
+                    {showMemberCount && team.member_count && (
+                      <Tooltip title="Members">
+                        <Chip
+                          icon={<MembersIcon />}
+                          label={team.member_count}
+                          size="small"
+                          sx={{ mt: 1 }}
+                        />
+                      </Tooltip>
+                    )}
+                  </CardContent>
+                </CardActionArea>
+
+                {/* Selected indicator */}
+                {isSelected && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      zIndex: 1,
+                    }}
+                  >
+                    <CheckIcon color="primary" fontSize="small" />
+                  </Box>
+                )}
+              </Card>
             </Grid>
           );
         })}
