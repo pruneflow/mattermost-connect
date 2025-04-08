@@ -17,8 +17,9 @@ import {
 
 // Utils
 import {
+  formatTeamName,
   generateColorFromString,
-  truncateText,
+  getTeamInitials,
 } from "../../../utils/formatting";
 
 /**
@@ -71,29 +72,6 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
 
   // Select first team if none is selected
   const currentTeamId = selectedTeamId || (teams.length > 0 ? teams[0].id : "");
-
-  // Get the initials from team name
-  const getTeamInitials = (team: Team): string => {
-    const words = team.display_name.trim().split(/\s+/);
-
-    if (words.length === 1) {
-      return words[0].charAt(0).toUpperCase();
-    }
-
-    return (
-      words[0].charAt(0) + words[words.length - 1].charAt(0)
-    ).toUpperCase();
-  };
-
-  // Format the team name if maxNameLength is set
-  const formatTeamName = (name: string): string => {
-    // On mobile, use shorter names
-    const effectiveMaxLength = isMobile
-      ? Math.min(maxNameLength || 10, 10)
-      : maxNameLength;
-    if (!effectiveMaxLength || name.length <= effectiveMaxLength) return name;
-    return truncateText(name, effectiveMaxLength);
-  };
 
   // Handle tab change
   const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
@@ -151,11 +129,11 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
                     bgcolor: generateColorFromString(team.name),
                   }}
                 >
-                  {getTeamInitials(team)}
+                  {getTeamInitials(team.display_name)}
                 </Avatar>
               )}
 
-              {formatTeamName(team.display_name)}
+              {formatTeamName(team.display_name, maxNameLength)}
 
               {showMemberCount && team.member_count && !isMobile && (
                 <Badge

@@ -21,7 +21,10 @@ import {
 import { People as MembersIcon } from "@mui/icons-material";
 
 // Utils
-import { generateColorFromString } from "../../../utils/formatting";
+import {
+  generateColorFromString,
+  getTeamInitials,
+} from "../../../utils/formatting";
 
 /**
  * Props for the TeamSidebar component
@@ -63,19 +66,6 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
 }) => {
   // Select first team if none is selected
   const currentTeamId = selectedTeamId || (teams.length > 0 ? teams[0].id : "");
-
-  // Get the initials from team name
-  const getTeamInitials = (team: Team): string => {
-    const words = team.display_name.trim().split(/\s+/);
-
-    if (words.length === 1) {
-      return words[0].charAt(0).toUpperCase();
-    }
-
-    return (
-      words[0].charAt(0) + words[words.length - 1].charAt(0)
-    ).toUpperCase();
-  };
 
   return (
     <Box
@@ -203,7 +193,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                           transition: "all 0.2s ease-in-out",
                         }}
                       >
-                        {getTeamInitials(team)}
+                        {getTeamInitials(team.display_name)}
                       </Avatar>
                     </Badge>
                   </IconButton>

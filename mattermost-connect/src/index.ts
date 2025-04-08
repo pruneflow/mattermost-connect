@@ -43,6 +43,8 @@ export {
   truncateText,
   getInitials,
   generateColorFromString,
+  getTeamInitials,
+  formatTeamName,
 } from "./utils/formatting";
 
 export { MattermostAPI } from "./utils/api-helpers";

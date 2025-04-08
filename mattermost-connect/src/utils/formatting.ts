@@ -242,10 +242,40 @@ export const generateColorFromString = (str?: string): string => {
   return colors[sum % colors.length];
 };
 
+/**
+ * Generates initials from a team name
+ *
+ * @param teamName - Full team name
+ * @returns 1-2 character initials
+ */
+export const getTeamInitials = (teamName: string): string => {
+  const words = teamName.trim().split(/\s+/);
+
+  if (words.length === 1) {
+    return words[0].charAt(0).toUpperCase();
+  }
+
+  return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+};
+
+/**
+ * Format team name with optional truncation
+ *
+ * @param name - Team name to format
+ * @param maxLength - Maximum length before truncating (0 for no limit)
+ * @returns Formatted team name
+ */
+export const formatTeamName = (name: string, maxLength = 0): string => {
+  if (!maxLength || name.length <= maxLength) return name;
+  return truncateText(name, maxLength);
+};
+
 export default {
   formatMessageText,
   formatTimestamp,
   truncateText,
   getInitials,
   generateColorFromString,
+  getTeamInitials,
+  formatTeamName,
 };

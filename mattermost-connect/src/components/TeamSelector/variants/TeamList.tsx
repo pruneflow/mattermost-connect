@@ -21,8 +21,9 @@ import { People as MembersIcon } from "@mui/icons-material";
 
 // Utils
 import {
+  formatTeamName,
   generateColorFromString,
-  truncateText,
+  getTeamInitials,
 } from "../../../utils/formatting";
 
 /**
@@ -71,25 +72,6 @@ const TeamList: React.FC<TeamListProps> = ({
   teamItemSx,
   selectedTeamSx,
 }) => {
-  // Get the initials from team name
-  const getTeamInitials = (team: Team): string => {
-    const words = team.display_name.trim().split(/\s+/);
-
-    if (words.length === 1) {
-      return words[0].charAt(0).toUpperCase();
-    }
-
-    return (
-      words[0].charAt(0) + words[words.length - 1].charAt(0)
-    ).toUpperCase();
-  };
-
-  // Format the team name if maxNameLength is set
-  const formatTeamName = (name: string): string => {
-    if (!maxNameLength || name.length <= maxNameLength) return name;
-    return truncateText(name, maxNameLength);
-  };
-
   return (
     <List
       component="nav"
@@ -130,13 +112,13 @@ const TeamList: React.FC<TeamListProps> = ({
                       fontSize: "0.875rem",
                     }}
                   >
-                    {getTeamInitials(team)}
+                    {getTeamInitials(team.display_name)}
                   </Avatar>
                 </ListItemIcon>
               )}
 
               <ListItemText
-                primary={formatTeamName(team.display_name)}
+                primary={formatTeamName(team.display_name, maxNameLength)}
                 secondary={
                   showDescriptions && team.description ? team.description : null
                 }

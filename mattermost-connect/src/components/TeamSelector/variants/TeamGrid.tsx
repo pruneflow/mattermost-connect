@@ -25,8 +25,9 @@ import {
 
 // Utils
 import {
+  formatTeamName,
   generateColorFromString,
-  truncateText,
+  getTeamInitials,
 } from "../../../utils/formatting";
 
 /**
@@ -75,25 +76,6 @@ const TeamGrid: React.FC<TeamGridProps> = ({
   teamItemSx,
   selectedTeamSx,
 }) => {
-  // Get the initials from team name
-  const getTeamInitials = (team: Team): string => {
-    const words = team.display_name.trim().split(/\s+/);
-
-    if (words.length === 1) {
-      return words[0].charAt(0).toUpperCase();
-    }
-
-    return (
-      words[0].charAt(0) + words[words.length - 1].charAt(0)
-    ).toUpperCase();
-  };
-
-  // Format the team name if maxNameLength is set
-  const formatTeamName = (name: string): string => {
-    if (!maxNameLength || name.length <= maxNameLength) return name;
-    return truncateText(name, maxNameLength);
-  };
-
   return (
     <Box sx={{ p: 2 }}>
       <Grid container spacing={2}>
@@ -134,7 +116,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                           mx: "auto",
                         }}
                       >
-                        {getTeamInitials(team)}
+                        {getTeamInitials(team.display_name)}
                       </Avatar>
                     )}
 
@@ -147,7 +129,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                         minHeight: showDescriptions ? 32 : "auto",
                       }}
                     >
-                      {formatTeamName(team.display_name)}
+                      {formatTeamName(team.display_name, maxNameLength)}
                     </Typography>
 
                     {showDescriptions && team.description && (
