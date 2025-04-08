@@ -18,6 +18,18 @@ export { default as MessageAttachment } from "./components/ChannelViewer/Message
 export { default as MessageComposer } from "./components/MessageComposer/MessageComposer";
 export { default as AttachmentPreview } from "./components/MessageComposer/AttachmentPreview";
 
+// Export Team Selection components
+export { default as TeamSelector } from "./components/TeamSelector/TeamSelector";
+export { default as TeamList } from "./components/TeamSelector/variants/TeamList";
+export { default as TeamGrid } from "./components/TeamSelector/variants/TeamGrid";
+export { default as TeamTabs } from "./components/TeamSelector/variants/TeamTabs";
+export { default as TeamSidebar } from "./components/TeamSelector/variants/TeamSidebar";
+
+export type {
+  TeamSelectorVariant,
+  TeamSelectorProps,
+} from "./components/TeamSelector/TeamSelector";
+
 // Export theme
 export { createDefaultTheme, MattermostThemeProvider } from "./theme";
 

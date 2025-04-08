@@ -3,13 +3,7 @@ import React, { useState, useEffect } from "react";
 import {
   MattermostProvider,
   MattermostThemeProvider,
-  ChannelList,
-  ChannelViewer,
-  MessageComposer,
   useMattermost,
-  MattermostAPI,
-  Channel,
-  Team,
 } from "mattermost-connect";
 
 // Material-UI Components
@@ -27,23 +21,21 @@ import {
   RadioGroup,
   Radio,
   Alert,
-  Drawer,
-  IconButton,
-  Tooltip,
-  useTheme,
-  useMediaQuery,
-  CircularProgress,
-  Tab,
   Tabs,
+  Tab,
+  CircularProgress,
 } from "@mui/material";
 
 // Material-UI Icons
 import {
-  Menu as MenuIcon,
   Login as LoginIcon,
   Logout as LogoutIcon,
   ExitToApp as ExternalLinkIcon,
 } from "@mui/icons-material";
+
+// Import examples
+import ClassicInterface from "./examples/ClassicInterface";
+import TeamSelectorExample from "./examples/TeamSelectorExample";
 
 // Create mock service
 import createMockService from "./mockService";
@@ -86,14 +78,8 @@ const LoginForm: React.FC<{
             throw new Error("Server URL, username and password are required");
           }
 
-          // Generate token from credentials
-          const generatedToken = await MattermostAPI.createUserToken({
-            serverUrl,
-            username,
-            password,
-          });
-
-          onLogin("direct", { serverUrl, token: generatedToken });
+          // In real app, generate token from credentials here
+          onLogin("direct", { serverUrl, token: "mock-token" });
         }
       } else {
         if (!proxyUrl || !clientId) {
@@ -252,253 +238,48 @@ const LoginForm: React.FC<{
   );
 };
 
-// Main app interface once connected
-const MattermostInterface: React.FC<{
+// Wrapper for examples with tab navigation
+const ExamplesContainer: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const { isConnected, currentUser, getTeams, error, mode } = useMattermost();
+  const { currentUser, mode } = useMattermost();
+  const [tabIndex, setTabIndex] = useState(0);
 
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [drawerOpen, setDrawerOpen] = useState(!isMobile);
-
-  // Load teams when component mounts
-  useEffect(() => {
-    if (isConnected) {
-      const fetchTeams = async () => {
-        try {
-          const teamsData = await getTeams();
-          setTeams(teamsData);
-
-          // Auto-select first team
-          if (teamsData.length > 0) {
-            setSelectedTeam(teamsData[0]);
-          }
-
-          setLoading(false);
-        } catch (err) {
-          console.error("Error loading teams:", err);
-          setLoading(false);
-        }
-      };
-
-      void fetchTeams();
-    }
-  }, [isConnected, getTeams]);
-
-  // Close drawer on mobile when a channel is selected
-  useEffect(() => {
-    if (isMobile && selectedChannel) {
-      setDrawerOpen(false);
-    }
-  }, [selectedChannel, isMobile]);
-
-  // Auto-close drawer when switching to mobile
-  useEffect(() => {
-    if (isMobile) {
-      setDrawerOpen(false);
-    } else {
-      setDrawerOpen(true);
-    }
-  }, [isMobile]);
-
-  const handleChannelSelect = (channel: Channel) => {
-    setSelectedChannel(channel);
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setTabIndex(newValue);
   };
-
-  const handleTeamChange = (_event: React.SyntheticEvent, newValue: string) => {
-    const team = teams.find((t) => t.id === newValue);
-    if (team) {
-      setSelectedTeam(team);
-      setSelectedChannel(null);
-    }
-  };
-
-  const toggleDrawer = () => {
-    setDrawerOpen(!drawerOpen);
-  };
-
-  // Loading state
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error.message}
-        </Alert>
-        <Button variant="outlined" onClick={onLogout}>
-          Back to Login
-        </Button>
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       {/* App bar */}
       <AppBar position="static">
         <Toolbar>
-          {isMobile && (
-            <IconButton
-              color="inherit"
-              edge="start"
-              onClick={toggleDrawer}
-              sx={{ mr: 2 }}
-            >
-              <MenuIcon />
-            </IconButton>
-          )}
-
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            MattermostConnect Demo
-          </Typography>
-
           {currentUser && (
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="body2" sx={{ mr: 2 }}>
-                {currentUser.first_name} {currentUser.last_name}
-              </Typography>
-              <Tooltip title="Logout">
-                <IconButton color="inherit" onClick={onLogout}>
-                  <LogoutIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          )}
-        </Toolbar>
-
-        {/* Team tabs */}
-        {teams.length > 0 && (
-          <Tabs
-            value={selectedTeam?.id || ""}
-            onChange={handleTeamChange}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{ bgcolor: "primary.dark" }}
-          >
-            {teams.map((team) => (
-              <Tab
-                key={team.id}
-                label={team.display_name}
-                value={team.id}
-                sx={{ color: "white" }}
-              />
-            ))}
-          </Tabs>
-        )}
-      </AppBar>
-
-      {/* Main content */}
-      <Box sx={{ display: "flex", flexGrow: 1, overflow: "hidden" }}>
-        {/* Channel sidebar - Responsive drawer on mobile */}
-        <Drawer
-          variant={isMobile ? "temporary" : "persistent"}
-          open={drawerOpen}
-          onClose={toggleDrawer}
-          sx={{
-            width: 280,
-            flexShrink: 0,
-            "& .MuiDrawer-paper": {
-              width: 280,
-              boxSizing: "border-box",
-              position: isMobile ? "fixed" : "relative",
-            },
-          }}
-        >
-          {selectedTeam ? (
-            <ChannelList
-              teamId={selectedTeam.id}
-              selectedChannelId={selectedChannel?.id}
-              onSelectChannel={handleChannelSelect}
-              showSearch
-              showPrivateChannels
-              showDirectMessages
-              groupByType
-              sx={{ height: "100%" }}
-            />
-          ) : (
-            <Box sx={{ p: 2 }}>
-              <Typography variant="body2">No teams available</Typography>
-            </Box>
-          )}
-        </Drawer>
-
-        {/* Messages area */}
-        <Box
-          sx={{
-            flexGrow: 1,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
-          {selectedChannel ? (
-            <>
-              <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
-                <ChannelViewer
-                  channelId={selectedChannel.id}
-                  showHeader
-                  autoScrollToBottom
-                  sx={{ height: "100%" }}
-                />
-              </Box>
-
-              <MessageComposer
-                channelId={selectedChannel.id}
-                placeholder={`Message ${selectedChannel.display_name}`}
-                allowAttachments
-                showSendButton
-              />
-            </>
-          ) : (
             <Box
               sx={{
                 display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
+                justifyContent: "space-between",
                 alignItems: "center",
-                height: "100%",
-                p: 3,
               }}
             >
-              <Typography variant="h5" gutterBottom>
-                {selectedTeam
-                  ? "Select a channel to start messaging"
-                  : "Select a team to view channels"}
+              <Typography variant="body2">
+                {currentUser.first_name} {currentUser.last_name}
               </Typography>
-
-              {!isMobile && !drawerOpen && (
-                <Button
-                  variant="outlined"
-                  onClick={toggleDrawer}
-                  startIcon={<MenuIcon />}
-                  sx={{ mt: 2 }}
-                >
-                  Show Channels
-                </Button>
-              )}
+              <Button
+                color="inherit"
+                onClick={onLogout}
+                startIcon={<LogoutIcon />}
+                sx={{ float: "right" }}
+              ></Button>
             </Box>
           )}
-        </Box>
+        </Toolbar>
+      </AppBar>
+
+      {/* Example content */}
+      <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
+        {tabIndex === 0 && <ClassicInterface />}
+        {tabIndex === 1 && <TeamSelectorExample />}
       </Box>
 
       {/* Status footer */}
@@ -584,7 +365,7 @@ const App: React.FC = () => {
           // Common options
           enableWebsocket={true}
         >
-          <MattermostInterface onLogout={handleLogout} />
+          <ExamplesContainer onLogout={handleLogout} />
         </MattermostProvider>
       )}
     </MattermostThemeProvider>

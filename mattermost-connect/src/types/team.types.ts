@@ -10,4 +10,5 @@ export interface Team {
   description?: string;
   type?: "O" | "I";
   invite_id?: string;
+  member_count?: number;
 }
