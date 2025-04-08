@@ -4,8 +4,16 @@ import {
   TextField,
   IconButton,
   Tooltip,
-  Button,
   Popover,
+  InputAdornment,
+  Collapse,
+  Divider,
+  useMediaQuery,
+  useTheme,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -22,6 +30,7 @@ import {
   EmojiEmotions as EmojiIcon,
   Visibility as ShowFormattingIcon,
   VisibilityOff as HideFormattingIcon,
+  MoreHoriz as MoreIcon,
 } from "@mui/icons-material";
 
 import EmojiPicker from "./EmojiPicker";
@@ -53,7 +62,18 @@ export interface MessageComposerProps {
 }
 
 /**
+ * Formateur de texte pour représenter les outils de formatage
+ */
+interface FormatOption {
+  label: string;
+  icon: React.ReactNode;
+  action: () => void;
+}
+
+/**
  * Composant pour composer et envoyer des messages
+ * Interface fluide avec contrôles intégrés au bas de la zone de saisie
+ * Adaptation responsiv pour mobile et desktop
  */
 const MessageComposer: React.FC<MessageComposerProps> = ({
   channelId,
@@ -64,10 +84,16 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   disabled = false,
   sx,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   // État pour le message, la visibilité du formatting, et l'ancre des emojis
   const [message, setMessage] = useState(initialText);
   const [showFormatting, setShowFormatting] = useState(false);
   const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
+  const [moreMenuAnchorEl, setMoreMenuAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
 
   /**
@@ -115,6 +141,11 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         input.setSelectionRange(start + prefix.length, start + prefix.length);
       }, 0);
     }
+
+    // Fermer le menu "more" si ouvert
+    if (moreMenuAnchorEl) {
+      setMoreMenuAnchorEl(null);
+    }
   };
 
   /**
@@ -151,147 +182,266 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     setEmojiAnchorEl(null);
   };
 
+  // Définir toutes les options de formatage
+  const formatOptions: FormatOption[] = [
+    {
+      label: "Gras",
+      icon: <BoldIcon fontSize="small" />,
+      action: () => applyFormat("**"),
+    },
+    {
+      label: "Italique",
+      icon: <ItalicIcon fontSize="small" />,
+      action: () => applyFormat("*"),
+    },
+    {
+      label: "Barré",
+      icon: <StrikethroughIcon fontSize="small" />,
+      action: () => applyFormat("~~"),
+    },
+    {
+      label: "Titre",
+      icon: <HeadingIcon fontSize="small" />,
+      action: () => applyFormat("## "),
+    },
+    {
+      label: "Lien",
+      icon: <LinkIcon fontSize="small" />,
+      action: () => applyFormat("[", "](url)"),
+    },
+    {
+      label: "Code",
+      icon: <CodeIcon fontSize="small" />,
+      action: () => applyFormat("`"),
+    },
+    {
+      label: "Bloc de code",
+      icon: <CodeIcon fontSize="small" />,
+      action: () => applyFormat("```\n", "\n```"),
+    },
+    {
+      label: "Citation",
+      icon: <QuoteIcon fontSize="small" />,
+      action: () => applyFormat("> "),
+    },
+  ];
+
+  // Sur mobile, on n'affiche que les 4 premières options
+  const primaryOptions = formatOptions.slice(0, 4);
+  const secondaryOptions = formatOptions.slice(4);
+
+  // Boutons d'action principaux (formatage, pièces jointes, emoji, envoi)
+  const actionBar = (
+    <Box sx={{ display: "flex", alignItems: "center" }}>
+      <Tooltip
+        title={
+          showFormatting ? "Masquer le formatage" : "Afficher le formatage"
+        }
+      >
+        <IconButton
+          size="small"
+          onClick={() => setShowFormatting(!showFormatting)}
+        >
+          {showFormatting ? (
+            <HideFormattingIcon fontSize="small" />
+          ) : (
+            <ShowFormattingIcon fontSize="small" />
+          )}
+        </IconButton>
+      </Tooltip>
+
+      {allowAttachments && (
+        <Tooltip title="Ajouter des fichiers">
+          <IconButton size="small">
+            <AttachmentIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+
+      <Tooltip title="Ajouter un emoji">
+        <IconButton
+          size="small"
+          onClick={(e) => setEmojiAnchorEl(e.currentTarget)}
+        >
+          <EmojiIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Envoyer">
+        <span>
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={sendMessage}
+            disabled={!message.trim() || disabled}
+            sx={{ ml: 0.5 }}
+          >
+            <SendIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Box>
+  );
+  console.debug("showFormatting", showFormatting);
   return (
     <Box
       sx={{
         display: "flex",
         flexDirection: "column",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 2,
-        padding: 1,
+        bgcolor: "background.paper",
+        ...(!isMobile
+          ? { m: 1 }
+          : {
+              position: "sticky",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              width: "100%",
+              borderTop: "1px solid",
+              borderColor: "divider",
+              zIndex: 10,
+            }),
         ...sx,
       }}
     >
-      {/* Barre de formatting */}
-      {showFormatting && (
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            marginBottom: 1,
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            paddingBottom: 1,
-          }}
-        >
-          {/* Formatage de texte */}
-          <Tooltip title="Gras" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("**")}>
-              <BoldIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Italique" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("*")}>
-              <ItalicIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Barré" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("~~")}>
-              <StrikethroughIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Titre" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("## ")}>
-              <HeadingIcon />
-            </IconButton>
-          </Tooltip>
-
-          <Box
-            sx={{ margin: "0 8px", borderLeft: "1px solid", height: "20px" }}
-          />
-
-          <Tooltip title="Lien" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("[", "](url)")}>
-              <LinkIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Code" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("`")}>
-              <CodeIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Bloc de code" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("```\n", "\n```")}>
-              <CodeIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Citation" placement="top" arrow>
-            <IconButton onClick={() => applyFormat("> ")}>
-              <QuoteIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )}
-
-      {/* Zone de saisie et actions */}
-      <Box sx={{ display: "flex", alignItems: "center" }}>
-        {/* Actions de gauche */}
-        <Box sx={{ display: "flex", alignItems: "center", marginRight: 1 }}>
-          {/* Afficher/masquer le formatting */}
-          <Tooltip
-            title={
-              showFormatting
-                ? "Masquer le formatting"
-                : "Afficher le formatting"
-            }
-            placement="top"
-            arrow
-          >
-            <IconButton onClick={() => setShowFormatting(!showFormatting)}>
-              {showFormatting ? <HideFormattingIcon /> : <ShowFormattingIcon />}
-            </IconButton>
-          </Tooltip>
-
-          <Box
-            sx={{ margin: "0 8px", borderLeft: "1px solid", height: "20px" }}
-          />
-
-          {/* Pièces jointes */}
-          {allowAttachments && (
-            <Tooltip title="Ajouter des fichiers" placement="top" arrow>
-              <IconButton>
-                <AttachmentIcon />
-              </IconButton>
-            </Tooltip>
-          )}
-
-          {/* Sélecteur d'emojis */}
-          <Tooltip title="Ajouter un emoji" placement="top" arrow>
-            <IconButton onClick={(e) => setEmojiAnchorEl(e.currentTarget)}>
-              <EmojiIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-
-        {/* Zone de saisie du message */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          ...(isMobile
+            ? {
+                borderRadius: 0,
+              }
+            : {
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: "4px",
+                overflow: "hidden",
+              }),
+        }}
+      >
         <TextField
           inputRef={textFieldRef}
           multiline
-          maxRows={4}
+          minRows={1}
+          maxRows={isMobile ? 3 : 4}
           fullWidth
           variant="outlined"
           placeholder={placeholder}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={disabled}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage();
+            }
+          }}
           sx={{
             "& .MuiOutlinedInput-root": {
-              borderRadius: 2,
+              padding: "8px 12px",
+              "& fieldset": {
+                border: "none",
+              },
+              "&.Mui-focused fieldset": {
+                border: "none",
+              },
+              "&:hover fieldset": {
+                border: "none",
+              },
+            },
+          }}
+          slotProps={{
+            input: {
+              endAdornment: !showFormatting && (
+                <InputAdornment position="end">{actionBar}</InputAdornment>
+              ),
             },
           }}
         />
 
-        {/* Bouton d'envoi */}
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={sendMessage}
-          disabled={!message.trim() || disabled}
-          sx={{ marginLeft: 1 }}
-        >
-          <SendIcon />
-        </Button>
+        {/* Barre de formatage pour desktop (cachée sur mobile) */}
+        {!isMobile && (
+          <Collapse in={showFormatting}>
+            <Box
+              sx={{
+                borderTop: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.paper",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  p: 1,
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  {formatOptions.map((option, index) => (
+                    <React.Fragment key={option.label}>
+                      <Tooltip title={option.label}>
+                        <IconButton size="small" onClick={option.action}>
+                          {option.icon}
+                        </IconButton>
+                      </Tooltip>
+                      {index === 3 && (
+                        <Divider
+                          orientation="vertical"
+                          flexItem
+                          sx={{ mx: 0.5, height: 20 }}
+                        />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </Box>
+
+                {/* Actions à droite */}
+                {actionBar}
+              </Box>
+            </Box>
+          </Collapse>
+        )}
+
+        {/* Barre de formatage pour mobile (toujours visible si le formatage est activé) */}
+        {isMobile && showFormatting && (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              p: 1,
+              borderTop: "1px solid",
+              borderColor: "divider",
+              bgcolor: "background.paper",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              {/* Afficher seulement les 4 premiers outils de formatage sur mobile */}
+              {primaryOptions.map((option) => (
+                <Tooltip key={option.label} title={option.label}>
+                  <IconButton size="small" onClick={option.action}>
+                    {option.icon}
+                  </IconButton>
+                </Tooltip>
+              ))}
+
+              {/* Bouton "Plus" pour afficher les outils restants */}
+              <Tooltip title="Plus d'options">
+                <IconButton
+                  size="small"
+                  onClick={(e) => setMoreMenuAnchorEl(e.currentTarget)}
+                >
+                  <MoreIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {/* Bouton pour masquer la barre de formatage sur mobile */}
+            {actionBar}
+          </Box>
+        )}
       </Box>
 
       {/* Popover pour le sélecteur d'emojis */}
@@ -301,11 +451,11 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         onClose={() => setEmojiAnchorEl(null)}
         anchorOrigin={{
           vertical: "top",
-          horizontal: "center",
+          horizontal: "right",
         }}
         transformOrigin={{
           vertical: "bottom",
-          horizontal: "center",
+          horizontal: "right",
         }}
       >
         <EmojiPicker
@@ -313,6 +463,20 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           onClose={() => setEmojiAnchorEl(null)}
         />
       </Popover>
+
+      {/* Menu pour les options de formatage supplémentaires sur mobile */}
+      <Menu
+        anchorEl={moreMenuAnchorEl}
+        open={Boolean(moreMenuAnchorEl)}
+        onClose={() => setMoreMenuAnchorEl(null)}
+      >
+        {secondaryOptions.map((option) => (
+          <MenuItem key={option.label} onClick={option.action}>
+            <ListItemIcon>{option.icon}</ListItemIcon>
+            <ListItemText primary={option.label} />
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 };
