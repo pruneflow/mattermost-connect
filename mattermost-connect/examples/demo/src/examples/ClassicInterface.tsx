@@ -49,12 +49,15 @@ const ClassicInterface: React.FC = () => {
   const [appBarHeight, setAppBarHeight] = useState<number>(0);
   const [tabsHeight, setTabsHeight] = useState<number>(0);
 
-  // State
+  // État
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Height for spacing below the chat to accommodate the fixed MessageComposer on mobile
+  const messageComposerHeight = isMobile ? 64 : 0; // Hauteur estimée du MessageComposer
 
   // Load teams when component mounts
   useEffect(() => {
@@ -210,7 +213,7 @@ const ClassicInterface: React.FC = () => {
         {/* Content Area */}
         <Box
           sx={{
-            height: "calc(100vh - 200px)", // Adjust for AppBar height
+            height: `calc(100vh - 64px)`, // Hauteur totale moins la hauteur de l'AppBar
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -218,7 +221,14 @@ const ClassicInterface: React.FC = () => {
         >
           {selectedChannel ? (
             <>
-              <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
+              <Box
+                sx={{
+                  flexGrow: 1,
+                  overflow: "auto",
+                  // Ajouter de l'espace en bas pour éviter que le contenu soit masqué par le MessageComposer
+                  pb: `${messageComposerHeight}px`,
+                }}
+              >
                 <ChannelViewer
                   channelId={selectedChannel.id}
                   showHeader={false} // We already show the header in the app bar

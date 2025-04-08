@@ -73,7 +73,7 @@ interface FormatOption {
 /**
  * Composant pour composer et envoyer des messages
  * Interface fluide avec contrôles intégrés au bas de la zone de saisie
- * Adaptation responsiv pour mobile et desktop
+ * Adaptation responsive pour mobile et desktop
  */
 const MessageComposer: React.FC<MessageComposerProps> = ({
   channelId,
@@ -282,7 +282,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       </Tooltip>
     </Box>
   );
-  console.debug("showFormatting", showFormatting);
+
   return (
     <Box
       sx={{
@@ -290,16 +290,20 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         flexDirection: "column",
         bgcolor: "background.paper",
         ...(!isMobile
-          ? { m: 1 }
+          ? {
+              m: 1,
+              position: "relative",
+            }
           : {
-              position: "sticky",
+              position: "fixed", // Changement de sticky à fixed
               bottom: 0,
               left: 0,
               right: 0,
               width: "100%",
               borderTop: "1px solid",
               borderColor: "divider",
-              zIndex: 10,
+              zIndex: 1200, // Augmenter le z-index pour s'assurer qu'il est au-dessus des autres éléments
+              boxShadow: "0 -2px 10px rgba(0, 0, 0, 0.05)", // Ajouter une ombre légère
             }),
         ...sx,
       }}
@@ -311,6 +315,8 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           ...(isMobile
             ? {
                 borderRadius: 0,
+                px: 1, // Ajouter un peu de padding horizontal
+                py: 1, // Ajouter un peu de padding vertical
               }
             : {
                 border: "1px solid",
