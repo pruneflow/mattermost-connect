@@ -1,5 +1,5 @@
 // examples/demo/src/App.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   MattermostProvider,
   MattermostThemeProvider,
@@ -35,7 +35,6 @@ import {
 
 // Import examples
 import ClassicInterface from "./examples/ClassicInterface";
-import TeamSelectorExample from "./examples/TeamSelectorExample";
 
 // Create mock service
 import createMockService from "./mockService";
@@ -243,11 +242,6 @@ const ExamplesContainer: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
   const { currentUser, mode } = useMattermost();
-  const [tabIndex, setTabIndex] = useState(0);
-
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabIndex(newValue);
-  };
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
@@ -278,8 +272,7 @@ const ExamplesContainer: React.FC<{
 
       {/* Example content */}
       <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
-        {tabIndex === 0 && <ClassicInterface />}
-        {tabIndex === 1 && <TeamSelectorExample />}
+        <ClassicInterface />
       </Box>
 
       {/* Status footer */}
