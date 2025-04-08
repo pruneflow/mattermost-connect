@@ -13,10 +13,8 @@ import {
   Chip,
   Tooltip,
   Grid,
-  Paper,
   SxProps,
   Theme,
-  styled,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -63,17 +61,6 @@ export interface TeamGridProps {
   selectedTeamSx?: SxProps<Theme>;
 }
 
-const Item = styled(Paper)(({ theme }) => ({
-  backgroundColor: "#fff",
-  ...theme.typography.body2,
-  padding: theme.spacing(1),
-  textAlign: "center",
-  color: theme.palette.text.secondary,
-  ...theme.applyStyles("dark", {
-    backgroundColor: "#1A2027",
-  }),
-}));
-
 /**
  * A grid view of teams as cards
  */
@@ -114,7 +101,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
           const isSelected = team.id === selectedTeamId;
 
           return (
-            <Grid size={{ xs: 6, sm: 4, md: 3 }} key={team.id}>
+            <Grid size={{ xs: 12, sm: 4, md: 3 }} key={team.id}>
               <Card
                 elevation={isSelected ? 3 : 1}
                 sx={{

@@ -13,7 +13,6 @@ import {
   Zoom,
   SxProps,
   Theme,
-  Paper,
   Typography,
   Divider,
 } from "@mui/material";
@@ -37,17 +36,11 @@ export interface TeamSidebarProps {
   /** Callback when a team is selected */
   onSelectTeam: (team: Team) => void;
 
-  /** Show team icons (if available) */
-  showIcons?: boolean;
-
   /** Show team descriptions */
   showDescriptions?: boolean;
 
   /** Show team member count badges */
   showMemberCount?: boolean;
-
-  /** Max number of characters for team name before truncating (0 for no limit) */
-  maxNameLength?: number;
 
   /** Custom styling for team items */
   teamItemSx?: SxProps<Theme>;
@@ -63,15 +56,13 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
   teams,
   selectedTeamId,
   onSelectTeam,
-  showIcons = true, // Always true for sidebar
   showDescriptions = false,
   showMemberCount = false,
-  maxNameLength = 0, // Not used in sidebar, but kept for API consistency
   teamItemSx,
   selectedTeamSx,
 }) => {
-  // Current team for displaying info panel
-  const [hoverTeam, setHoverTeam] = React.useState<Team | null>(null);
+  // Select first team if none is selected
+  const currentTeamId = selectedTeamId || (teams.length > 0 ? teams[0].id : "");
 
   // Get the initials from team name
   const getTeamInitials = (team: Team): string => {
@@ -97,7 +88,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
       {/* Team icons sidebar */}
       <Box
         sx={{
-          width: 72,
+          width: "100%",
           bgcolor: (theme) =>
             theme.palette.mode === "dark"
               ? theme.palette.grey[900]
@@ -114,7 +105,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
       >
         <Stack spacing={2} sx={{ width: "100%", alignItems: "center" }}>
           {teams.map((team) => {
-            const isSelected = team.id === selectedTeamId;
+            const isSelected = team.id === currentTeamId;
 
             return (
               <Box
@@ -125,8 +116,6 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                   display: "flex",
                   justifyContent: "center",
                 }}
-                onMouseEnter={() => setHoverTeam(team)}
-                onMouseLeave={() => setHoverTeam(null)}
               >
                 {/* Selected indicator */}
                 {isSelected && (
@@ -151,15 +140,35 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                       <Typography variant="body2">
                         {team.display_name}
                       </Typography>
+                      {showDescriptions && team.description && (
+                        <>
+                          <Divider sx={{ my: 1 }} />
+                          <Typography variant="body2" color="white">
+                            {team.description}
+                          </Typography>
+                        </>
+                      )}
                       {showMemberCount && team.member_count && (
-                        <Typography variant="caption" color="text.secondary">
-                          {team.member_count} members
-                        </Typography>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            mt: 1,
+                          }}
+                        >
+                          <MembersIcon
+                            fontSize="small"
+                            sx={{ mr: 0.5, color: "white" }}
+                          />
+                          <Typography variant="caption" color="white">
+                            {team.member_count} members
+                          </Typography>
+                        </Box>
                       )}
                     </Box>
                   }
                   placement="right"
-                  TransitionComponent={Zoom}
+                  slots={{ transition: Zoom }}
                 >
                   <IconButton
                     onClick={() => onSelectTeam(team)}
@@ -204,53 +213,6 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
           })}
         </Stack>
       </Box>
-
-      {/* Info panel when hovering (optional) */}
-      {hoverTeam && showDescriptions && (
-        <Box
-          sx={{
-            position: "absolute",
-            left: 80,
-            top: "50%",
-            transform: "translateY(-50%)",
-            zIndex: 1,
-            maxWidth: 240,
-          }}
-        >
-          <Paper
-            elevation={3}
-            sx={{
-              p: 2,
-              borderRadius: 2,
-            }}
-          >
-            <Typography variant="subtitle1" fontWeight={600}>
-              {hoverTeam.display_name}
-            </Typography>
-
-            {hoverTeam.description && (
-              <>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="body2" color="text.secondary">
-                  {hoverTeam.description}
-                </Typography>
-              </>
-            )}
-
-            {showMemberCount && hoverTeam.member_count && (
-              <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
-                <MembersIcon
-                  fontSize="small"
-                  sx={{ mr: 0.5, color: "text.secondary" }}
-                />
-                <Typography variant="caption" color="text.secondary">
-                  {hoverTeam.member_count} members
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-        </Box>
-      )}
     </Box>
   );
 };

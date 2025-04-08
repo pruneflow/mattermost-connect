@@ -162,7 +162,7 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
                   badgeContent={team.member_count}
                   color="primary"
                   max={999}
-                  sx={{ ml: 0.5 }}
+                  sx={{ ml: 1.5 }}
                 />
               )}
             </Box>
