@@ -1,9 +1,4 @@
 // src/context/EmojiProvider.tsx
-/**
- * Context provider pour les fonctionnalités liées aux emojis
- * Gère l'état global et les fonctionnalités des emojis et GIFs
- */
-
 import React, {
   createContext,
   useContext,
@@ -45,7 +40,7 @@ interface EmojiProviderProps {
  * Utilise le nouveau service Mattermost centralisé au lieu d'un service emoji séparé
  */
 export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
-  const { service } = useMattermost();
+  const { service, currentUser } = useMattermost();
 
   // États pour les emojis
   const [frequentEmojis, setFrequentEmojis] = useState<string[]>([]);
@@ -111,13 +106,15 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
       if (!service) return;
 
       try {
+        // L'utilisateur actuel est disponible via le context useMattermost
+        // service.addReaction utilisera directement ou indirectement l'ID utilisateur
         await service.addReaction(messageId, emoji);
       } catch (error) {
         console.error("Error adding reaction:", error);
         throw error;
       }
     },
-    [service],
+    [service, currentUser], // Ajouter currentUser à la liste des dépendances
   );
 
   /**

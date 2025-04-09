@@ -6,7 +6,14 @@ import {
 } from "../types";
 import { createDirectService } from "./direct.service";
 import { createProxyService } from "./proxy.service";
-import { MOCK_GIFS, GIF_CATEGORIES } from "../components/EmojiPicker";
+
+// Importer les utilitaires d'emoji
+import {
+  getFrequentEmojis,
+  searchGifs,
+  getGifs,
+  GifApiOptions,
+} from "../utils/emoji.utils";
 
 /**
  * Crée un service personnalisé basé sur le fournisseur de service
@@ -59,6 +66,13 @@ export function createMattermostService(
  * Crée un service mock pour les tests et développement
  */
 export function createMockService(): MattermostService {
+  // Options pour les utilitaires de GIF du mock service
+  const mockGifOptions: GifApiOptions = {
+    baseUrl: "https://mock-api.example.com",
+    mode: "direct",
+    useRealApi: false,
+  };
+
   return {
     mode: "custom",
 
@@ -184,17 +198,11 @@ export function createMockService(): MattermostService {
       status: "online",
     }),
 
-    // Méthodes pour les emojis
-    getFrequentEmojis: async () => [
-      "👍",
-      "❤️",
-      "😂",
-      "🎉",
-      "🔥",
-      "👏",
-      "✅",
-      "🙏",
-    ],
+    // Méthodes pour les emojis utilisant les utilitaires centralisés
+    getFrequentEmojis: async () => {
+      // Utiliser la fonction utilitaire
+      return getFrequentEmojis();
+    },
 
     addReaction: async () => ({ success: true }),
 
@@ -202,16 +210,16 @@ export function createMockService(): MattermostService {
 
     hasReacted: async () => false,
 
-    // Méthodes pour les GIFs
+    // Méthodes pour les GIFs utilisant les utilitaires centralisés
     searchGifs: async (query) => {
-      // Combiner tous les GIFs et filtrer par titre
-      const allGifs = Object.values(MOCK_GIFS).flat();
-      return allGifs.filter((gif) =>
-        gif.title.toLowerCase().includes(query.toLowerCase()),
-      );
+      // Utiliser la fonction utilitaire
+      return searchGifs(query, mockGifOptions);
     },
 
-    getGifs: async (category) => MOCK_GIFS[category] || [],
+    getGifs: async (category) => {
+      // Utiliser la fonction utilitaire
+      return getGifs(category, mockGifOptions);
+    },
 
     // Méthodes pour WebSocket
     getWebsocketUrl: () => "wss://example.com/websocket",

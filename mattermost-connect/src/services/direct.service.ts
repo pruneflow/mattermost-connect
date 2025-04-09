@@ -5,13 +5,18 @@ import {
   GetUsersOptions,
   MessagesResponse,
 } from "../types";
-import { getEmojiName } from "../components/EmojiPicker/data/emojiData";
+
+// Importer les utilitaires d'emoji
 import {
-  MOCK_GIFS,
-  GIF_API_CONFIG,
-  buildApiUrl,
-  parseApiResponse,
-} from "../components/EmojiPicker/data/gifData";
+  getFrequentEmojis,
+  addReaction,
+  removeReaction,
+  hasReacted,
+  searchGifs,
+  getGifs,
+  EmojiApiOptions,
+  GifApiOptions,
+} from "../utils";
 
 /**
  * Normalise l'URL en supprimant le slash final s'il existe
@@ -81,6 +86,22 @@ export function createDirectService(config: {
       console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
       throw error;
     }
+  };
+
+  // Options pour les utilitaires d'emoji
+  const emojiOptions: EmojiApiOptions = {
+    baseUrl,
+    token,
+    mode: "direct",
+    isAuthenticated: !!token,
+  };
+
+  // Options pour les utilitaires de GIF
+  const gifOptions: GifApiOptions = {
+    baseUrl,
+    token,
+    mode: "direct",
+    useRealApi: false, // Utiliser les API réelles ou les données de test
   };
 
   // Retourner l'interface du service
@@ -230,125 +251,51 @@ export function createDirectService(config: {
 
     // ----- Méthodes pour les emojis et réactions -----
     getFrequentEmojis: async () => {
-      try {
-        // Dans une implémentation réelle, cette fonction récupérerait les emojis
-        // fréquemment utilisés à partir de l'API ou du stockage local
-
-        // Pour la démonstration, nous retournons une liste statique
-        return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
-      } catch (error) {
-        console.error("Error getting frequent emojis:", error);
-        return [];
-      }
+      // Utiliser la fonction utilitaire centralisée
+      return getFrequentEmojis();
     },
 
     addReaction: async (messageId, emoji) => {
-      const emojiName = getEmojiName(emoji);
+      // D'abord récupérer l'utilisateur actuel pour obtenir son ID
+      try {
+        const currentUser = await apiCall("users/me");
 
-      return apiCall("reactions", {
-        method: "POST",
-        body: JSON.stringify({
-          post_id: messageId,
-          emoji_name: emojiName,
-          user_id: "me",
-        }),
-      });
+        // Mettre à jour les options avec l'ID utilisateur actuel
+        const optionsWithUser = {
+          ...emojiOptions,
+          currentUserId: currentUser.id,
+        };
+
+        // Utiliser la fonction utilitaire centralisée avec l'ID utilisateur
+        return addReaction(messageId, emoji, optionsWithUser);
+      } catch (error) {
+        console.error(
+          "Erreur lors de la récupération de l'utilisateur pour la réaction:",
+          error,
+        );
+        throw error;
+      }
     },
 
     removeReaction: async (channelId, messageId, emoji) => {
-      const emojiName = getEmojiName(emoji);
-
-      // L'API Mattermost pour supprimer une réaction nécessite l'ID utilisateur
-      // Nous utilisons "me" pour l'utilisateur courant
-      const userId = "me";
-
-      return apiCall(
-        `users/${userId}/posts/${messageId}/reactions/${emojiName}`,
-        {
-          method: "DELETE",
-        },
-      );
+      // Utiliser la fonction utilitaire centralisée
+      return removeReaction(channelId, messageId, emoji, emojiOptions);
     },
 
     hasReacted: async (channelId, messageId, emoji) => {
-      const emojiName = getEmojiName(emoji);
-
-      try {
-        // Récupérer les réactions pour ce message
-        const reactions = await apiCall<any[]>(`posts/${messageId}/reactions`);
-
-        // Récupérer l'utilisateur actuel
-        const currentUser = await apiCall("users/me");
-
-        // Vérifier si l'utilisateur actuel a réagi avec cet emoji
-        return reactions.some(
-          (reaction) =>
-            reaction.emoji_name === emojiName &&
-            reaction.user_id === currentUser.id,
-        );
-      } catch (error) {
-        console.error("Error checking reaction:", error);
-        return false;
-      }
+      // Utiliser la fonction utilitaire centralisée avec l'option de récupérer l'utilisateur actuel
+      return hasReacted(channelId, messageId, emoji, emojiOptions);
     },
 
     // ----- Méthodes pour les GIFs -----
     searchGifs: async (query, category) => {
-      // Vérifier si nous utilisons une API réelle ou des données de test
-      if (GIF_API_CONFIG.USE_API_PROVIDER) {
-        try {
-          // Construire l'URL de recherche
-          const url = buildApiUrl("search", query, category);
-
-          const response = await fetch(url);
-
-          if (!response.ok) {
-            throw new Error(`GIF API error: ${response.status}`);
-          }
-
-          const data = await response.json();
-          return parseApiResponse(data, GIF_API_CONFIG.PROVIDER);
-        } catch (error) {
-          console.error("Error searching GIFs:", error);
-          return [];
-        }
-      } else {
-        // Utiliser les données de test
-        // Pour simuler une recherche, filtrer par titre
-        const allGifs = Object.values(MOCK_GIFS).flat();
-        return allGifs.filter((gif) =>
-          gif.title.toLowerCase().includes(query.toLowerCase()),
-        );
-      }
+      // Utiliser la fonction utilitaire centralisée
+      return searchGifs(query, gifOptions, category);
     },
 
     getGifs: async (category, limit = 20) => {
-      // Vérifier si nous utilisons une API réelle ou des données de test
-      if (GIF_API_CONFIG.USE_API_PROVIDER) {
-        try {
-          // Construire l'URL pour la catégorie
-          const url = buildApiUrl(
-            category.toLowerCase() === "trending" ? "trending" : "category",
-            undefined,
-            category,
-          );
-
-          const response = await fetch(url);
-
-          if (!response.ok) {
-            throw new Error(`GIF API error: ${response.status}`);
-          }
-
-          const data = await response.json();
-          return parseApiResponse(data, GIF_API_CONFIG.PROVIDER);
-        } catch (error) {
-          console.error("Error getting GIFs:", error);
-          return [];
-        }
-      } else {
-        // Utiliser les données de test
-        return MOCK_GIFS[category] || [];
-      }
+      // Utiliser la fonction utilitaire centralisée
+      return getGifs(category, gifOptions, limit);
     },
 
     // ----- Méthodes pour WebSocket -----

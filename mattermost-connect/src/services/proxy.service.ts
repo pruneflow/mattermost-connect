@@ -1,11 +1,22 @@
+// src/services/proxy.service.ts
 import {
   MattermostService,
   GetMessagesOptions,
   GetUsersOptions,
   MessagesResponse,
-  GifData,
 } from "../types";
-import { getEmojiName } from "../components/EmojiPicker/data/emojiData";
+
+// Importer les utilitaires d'emoji
+import {
+  getFrequentEmojis,
+  addReaction,
+  removeReaction,
+  hasReacted,
+  searchGifs,
+  getGifs,
+  EmojiApiOptions,
+  GifApiOptions,
+} from "../utils/emoji.utils";
 
 function normalizeUrl(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
@@ -68,6 +79,28 @@ export function createProxyService(config: {
       console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
       throw error;
     }
+  };
+
+  // Options pour les utilitaires d'emoji
+  const emojiOptions: EmojiApiOptions = {
+    baseUrl,
+    headers: {
+      "X-Mattermost-Client-ID": clientId,
+      ...(userId ? { "X-Mattermost-User-ID": userId } : {}),
+    },
+    mode: "proxy",
+    isAuthenticated: true,
+  };
+
+  // Options pour les utilitaires de GIF
+  const gifOptions: GifApiOptions = {
+    baseUrl,
+    headers: {
+      "X-Mattermost-Client-ID": clientId,
+      ...(userId ? { "X-Mattermost-User-ID": userId } : {}),
+    },
+    mode: "proxy",
+    useRealApi: false,
   };
 
   return {
@@ -236,28 +269,46 @@ export function createProxyService(config: {
       }
     },
 
+    // ----- Méthodes d'emoji utilisant les utilitaires centralisés -----
     getFrequentEmojis: async () => {
       try {
-        return await apiCall<string[]>("emoji/frequent", {}, true);
+        // Utiliser la fonction utilitaire
+        return await getFrequentEmojis();
       } catch (error) {
         console.error(
           "Erreur lors de la récupération des emojis fréquents :",
           error,
         );
-        return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
+        return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"]; // Fallback
       }
     },
 
     addReaction: async (messageId, emoji) => {
       try {
-        const emojiName = getEmojiName(emoji);
-        return await apiCall("reactions", {
-          method: "POST",
-          body: JSON.stringify({
-            post_id: messageId,
-            emoji_name: emojiName,
-          }),
-        });
+        // En mode proxy, userId pourrait déjà être disponible depuis la configuration
+        // Si non, essayer de récupérer l'utilisateur actuel
+        let userIdForReaction = userId;
+
+        if (!userIdForReaction) {
+          try {
+            const user = await apiCall("users/me");
+            userIdForReaction = user.id;
+          } catch (userError) {
+            console.warn(
+              "Erreur lors de la récupération de l'utilisateur, tentative sans ID:",
+              userError,
+            );
+          }
+        }
+
+        // Mettre à jour les options avec l'ID utilisateur
+        const optionsWithUser = {
+          ...emojiOptions,
+          currentUserId: userIdForReaction,
+        };
+
+        // Utiliser la fonction utilitaire avec l'ID utilisateur
+        return await addReaction(messageId, emoji, optionsWithUser);
       } catch (error) {
         console.error(`Erreur lors de l'ajout de la réaction :`, error);
         throw error;
@@ -266,10 +317,8 @@ export function createProxyService(config: {
 
     removeReaction: async (channelId, messageId, emoji) => {
       try {
-        const emojiName = getEmojiName(emoji);
-        return await apiCall(`reactions/${messageId}/${emojiName}`, {
-          method: "DELETE",
-        });
+        // Utiliser la fonction utilitaire
+        return await removeReaction(channelId, messageId, emoji, emojiOptions);
       } catch (error) {
         console.error(`Erreur lors de la suppression de la réaction :`, error);
         throw error;
@@ -278,13 +327,13 @@ export function createProxyService(config: {
 
     hasReacted: async (channelId, messageId, emoji) => {
       try {
-        const emojiName = getEmojiName(emoji);
-        const reactions = await apiCall<any[]>(`posts/${messageId}/reactions`);
-
-        return reactions.some(
-          (reaction) =>
-            reaction.emoji_name === emojiName &&
-            (userId ? reaction.user_id === userId : true),
+        // Utiliser la fonction utilitaire
+        return await hasReacted(
+          channelId,
+          messageId,
+          emoji,
+          emojiOptions,
+          userId,
         );
       } catch (error) {
         console.error(`Erreur lors de la vérification de la réaction :`, error);
@@ -292,13 +341,11 @@ export function createProxyService(config: {
       }
     },
 
+    // ----- Méthodes de GIF utilisant les utilitaires centralisés -----
     searchGifs: async (query, category) => {
       try {
-        let endpoint = `gifs/search?q=${encodeURIComponent(query)}`;
-        if (category) {
-          endpoint += `&category=${encodeURIComponent(category)}`;
-        }
-        return await apiCall<GifData[]>(endpoint);
+        // Utiliser la fonction utilitaire
+        return await searchGifs(query, gifOptions, category);
       } catch (error) {
         console.error("Erreur lors de la recherche de GIFs :", error);
         return [];
@@ -307,16 +354,8 @@ export function createProxyService(config: {
 
     getGifs: async (category, limit = 20) => {
       try {
-        let endpoint =
-          category.toLowerCase() === "trending"
-            ? "gifs/trending"
-            : `gifs/category/${encodeURIComponent(category.toLowerCase())}`;
-
-        if (limit) {
-          endpoint += `?limit=${limit}`;
-        }
-
-        return await apiCall<GifData[]>(endpoint);
+        // Utiliser la fonction utilitaire
+        return await getGifs(category, gifOptions, limit);
       } catch (error) {
         console.error(
           `Erreur lors de la récupération des GIFs de ${category} :`,
