@@ -24,7 +24,7 @@ import {
 } from "@mui/icons-material";
 
 // Types
-import { CategoryBarProps } from "./types";
+import { CategoryBarProps } from "../../types";
 
 // Mapping par défaut des icônes pour les catégories
 export const DEFAULT_CATEGORY_ICONS: Record<string, React.ReactNode> = {

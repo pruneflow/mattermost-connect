@@ -1,80 +1,22 @@
 // src/components/EmojiPicker/GifPickerContent.tsx
-import React, { useState, useEffect } from "react";
-import { Box, Grid, Typography, Skeleton } from "@mui/material";
-import { GifPickerContentProps } from "./types";
-
-// Catégories de GIFs
-export const GIF_CATEGORIES = [
-  "Trending",
-  "Reactions",
-  "Memes",
-  "Celebs",
-  "Sports",
-  "TV",
-  "Movies",
-  "Animals",
-];
-
-// Exemple de données GIF pour la démo - à remplacer par vos propres données
-const GIF_SAMPLES = {
-  Trending: [
-    { id: "trend1", title: "Trending GIF 1" },
-    { id: "trend2", title: "Trending GIF 2" },
-    { id: "trend3", title: "Trending GIF 3" },
-    { id: "trend4", title: "Trending GIF 4" },
-  ],
-  Reactions: [
-    { id: "react1", title: "Reaction GIF 1" },
-    { id: "react2", title: "Reaction GIF 2" },
-    { id: "react3", title: "Reaction GIF 3" },
-    { id: "react4", title: "Reaction GIF 4" },
-  ],
-  Memes: [
-    { id: "meme1", title: "Meme GIF 1" },
-    { id: "meme2", title: "Meme GIF 2" },
-  ],
-  // Autres catégories similaires
-};
+import React from "react";
+import { Box, Grid, Typography, Skeleton, useTheme } from "@mui/material";
+import { GifPickerContentProps } from "../../types";
 
 /**
- * Contenu du sélecteur de GIFs
+ * Affichage du contenu GIF avec gestion des états de chargement et des résultats vides
  */
 const GifPickerContent: React.FC<GifPickerContentProps> = ({
   onGifSelect,
   searchQuery,
   activeCategory,
+  gifs,
+  loading,
 }) => {
-  const [loading, setLoading] = useState(false);
-  const [gifs, setGifs] = useState<any[]>([]);
-
-  // Simuler un chargement de GIFs
-  useEffect(() => {
-    setLoading(true);
-
-    // Simuler un délai de chargement
-    const timer = setTimeout(() => {
-      if (searchQuery) {
-        // Simuler une recherche - remplacer par une vraie API
-        setGifs([
-          { id: "search1", title: `Result for "${searchQuery}" 1` },
-          { id: "search2", title: `Result for "${searchQuery}" 2` },
-          { id: "search3", title: `Result for "${searchQuery}" 3` },
-          { id: "search4", title: `Result for "${searchQuery}" 4` },
-        ]);
-      } else {
-        // Afficher les GIFs de la catégorie sélectionnée
-        setGifs(GIF_SAMPLES[activeCategory] || []);
-      }
-      setLoading(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, activeCategory]);
+  const theme = useTheme();
 
   // Gérer la sélection d'un GIF
-  const handleGifClick = (gifId: string) => {
-    // Dans une implémentation réelle, on récupérerait l'URL du GIF
-    const gifUrl = `https://api.giphy.com/v1/gifs/${gifId}`;
+  const handleGifClick = (gifId: string, gifUrl?: string) => {
     onGifSelect(gifId, gifUrl);
   };
 
@@ -97,7 +39,7 @@ const GifPickerContent: React.FC<GifPickerContentProps> = ({
         // Affichage du chargement
         <Grid container spacing={1}>
           {[1, 2, 3, 4].map((num) => (
-            <Grid item key={num} xs={6}>
+            <Grid key={num} size={{ xs: 6 }}>
               <Skeleton
                 variant="rectangular"
                 height={80}
@@ -111,9 +53,9 @@ const GifPickerContent: React.FC<GifPickerContentProps> = ({
         // Affichage des GIFs
         <Grid container spacing={1}>
           {gifs.map((gif) => (
-            <Grid item key={gif.id} xs={6}>
+            <Grid key={gif.id} size={{ xs: 6 }}>
               <Box
-                onClick={() => handleGifClick(gif.id)}
+                onClick={() => handleGifClick(gif.id, gif.url)}
                 sx={{
                   width: "100%",
                   height: 80,
@@ -127,16 +69,61 @@ const GifPickerContent: React.FC<GifPickerContentProps> = ({
                   transition: "transform 0.2s",
                   "&:hover": {
                     transform: "scale(1.05)",
+                    boxShadow: theme.shadows[2],
                   },
+                  position: "relative",
                 }}
               >
-                {/* Ici, vous afficheriez une prévisualisation du GIF */}
-                <Typography
-                  variant="caption"
-                  sx={{ p: 1, textAlign: "center" }}
+                {/* Prévisualisation du GIF (si elle existe) */}
+                {gif.preview ? (
+                  <Box
+                    component="img"
+                    src={gif.preview}
+                    alt={gif.title}
+                    sx={{
+                      objectFit: "cover",
+                      width: "100%",
+                      height: "100%",
+                    }}
+                    onError={(e) => {
+                      // Fallback en cas d'erreur de chargement de l'image
+                      e.currentTarget.src = "/api/placeholder/100/80";
+                    }}
+                  />
+                ) : (
+                  <Typography
+                    variant="caption"
+                    sx={{ p: 1, textAlign: "center" }}
+                  >
+                    {gif.title}
+                  </Typography>
+                )}
+
+                {/* Titre du GIF en overlay */}
+                <Box
+                  sx={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    bgcolor: "rgba(0, 0, 0, 0.6)",
+                    padding: "2px 4px",
+                  }}
                 >
-                  {gif.title}
-                </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "white",
+                      fontSize: "0.6rem",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "block",
+                    }}
+                  >
+                    {gif.title}
+                  </Typography>
+                </Box>
               </Box>
             </Grid>
           ))}

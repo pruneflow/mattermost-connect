@@ -41,9 +41,9 @@ import {
 
 // Related components
 import MessageAttachment from "./MessageAttachment";
-import { EmojiPicker, PickerMode } from "../EmojiPicker";
+import { EmojiPicker, PickerMode, getEmojiFromName } from "../EmojiPicker";
+import { EmojiProvider } from "../../context/EmojiProvider";
 import Popover from "@mui/material/Popover";
-import { getEmojiFromName } from "../EmojiPicker/data/emojiData";
 
 /**
  * Props for the Message component
@@ -517,13 +517,15 @@ const Message: React.FC<MessageProps> = ({
           horizontal: "center",
         }}
       >
-        <EmojiPicker
-          onSelect={handleReactionSelect}
-          onClose={handleReactionMenuClose}
-          mode={PickerMode.REACTION}
-          messageId={message.id}
-          channelId={message.channel_id}
-        />
+        <EmojiProvider>
+          <EmojiPicker
+            onSelect={handleReactionSelect}
+            onClose={handleReactionMenuClose}
+            mode={PickerMode.REACTION}
+            messageId={message.id}
+            channelId={message.channel_id}
+          />
+        </EmojiProvider>
       </Popover>
     </>
   );

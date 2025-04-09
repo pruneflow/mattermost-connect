@@ -25,15 +25,15 @@ import {
 import EmojiPickerContent from "./EmojiPickerContent";
 import GifPickerContent from "./GifPickerContent";
 import CategoryBar from "./CategoryBar";
-import { useReactions } from "./utils/emojiUtils";
 import { DEFAULT_CATEGORY_ICONS } from "./CategoryBar";
 
-// Types
-import { EmojiPickerProps, PickerMode, EmojiSelectionResult } from "./types";
-
-// Categories
-import { GIF_CATEGORIES } from "./GifPickerContent";
-import { EMOJI_CATEGORIES } from "./EmojiPickerContent";
+// Context et types
+import { useEmoji } from "../../context/EmojiProvider";
+import {
+  EmojiPickerProps,
+  PickerMode,
+  EmojiSelectionResult,
+} from "../../types";
 
 /**
  * Sélecteur d'emojis et de GIFs
@@ -49,15 +49,25 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { addEmojiReaction } = useReactions();
+  const {
+    // États
+    activeEmojiCategory,
+    setActiveEmojiCategory,
+    emojiCategories,
+    activeGifCategory,
+    setActiveGifCategory,
+    gifCategories,
+    gifs,
+    loadingGifs,
+    frequentEmojis,
+    searchQuery,
+    setSearchQuery,
+    // Fonctions
+    addReaction,
+  } = useEmoji();
 
-  // États pour la navigation et le filtrage
+  // État pour la navigation entre onglets (emojis/GIFs)
   const [activeTab, setActiveTab] = useState(0); // 0 = emojis, 1 = GIFs
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeGifCategory, setActiveGifCategory] = useState(GIF_CATEGORIES[0]);
-  const [activeEmojiCategory, setActiveEmojiCategory] = useState(
-    EMOJI_CATEGORIES[0],
-  );
 
   // Déterminer la taille en fonction de l'appareil et du mode
   const getPickerSize = () => {
@@ -91,7 +101,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
     if (mode === PickerMode.REACTION && messageId && channelId) {
       try {
         // Si en mode réaction, envoyer directement la réaction via l'API
-        await addEmojiReaction(channelId, messageId, emoji);
+        await addReaction(channelId, messageId, emoji);
 
         // Fermer le picker après l'ajout réussi
         onClose?.();
@@ -265,7 +275,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
           {/* Sous-catégories des Emojis (visibles uniquement si pas de recherche) */}
           {!searchQuery && (
             <CategoryBar
-              categories={EMOJI_CATEGORIES}
+              categories={emojiCategories}
               activeCategory={activeEmojiCategory}
               onCategoryChange={setActiveEmojiCategory}
               categoryIcons={DEFAULT_CATEGORY_ICONS}
@@ -275,6 +285,8 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
           <EmojiPickerContent
             onEmojiSelect={handleEmojiSelect}
             searchQuery={searchQuery}
+            activeCategory={activeEmojiCategory}
+            frequentEmojis={frequentEmojis}
           />
         </>
       ) : (
@@ -283,7 +295,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
           {/* Sous-catégories de GIFs (visibles uniquement si pas de recherche) */}
           {!searchQuery && (
             <CategoryBar
-              categories={GIF_CATEGORIES}
+              categories={gifCategories}
               activeCategory={activeGifCategory}
               onCategoryChange={setActiveGifCategory}
               categoryIcons={DEFAULT_CATEGORY_ICONS}
@@ -296,6 +308,8 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
             onGifSelect={handleGifSelect}
             searchQuery={searchQuery}
             activeCategory={activeGifCategory}
+            gifs={gifs}
+            loading={loadingGifs}
           />
         </>
       )}

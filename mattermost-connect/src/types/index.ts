@@ -9,3 +9,4 @@ export * from "./provider.types";
 export * from "./service.types";
 export * from "./team.types";
 export * from "./websocket.types";
+export * from "./emoji.types";

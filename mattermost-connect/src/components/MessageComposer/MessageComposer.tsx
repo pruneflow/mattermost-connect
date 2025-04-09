@@ -34,6 +34,16 @@ import {
 } from "@mui/icons-material";
 
 import { EmojiPicker, PickerMode, EmojiSelectionResult } from "../EmojiPicker";
+import { EmojiProvider } from "../../context/EmojiProvider";
+
+/**
+ * Formateur de texte pour représenter les outils de formatage
+ */
+interface FormatOption {
+  label: string;
+  icon: React.ReactNode;
+  action: () => void;
+}
 
 /**
  * Props pour le composant MessageComposer
@@ -59,15 +69,6 @@ export interface MessageComposerProps {
 
   /** Styles personnalisés */
   sx?: React.CSSProperties;
-}
-
-/**
- * Formateur de texte pour représenter les outils de formatage
- */
-interface FormatOption {
-  label: string;
-  icon: React.ReactNode;
-  action: () => void;
 }
 
 /**
@@ -473,7 +474,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         )}
       </Box>
 
-      {/* Popover pour le sélecteur d'emojis */}
+      {/* Popover pour le sélecteur d'emojis avec Provider */}
       <Popover
         open={Boolean(emojiAnchorEl)}
         anchorEl={emojiAnchorEl}
@@ -487,12 +488,14 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           horizontal: "right",
         }}
       >
-        <EmojiPicker
-          onSelect={handleEmojiSelect}
-          onClose={handleCloseEmojiPicker}
-          mode={PickerMode.MESSAGE}
-          channelId={channelId}
-        />
+        <EmojiProvider>
+          <EmojiPicker
+            onSelect={handleEmojiSelect}
+            onClose={handleCloseEmojiPicker}
+            mode={PickerMode.MESSAGE}
+            channelId={channelId}
+          />
+        </EmojiProvider>
       </Popover>
 
       {/* Menu pour les options de formatage supplémentaires sur mobile */}

@@ -5,3 +5,4 @@
 export * from "./direct.service";
 export * from "./proxy.service";
 export * from "./websocket.service";
+export * from "./emoji.service";

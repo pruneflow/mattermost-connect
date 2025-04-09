@@ -5,195 +5,27 @@ import {
   Grid,
   Tooltip,
   Typography,
+  Divider,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
-import { EmojiPickerContentProps } from "./types";
-import { getEmojiName } from "./data/emojiData";
-
-// Catégories d'emojis
-export const EMOJI_CATEGORIES = [
-  "Smileys & Emotion",
-  "People & Body",
-  "Animals & Nature",
-  "Food & Drink",
-  "Travel & Places",
-  "Activities",
-  "Objects",
-  "Symbols",
-  "Flags",
-];
-
-// Emojis pour la démo - en pratique, vous remplaceriez ceci par vos propres données
-// Note: Ces donnés seraient normalement importées d'un autre fichier
-const EMOJI_SAMPLES: Record<string, string[]> = {
-  "Smileys & Emotion": [
-    "😀",
-    "😃",
-    "😄",
-    "😁",
-    "😆",
-    "😅",
-    "🤣",
-    "😂",
-    "🙂",
-    "🙃",
-    "😉",
-    "😊",
-    "😇",
-    "🥰",
-    "😍",
-    "🤩",
-    "😘",
-    "😗",
-    "😚",
-    "😙",
-    "😋",
-    "😛",
-    "😜",
-    "🤪",
-  ],
-  "People & Body": [
-    "👋",
-    "🤚",
-    "🖐️",
-    "✋",
-    "🖖",
-    "👌",
-    "🤏",
-    "✌️",
-    "🤞",
-    "🤟",
-    "🤘",
-    "🤙",
-    "👈",
-    "👉",
-    "👆",
-    "🖕",
-    "👇",
-    "☝️",
-    "👍",
-    "👎",
-    "✊",
-    "👊",
-    "🤛",
-    "🤜",
-  ],
-  "Animals & Nature": [
-    "🐶",
-    "🐱",
-    "🐭",
-    "🐹",
-    "🐰",
-    "🦊",
-    "🐻",
-    "🐼",
-    "🐨",
-    "🐯",
-    "🦁",
-    "🐮",
-  ],
-  "Food & Drink": [
-    "🍏",
-    "🍎",
-    "🍐",
-    "🍊",
-    "🍋",
-    "🍌",
-    "🍉",
-    "🍇",
-    "🍓",
-    "🍈",
-    "🍒",
-    "🍑",
-  ],
-  "Travel & Places": [
-    "🚗",
-    "🚕",
-    "🚙",
-    "🚌",
-    "🚎",
-    "🏎️",
-    "🚓",
-    "🚑",
-    "🚒",
-    "🚐",
-    "🚚",
-    "🚛",
-  ],
-  Activities: [
-    "⚽",
-    "🏀",
-    "🏈",
-    "⚾",
-    "🥎",
-    "🎾",
-    "🏐",
-    "🏉",
-    "🥏",
-    "🎱",
-    "🪀",
-    "🏓",
-  ],
-  Objects: [
-    "🎭",
-    "👓",
-    "🕶️",
-    "🥽",
-    "🥼",
-    "🦺",
-    "👔",
-    "👕",
-    "👖",
-    "🧣",
-    "🧤",
-    "🧥",
-  ],
-  Symbols: [
-    "❤️",
-    "🧡",
-    "💛",
-    "💚",
-    "💙",
-    "💜",
-    "🖤",
-    "🤍",
-    "🤎",
-    "💔",
-    "❣️",
-    "💕",
-  ],
-  Flags: [
-    "🏁",
-    "🚩",
-    "🎌",
-    "🏴",
-    "🏳️",
-    "🏳️‍🌈",
-    "🏳️‍⚧️",
-    "🏴‍☠️",
-    "🇫🇷",
-    "🇺🇸",
-    "🇬🇧",
-    "🇯🇵",
-  ],
-};
+import { EmojiPickerContentProps } from "../../types";
+import { EMOJI_SAMPLES, getEmojiName } from "./data/emojiData";
 
 /**
- * Contenu du sélecteur d'emojis
+ * Affiche une grille d'emojis catégorisée ou filtrée par recherche
  */
 const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
   onEmojiSelect,
   searchQuery,
+  activeCategory,
+  frequentEmojis = [],
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   // État pour les emojis filtrés
   const [filteredEmojis, setFilteredEmojis] = useState<string[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>(
-    EMOJI_CATEGORIES[0],
-  );
 
   // Effet pour filtrer les emojis lors de la recherche ou du changement de catégorie
   useEffect(() => {
@@ -205,7 +37,14 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
       });
 
       // Filtrage simple - en pratique, vous auriez une recherche plus sophistiquée
-      setFilteredEmojis(allEmojis);
+      const lowerQuery = searchQuery.toLowerCase();
+      const filtered = allEmojis.filter((emoji) => {
+        // Recherche par unicode ou description
+        // Note: ici on simule une recherche simplifiée
+        return emoji.toLowerCase().includes(lowerQuery);
+      });
+
+      setFilteredEmojis(filtered);
     } else {
       // Afficher les emojis de la catégorie sélectionnée
       setFilteredEmojis(EMOJI_SAMPLES[activeCategory] || []);
@@ -222,6 +61,9 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
     onEmojiSelect(emoji, emojiApiName);
   };
 
+  // Afficher les emojis fréquents seulement si pas de recherche et si c'est la première catégorie
+  const showFrequent = frequentEmojis.length > 0 && !searchQuery;
+
   return (
     <Box
       sx={{
@@ -237,9 +79,50 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
         },
       }}
     >
+      {/* Section pour les emojis fréquemment utilisés */}
+      {showFrequent && (
+        <>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", mb: 0.5, px: 1 }}
+          >
+            Récemment utilisés
+          </Typography>
+
+          <Grid container spacing={0.5} sx={{ mb: 1.5 }}>
+            {frequentEmojis.map((emoji, index) => (
+              <Grid key={`frequent-${index}`} size={{ xs: 12 / emojisPerRow }}>
+                <Tooltip title={emoji} arrow>
+                  <Box
+                    onClick={() => handleEmojiClick(emoji)}
+                    sx={{
+                      cursor: "pointer",
+                      fontSize: emojiSize,
+                      textAlign: "center",
+                      borderRadius: 1,
+                      py: 0.25,
+                      transition: "background-color 0.2s",
+                      "&:hover": {
+                        bgcolor: "action.hover",
+                      },
+                    }}
+                  >
+                    {emoji}
+                  </Box>
+                </Tooltip>
+              </Grid>
+            ))}
+          </Grid>
+
+          <Divider sx={{ my: 1 }} />
+        </>
+      )}
+
+      {/* Grille principale d'emojis */}
       <Grid container spacing={0.5}>
         {filteredEmojis.map((emoji, index) => (
-          <Grid item key={index} xs={12 / emojisPerRow}>
+          <Grid key={index} size={{ xs: 12 / emojisPerRow }}>
             <Tooltip title={emoji} arrow>
               <Box
                 onClick={() => handleEmojiClick(emoji)}

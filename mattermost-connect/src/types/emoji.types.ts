@@ -1,8 +1,12 @@
-// src/components/EmojiPicker/types.ts
-// Types pour le module EmojiPicker
+// src/types/emoji.types.ts
+/**
+ * Types pour les fonctionnalités liées aux emojis et aux GIFs
+ */
+
+import { EmojiServiceInterface } from "../services/emoji.service";
 
 /**
- * Mode d'utilisation du picker
+ * Mode d'utilisation du picker d'emoji
  */
 export enum PickerMode {
   /** Mode pour envoyer un message */
@@ -15,9 +19,13 @@ export enum PickerMode {
  * Interface pour les données de GIF
  */
 export interface GifData {
+  /** Identifiant unique du GIF */
   id: string;
+  /** URL de prévisualisation (thumbnail) */
   preview: string;
+  /** Titre du GIF */
   title: string;
+  /** URL complète du GIF */
   url?: string;
 }
 
@@ -69,6 +77,12 @@ export interface EmojiPickerContentProps {
 
   /** Valeur de recherche */
   searchQuery: string;
+
+  /** Catégorie active */
+  activeCategory: string;
+
+  /** Liste des emojis fréquemment utilisés */
+  frequentEmojis?: string[];
 }
 
 /**
@@ -83,6 +97,12 @@ export interface GifPickerContentProps {
 
   /** Catégorie active */
   activeCategory: string;
+
+  /** Liste des GIFs à afficher */
+  gifs: GifData[];
+
+  /** État de chargement */
+  loading: boolean;
 }
 
 /**
@@ -103,4 +123,47 @@ export interface CategoryBarProps {
 
   /** Afficher uniquement les icônes (mobile) */
   iconsOnly?: boolean;
+}
+
+/**
+ * Interface du contexte pour les emoji
+ */
+export interface EmojiContextType {
+  // Services
+  emojiService: EmojiServiceInterface | null;
+
+  // Emojis
+  frequentEmojis: string[];
+  activeEmojiCategory: string;
+  setActiveEmojiCategory: (category: string) => void;
+  emojiCategories: string[];
+
+  // GIFs
+  activeGifCategory: string;
+  setActiveGifCategory: (category: string) => void;
+  gifCategories: string[];
+  gifs: GifData[];
+  loadingGifs: boolean;
+
+  // Recherche
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+
+  // Fonctions
+  addReaction: (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => Promise<void>;
+  removeReaction: (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => Promise<void>;
+  hasReacted: (
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ) => Promise<boolean>;
+  searchGifs: (query: string) => Promise<void>;
 }
