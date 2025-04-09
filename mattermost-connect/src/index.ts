@@ -1,14 +1,14 @@
 // src/index.ts
-// Main entry point for the library
+// Fichier d'entrée principal pour la bibliothèque
 
-// Export context and provider
+// Exporter le context et le provider
 export {
   MattermostProvider,
   useMattermost,
   MattermostContext,
 } from "./context/MattermostProvider";
 
-// Export components
+// Exporter les composants
 export { default as ChannelList } from "./components/ChannelList/ChannelList";
 export { default as ChannelItem } from "./components/ChannelList/ChannelItem";
 export { default as ChannelViewer } from "./components/ChannelViewer/ChannelViewer";
@@ -18,7 +18,7 @@ export { default as MessageAttachment } from "./components/ChannelViewer/Message
 export { default as MessageComposer } from "./components/MessageComposer/MessageComposer";
 export { default as AttachmentPreview } from "./components/MessageComposer/AttachmentPreview";
 
-// Export Team Selection components
+// Exporter les composants de sélection d'équipe
 export { default as TeamSelector } from "./components/TeamSelector/TeamSelector";
 export { default as TeamList } from "./components/TeamSelector/variants/TeamList";
 export { default as TeamGrid } from "./components/TeamSelector/variants/TeamGrid";
@@ -30,13 +30,19 @@ export type {
   TeamSelectorProps,
 } from "./components/TeamSelector/TeamSelector";
 
-// Export theme
+// Exporter les composants d'emoji
+export { default as EmojiProvider } from "./context/EmojiProvider";
+export { useEmoji } from "./context/EmojiProvider";
+export { default as EmojiPicker } from "./components/EmojiPicker/EmojiPicker";
+export { PickerMode } from "./types/emoji.types";
+
+// Exporter le thème
 export { createDefaultTheme, MattermostThemeProvider } from "./theme";
 
-// Export services
-export { createDirectService, createProxyService } from "./services";
+// Exporter les services
+export { createMattermostService } from "./services";
 
-// Export utilities
+// Exporter les utilitaires
 export {
   formatMessageText,
   formatTimestamp,
@@ -47,10 +53,8 @@ export {
   formatTeamName,
 } from "./utils/formatting";
 
-export { MattermostAPI } from "./utils/api-helpers";
-
-// Export types
+// Exporter les types
 export * from "./types";
 
-// Default export is the provider for convenience
+// Export par défaut est le provider pour plus de commodité
 export { MattermostProvider as default } from "./context/MattermostProvider";

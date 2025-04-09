@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import { EmojiEmotions as EmojiIcon } from "@mui/icons-material";
 import MattermostProvider from "../../context/MattermostProvider";
+import EmojiProvider from "../../context/EmojiProvider";
 
 // Mock Mattermost service pour Storybook
 const createMockMattermostService = () => ({
@@ -30,7 +31,7 @@ const createMockMattermostService = () => ({
 });
 
 // Decorateur pour fournir un MattermostProvider factice
-const MattermostProviderDecorator: Decorator = (Story) => (
+const ProviderDecorator: Decorator = (Story) => (
   <MattermostProvider
     serviceProvider={{
       setupService: createMockMattermostService,
@@ -38,7 +39,9 @@ const MattermostProviderDecorator: Decorator = (Story) => (
       skipConnectionTest: true,
     }}
   >
-    <Story />
+    <EmojiProvider>
+      <Story />
+    </EmojiProvider>
   </MattermostProvider>
 );
 
@@ -46,7 +49,7 @@ const meta: Meta<typeof EmojiPicker> = {
   title: "Components/EmojiPicker",
   component: EmojiPicker,
 
-  decorators: [MattermostProviderDecorator],
+  decorators: [ProviderDecorator],
   parameters: {
     layout: "centered",
   },

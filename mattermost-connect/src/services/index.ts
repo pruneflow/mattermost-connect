@@ -1,8 +1,7 @@
 // src/services/index.ts
 /**
- * Export all services
+ * Export tous les services
  */
+export * from "./factory";
 export * from "./direct.service";
 export * from "./proxy.service";
-export * from "./websocket.service";
-export * from "./emoji.service";

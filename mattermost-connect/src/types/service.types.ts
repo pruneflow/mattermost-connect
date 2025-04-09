@@ -1,10 +1,9 @@
 // src/types/service.types.ts
-import { Channel, Message, Team, User, UserStatus } from "./index";
+import { Channel, Message, Team, User, UserStatus, GifData } from "./index";
 
 /**
- * Types for service implementations
+ * Options pour la récupération des messages
  */
-
 export interface GetMessagesOptions {
   page?: number;
   perPage?: number;
@@ -13,6 +12,9 @@ export interface GetMessagesOptions {
   after?: string;
 }
 
+/**
+ * Options pour la récupération des utilisateurs
+ */
 export interface GetUsersOptions {
   ids?: string[];
   inChannel?: string;
@@ -21,6 +23,9 @@ export interface GetUsersOptions {
   perPage?: number;
 }
 
+/**
+ * Réponse de l'API pour les messages
+ */
 export interface MessagesResponse {
   posts: Record<string, Message>;
   order: string[];
@@ -28,33 +33,93 @@ export interface MessagesResponse {
   prev_post_id?: string;
 }
 
+/**
+ * Configuration pour le service Mattermost
+ */
+export interface ServiceConfig {
+  // Mode direct
+  serverUrl?: string;
+  token?: string;
+
+  // Mode proxy
+  proxyUrl?: string;
+  clientId?: string;
+  userId?: string;
+
+  // Mode personnalisé
+  serviceProvider?: CustomServiceProvider;
+
+  // Options communes
+  enableWebsocket?: boolean;
+  refreshInterval?: number;
+}
+
+/**
+ * Fournisseur de service personnalisé (pour les tests, démonstrations, etc.)
+ */
+export interface CustomServiceProvider {
+  setupService: () => MattermostService;
+  isConnected?: boolean;
+  skipConnectionTest?: boolean;
+  currentUser?: User;
+  enableWebsocket?: boolean;
+}
+
+/**
+ * Interface principale du service Mattermost
+ * Regroupe toutes les fonctionnalités dans une interface unique
+ */
 export interface MattermostService {
-  // User methods
-  getCurrentUser: () => Promise<User>;
+  // Propriété indiquant le mode de fonctionnement
+  readonly mode: "direct" | "proxy" | "custom";
 
-  // Teams methods
-  getTeams: () => Promise<Team[]>;
-  getTeam: (teamId: string) => Promise<Team>;
+  // ----- Méthodes de base (utilisateurs, équipes, canaux) -----
+  getCurrentUser(): Promise<User>;
+  getTeams(): Promise<Team[]>;
+  getTeam(teamId: string): Promise<Team>;
+  getChannels(teamId: string): Promise<Channel[]>;
+  getChannel(channelId: string): Promise<Channel>;
 
-  // Channels methods
-  getChannels: (teamId: string) => Promise<Channel[]>;
-  getChannel: (channelId: string) => Promise<Channel>;
-
-  // Messages methods
-  getChannelMessages: (
+  // ----- Méthodes pour les messages -----
+  getChannelMessages(
     channelId: string,
     options?: GetMessagesOptions,
-  ) => Promise<MessagesResponse>;
-  postMessage: (channelId: string, message: string) => Promise<Message>;
+  ): Promise<MessagesResponse>;
+  postMessage(channelId: string, message: string): Promise<Message>;
 
-  // Users methods
-  getUsers: (options?: GetUsersOptions) => Promise<User[]>;
-  getUserStatus: (userId: string) => Promise<UserStatus>;
+  // ----- Méthodes pour les utilisateurs -----
+  getUsers(options?: GetUsersOptions): Promise<User[]>;
+  getUserStatus(userId: string): Promise<UserStatus>;
 
-  // Websocket utils
-  getWebsocketUrl: () => string;
-  getWebsocketToken: () => Promise<string>;
+  // ----- Méthodes pour les emojis et réactions -----
+  getFrequentEmojis(): Promise<string[]>;
+  addReaction(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<any>;
+  removeReaction(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<any>;
+  hasReacted(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<boolean>;
 
-  // Optional methods
-  uploadFiles?: (formData: FormData) => Promise<unknown>;
+  // ----- Méthodes pour les GIFs -----
+  searchGifs(query: string, category?: string): Promise<GifData[]>;
+  getGifs(category: string, limit?: number): Promise<GifData[]>;
+
+  // ----- Méthodes pour WebSocket -----
+  getWebsocketUrl(): string;
+  getWebsocketToken(): Promise<string>;
+
+  // ----- Méthodes pour les fichiers -----
+  uploadFiles(formData: FormData): Promise<any>;
+
+  // ----- Méthodes utilitaires -----
+  getBaseUrl(): string;
 }

@@ -7,80 +7,46 @@ import React, {
   useMemo,
   ReactNode,
 } from "react";
-import {
-  createDirectService,
-  createProxyService,
-  setupWebsocket,
-} from "../services";
+import { createMattermostService } from "../services";
 import type {
   User,
   ProviderConfig,
   MattermostService,
-  Team,
-  Channel,
-  Message,
-  GetMessagesOptions,
-  GetUsersOptions,
-  MessagesResponse,
-  UserStatus,
   WebSocketConnection,
 } from "../types";
+import { setupWebsocket } from "../services/websocket.service";
 
 /**
- * Mattermost context interface that provides access to
- * all Mattermost functionality and state
+ * Type du contexte Mattermost qui fournit l'accès à
+ * toutes les fonctionnalités et états Mattermost
  */
 export interface MattermostContextType {
-  /** Current connection mode (direct, proxy, custom) */
+  /** Mode de connexion actuel (direct, proxy, custom) */
   mode: "direct" | "proxy" | "custom" | null;
 
-  /** Whether connected to Mattermost */
+  /** Si connecté à Mattermost */
   isConnected: boolean;
 
-  /** Error if connection failed */
+  /** Erreur si la connexion a échoué */
   error: Error | null;
 
-  /** Current user information */
+  /** Informations sur l'utilisateur actuel */
   currentUser: User | null;
 
-  /** The underlying service instance */
+  /** L'instance du service */
   service: MattermostService | null;
 
-  /** WebSocket connection instance */
+  /** Instance de connexion WebSocket */
   websocket: WebSocketConnection | null;
-
-  /** Get channel information */
-  getChannel: (channelId: string) => Promise<Channel>;
-
-  /** Get channel messages */
-  getChannelMessages: (
-    channelId: string,
-    options?: GetMessagesOptions,
-  ) => Promise<MessagesResponse>;
-
-  /** Post a message to a channel */
-  postMessage: (channelId: string, message: string) => Promise<Message>;
-
-  /** Get all channels in a team */
-  getChannels: (teamId: string) => Promise<Channel[]>;
-
-  /** Get all teams the user belongs to */
-  getTeams: () => Promise<Team[]>;
-
-  /** Get users based on options */
-  getUsers: (options?: GetUsersOptions) => Promise<User[]>;
-
-  /** Get a user's status */
-  getUserStatus: (userId: string) => Promise<UserStatus>;
 }
 
-// Create the context
+// Créer le contexte
 const MattermostContext = createContext<MattermostContextType | null>(null);
 
 /**
- * Hook to use the Mattermost context
- * @returns The Mattermost context
- * @throws Error if used outside of MattermostProvider
+ * Hook pour utiliser le contexte Mattermost
+ * @returns Le contexte Mattermost
+ * @throws Error si utilisé en dehors de MattermostProvider
  */
 export const useMattermost = (): MattermostContextType => {
   const context = useContext(MattermostContext);
@@ -91,45 +57,45 @@ export const useMattermost = (): MattermostContextType => {
 };
 
 /**
- * Props for the MattermostProvider component
+ * Props pour le composant MattermostProvider
  */
 interface MattermostProviderProps extends ProviderConfig {
-  /** Children components */
+  /** Composants enfants */
   children: ReactNode;
 }
 
 /**
- * Provider component for configuring Mattermost access
- * Supports three modes: Direct, Proxy, and Custom
+ * Composant Provider pour configurer l'accès à Mattermost
+ * Prend en charge trois modes : Direct, Proxy et Custom
  */
 export const MattermostProvider: React.FC<MattermostProviderProps> = ({
-  // Direct mode config
+  // Configuration du mode Direct
   serverUrl,
   token,
 
-  // Proxy mode config
+  // Configuration du mode Proxy
   proxyUrl,
   clientId,
   userId,
 
-  // Custom service provider for tests/demos
+  // Fournisseur de service personnalisé pour les tests/démos
   serviceProvider,
 
-  // Common options
+  // Options communes
   enableWebsocket = true,
   refreshInterval = 30000,
 
-  // Children components
+  // Composants enfants
   children,
 }) => {
-  // Provider state
+  // État du Provider
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [websocket, setWebsocket] = useState<WebSocketConnection | null>(null);
   const [service, setService] = useState<MattermostService | null>(null);
 
-  // Determine the mode based on provided props
+  // Déterminer le mode en fonction des props fournies
   const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
     if (serviceProvider) return "custom";
     if (serverUrl && token) return "direct";
@@ -137,7 +103,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     return null;
   }, [serviceProvider, serverUrl, token, proxyUrl, clientId]);
 
-  // Initialize the appropriate service based on the mode
+  // Initialiser le service approprié en fonction du mode
   useEffect(() => {
     if (!mode) {
       setError(
@@ -150,25 +116,19 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
     const initService = async () => {
       try {
-        let serviceInstance: MattermostService;
-
-        if (mode === "custom" && serviceProvider) {
-          // Use the custom service provider
-          serviceInstance = serviceProvider.setupService();
-          setIsConnected(serviceProvider.isConnected !== false);
-        } else if (mode === "direct" && serverUrl && token) {
-          // Direct mode with user token
-          serviceInstance = createDirectService({ serverUrl, token });
-        } else if (mode === "proxy" && proxyUrl && clientId) {
-          // Proxy mode via our service
-          serviceInstance = createProxyService({ proxyUrl, clientId, userId });
-        } else {
-          throw new Error("Invalid configuration");
-        }
+        // Créer l'instance de service avec notre factory centralisée
+        const serviceInstance = createMattermostService({
+          serverUrl,
+          token,
+          proxyUrl,
+          clientId,
+          userId,
+          serviceProvider,
+        });
 
         setService(serviceInstance);
 
-        // Test the connection (except for custom services that specify to skip it)
+        // Tester la connexion (sauf pour les services personnalisés qui spécifient de sauter le test)
         if (mode !== "custom" || !serviceProvider?.skipConnectionTest) {
           try {
             const user = await serviceInstance.getCurrentUser();
@@ -183,43 +143,41 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             setIsConnected(false);
           }
         } else if (mode === "custom" && serviceProvider?.currentUser) {
-          // For custom services that provide a current user
+          // Pour les services personnalisés qui fournissent un utilisateur actuel
           setCurrentUser(serviceProvider.currentUser);
         }
 
-        // Initialize WebSocket if enabled
+        // Initialiser WebSocket si activé
         if (
           enableWebsocket &&
           (mode !== "custom" || serviceProvider?.enableWebsocket !== false)
         ) {
           try {
-            const wsUrl = mode === "direct" ? serverUrl || "" : proxyUrl || "";
-            const wsToken =
-              mode === "direct"
-                ? token || ""
-                : await serviceInstance.getWebsocketToken();
+            // Obtenir l'URL et le token WebSocket du service
+            const wsUrl = serviceInstance.getWebsocketUrl();
+            const wsToken = await serviceInstance.getWebsocketToken();
 
             const ws = await setupWebsocket({
               mode,
               serverUrl: wsUrl,
               token: wsToken,
               onMessage: (msg) => {
-                // Process WebSocket messages
+                // Traiter les messages WebSocket
                 console.debug("WebSocket message:", msg);
 
-                // Handle different event types
+                // Gérer différents types d'événements
                 if (msg.event === "posted") {
-                  // New message posted
-                  // Implement logic to update the UI
+                  // Nouveau message posté
+                  // Implémenter la logique pour mettre à jour l'interface
                 } else if (msg.event === "status_change") {
-                  // User status changed
+                  // Statut de l'utilisateur changé
                 } else if (msg.event === "typing") {
-                  // User is typing
+                  // L'utilisateur est en train d'écrire
                 }
               },
               onError: (err) => {
                 console.error("WebSocket error:", err);
-                // Don't set error here to avoid blocking the UI
+                // Ne pas définir d'erreur ici pour éviter de bloquer l'interface
               },
               onClose: () => {
                 console.debug("WebSocket closed");
@@ -230,7 +188,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             setWebsocket(ws);
           } catch (wsError) {
             console.warn("Failed to establish WebSocket connection:", wsError);
-            // Continue without WebSocket
+            // Continuer sans WebSocket
           }
         }
       } catch (err) {
@@ -242,7 +200,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
     initService();
 
-    // Cleanup when unmounting
+    // Nettoyage lors du démontage
     return () => {
       if (websocket) {
         websocket.close();
@@ -259,51 +217,15 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     serviceProvider,
   ]);
 
-  // Context value to share with child components
+  // Valeur du contexte à partager avec les composants enfants
   const contextValue: MattermostContextType = {
-    // State
+    // État
     mode,
     isConnected,
     error,
     currentUser,
     service,
     websocket,
-
-    // Common method shortcuts with error handling
-    getChannel: async (channelId) => {
-      if (!service) throw new Error("Service not initialized");
-      return service.getChannel(channelId);
-    },
-
-    getChannelMessages: async (channelId, options = {}) => {
-      if (!service) throw new Error("Service not initialized");
-      return service.getChannelMessages(channelId, options);
-    },
-
-    postMessage: async (channelId, message) => {
-      if (!service) throw new Error("Service not initialized");
-      return service.postMessage(channelId, message);
-    },
-
-    getChannels: async (teamId) => {
-      if (!service) throw new Error("Service not initialized");
-      return service.getChannels(teamId);
-    },
-
-    getTeams: async () => {
-      if (!service) throw new Error("Service not initialized");
-      return service.getTeams();
-    },
-
-    getUsers: async (options = {}) => {
-      if (!service) throw new Error("Service not initialized");
-      return service.getUsers(options);
-    },
-
-    getUserStatus: async (userId) => {
-      if (!service) throw new Error("Service not initialized");
-      return service.getUserStatus(userId);
-    },
   };
 
   return (
@@ -313,7 +235,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   );
 };
 
-// Export the context to allow direct usage if needed
+// Exporter le contexte pour permettre l'utilisation directe si nécessaire
 export { MattermostContext };
 
 export default MattermostProvider;

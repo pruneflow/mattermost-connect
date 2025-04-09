@@ -3,8 +3,6 @@
  * Types pour les fonctionnalités liées aux emojis et aux GIFs
  */
 
-import { EmojiServiceInterface } from "../services/emoji.service";
-
 /**
  * Mode d'utilisation du picker d'emoji
  */
@@ -127,11 +125,9 @@ export interface CategoryBarProps {
 
 /**
  * Interface du contexte pour les emoji
+ * Utilise désormais le service Mattermost centralisé au lieu d'un service emoji spécifique
  */
 export interface EmojiContextType {
-  // Services
-  emojiService: EmojiServiceInterface | null;
-
   // Emojis
   frequentEmojis: string[];
   activeEmojiCategory: string;

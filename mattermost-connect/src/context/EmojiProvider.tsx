@@ -16,10 +16,6 @@ import React, {
 // Import des types et interfaces
 import { GifData, EmojiContextType } from "../types";
 import { useMattermost } from "./MattermostProvider";
-import {
-  EmojiServiceInterface,
-  createEmojiService,
-} from "../services/emoji.service";
 import { EMOJI_CATEGORIES } from "../components/EmojiPicker/data/emojiData";
 import { GIF_CATEGORIES } from "../components/EmojiPicker/data/gifData";
 
@@ -46,13 +42,10 @@ interface EmojiProviderProps {
 
 /**
  * Provider pour les fonctionnalités d'emoji
+ * Utilise le nouveau service Mattermost centralisé au lieu d'un service emoji séparé
  */
 export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
   const { service } = useMattermost();
-
-  // État du service
-  const [emojiService, setEmojiService] =
-    useState<EmojiServiceInterface | null>(null);
 
   // États pour les emojis
   const [frequentEmojis, setFrequentEmojis] = useState<string[]>([]);
@@ -70,34 +63,32 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
   // État pour la recherche
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Initialiser le service emoji lorsque le service Mattermost est disponible
+  // Charger les emojis fréquents lorsque le service est disponible
   useEffect(() => {
-    if (service) {
-      const emojiServiceInstance = createEmojiService(service);
-      setEmojiService(emojiServiceInstance);
+    if (!service) return;
 
-      // Charger les emojis fréquemment utilisés
-      const loadFrequentEmojis = async () => {
-        try {
-          const emojis = await emojiServiceInstance.getFrequentEmojis();
-          setFrequentEmojis(emojis);
-        } catch (error) {
-          console.error("Error loading frequent emojis:", error);
-        }
-      };
+    const loadFrequentEmojis = async () => {
+      try {
+        const emojis = await service.getFrequentEmojis();
+        setFrequentEmojis(emojis);
+      } catch (error) {
+        console.error("Error loading frequent emojis:", error);
+        // En cas d'erreur, utiliser une liste par défaut
+        setFrequentEmojis(["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"]);
+      }
+    };
 
-      void loadFrequentEmojis();
-    }
+    void loadFrequentEmojis();
   }, [service]);
 
   // Charger les GIFs lorsque la catégorie change
   useEffect(() => {
-    if (!emojiService || searchQuery) return;
+    if (!service || searchQuery) return;
 
     const loadGifs = async () => {
       setLoadingGifs(true);
       try {
-        const gifData = await emojiService.getGifs(activeGifCategory);
+        const gifData = await service.getGifs(activeGifCategory);
         setGifs(gifData);
       } catch (error) {
         console.error(
@@ -110,7 +101,7 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
     };
 
     void loadGifs();
-  }, [emojiService, activeGifCategory, searchQuery]);
+  }, [service, activeGifCategory, searchQuery]);
 
   /**
    * Ajoute une réaction à un message
@@ -121,16 +112,16 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
       messageId: string,
       emoji: string,
     ): Promise<void> => {
-      if (!emojiService) return;
+      if (!service) return;
 
       try {
-        await emojiService.addReaction(channelId, messageId, emoji);
+        await service.addReaction(channelId, messageId, emoji);
       } catch (error) {
         console.error("Error adding reaction:", error);
         throw error;
       }
     },
-    [emojiService],
+    [service],
   );
 
   /**
@@ -142,16 +133,16 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
       messageId: string,
       emoji: string,
     ): Promise<void> => {
-      if (!emojiService) return;
+      if (!service) return;
 
       try {
-        await emojiService.removeReaction(channelId, messageId, emoji);
+        await service.removeReaction(channelId, messageId, emoji);
       } catch (error) {
         console.error("Error removing reaction:", error);
         throw error;
       }
     },
-    [emojiService],
+    [service],
   );
 
   /**
@@ -163,16 +154,16 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
       messageId: string,
       emoji: string,
     ): Promise<boolean> => {
-      if (!emojiService) return false;
+      if (!service) return false;
 
       try {
-        return await emojiService.hasReacted(channelId, messageId, emoji);
+        return await service.hasReacted(channelId, messageId, emoji);
       } catch (error) {
         console.error("Error checking reaction:", error);
         return false;
       }
     },
-    [emojiService],
+    [service],
   );
 
   /**
@@ -180,11 +171,11 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
    */
   const searchGifs = useCallback(
     async (query: string): Promise<void> => {
-      if (!emojiService || !query.trim()) return;
+      if (!service || !query.trim()) return;
 
       setLoadingGifs(true);
       try {
-        const results = await emojiService.searchGifs(query);
+        const results = await service.searchGifs(query);
         setGifs(results);
       } catch (error) {
         console.error("Error searching GIFs:", error);
@@ -192,7 +183,7 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
         setLoadingGifs(false);
       }
     },
-    [emojiService],
+    [service],
   );
 
   // Effectuer une recherche quand searchQuery change
@@ -204,9 +195,6 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
 
   // Construire la valeur du contexte
   const contextValue: EmojiContextType = {
-    // Services
-    emojiService,
-
     // Emojis
     frequentEmojis,
     activeEmojiCategory,

@@ -10,7 +10,7 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import { EmojiPickerContentProps } from "../../types";
-import { EMOJI_SAMPLES, getEmojiName } from "./data/emojiData";
+import { EMOJI_MAP, getEmojiName } from "./data/emojiData";
 
 /**
  * Affiche une grille d'emojis catégorisée ou filtrée par recherche
@@ -32,22 +32,22 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
     if (searchQuery) {
       // Recherche dans toutes les catégories
       const allEmojis: string[] = [];
-      Object.values(EMOJI_SAMPLES).forEach((categoryEmojis) => {
+      Object.values(EMOJI_MAP).forEach((categoryEmojis) => {
         allEmojis.push(...categoryEmojis);
       });
 
-      // Filtrage simple - en pratique, vous auriez une recherche plus sophistiquée
+      // Filtrage par emoji ou par nom
       const lowerQuery = searchQuery.toLowerCase();
       const filtered = allEmojis.filter((emoji) => {
-        // Recherche par unicode ou description
-        // Note: ici on simule une recherche simplifiée
-        return emoji.toLowerCase().includes(lowerQuery);
+        // Recherche par emoji ou par son nom API
+        const emojiName = getEmojiName(emoji).toLowerCase();
+        return emoji.includes(lowerQuery) || emojiName.includes(lowerQuery);
       });
 
       setFilteredEmojis(filtered);
     } else {
       // Afficher les emojis de la catégorie sélectionnée
-      setFilteredEmojis(EMOJI_SAMPLES[activeCategory] || []);
+      setFilteredEmojis(EMOJI_MAP[activeCategory] || []);
     }
   }, [searchQuery, activeCategory]);
 
@@ -93,7 +93,7 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
           <Grid container spacing={0.5} sx={{ mb: 1.5 }}>
             {frequentEmojis.map((emoji, index) => (
               <Grid key={`frequent-${index}`} size={{ xs: 12 / emojisPerRow }}>
-                <Tooltip title={emoji} arrow>
+                <Tooltip title={getEmojiName(emoji)} arrow>
                   <Box
                     onClick={() => handleEmojiClick(emoji)}
                     sx={{
@@ -123,7 +123,7 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
       <Grid container spacing={0.5}>
         {filteredEmojis.map((emoji, index) => (
           <Grid key={index} size={{ xs: 12 / emojisPerRow }}>
-            <Tooltip title={emoji} arrow>
+            <Tooltip title={getEmojiName(emoji)} arrow>
               <Box
                 onClick={() => handleEmojiClick(emoji)}
                 sx={{

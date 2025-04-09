@@ -4,37 +4,41 @@ import {
   GetMessagesOptions,
   GetUsersOptions,
   MessagesResponse,
-  User,
-  Team,
-  Channel,
-  Message,
-  UserStatus,
+  GifData,
 } from "../types";
+import { getEmojiName } from "../components/EmojiPicker/data/emojiData";
 
 /**
- * Creates a service that communicates with Mattermost via our proxy service
- * Handles authentication and tokens on the server-side
- *
- * @param config - Configuration with proxyUrl, clientId, and userId
- * @returns MattermostService implementation
+ * Normalise l'URL en supprimant le slash final s'il existe
  */
-export const createProxyService = (config: {
+function normalizeUrl(url: string): string {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+/**
+ * Crée un service qui communique avec Mattermost via un service proxy
+ * Gère l'authentification et les tokens côté serveur
+ *
+ * @param config - Configuration avec proxyUrl, clientId et userId
+ * @returns Implémentation du service Mattermost
+ */
+export function createProxyService(config: {
   proxyUrl: string;
   clientId: string;
   userId?: string;
-}): MattermostService => {
+}): MattermostService {
   const { proxyUrl, clientId, userId } = config;
 
-  // Validate required parameters
+  // Validation des paramètres obligatoires
   if (!proxyUrl || !clientId) {
     throw new Error("proxyUrl and clientId are required for proxy mode");
   }
 
-  // Normalize proxy URL (remove trailing slash if present)
-  const baseUrl = proxyUrl.endsWith("/") ? proxyUrl.slice(0, -1) : proxyUrl;
+  // Normaliser l'URL du proxy (supprimer le slash final s'il existe)
+  const baseUrl = normalizeUrl(proxyUrl);
 
   /**
-   * Helper method to make API calls through the proxy
+   * Méthode utilitaire pour faire des appels API via le proxy
    */
   const apiCall = async <T>(
     endpoint: string,
@@ -42,14 +46,14 @@ export const createProxyService = (config: {
   ): Promise<T> => {
     const url = `${baseUrl}/${endpoint}`;
 
-    // In proxy mode, we send clientId and userId for authentication
-    const headers: any = {
+    // En mode proxy, nous envoyons clientId et userId pour l'authentification
+    const headers: Record<string, string> = {
       "X-Mattermost-Client-ID": clientId,
       "Content-Type": "application/json",
-      ...options.headers,
+      ...((options.headers as Record<string, string>) || {}),
     };
 
-    // Add userId if available
+    // Ajouter userId si disponible
     if (userId) {
       headers["X-Mattermost-User-ID"] = userId;
     }
@@ -61,7 +65,7 @@ export const createProxyService = (config: {
       });
 
       if (!response.ok) {
-        // Handle error responses
+        // Gérer les réponses d'erreur
         const error = await response.json().catch(() => ({}));
         throw new Error(
           error.message ||
@@ -76,36 +80,34 @@ export const createProxyService = (config: {
     }
   };
 
-  // Return the service interface (similar to direct service for consistent API)
+  // Retourner l'interface du service
   return {
-    // User information
-    getCurrentUser: async (): Promise<User> => {
-      return apiCall<User>("users/me");
+    // Propriété indiquant le mode
+    mode: "proxy",
+
+    // ----- Méthodes de base (utilisateurs, équipes, canaux) -----
+    getCurrentUser: async () => {
+      return apiCall("users/me");
     },
 
-    // Teams management
-    getTeams: async (): Promise<Team[]> => {
-      return apiCall<Team[]>("teams");
+    getTeams: async () => {
+      return apiCall("teams");
     },
 
-    getTeam: async (teamId: string): Promise<Team> => {
-      return apiCall<Team>(`teams/${teamId}`);
+    getTeam: async (teamId) => {
+      return apiCall(`teams/${teamId}`);
     },
 
-    // Channels management
-    getChannels: async (teamId: string): Promise<Channel[]> => {
-      return apiCall<Channel[]>(`teams/${teamId}/channels`);
+    getChannels: async (teamId) => {
+      return apiCall(`teams/${teamId}/channels`);
     },
 
-    getChannel: async (channelId: string): Promise<Channel> => {
-      return apiCall<Channel>(`channels/${channelId}`);
+    getChannel: async (channelId) => {
+      return apiCall(`channels/${channelId}`);
     },
 
-    // Messages management
-    getChannelMessages: async (
-      channelId: string,
-      options: GetMessagesOptions = {},
-    ): Promise<MessagesResponse> => {
+    // ----- Méthodes pour les messages -----
+    getChannelMessages: async (channelId, options: GetMessagesOptions = {}) => {
       const { page = 0, perPage = 60, since = 0, before, after } = options;
 
       let endpoint = `channels/${channelId}/messages?page=${page}&per_page=${perPage}`;
@@ -117,11 +119,8 @@ export const createProxyService = (config: {
       return apiCall<MessagesResponse>(endpoint);
     },
 
-    postMessage: async (
-      channelId: string,
-      message: string,
-    ): Promise<Message> => {
-      return apiCall<Message>("messages", {
+    postMessage: async (channelId, message) => {
+      return apiCall("messages", {
         method: "POST",
         body: JSON.stringify({
           channel_id: channelId,
@@ -130,8 +129,8 @@ export const createProxyService = (config: {
       });
     },
 
-    // Users management
-    getUsers: async (options: GetUsersOptions = {}): Promise<User[]> => {
+    // ----- Méthodes pour les utilisateurs -----
+    getUsers: async (options: GetUsersOptions = {}) => {
       const params = new URLSearchParams();
 
       if (options.inChannel) params.append("in_channel", options.inChannel);
@@ -140,36 +139,124 @@ export const createProxyService = (config: {
         params.append("per_page", options.perPage.toString());
       if (options.page) params.append("page", options.page.toString());
 
-      // Special case for getting specific users by ID
+      // Cas spécial pour obtenir des utilisateurs spécifiques par ID
       if (options.ids && options.ids.length > 0) {
-        return apiCall<User[]>("users/ids", {
+        return apiCall("users/ids", {
           method: "POST",
           body: JSON.stringify(options.ids),
         });
       }
 
-      return apiCall<User[]>(`users?${params.toString()}`);
+      return apiCall(`users?${params.toString()}`);
     },
 
-    getUserStatus: async (userId: string): Promise<UserStatus> => {
-      return apiCall<UserStatus>(`users/${userId}/status`);
+    getUserStatus: async (userId) => {
+      return apiCall(`users/${userId}/status`);
     },
 
-    // Utilities for WebSocket
-    getWebsocketUrl: (): string => {
-      // For proxy mode, WebSocket URL is managed by the proxy
+    // ----- Méthodes pour les emojis et réactions -----
+    getFrequentEmojis: async () => {
+      try {
+        return apiCall<{ emojis: string[] }>("emoji/frequent")
+          .then((response) => response.emojis)
+          .catch(() => {
+            // Fallback par défaut si l'API n'est pas disponible
+            return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
+          });
+      } catch (error) {
+        console.error("Error getting frequent emojis:", error);
+        return [];
+      }
+    },
+
+    addReaction: async (channelId, messageId, emoji) => {
+      const emojiName = getEmojiName(emoji);
+
+      return apiCall("reactions", {
+        method: "POST",
+        body: JSON.stringify({
+          channel_id: channelId,
+          post_id: messageId,
+          emoji_name: emojiName,
+        }),
+      });
+    },
+
+    removeReaction: async (channelId, messageId, emoji) => {
+      const emojiName = getEmojiName(emoji);
+
+      return apiCall(`reactions/${messageId}/${emojiName}`, {
+        method: "DELETE",
+      });
+    },
+
+    hasReacted: async (channelId, messageId, emoji) => {
+      try {
+        const emojiName = getEmojiName(emoji);
+
+        const response = await apiCall<any[]>(`posts/${messageId}/reactions`);
+
+        return response.some(
+          (reaction) =>
+            reaction.emoji_name === emojiName &&
+            (userId ? reaction.user_id === userId : true),
+        );
+      } catch (error) {
+        console.error("Error checking reaction:", error);
+        return false;
+      }
+    },
+
+    // ----- Méthodes pour les GIFs -----
+    searchGifs: async (query, category) => {
+      if (!query.trim()) return [];
+
+      let endpoint = `gifs/search?q=${encodeURIComponent(query)}`;
+
+      if (category) {
+        endpoint += `&category=${encodeURIComponent(category)}`;
+      }
+
+      return apiCall<GifData[]>(endpoint);
+    },
+
+    getGifs: async (category, limit = 20) => {
+      try {
+        let endpoint = "gifs";
+
+        if (category.toLowerCase() === "trending") {
+          endpoint = "gifs/trending";
+        } else {
+          endpoint = `gifs/category/${encodeURIComponent(category.toLowerCase())}`;
+        }
+
+        if (limit) {
+          endpoint += `?limit=${limit}`;
+        }
+
+        return apiCall<GifData[]>(endpoint);
+      } catch (error) {
+        console.error("Error getting GIFs:", error);
+        return [];
+      }
+    },
+
+    // ----- Méthodes pour WebSocket -----
+    getWebsocketUrl: () => {
+      // Pour le mode proxy, l'URL WebSocket est gérée par le proxy
       return `${baseUrl.replace(/^http/, "ws")}/websocket`;
     },
 
-    getWebsocketToken: async (): Promise<string> => {
-      // In proxy mode, we need a temporary token for WebSocket
+    getWebsocketToken: async () => {
+      // En mode proxy, nous avons besoin d'un token temporaire pour WebSocket
       const response = await apiCall<{ token: string }>("websocket/token");
       return response.token;
     },
 
-    // File uploads
-    uploadFiles: async (formData: FormData): Promise<unknown> => {
-      // Create a headers object without Content-Type so browser can set it with the boundary
+    // ----- Méthodes pour les fichiers -----
+    uploadFiles: async (formData) => {
+      // Créer un objet headers sans Content-Type pour que le navigateur puisse définir
+      // celui-ci automatiquement avec la boundary
       const headers: Record<string, string> = {
         "X-Mattermost-Client-ID": clientId,
       };
@@ -193,7 +280,8 @@ export const createProxyService = (config: {
 
       return response.json();
     },
-  };
-};
 
-export default createProxyService;
+    // ----- Méthodes utilitaires -----
+    getBaseUrl: () => baseUrl,
+  };
+}
