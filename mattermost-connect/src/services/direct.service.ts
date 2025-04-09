@@ -29,31 +29,31 @@ function normalizeUrl(url: string): string {
  */
 export function createDirectService(config: {
   serverUrl: string;
-  token: string;
+  token?: string;
 }): MattermostService {
   const { serverUrl, token } = config;
 
   // Validation des paramètres obligatoires
-  if (!serverUrl || !token) {
-    throw new Error("serverUrl and token are required for direct mode");
+  if (!serverUrl) {
+    throw new Error("serverUrl et token sont requis pour le mode direct");
   }
 
   // Normaliser l'URL du serveur (supprimer le slash final s'il existe)
   const baseUrl = normalizeUrl(serverUrl);
 
-  /**
-   * Méthode utilitaire pour faire des appels API avec authentification
-   */
   const apiCall = async <T>(
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> => {
     const url = `${baseUrl}/api/v4/${endpoint}`;
-    const headers = {
-      Authorization: `Bearer ${token}`,
+    const headers: any = {
       "Content-Type": "application/json",
       ...options.headers,
     };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
     try {
       const response = await fetch(url, {
@@ -61,23 +61,24 @@ export function createDirectService(config: {
         headers,
       });
 
-      if (!response.ok) {
-        // Gérer les erreurs spécifiques de l'API Mattermost
-        const error = await response.json().catch(() => ({}));
+      // Gestion spécifique des erreurs d'authentification
+      if (response.status === 401) {
         throw new Error(
-          error.message ||
-            `API Error: ${response.status} ${response.statusText}`,
+          "Session invalide ou expirée, veuillez vous reconnecter.",
         );
       }
 
-      // Pour les requêtes DELETE qui peuvent ne pas renvoyer de corps
-      if (options.method === "DELETE" && response.status === 204) {
-        return {} as T;
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(
+          error.message ||
+            `Erreur API : ${response.status} ${response.statusText}`,
+        );
       }
 
       return response.json() as Promise<T>;
     } catch (error) {
-      console.error(`Error calling API at ${endpoint}:`, error);
+      console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
       throw error;
     }
   };
@@ -88,8 +89,79 @@ export function createDirectService(config: {
     mode: "direct",
 
     // ----- Méthodes de base (utilisateurs, équipes, canaux) -----
+    authenticate: async (username, password) => {
+      try {
+        // Appel à l'API Mattermost pour obtenir un token
+        const response = await fetch(`${baseUrl}/api/v4/users/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            login_id: username,
+            password: password,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Échec de l'authentification");
+        }
+
+        const user = await response.json();
+        const tokenResponse = await fetch(
+          `${baseUrl}/api/v4/users/${user.id}/tokens`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${response.headers.get("Token")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              description: "MattermostConnect Integration",
+            }),
+          },
+        );
+
+        if (!tokenResponse.ok) {
+          throw new Error("Échec de la génération du token");
+        }
+
+        const tokenData = await tokenResponse.json();
+        return {
+          token: tokenData.token,
+          serverUrl: baseUrl,
+        };
+      } catch (error) {
+        console.error("Erreur d'authentification :", error);
+        throw error;
+      }
+    },
+    validateToken: async (token) => {
+      try {
+        const response = await fetch(`${baseUrl}/api/v4/users/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("Erreur de validation du token :", error);
+        return false;
+      }
+    },
+
+    // Modification de getCurrentUser pour gérer les erreurs
     getCurrentUser: async () => {
-      return apiCall("users/me");
+      try {
+        return await apiCall("users/me");
+      } catch (error) {
+        console.error(
+          "Erreur lors de la récupération de l'utilisateur :",
+          error,
+        );
+        throw error;
+      }
     },
 
     getTeams: async () => {

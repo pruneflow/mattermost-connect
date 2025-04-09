@@ -40,7 +40,7 @@ export { PickerMode } from "./types/emoji.types";
 export { createDefaultTheme, MattermostThemeProvider } from "./theme";
 
 // Exporter les services
-export { createMattermostService } from "./services";
+export { createMattermostService, createMockService } from "./services";
 
 // Exporter les utilitaires
 export {

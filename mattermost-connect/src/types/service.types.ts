@@ -88,6 +88,22 @@ export interface MattermostService {
   postMessage(channelId: string, message: string): Promise<Message>;
 
   // ----- Méthodes pour les utilisateurs -----
+  /**
+   * Méthode d'authentification pour obtenir un token
+   * @param username Nom d'utilisateur ou email
+   * @param password Mot de passe
+   * @returns Token d'authentification
+   */
+  authenticate?(
+    username: string,
+    password: string,
+  ): Promise<{ token: string; serverUrl?: string }>;
+  /**
+   * Valide un token existant
+   * @param token Token à valider
+   * @returns Booléen indiquant la validité du token
+   */
+  validateToken?(token: string): Promise<boolean>;
   getUsers(options?: GetUsersOptions): Promise<User[]>;
   getUserStatus(userId: string): Promise<UserStatus>;
 

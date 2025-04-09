@@ -42,6 +42,11 @@ export function createMattermostService(
       clientId: config.clientId,
       userId: config.userId,
     });
+  } else if (config.serverUrl) {
+    // Ajouter cette condition pour permettre la création avec uniquement l'URL
+    return createDirectService({
+      serverUrl: config.serverUrl,
+    });
   } else {
     throw new Error(
       "Invalid configuration. You must provide (serverUrl and token) OR " +
@@ -57,15 +62,31 @@ export function createMockService(): MattermostService {
   return {
     mode: "custom",
 
-    // Méthodes de base simulées
-    getCurrentUser: async () => ({
-      id: "user1",
-      username: "testuser",
-      first_name: "Test",
-      last_name: "User",
-      email: "test@example.com",
-      roles: "system_user",
-    }),
+    authenticate: async (username: string, password: string) => {
+      // Simulation d'une authentification
+      if (username === "demo" && password === "password") {
+        return { token: "mock-user-token" };
+      }
+      throw new Error("Authentification échouée");
+    },
+    validateToken: async (token) => {
+      return token === "mock-user-token";
+    },
+
+    getCurrentUser: async () => {
+      try {
+        return {
+          id: "user1",
+          username: "johndoe",
+          first_name: "John",
+          last_name: "Doe",
+          email: "john@example.com",
+          roles: "system_user",
+        };
+      } catch (error) {
+        throw new Error("Impossible de récupérer l'utilisateur actuel");
+      }
+    },
 
     getTeams: async () => [
       { id: "team1", name: "team1", display_name: "Team One" },

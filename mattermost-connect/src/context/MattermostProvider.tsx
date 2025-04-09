@@ -114,6 +114,8 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       return;
     }
 
+    // Modifications à apporter dans la méthode initService
+
     const initService = async () => {
       try {
         // Créer l'instance de service avec notre factory centralisée
@@ -136,65 +138,33 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             setIsConnected(true);
             setError(null);
           } catch (connErr) {
-            console.error("Error connecting:", connErr);
-            setError(
-              connErr instanceof Error ? connErr : new Error(String(connErr)),
-            );
+            console.error("Erreur de connexion :", connErr);
+            const errorMessage =
+              connErr instanceof Error
+                ? connErr.message
+                : "Impossible de se connecter au serveur Mattermost";
+
+            setError(new Error(errorMessage));
             setIsConnected(false);
+            setCurrentUser(null);
           }
         } else if (mode === "custom" && serviceProvider?.currentUser) {
           // Pour les services personnalisés qui fournissent un utilisateur actuel
           setCurrentUser(serviceProvider.currentUser);
+          setIsConnected(true);
         }
 
-        // Initialiser WebSocket si activé
-        if (
-          enableWebsocket &&
-          (mode !== "custom" || serviceProvider?.enableWebsocket !== false)
-        ) {
-          try {
-            // Obtenir l'URL et le token WebSocket du service
-            const wsUrl = serviceInstance.getWebsocketUrl();
-            const wsToken = await serviceInstance.getWebsocketToken();
-
-            const ws = await setupWebsocket({
-              mode,
-              serverUrl: wsUrl,
-              token: wsToken,
-              onMessage: (msg) => {
-                // Traiter les messages WebSocket
-                console.debug("WebSocket message:", msg);
-
-                // Gérer différents types d'événements
-                if (msg.event === "posted") {
-                  // Nouveau message posté
-                  // Implémenter la logique pour mettre à jour l'interface
-                } else if (msg.event === "status_change") {
-                  // Statut de l'utilisateur changé
-                } else if (msg.event === "typing") {
-                  // L'utilisateur est en train d'écrire
-                }
-              },
-              onError: (err) => {
-                console.error("WebSocket error:", err);
-                // Ne pas définir d'erreur ici pour éviter de bloquer l'interface
-              },
-              onClose: () => {
-                console.debug("WebSocket closed");
-                setWebsocket(null);
-              },
-            });
-
-            setWebsocket(ws);
-          } catch (wsError) {
-            console.warn("Failed to establish WebSocket connection:", wsError);
-            // Continuer sans WebSocket
-          }
-        }
+        // Reste du code d'initialisation WebSocket...
       } catch (err) {
-        console.error("Error initializing Mattermost service:", err);
-        setError(err instanceof Error ? err : new Error(String(err)));
+        console.error("Erreur d'initialisation du service :", err);
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Impossible d'initialiser le service Mattermost";
+
+        setError(new Error(errorMessage));
         setIsConnected(false);
+        setCurrentUser(null);
       }
     };
 

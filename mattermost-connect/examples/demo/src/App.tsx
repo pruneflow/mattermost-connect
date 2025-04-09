@@ -1,11 +1,4 @@
-// examples/demo/src/App.tsx
 import React, { useState } from "react";
-import {
-  MattermostProvider,
-  MattermostThemeProvider,
-  useMattermost,
-} from "mattermost-connect";
-
 // Material-UI Components
 import {
   Box,
@@ -17,33 +10,52 @@ import {
   TextField,
   Paper,
   FormControl,
-  FormControlLabel,
-  RadioGroup,
-  Radio,
   Alert,
-  Tabs,
-  Tab,
   CircularProgress,
+  Select,
+  MenuItem,
+  InputLabel,
 } from "@mui/material";
 
 // Material-UI Icons
-import {
-  Login as LoginIcon,
-  Logout as LogoutIcon,
-  ExitToApp as ExternalLinkIcon,
-} from "@mui/icons-material";
+import { Logout as LogoutIcon } from "@mui/icons-material";
 
 // Import examples
 import ClassicInterface from "./examples/ClassicInterface";
 
-// Create mock service
-import createMockService from "./mockService";
+// Imports pour l'authentification
+import {
+  MattermostProvider,
+  MattermostThemeProvider,
+  createMattermostService,
+  createMockService,
+  useMattermost,
+} from "mattermost-connect";
 
-// Login form component
+// Configuration pour différents modes de connexion
+const MODES = {
+  DIRECT: "direct",
+  PROXY: "proxy",
+  MOCK: "mock",
+};
+
+// Interface pour les informations de connexion
+interface LoginCredentials {
+  mode: string;
+  serverUrl?: string;
+  token?: string;
+  username?: string;
+  password?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  userId?: string;
+}
+
+// Composant de formulaire de connexion
 const LoginForm: React.FC<{
-  onLogin: (mode: "direct" | "proxy", credentials: any) => void;
+  onLogin: (credentials: LoginCredentials) => void;
 }> = ({ onLogin }) => {
-  const [mode, setMode] = useState<"direct" | "proxy">("direct");
+  const [mode, setMode] = useState(MODES.DIRECT);
   const [serverUrl, setServerUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -53,12 +65,6 @@ const LoginForm: React.FC<{
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useToken, setUseToken] = useState(false);
-
-  const handleModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setMode(event.target.value as "direct" | "proxy");
-    setError(null);
-  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -66,174 +72,180 @@ const LoginForm: React.FC<{
     setLoading(true);
 
     try {
-      if (mode === "direct") {
-        if (useToken) {
-          if (!serverUrl || !token) {
-            throw new Error("Server URL and token are required");
-          }
-          onLogin("direct", { serverUrl, token });
-        } else {
-          if (!serverUrl || !username || !password) {
-            throw new Error("Server URL, username and password are required");
-          }
+      switch (mode) {
+        case MODES.DIRECT:
+          if (token) {
+            onLogin({
+              mode: MODES.DIRECT,
+              serverUrl,
+              token,
+            });
+          } else if (username && password) {
+            const serviceInstance = createMattermostService({ serverUrl });
 
-          // In real app, generate token from credentials here
-          onLogin("direct", { serverUrl, token: "mock-token" });
-        }
-      } else {
-        if (!proxyUrl || !clientId) {
-          throw new Error("Proxy URL and Client ID are required");
-        }
-        onLogin("proxy", { proxyUrl, clientId, userId });
+            if (serviceInstance.authenticate) {
+              const loginResult = await serviceInstance.authenticate(
+                username,
+                password,
+              );
+
+              onLogin({
+                mode: MODES.DIRECT,
+                serverUrl: loginResult.serverUrl,
+                token: loginResult.token,
+              });
+            } else {
+              throw new Error("Méthode d'authentification non supportée");
+            }
+          } else {
+            throw new Error(
+              "Veuillez fournir un token ou des identifiants de connexion",
+            );
+          }
+          break;
+
+        case MODES.MOCK:
+          onLogin({ mode: MODES.MOCK });
+          break;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Une erreur est survenue lors de la connexion",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <Paper sx={{ p: 3, maxWidth: 500, mx: "auto", mt: 4 }}>
-      <Typography variant="h5" component="h2" gutterBottom>
-        Connect to Mattermost
-      </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      <form onSubmit={handleSubmit}>
-        <FormControl component="fieldset" sx={{ mb: 2 }}>
-          <RadioGroup name="mode" value={mode} onChange={handleModeChange}>
-            <FormControlLabel
-              value="direct"
-              control={<Radio />}
-              label="Direct Mode"
-            />
-            <FormControlLabel
-              value="proxy"
-              control={<Radio />}
-              label="Proxy Mode"
-            />
-          </RadioGroup>
-        </FormControl>
-
-        {mode === "direct" ? (
+  // Rendu des champs spécifiques selon le mode
+  const renderModeSpecificFields = () => {
+    switch (mode) {
+      case MODES.DIRECT:
+        return (
           <>
             <TextField
-              label="Server URL"
               fullWidth
+              label="URL du serveur Mattermost"
+              variant="outlined"
               margin="normal"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              placeholder="https://mattermost.example.com"
+              placeholder="https://mattermost.votreentreprise.com"
               required
-              disabled={loading}
             />
-
-            <FormControlLabel
-              control={
-                <Radio
-                  checked={useToken}
-                  onChange={() => setUseToken(!useToken)}
-                  disabled={loading}
-                />
-              }
-              label="Use Personal Access Token"
+            <TextField
+              fullWidth
+              label="Nom d'utilisateur"
+              variant="outlined"
+              margin="normal"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
             />
-
-            {useToken ? (
-              <TextField
-                label="Personal Access Token"
-                fullWidth
-                margin="normal"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                type="password"
-                required
-                disabled={loading}
-              />
-            ) : (
-              <>
-                <TextField
-                  label="Username or Email"
-                  fullWidth
-                  margin="normal"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  disabled={loading}
-                />
-                <TextField
-                  label="Password"
-                  fullWidth
-                  margin="normal"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  type="password"
-                  required
-                  disabled={loading}
-                />
-              </>
-            )}
+            <TextField
+              fullWidth
+              label="Mot de passe"
+              type="password"
+              variant="outlined"
+              margin="normal"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </>
-        ) : (
+        );
+
+      case MODES.PROXY:
+        return (
           <>
             <TextField
-              label="Proxy URL"
               fullWidth
+              label="URL du proxy Mattermost"
+              variant="outlined"
               margin="normal"
               value={proxyUrl}
               onChange={(e) => setProxyUrl(e.target.value)}
-              placeholder="https://proxy.example.com"
+              placeholder="https://proxy.votreentreprise.com"
               required
-              disabled={loading}
             />
             <TextField
-              label="Client ID"
               fullWidth
+              label="Client ID"
+              variant="outlined"
               margin="normal"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               required
-              disabled={loading}
             />
             <TextField
-              label="User ID (optional)"
               fullWidth
+              label="User ID (optionnel)"
+              variant="outlined"
               margin="normal"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              disabled={loading}
             />
           </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Container maxWidth="xs">
+      <Paper
+        elevation={3}
+        sx={{
+          padding: 3,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          marginTop: 8,
+        }}
+      >
+        <Typography component="h1" variant="h5">
+          Connexion à Mattermost
+        </Typography>
+
+        {error && (
+          <Alert severity="error" sx={{ width: "100%", mt: 2, mb: 2 }}>
+            {error}
+          </Alert>
         )}
 
-        <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
-          <Button
-            variant="outlined"
-            onClick={() => onLogin("direct", { useMockService: true })}
-            disabled={loading}
-            startIcon={<ExternalLinkIcon />}
-          >
-            Demo Mode
-          </Button>
+        <form onSubmit={handleSubmit} style={{ width: "100%" }}>
+          <FormControl fullWidth margin="normal" variant="outlined">
+            <InputLabel>Mode de connexion</InputLabel>
+            <Select
+              value={mode}
+              label="Mode de connexion"
+              onChange={(e) => setMode(e.target.value as string)}
+            >
+              <MenuItem value={MODES.DIRECT}>Connexion Directe</MenuItem>
+              <MenuItem value={MODES.PROXY}>Connexion via Proxy</MenuItem>
+              <MenuItem value={MODES.MOCK}>Mode Démo</MenuItem>
+            </Select>
+          </FormControl>
+
+          {renderModeSpecificFields()}
 
           <Button
             type="submit"
+            fullWidth
             variant="contained"
             color="primary"
             disabled={loading}
-            startIcon={loading ? <CircularProgress size={20} /> : <LoginIcon />}
+            sx={{ mt: 3, mb: 2 }}
           >
-            {loading ? "Connecting..." : "Connect"}
+            {loading ? <CircularProgress size={24} /> : "Se connecter"}
           </Button>
-        </Box>
-      </form>
-    </Paper>
+        </form>
+      </Paper>
+    </Container>
   );
 };
 
@@ -298,16 +310,13 @@ const ExamplesContainer: React.FC<{
   );
 };
 
-// Main App component
+// Composant principal de l'application
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authConfig, setAuthConfig] = useState<any>(null);
+  const [authConfig, setAuthConfig] = useState<LoginCredentials | null>(null);
 
-  const handleLogin = (mode: "direct" | "proxy", credentials: any) => {
-    setAuthConfig({
-      mode,
-      ...credentials,
-    });
+  const handleLogin = (credentials: LoginCredentials) => {
+    setAuthConfig(credentials);
     setIsAuthenticated(true);
   };
 
@@ -316,48 +325,44 @@ const App: React.FC = () => {
     setAuthConfig(null);
   };
 
+  // Rendu du composant de connexion ou de l'interface principale
   return (
     <MattermostThemeProvider>
       {!isAuthenticated ? (
-        <Container>
-          <Box sx={{ my: 4, textAlign: "center" }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-              MattermostConnect Demo
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary" paragraph>
-              A modern React component library for Mattermost integration
-            </Typography>
-          </Box>
-
-          <LoginForm onLogin={handleLogin} />
-        </Container>
+        <LoginForm onLogin={handleLogin} />
       ) : (
         <MattermostProvider
-          // Direct mode props
+          // Configuration directe
           serverUrl={
-            authConfig.mode === "direct" ? authConfig.serverUrl : undefined
+            authConfig?.mode === MODES.DIRECT ? authConfig.serverUrl : undefined
           }
-          token={authConfig.mode === "direct" ? authConfig.token : undefined}
-          // Proxy mode props
+          token={
+            authConfig?.mode === MODES.DIRECT ? authConfig.token : undefined
+          }
+          // Configuration proxy
           proxyUrl={
-            authConfig.mode === "proxy" ? authConfig.proxyUrl : undefined
+            authConfig?.mode === MODES.PROXY ? authConfig.proxyUrl : undefined
           }
           clientId={
-            authConfig.mode === "proxy" ? authConfig.clientId : undefined
+            authConfig?.mode === MODES.PROXY ? authConfig.clientId : undefined
           }
-          userId={authConfig.mode === "proxy" ? authConfig.userId : undefined}
-          // Demo mode props
+          userId={
+            authConfig?.mode === MODES.PROXY ? authConfig.userId : undefined
+          }
+          // Configuration mock
           serviceProvider={
-            authConfig.useMockService
+            authConfig?.mode === MODES.MOCK
               ? {
                   setupService: createMockService,
                   isConnected: true,
+                  skipConnectionTest: true,
                 }
               : undefined
           }
-          // Common options
+          // Options communes
           enableWebsocket={true}
         >
+          {/* Votre interface principale après connexion */}
           <ExamplesContainer onLogout={handleLogout} />
         </MattermostProvider>
       )}

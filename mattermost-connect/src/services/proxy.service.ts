@@ -1,4 +1,3 @@
-// src/services/proxy.service.ts
 import {
   MattermostService,
   GetMessagesOptions,
@@ -8,20 +7,10 @@ import {
 } from "../types";
 import { getEmojiName } from "../components/EmojiPicker/data/emojiData";
 
-/**
- * Normalise l'URL en supprimant le slash final s'il existe
- */
 function normalizeUrl(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-/**
- * Crée un service qui communique avec Mattermost via un service proxy
- * Gère l'authentification et les tokens côté serveur
- *
- * @param config - Configuration avec proxyUrl, clientId et userId
- * @returns Implémentation du service Mattermost
- */
 export function createProxyService(config: {
   proxyUrl: string;
   clientId: string;
@@ -29,32 +18,27 @@ export function createProxyService(config: {
 }): MattermostService {
   const { proxyUrl, clientId, userId } = config;
 
-  // Validation des paramètres obligatoires
   if (!proxyUrl || !clientId) {
-    throw new Error("proxyUrl and clientId are required for proxy mode");
+    throw new Error("proxyUrl et clientId sont requis pour le mode proxy");
   }
 
-  // Normaliser l'URL du proxy (supprimer le slash final s'il existe)
   const baseUrl = normalizeUrl(proxyUrl);
 
-  /**
-   * Méthode utilitaire pour faire des appels API via le proxy
-   */
   const apiCall = async <T>(
     endpoint: string,
     options: RequestInit = {},
+    requireAuth = true,
   ): Promise<T> => {
     const url = `${baseUrl}/${endpoint}`;
 
-    // En mode proxy, nous envoyons clientId et userId pour l'authentification
     const headers: Record<string, string> = {
       "X-Mattermost-Client-ID": clientId,
       "Content-Type": "application/json",
       ...((options.headers as Record<string, string>) || {}),
     };
 
-    // Ajouter userId si disponible
-    if (userId) {
+    // Ajouter l'ID utilisateur si requis et disponible
+    if (requireAuth && userId) {
       headers["X-Mattermost-User-ID"] = userId;
     }
 
@@ -65,223 +49,331 @@ export function createProxyService(config: {
       });
 
       if (!response.ok) {
-        // Gérer les réponses d'erreur
+        // Gestion des erreurs d'authentification
+        if (response.status === 401) {
+          throw new Error(
+            "Session invalide ou expirée. Veuillez vous reconnecter.",
+          );
+        }
+
         const error = await response.json().catch(() => ({}));
         throw new Error(
           error.message ||
-            `Proxy API Error: ${response.status} ${response.statusText}`,
+            `Erreur API Proxy : ${response.status} ${response.statusText}`,
         );
       }
 
       return (await response.json()) as Promise<T>;
     } catch (error) {
-      console.error(`Error calling Proxy API at ${endpoint}:`, error);
+      console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
       throw error;
     }
   };
 
-  // Retourner l'interface du service
   return {
-    // Propriété indiquant le mode
     mode: "proxy",
 
-    // ----- Méthodes de base (utilisateurs, équipes, canaux) -----
+    // Méthode d'authentification
+    authenticate: async (username, password) => {
+      try {
+        const response = await fetch(`${baseUrl}/auth/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Mattermost-Client-ID": clientId,
+          },
+          body: JSON.stringify({
+            username,
+            password,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.message || "Échec de l'authentification via le proxy",
+          );
+        }
+
+        const authData = await response.json();
+        return { token: authData.token }; // Ou tout autre identifiant approprié
+      } catch (error) {
+        console.error("Erreur d'authentification proxy :", error);
+        throw error;
+      }
+    },
+
     getCurrentUser: async () => {
-      return apiCall("users/me");
+      try {
+        return await apiCall("users/me");
+      } catch (error) {
+        console.error(
+          "Erreur lors de la récupération de l'utilisateur :",
+          error,
+        );
+        throw error;
+      }
     },
 
     getTeams: async () => {
-      return apiCall("teams");
+      try {
+        return await apiCall("teams");
+      } catch (error) {
+        console.error("Erreur lors de la récupération des équipes :", error);
+        throw error;
+      }
     },
 
     getTeam: async (teamId) => {
-      return apiCall(`teams/${teamId}`);
+      try {
+        return await apiCall(`teams/${teamId}`);
+      } catch (error) {
+        console.error(
+          `Erreur lors de la récupération de l'équipe ${teamId} :`,
+          error,
+        );
+        throw error;
+      }
     },
 
     getChannels: async (teamId) => {
-      return apiCall(`teams/${teamId}/channels`);
+      try {
+        return await apiCall(`teams/${teamId}/channels`);
+      } catch (error) {
+        console.error(
+          `Erreur lors de la récupération des canaux pour l'équipe ${teamId} :`,
+          error,
+        );
+        throw error;
+      }
     },
 
     getChannel: async (channelId) => {
-      return apiCall(`channels/${channelId}`);
+      try {
+        return await apiCall(`channels/${channelId}`);
+      } catch (error) {
+        console.error(
+          `Erreur lors de la récupération du canal ${channelId} :`,
+          error,
+        );
+        throw error;
+      }
     },
 
-    // ----- Méthodes pour les messages -----
     getChannelMessages: async (channelId, options: GetMessagesOptions = {}) => {
-      const { page = 0, perPage = 60, since = 0, before, after } = options;
+      try {
+        const { page = 0, perPage = 60, since, before, after } = options;
+        let endpoint = `channels/${channelId}/messages?page=${page}&per_page=${perPage}`;
 
-      let endpoint = `channels/${channelId}/messages?page=${page}&per_page=${perPage}`;
+        if (since) endpoint += `&since=${since}`;
+        if (before) endpoint += `&before=${before}`;
+        if (after) endpoint += `&after=${after}`;
 
-      if (since) endpoint += `&since=${since}`;
-      if (before) endpoint += `&before=${before}`;
-      if (after) endpoint += `&after=${after}`;
-
-      return apiCall<MessagesResponse>(endpoint);
+        return await apiCall<MessagesResponse>(endpoint);
+      } catch (error) {
+        console.error(
+          `Erreur lors de la récupération des messages du canal ${channelId} :`,
+          error,
+        );
+        throw error;
+      }
     },
 
     postMessage: async (channelId, message) => {
-      return apiCall("messages", {
-        method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-          message,
-        }),
-      });
+      try {
+        return await apiCall("messages", {
+          method: "POST",
+          body: JSON.stringify({
+            channel_id: channelId,
+            message,
+          }),
+        });
+      } catch (error) {
+        console.error(
+          `Erreur lors de l'envoi du message dans le canal ${channelId} :`,
+          error,
+        );
+        throw error;
+      }
     },
 
-    // ----- Méthodes pour les utilisateurs -----
     getUsers: async (options: GetUsersOptions = {}) => {
-      const params = new URLSearchParams();
+      try {
+        const params = new URLSearchParams();
 
-      if (options.inChannel) params.append("in_channel", options.inChannel);
-      if (options.inTeam) params.append("in_team", options.inTeam);
-      if (options.perPage)
-        params.append("per_page", options.perPage.toString());
-      if (options.page) params.append("page", options.page.toString());
+        if (options.inChannel) params.append("in_channel", options.inChannel);
+        if (options.inTeam) params.append("in_team", options.inTeam);
+        if (options.perPage)
+          params.append("per_page", options.perPage.toString());
+        if (options.page) params.append("page", options.page.toString());
 
-      // Cas spécial pour obtenir des utilisateurs spécifiques par ID
-      if (options.ids && options.ids.length > 0) {
-        return apiCall("users/ids", {
-          method: "POST",
-          body: JSON.stringify(options.ids),
-        });
+        if (options.ids && options.ids.length > 0) {
+          return await apiCall("users/ids", {
+            method: "POST",
+            body: JSON.stringify(options.ids),
+          });
+        }
+
+        return await apiCall(`users?${params.toString()}`);
+      } catch (error) {
+        console.error(
+          "Erreur lors de la récupération des utilisateurs :",
+          error,
+        );
+        throw error;
       }
-
-      return apiCall(`users?${params.toString()}`);
     },
 
     getUserStatus: async (userId) => {
-      return apiCall(`users/${userId}/status`);
+      try {
+        return await apiCall(`users/${userId}/status`);
+      } catch (error) {
+        console.error(
+          `Erreur lors de la récupération du statut de l'utilisateur ${userId} :`,
+          error,
+        );
+        throw error;
+      }
     },
 
-    // ----- Méthodes pour les emojis et réactions -----
     getFrequentEmojis: async () => {
       try {
-        return apiCall<{ emojis: string[] }>("emoji/frequent")
-          .then((response) => response.emojis)
-          .catch(() => {
-            // Fallback par défaut si l'API n'est pas disponible
-            return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
-          });
+        return await apiCall<string[]>("emoji/frequent", {}, true);
       } catch (error) {
-        console.error("Error getting frequent emojis:", error);
-        return [];
+        console.error(
+          "Erreur lors de la récupération des emojis fréquents :",
+          error,
+        );
+        return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
       }
     },
 
     addReaction: async (channelId, messageId, emoji) => {
-      const emojiName = getEmojiName(emoji);
-
-      return apiCall("reactions", {
-        method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-          post_id: messageId,
-          emoji_name: emojiName,
-        }),
-      });
+      try {
+        const emojiName = getEmojiName(emoji);
+        return await apiCall("reactions", {
+          method: "POST",
+          body: JSON.stringify({
+            channel_id: channelId,
+            post_id: messageId,
+            emoji_name: emojiName,
+          }),
+        });
+      } catch (error) {
+        console.error(`Erreur lors de l'ajout de la réaction :`, error);
+        throw error;
+      }
     },
 
     removeReaction: async (channelId, messageId, emoji) => {
-      const emojiName = getEmojiName(emoji);
-
-      return apiCall(`reactions/${messageId}/${emojiName}`, {
-        method: "DELETE",
-      });
+      try {
+        const emojiName = getEmojiName(emoji);
+        return await apiCall(`reactions/${messageId}/${emojiName}`, {
+          method: "DELETE",
+        });
+      } catch (error) {
+        console.error(`Erreur lors de la suppression de la réaction :`, error);
+        throw error;
+      }
     },
 
     hasReacted: async (channelId, messageId, emoji) => {
       try {
         const emojiName = getEmojiName(emoji);
+        const reactions = await apiCall<any[]>(`posts/${messageId}/reactions`);
 
-        const response = await apiCall<any[]>(`posts/${messageId}/reactions`);
-
-        return response.some(
+        return reactions.some(
           (reaction) =>
             reaction.emoji_name === emojiName &&
             (userId ? reaction.user_id === userId : true),
         );
       } catch (error) {
-        console.error("Error checking reaction:", error);
+        console.error(`Erreur lors de la vérification de la réaction :`, error);
         return false;
       }
     },
 
-    // ----- Méthodes pour les GIFs -----
     searchGifs: async (query, category) => {
-      if (!query.trim()) return [];
-
-      let endpoint = `gifs/search?q=${encodeURIComponent(query)}`;
-
-      if (category) {
-        endpoint += `&category=${encodeURIComponent(category)}`;
+      try {
+        let endpoint = `gifs/search?q=${encodeURIComponent(query)}`;
+        if (category) {
+          endpoint += `&category=${encodeURIComponent(category)}`;
+        }
+        return await apiCall<GifData[]>(endpoint);
+      } catch (error) {
+        console.error("Erreur lors de la recherche de GIFs :", error);
+        return [];
       }
-
-      return apiCall<GifData[]>(endpoint);
     },
 
     getGifs: async (category, limit = 20) => {
       try {
-        let endpoint = "gifs";
-
-        if (category.toLowerCase() === "trending") {
-          endpoint = "gifs/trending";
-        } else {
-          endpoint = `gifs/category/${encodeURIComponent(category.toLowerCase())}`;
-        }
+        let endpoint =
+          category.toLowerCase() === "trending"
+            ? "gifs/trending"
+            : `gifs/category/${encodeURIComponent(category.toLowerCase())}`;
 
         if (limit) {
           endpoint += `?limit=${limit}`;
         }
 
-        return apiCall<GifData[]>(endpoint);
+        return await apiCall<GifData[]>(endpoint);
       } catch (error) {
-        console.error("Error getting GIFs:", error);
+        console.error(
+          `Erreur lors de la récupération des GIFs de ${category} :`,
+          error,
+        );
         return [];
       }
     },
 
-    // ----- Méthodes pour WebSocket -----
-    getWebsocketUrl: () => {
-      // Pour le mode proxy, l'URL WebSocket est gérée par le proxy
-      return `${baseUrl.replace(/^http/, "ws")}/websocket`;
-    },
+    getWebsocketUrl: () => `${baseUrl.replace(/^http/, "ws")}/websocket`,
 
     getWebsocketToken: async () => {
-      // En mode proxy, nous avons besoin d'un token temporaire pour WebSocket
-      const response = await apiCall<{ token: string }>("websocket/token");
-      return response.token;
-    },
-
-    // ----- Méthodes pour les fichiers -----
-    uploadFiles: async (formData) => {
-      // Créer un objet headers sans Content-Type pour que le navigateur puisse définir
-      // celui-ci automatiquement avec la boundary
-      const headers: Record<string, string> = {
-        "X-Mattermost-Client-ID": clientId,
-      };
-
-      if (userId) {
-        headers["X-Mattermost-User-ID"] = userId;
-      }
-
-      const response = await fetch(`${baseUrl}/files`, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-          error.message || `File upload error: ${response.status}`,
+      try {
+        const response = await apiCall<{ token: string }>(
+          "websocket/token",
+          {},
+          true,
         );
+        return response.token;
+      } catch (error) {
+        console.error(
+          "Erreur lors de la récupération du token WebSocket :",
+          error,
+        );
+        throw error;
       }
-
-      return response.json();
     },
 
-    // ----- Méthodes utilitaires -----
+    uploadFiles: async (formData) => {
+      try {
+        const response = await fetch(`${baseUrl}/files`, {
+          method: "POST",
+          headers: {
+            "X-Mattermost-Client-ID": clientId,
+            ...(userId ? { "X-Mattermost-User-ID": userId } : {}),
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(
+            error.message ||
+              `Erreur de téléchargement de fichier : ${response.status}`,
+          );
+        }
+
+        return response.json();
+      } catch (error) {
+        console.error("Erreur lors du téléchargement de fichiers :", error);
+        throw error;
+      }
+    },
+
     getBaseUrl: () => baseUrl,
   };
 }
+
+export default createProxyService;

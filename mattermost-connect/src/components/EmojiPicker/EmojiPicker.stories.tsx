@@ -13,6 +13,7 @@ import {
 import { EmojiEmotions as EmojiIcon } from "@mui/icons-material";
 import MattermostProvider from "../../context/MattermostProvider";
 import EmojiProvider from "../../context/EmojiProvider";
+import { MOCK_GIFS } from "./data/gifData";
 
 // Mock Mattermost service pour Storybook
 const createMockMattermostService = () => ({
@@ -26,6 +27,33 @@ const createMockMattermostService = () => ({
       create_at: Date.now(),
       update_at: Date.now(),
     };
+  },
+  // Ajout des méthodes manquantes
+  getFrequentEmojis: async () => [
+    "👍",
+    "❤️",
+    "😂",
+    "🎉",
+    "🔥",
+    "👏",
+    "✅",
+    "🙏",
+  ],
+
+  addReaction: async () => ({ success: true }),
+  removeReaction: async () => ({ success: true }),
+  hasReacted: async () => false,
+  getGifs: async (category: string) => {
+    // Utiliser les données de MOCK_GIFS
+    return MOCK_GIFS[category] || [];
+  },
+
+  searchGifs: async (query: string) => {
+    // Recherche simple dans les GIFs
+    const allGifs = Object.values(MOCK_GIFS).flat();
+    return allGifs.filter((gif) =>
+      gif.title.toLowerCase().includes(query.toLowerCase()),
+    );
   },
   // Autres méthodes mockées si nécessaire
 });
