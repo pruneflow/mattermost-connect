@@ -36,10 +36,14 @@ import {
   ContentCopy as CopyIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
+  AddReaction as AddReactionIcon,
 } from "@mui/icons-material";
 
 // Related components
 import MessageAttachment from "./MessageAttachment";
+import { EmojiPicker, PickerMode } from "../EmojiPicker";
+import Popover from "@mui/material/Popover";
+import { getEmojiFromName } from "../EmojiPicker/data/emojiData";
 
 /**
  * Props for the Message component
@@ -115,13 +119,39 @@ const Message: React.FC<MessageProps> = ({
   actionsSx,
   avatarSx,
 }) => {
-  const { service } = useMattermost();
+  const { service, currentUser } = useMattermost();
   const [author, setAuthor] = useState<User | null>(null);
   const [formattedText, setFormattedText] = useState("");
   const [isHovered, setIsHovered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(menuAnchor);
+
+  // État pour le menu des réactions
+  const [reactionAnchorEl, setReactionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const reactionMenuOpen = Boolean(reactionAnchorEl);
+
+  // Gestionnaires pour le menu des réactions
+  const handleReactionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setReactionAnchorEl(event.currentTarget);
+  };
+
+  const handleReactionMenuClose = () => {
+    setReactionAnchorEl(null);
+  };
+
+  // Ajouter un gestionnaire pour la sélection d'une réaction
+  const handleReactionSelect = async (result: any) => {
+    try {
+      // La réaction sera envoyée directement par le EmojiPicker si messageId et channelId sont fournis
+      handleReactionMenuClose();
+      // Si besoin, rafraîchir les données du message après l'ajout d'une réaction
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+    }
+  };
 
   // For messages with attachments
   let hasAttachments: boolean = false;
@@ -240,194 +270,262 @@ const Message: React.FC<MessageProps> = ({
     : "1px solid rgba(0, 0, 0, 0.12)";
 
   return (
-    <Box
-      className={className}
-      style={style}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: messageAlignment,
-        mb: 2,
-        maxWidth: { xs: "95%", sm: "85%" },
-        alignSelf: messageAlignment,
-        ...sx,
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Message header */}
+    <>
       <Box
+        className={className}
+        style={style}
         sx={{
           display: "flex",
-          alignItems: "center",
-          mb: 0.5,
-          ml: isFromCurrentUser ? 0 : 1,
-          mr: isFromCurrentUser ? 1 : 0,
+          flexDirection: "column",
+          alignItems: messageAlignment,
+          mb: 2,
+          maxWidth: { xs: "95%", sm: "85%" },
           alignSelf: messageAlignment,
-          ...authorSx,
+          ...sx,
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        {!isFromCurrentUser && (
-          <Avatar
-            sx={{
-              width: 24,
-              height: 24,
-              mr: 1,
-              bgcolor: generateColorFromString(author?.username),
-              fontSize: "0.75rem",
-              ...avatarSx,
-            }}
-          >
-            {getInitials(
-              author && author.first_name
-                ? `${author.first_name} ${author.last_name}`
-                : author
-                  ? author.username
-                  : "",
-            )}
-          </Avatar>
-        )}
-
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ fontWeight: 500 }}
-        >
-          {author
-            ? `${author.first_name || ""} ${author.last_name || ""} ${
-                author.username ? `(@${author.username})` : ""
-              }`.trim()
-            : "Unknown User"}
-        </Typography>
-
-        <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-          {timestamp}
-        </Typography>
-      </Box>
-
-      {/* Message content */}
-      <Box sx={{ display: "flex", position: "relative" }}>
-        {/* Message bubble */}
-        <Paper
-          elevation={0}
+        {/* Message header */}
+        <Box
           sx={{
-            p: 1.5,
-            borderRadius: 2,
-            bgcolor: bubbleColor,
-            border: bubbleBorder,
-            maxWidth: "100%",
-            wordBreak: "break-word",
-            ...bubbleSx,
+            display: "flex",
+            alignItems: "center",
+            mb: 0.5,
+            ml: isFromCurrentUser ? 0 : 1,
+            mr: isFromCurrentUser ? 1 : 0,
+            alignSelf: messageAlignment,
+            ...authorSx,
           }}
         >
-          {/* Text content */}
-          <Box
-            sx={{ ...contentSx }}
-            dangerouslySetInnerHTML={{ __html: formattedText }}
-          />
-
-          {/* Attachments */}
-          {hasAttachments && message.metadata?.files && (
-            <Box
-              sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}
+          {!isFromCurrentUser && (
+            <Avatar
+              sx={{
+                width: 24,
+                height: 24,
+                mr: 1,
+                bgcolor: generateColorFromString(author?.username),
+                fontSize: "0.75rem",
+                ...avatarSx,
+              }}
             >
-              {message.metadata.files.map((file) => (
-                <MessageAttachment key={file.id} file={file} />
-              ))}
-            </Box>
+              {getInitials(
+                author && author.first_name
+                  ? `${author.first_name} ${author.last_name}`
+                  : author
+                    ? author.username
+                    : "",
+              )}
+            </Avatar>
           )}
-        </Paper>
 
-        {/* Message actions */}
-        {showActions && isHovered && (
-          <Box
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontWeight: 500 }}
+          >
+            {author
+              ? `${author.first_name || ""} ${author.last_name || ""} ${
+                  author.username ? `(@${author.username})` : ""
+                }`.trim()
+              : "Unknown User"}
+          </Typography>
+
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            {timestamp}
+          </Typography>
+        </Box>
+
+        {/* Message content */}
+        <Box sx={{ display: "flex", position: "relative" }}>
+          {/* Message bubble */}
+          <Paper
+            elevation={0}
             sx={{
-              position: "absolute",
-              top: -16,
-              right: isFromCurrentUser ? -8 : "auto",
-              left: isFromCurrentUser ? "auto" : -8,
-              display: "flex",
-              bgcolor: "background.paper",
-              borderRadius: 4,
-              boxShadow: 1,
-              ...actionsSx,
+              p: 1.5,
+              borderRadius: 2,
+              bgcolor: bubbleColor,
+              border: bubbleBorder,
+              maxWidth: "100%",
+              wordBreak: "break-word",
+              ...bubbleSx,
             }}
           >
-            <Tooltip title="Reply">
-              <IconButton size="small" onClick={handleReply}>
-                <ReplyIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            {/* Text content */}
+            <Box
+              sx={{ ...contentSx }}
+              dangerouslySetInnerHTML={{ __html: formattedText }}
+            />
 
-            <Tooltip title="Like">
-              <IconButton size="small">
-                <LikeIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            {/* Attachments */}
+            {hasAttachments && message.metadata?.files && (
+              <Box
+                sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}
+              >
+                {message.metadata.files.map((file) => (
+                  <MessageAttachment key={file.id} file={file} />
+                ))}
+              </Box>
+            )}
+          </Paper>
 
-            <Tooltip title="More">
-              <IconButton size="small" onClick={handleMenuOpen}>
-                <MoreIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
+          {/* Message actions */}
+          {showActions && isHovered && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: -16,
+                right: isFromCurrentUser ? -8 : "auto",
+                left: isFromCurrentUser ? "auto" : -8,
+                display: "flex",
+                bgcolor: "background.paper",
+                borderRadius: 4,
+                boxShadow: 1,
+                ...actionsSx,
+              }}
+            >
+              <Tooltip title="Reply">
+                <IconButton size="small" onClick={handleReply}>
+                  <ReplyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Réagir">
+                <IconButton size="small" onClick={handleReactionMenuOpen}>
+                  <AddReactionIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="More">
+                <IconButton size="small" onClick={handleMenuOpen}>
+                  <MoreIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
+        </Box>
+
+        {/* Context menu */}
+        <Menu
+          anchorEl={menuAnchor}
+          open={menuOpen}
+          onClose={handleMenuClose}
+          anchorOrigin={{
+            vertical: "top",
+            horizontal: "right",
+          }}
+          transformOrigin={{
+            vertical: "top",
+            horizontal: "right",
+          }}
+        >
+          <MenuItem onClick={handleCopyMessage} dense>
+            <ListItemIcon>
+              <CopyIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Copy Text" />
+          </MenuItem>
+
+          <MenuItem onClick={handleReply} dense>
+            <ListItemIcon>
+              <ReplyIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Reply" />
+          </MenuItem>
+
+          {isFromCurrentUser && (
+            <>
+              <MenuItem onClick={handleEdit} dense>
+                <ListItemIcon>
+                  <EditIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary="Edit" />
+              </MenuItem>
+
+              <Divider />
+
+              <MenuItem onClick={handleDelete} dense>
+                <ListItemIcon>
+                  <DeleteIcon fontSize="small" color="error" />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Delete"
+                  slotProps={{
+                    primary: { color: "error" },
+                  }}
+                />
+              </MenuItem>
+            </>
+          )}
+        </Menu>
       </Box>
-
-      {/* Context menu */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={menuOpen}
-        onClose={handleMenuClose}
+      {/* Affichage des réactions (si le message en a) */}
+      {message.metadata?.reactions && message.metadata.reactions.length > 0 && (
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 0.5,
+            mt: 0.5,
+          }}
+        >
+          {message.metadata.reactions.map((reaction, idx) => (
+            <Box
+              key={`${reaction.emoji_name}-${idx}`}
+              sx={{
+                borderRadius: "12px",
+                border: "1px solid",
+                borderColor: "divider",
+                px: 1,
+                py: 0.5,
+                fontSize: "0.875rem",
+                display: "flex",
+                alignItems: "center",
+                bgcolor:
+                  reaction.user_id === currentUser?.id
+                    ? "primary.light"
+                    : "action.hover",
+                cursor: "pointer",
+                "&:hover": {
+                  bgcolor: "action.selected",
+                },
+              }}
+              onClick={() => {
+                // Ajouter ou retirer la réaction
+                // Cette fonction dépendra de votre API
+              }}
+            >
+              {getEmojiFromName(reaction.emoji_name) || reaction.emoji_name}{" "}
+              <Typography variant="caption" sx={{ ml: 0.5 }}>
+                {1} {/* Remplacer par le nombre de réactions */}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {/* Popover pour les réactions */}
+      <Popover
+        open={reactionMenuOpen}
+        anchorEl={reactionAnchorEl}
+        onClose={handleReactionMenuClose}
         anchorOrigin={{
           vertical: "top",
-          horizontal: "right",
+          horizontal: "center",
         }}
         transformOrigin={{
-          vertical: "top",
-          horizontal: "right",
+          vertical: "bottom",
+          horizontal: "center",
         }}
       >
-        <MenuItem onClick={handleCopyMessage} dense>
-          <ListItemIcon>
-            <CopyIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Copy Text" />
-        </MenuItem>
-
-        <MenuItem onClick={handleReply} dense>
-          <ListItemIcon>
-            <ReplyIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Reply" />
-        </MenuItem>
-
-        {isFromCurrentUser && (
-          <>
-            <MenuItem onClick={handleEdit} dense>
-              <ListItemIcon>
-                <EditIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary="Edit" />
-            </MenuItem>
-
-            <Divider />
-
-            <MenuItem onClick={handleDelete} dense>
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" color="error" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Delete"
-                slotProps={{
-                  primary: { color: "error" },
-                }}
-              />
-            </MenuItem>
-          </>
-        )}
-      </Menu>
-    </Box>
+        <EmojiPicker
+          onSelect={handleReactionSelect}
+          onClose={handleReactionMenuClose}
+          mode={PickerMode.REACTION}
+          messageId={message.id}
+          channelId={message.channel_id}
+        />
+      </Popover>
+    </>
   );
 };
 

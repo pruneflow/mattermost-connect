@@ -1,5 +1,5 @@
 // src/components/MessageComposer/EmojiPicker.stories.tsx
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Decorator, Meta, StoryObj } from "@storybook/react";
 import React, { useState } from "react";
 import EmojiPicker from "./EmojiPicker";
 import {
@@ -11,10 +11,42 @@ import {
   InputAdornment,
 } from "@mui/material";
 import { EmojiEmotions as EmojiIcon } from "@mui/icons-material";
+import MattermostProvider from "../../context/MattermostProvider";
+
+// Mock Mattermost service pour Storybook
+const createMockMattermostService = () => ({
+  postMessage: async (channelId: string, message: string) => {
+    console.log(`Message envoyé au canal ${channelId}:`, message);
+    return {
+      id: "mock-message-id",
+      message,
+      channel_id: channelId,
+      user_id: "user1",
+      create_at: Date.now(),
+      update_at: Date.now(),
+    };
+  },
+  // Autres méthodes mockées si nécessaire
+});
+
+// Decorateur pour fournir un MattermostProvider factice
+const MattermostProviderDecorator: Decorator = (Story) => (
+  <MattermostProvider
+    serviceProvider={{
+      setupService: createMockMattermostService,
+      isConnected: true,
+      skipConnectionTest: true,
+    }}
+  >
+    <Story />
+  </MattermostProvider>
+);
 
 const meta: Meta<typeof EmojiPicker> = {
   title: "Components/EmojiPicker",
   component: EmojiPicker,
+
+  decorators: [MattermostProviderDecorator],
   parameters: {
     layout: "centered",
   },
@@ -68,65 +100,6 @@ export const WithSelection: Story = {
             onEmojiSelect={handleEmojiSelect}
             onClose={handleClose}
           />
-        )}
-      </Box>
-    );
-  },
-  args: {},
-};
-
-// Story qui montre l'intégration du picker dans un champ de texte
-export const IntegratedWithTextField: Story = {
-  render: (args) => {
-    const [text, setText] = useState("");
-    const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-
-    const handleEmojiSelect = (emoji: string) => {
-      setText((prev) => prev + emoji);
-      setAnchorEl(null);
-      args.onEmojiSelect?.(emoji);
-    };
-
-    return (
-      <Box sx={{ width: 400, position: "relative" }}>
-        <TextField
-          fullWidth
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type a message..."
-          variant="outlined"
-          slotProps={{
-            input: {
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    edge="end"
-                    onClick={(e) => setAnchorEl(e.currentTarget)}
-                  >
-                    <EmojiIcon />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
-
-        {anchorEl && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              transform: "translateY(-100%)",
-              zIndex: 1200,
-            }}
-          >
-            <EmojiPicker
-              {...args}
-              onEmojiSelect={handleEmojiSelect}
-              onClose={() => setAnchorEl(null)}
-            />
-          </Box>
         )}
       </Box>
     );

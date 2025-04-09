@@ -33,7 +33,7 @@ import {
   MoreHoriz as MoreIcon,
 } from "@mui/icons-material";
 
-import EmojiPicker from "./EmojiPicker";
+import { EmojiPicker, PickerMode, EmojiSelectionResult } from "../EmojiPicker";
 
 /**
  * Props pour le composant MessageComposer
@@ -90,11 +90,61 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   // État pour le message, la visibilité du formatting, et l'ancre des emojis
   const [message, setMessage] = useState(initialText);
   const [showFormatting, setShowFormatting] = useState(false);
-  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
   const [moreMenuAnchorEl, setMoreMenuAnchorEl] = useState<HTMLElement | null>(
     null,
   );
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
+
+  // Ancre pour le popover d'emoji
+  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
+
+  // Gestionnaire pour ouvrir le popover
+  const handleEmojiButtonClick = (event: React.MouseEvent<HTMLElement>) => {
+    setEmojiAnchorEl(event.currentTarget);
+  };
+
+  // Gestionnaire pour fermer le popover
+  const handleCloseEmojiPicker = () => {
+    setEmojiAnchorEl(null);
+  };
+
+  // Gestionnaire pour la sélection d'emoji
+  const handleEmojiSelect = (result: EmojiSelectionResult) => {
+    if (!textFieldRef.current) return;
+
+    const input = textFieldRef.current;
+    const start = input.selectionStart || 0;
+
+    if (result.type === "emoji") {
+      // Insérer l'emoji à la position du curseur
+      const newMessage =
+        message.substring(0, start) + result.emoji + message.substring(start);
+
+      setMessage(newMessage);
+
+      // Repositionner le curseur
+      setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(
+          start + result.emoji.length,
+          start + result.emoji.length,
+        );
+      }, 0);
+    } else if (result.type === "gif" && result.gifUrl) {
+      // Pour les GIFs, on pourrait insérer une référence ou un placeholder
+      // En fonction de la façon dont l'application gère les GIFs
+      const gifPlaceholder = `[GIF: ${result.gifId}]`;
+      const newMessage =
+        message.substring(0, start) + gifPlaceholder + message.substring(start);
+
+      setMessage(newMessage);
+
+      // Stocker les métadonnées du GIF séparément si nécessaire
+      // setAttachments([...attachments, { type: 'gif', id: result.gifId, url: result.gifUrl }]);
+    }
+
+    handleCloseEmojiPicker();
+  };
 
   /**
    * Applique un format de texte (gras, italique, etc.)
@@ -156,30 +206,6 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
     onMessageSent?.(message);
     setMessage("");
-  };
-
-  /**
-   * Gère la sélection d'un emoji
-   * @param emoji Emoji sélectionné
-   */
-  const handleEmojiSelect = (emoji: string) => {
-    if (!textFieldRef.current) return;
-
-    const input = textFieldRef.current;
-    const start = input.selectionStart || 0;
-    const newMessage =
-      message.substring(0, start) + emoji + message.substring(start);
-
-    setMessage(newMessage);
-
-    // Repositionner le curseur
-    setTimeout(() => {
-      input.focus();
-      input.setSelectionRange(start + emoji.length, start + emoji.length);
-    }, 0);
-
-    // Fermer le sélecteur d'emojis
-    setEmojiAnchorEl(null);
   };
 
   // Définir toutes les options de formatage
@@ -259,10 +285,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       )}
 
       <Tooltip title="Ajouter un emoji">
-        <IconButton
-          size="small"
-          onClick={(e) => setEmojiAnchorEl(e.currentTarget)}
-        >
+        <IconButton size="small" onClick={handleEmojiButtonClick}>
           <EmojiIcon fontSize="small" />
         </IconButton>
       </Tooltip>
@@ -454,7 +477,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       <Popover
         open={Boolean(emojiAnchorEl)}
         anchorEl={emojiAnchorEl}
-        onClose={() => setEmojiAnchorEl(null)}
+        onClose={handleCloseEmojiPicker}
         anchorOrigin={{
           vertical: "top",
           horizontal: "right",
@@ -465,8 +488,10 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         }}
       >
         <EmojiPicker
-          onEmojiSelect={handleEmojiSelect}
-          onClose={() => setEmojiAnchorEl(null)}
+          onSelect={handleEmojiSelect}
+          onClose={handleCloseEmojiPicker}
+          mode={PickerMode.MESSAGE}
+          channelId={channelId}
         />
       </Popover>
 
