@@ -20,11 +20,7 @@ export interface EmojiServiceInterface {
    * @param messageId ID du message
    * @param emoji Emoji à ajouter (caractère Unicode)
    */
-  addReaction: (
-    channelId: string,
-    messageId: string,
-    emoji: string,
-  ) => Promise<any>;
+  addReaction: (messageId: string, emoji: string) => Promise<any>;
 
   /**
    * Supprime une réaction emoji d'un message
@@ -152,18 +148,13 @@ export const createEmojiService = (
     /**
      * Ajoute une réaction emoji à un message
      */
-    addReaction: async (
-      channelId: string,
-      messageId: string,
-      emoji: string,
-    ): Promise<any> => {
+    addReaction: async (messageId: string, emoji: string): Promise<any> => {
       const emojiName = getEmojiName(emoji);
 
       return apiCall<any>("reactions", "POST", {
-        user_id: "me", // Utilise l'utilisateur actuel
         post_id: messageId,
         emoji_name: emojiName,
-        channel_id: channelId,
+        user_id: "me",
       });
     },
 

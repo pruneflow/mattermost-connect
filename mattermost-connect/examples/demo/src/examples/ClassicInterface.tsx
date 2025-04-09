@@ -32,6 +32,7 @@ import {
 
 // Material-UI Icons
 import { Menu as MenuIcon } from "@mui/icons-material";
+import TeamSelector from "../../../../src/components/TeamSelector/TeamSelector";
 
 /**
  * Classic Mattermost-style interface with teams and channels always visible on desktop
@@ -39,7 +40,7 @@ import { Menu as MenuIcon } from "@mui/icons-material";
 const ClassicInterface: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const { isConnected, getTeams, error } = useMattermost();
+  const { isConnected, service, error } = useMattermost();
 
   // References for measuring initial heights
   const appBarRef = useRef<HTMLDivElement>(null);
@@ -64,7 +65,7 @@ const ClassicInterface: React.FC = () => {
     if (isConnected) {
       const fetchTeams = async () => {
         try {
-          const teamsData = await getTeams();
+          const teamsData = await service.getTeams();
           setTeams(teamsData);
 
           // Auto-select first team
@@ -81,7 +82,7 @@ const ClassicInterface: React.FC = () => {
 
       void fetchTeams();
     }
-  }, [isConnected, getTeams]);
+  }, [isConnected, service]);
 
   // Measure heights of fixed elements after render
   useEffect(() => {
@@ -170,27 +171,10 @@ const ClassicInterface: React.FC = () => {
               Teams
             </Typography>
           </Box>
-          <List disablePadding>
-            {teams.map((team) => (
-              <ListItemButton
-                key={team.id}
-                selected={selectedTeam?.id === team.id}
-                onClick={() => handleTeamSelect(team)}
-                sx={{
-                  pl: 3,
-                  pr: 2,
-                  py: 1,
-                  borderLeft: 3,
-                  borderColor:
-                    selectedTeam?.id === team.id
-                      ? "primary.main"
-                      : "transparent",
-                }}
-              >
-                <ListItemText primary={team.display_name} />
-              </ListItemButton>
-            ))}
-          </List>
+          <TeamSelector
+            selectedTeamId={selectedTeam?.id}
+            onSelectTeam={handleTeamSelect}
+          />
 
           <Divider sx={{ my: 1 }} />
 

@@ -109,11 +109,7 @@ export interface MattermostService {
 
   // ----- Méthodes pour les emojis et réactions -----
   getFrequentEmojis(): Promise<string[]>;
-  addReaction(
-    channelId: string,
-    messageId: string,
-    emoji: string,
-  ): Promise<any>;
+  addReaction(messageId: string, emoji: string): Promise<any>;
   removeReaction(
     channelId: string,
     messageId: string,

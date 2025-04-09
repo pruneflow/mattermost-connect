@@ -107,15 +107,11 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
    * Ajoute une réaction à un message
    */
   const addReaction = useCallback(
-    async (
-      channelId: string,
-      messageId: string,
-      emoji: string,
-    ): Promise<void> => {
+    async (messageId: string, emoji: string): Promise<void> => {
       if (!service) return;
 
       try {
-        await service.addReaction(channelId, messageId, emoji);
+        await service.addReaction(messageId, emoji);
       } catch (error) {
         console.error("Error adding reaction:", error);
         throw error;

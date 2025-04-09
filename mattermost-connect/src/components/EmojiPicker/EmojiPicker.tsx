@@ -101,7 +101,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
     if (mode === PickerMode.REACTION && messageId && channelId) {
       try {
         // Si en mode réaction, envoyer directement la réaction via l'API
-        await addReaction(channelId, messageId, emoji);
+        await addReaction(messageId, emoji);
 
         // Fermer le picker après l'ajout réussi
         onClose?.();

@@ -92,8 +92,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   messageProps,
   currentUserId,
 }) => {
-  const { isConnected, getChannel, getChannelMessages, currentUser } =
-    useMattermost();
+  const { isConnected, service, currentUser } = useMattermost();
   const [channel, setChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,7 +112,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
 
     const fetchChannel = async () => {
       try {
-        const channelData = await getChannel(channelId);
+        const channelData = await service.getChannel(channelId);
         setChannel(channelData);
         setError(null);
       } catch (err) {
@@ -123,7 +122,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     };
 
     void fetchChannel();
-  }, [isConnected, channelId, getChannel]);
+  }, [isConnected, channelId, service]);
 
   // Load messages
   useEffect(() => {
@@ -132,7 +131,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     const fetchMessages = async () => {
       setLoading(true);
       try {
-        const response = await getChannelMessages(channelId, {
+        const response = await service.getChannelMessages(channelId, {
           perPage: loadMessageCount,
         });
 
@@ -156,7 +155,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     };
 
     void fetchMessages();
-  }, [isConnected, channelId, getChannelMessages, loadMessageCount]);
+  }, [isConnected, channelId, service, loadMessageCount]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -175,7 +174,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       // Get messages before the first displayed message
       const firstMessage = messages[0];
 
-      const response = await getChannelMessages(channelId, {
+      const response = await service.getChannelMessages(channelId, {
         perPage: loadMessageCount,
         before: firstMessage.id,
       });

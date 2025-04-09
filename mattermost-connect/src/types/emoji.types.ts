@@ -146,11 +146,7 @@ export interface EmojiContextType {
   setSearchQuery: (query: string) => void;
 
   // Fonctions
-  addReaction: (
-    channelId: string,
-    messageId: string,
-    emoji: string,
-  ) => Promise<void>;
+  addReaction: (messageId: string, emoji: string) => Promise<void>;
   removeReaction: (
     channelId: string,
     messageId: string,

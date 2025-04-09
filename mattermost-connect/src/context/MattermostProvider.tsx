@@ -187,6 +187,8 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     serviceProvider,
   ]);
 
+  if (!service) return null;
+
   // Valeur du contexte à partager avec les composants enfants
   const contextValue: MattermostContextType = {
     // État

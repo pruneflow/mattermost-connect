@@ -242,16 +242,15 @@ export function createDirectService(config: {
       }
     },
 
-    addReaction: async (channelId, messageId, emoji) => {
+    addReaction: async (messageId, emoji) => {
       const emojiName = getEmojiName(emoji);
 
       return apiCall("reactions", {
         method: "POST",
         body: JSON.stringify({
-          user_id: "me", // Utilise l'utilisateur actuel
           post_id: messageId,
           emoji_name: emojiName,
-          channel_id: channelId,
+          user_id: "me",
         }),
       });
     },

@@ -248,13 +248,12 @@ export function createProxyService(config: {
       }
     },
 
-    addReaction: async (channelId, messageId, emoji) => {
+    addReaction: async (messageId, emoji) => {
       try {
         const emojiName = getEmojiName(emoji);
         return await apiCall("reactions", {
           method: "POST",
           body: JSON.stringify({
-            channel_id: channelId,
             post_id: messageId,
             emoji_name: emojiName,
           }),

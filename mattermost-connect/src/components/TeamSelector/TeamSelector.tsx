@@ -86,7 +86,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   teamItemSx,
   selectedTeamSx,
 }) => {
-  const { isConnected, getTeams } = useMattermost();
+  const { isConnected, service } = useMattermost();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +98,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     const fetchTeams = async () => {
       setLoading(true);
       try {
-        const teamsData = await getTeams();
+        const teamsData = await service.getTeams();
 
         // Sort teams if needed
         let sortedTeams = [...teamsData];
