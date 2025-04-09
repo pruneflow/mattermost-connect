@@ -3,17 +3,10 @@ import {
   MattermostService,
   ServiceConfig,
   CustomServiceProvider,
+  User,
 } from "../types";
-import { createDirectService } from "./direct.service";
-import { createProxyService } from "./proxy.service";
-
-// Importer les utilitaires d'emoji
-import {
-  getFrequentEmojis,
-  searchGifs,
-  getGifs,
-  GifApiOptions,
-} from "../utils/emoji.utils";
+import { createDirectService, DirectService } from "./direct.service";
+import { createProxyService, ProxyService } from "./proxy.service";
 
 /**
  * Crée un service personnalisé basé sur le fournisseur de service
@@ -22,7 +15,15 @@ function createCustomService(
   provider: CustomServiceProvider,
 ): MattermostService {
   // Le fournisseur doit implémenter la méthode setupService
-  return provider.setupService();
+  const service = provider.setupService();
+
+  // Si un utilisateur courant est fourni, le définir dans le service
+  // si le service implémente l'interface nécessaire
+  if (provider.currentUser && "setCurrentUser" in service) {
+    (service as any).setCurrentUser(provider.currentUser);
+  }
+
+  return service;
 }
 
 /**
@@ -39,16 +40,42 @@ export function createMattermostService(
   if (config.serviceProvider) {
     return createCustomService(config.serviceProvider);
   } else if (config.serverUrl && config.token) {
-    return createDirectService({
+    const service = createDirectService({
       serverUrl: config.serverUrl,
       token: config.token,
     });
+
+    // Pré-charger l'utilisateur courant en arrière-plan
+    if (service instanceof DirectService) {
+      Promise.resolve().then(() => {
+        service
+          .getCurrentUser()
+          .catch((err) =>
+            console.warn("Échec du préchargement de l'utilisateur:", err),
+          );
+      });
+    }
+
+    return service;
   } else if (config.proxyUrl && config.clientId) {
-    return createProxyService({
+    const service = createProxyService({
       proxyUrl: config.proxyUrl,
       clientId: config.clientId,
       userId: config.userId,
     });
+
+    // Pré-charger l'utilisateur courant en arrière-plan
+    if (service instanceof ProxyService) {
+      Promise.resolve().then(() => {
+        service
+          .getCurrentUser()
+          .catch((err) =>
+            console.warn("Échec du préchargement de l'utilisateur:", err),
+          );
+      });
+    }
+
+    return service;
   } else if (config.serverUrl) {
     // Ajouter cette condition pour permettre la création avec uniquement l'URL
     return createDirectService({
@@ -66,15 +93,25 @@ export function createMattermostService(
  * Crée un service mock pour les tests et développement
  */
 export function createMockService(): MattermostService {
-  // Options pour les utilitaires de GIF du mock service
-  const mockGifOptions: GifApiOptions = {
-    baseUrl: "https://mock-api.example.com",
-    mode: "direct",
-    useRealApi: false,
+  // Créer un mock service avec l'utilisateur courant préchargé
+  const mockUser: User = {
+    id: "user1",
+    username: "johndoe",
+    first_name: "John",
+    last_name: "Doe",
+    email: "john@example.com",
+    roles: "system_user",
   };
+
+  // On utilise une approche basée sur les objets pour simuler le caching
+  // Cela permettra également de tester si les méthodes du service fonctionnent correctement
+  let _cachedUser: User = mockUser;
 
   return {
     mode: "custom",
+
+    // Cache utilisateur simulé
+    _currentUser: mockUser,
 
     authenticate: async (username: string, password: string) => {
       // Simulation d'une authentification
@@ -83,23 +120,14 @@ export function createMockService(): MattermostService {
       }
       throw new Error("Authentification échouée");
     },
+
     validateToken: async (token) => {
       return token === "mock-user-token";
     },
 
     getCurrentUser: async () => {
-      try {
-        return {
-          id: "user1",
-          username: "johndoe",
-          first_name: "John",
-          last_name: "Doe",
-          email: "john@example.com",
-          roles: "system_user",
-        };
-      } catch (error) {
-        throw new Error("Impossible de récupérer l'utilisateur actuel");
-      }
+      // Utiliser l'utilisateur en cache
+      return _cachedUser;
     },
 
     getTeams: async () => [
@@ -198,40 +226,42 @@ export function createMockService(): MattermostService {
       status: "online",
     }),
 
-    // Méthodes pour les emojis utilisant les utilitaires centralisés
-    getFrequentEmojis: async () => {
-      // Utiliser la fonction utilitaire
-      return getFrequentEmojis();
-    },
-
+    // Méthodes emoji/gifs
+    getFrequentEmojis: async () => [
+      "👍",
+      "❤️",
+      "😂",
+      "🎉",
+      "🔥",
+      "👏",
+      "✅",
+      "🙏",
+    ],
     addReaction: async () => ({ success: true }),
-
     removeReaction: async () => ({ success: true }),
-
     hasReacted: async () => false,
+    searchGifs: async () => [],
+    getGifs: async () => [],
 
-    // Méthodes pour les GIFs utilisant les utilitaires centralisés
-    searchGifs: async (query) => {
-      // Utiliser la fonction utilitaire
-      return searchGifs(query, mockGifOptions);
-    },
-
-    getGifs: async (category) => {
-      // Utiliser la fonction utilitaire
-      return getGifs(category, mockGifOptions);
-    },
-
-    // Méthodes pour WebSocket
+    // Méthodes WebSocket
     getWebsocketUrl: () => "wss://example.com/websocket",
-
     getWebsocketToken: async () => "mock-token",
 
-    // Méthodes pour les fichiers
+    // Méthodes fichiers
     uploadFiles: async () => ({
       file_infos: [{ id: "file1", name: "test.jpg" }],
     }),
 
     // Méthodes utilitaires
     getBaseUrl: () => "https://example.com",
+
+    // Méthodes similaires à celles du BaseService pour simuler le cache d'utilisateur
+    setCurrentUser: (user: User) => {
+      _cachedUser = user;
+    },
+
+    refreshCurrentUser: async () => {
+      return _cachedUser;
+    },
   };
 }

@@ -1,5 +1,7 @@
 // src/services/direct.service.ts
+import { BaseService } from "./base.service";
 import {
+  User,
   MattermostService,
   GetMessagesOptions,
   GetUsersOptions,
@@ -26,38 +28,36 @@ function normalizeUrl(url: string): string {
 }
 
 /**
- * Crée un service pour communiquer directement avec un serveur Mattermost
- * en utilisant un token d'API utilisateur
- *
- * @param config - Configuration avec serverUrl et token
- * @returns Implémentation du service Mattermost
+ * Service direct implémentant la communication avec un serveur Mattermost
  */
-export function createDirectService(config: {
-  serverUrl: string;
-  token?: string;
-}): MattermostService {
-  const { serverUrl, token } = config;
+export class DirectService extends BaseService implements MattermostService {
+  private baseUrl: string;
+  private token?: string;
 
-  // Validation des paramètres obligatoires
-  if (!serverUrl) {
-    throw new Error("serverUrl et token sont requis pour le mode direct");
+  constructor(serverUrl: string, token?: string) {
+    super();
+    this.baseUrl = normalizeUrl(serverUrl);
+    this.token = token;
   }
 
-  // Normaliser l'URL du serveur (supprimer le slash final s'il existe)
-  const baseUrl = normalizeUrl(serverUrl);
+  // Propriété indiquant le mode
+  public readonly mode: "direct" | "proxy" | "custom" = "direct";
 
-  const apiCall = async <T>(
+  /**
+   * Effectue un appel API à Mattermost
+   */
+  private async apiCall<T>(
     endpoint: string,
     options: RequestInit = {},
-  ): Promise<T> => {
-    const url = `${baseUrl}/api/v4/${endpoint}`;
+  ): Promise<T> {
+    const url = `${this.baseUrl}/api/v4/${endpoint}`;
     const headers: any = {
       "Content-Type": "application/json",
       ...options.headers,
     };
 
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
     }
 
     try {
@@ -86,250 +86,282 @@ export function createDirectService(config: {
       console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
       throw error;
     }
-  };
+  }
 
-  // Options pour les utilitaires d'emoji
-  const emojiOptions: EmojiApiOptions = {
-    baseUrl,
-    token,
-    mode: "direct",
-    isAuthenticated: !!token,
-  };
+  /**
+   * Implémentation de la méthode abstraite pour récupérer l'utilisateur courant
+   */
+  protected async fetchCurrentUser(): Promise<User> {
+    return this.apiCall<User>("users/me");
+  }
 
-  // Options pour les utilitaires de GIF
-  const gifOptions: GifApiOptions = {
-    baseUrl,
-    token,
-    mode: "direct",
-    useRealApi: false, // Utiliser les API réelles ou les données de test
-  };
+  // ----- Méthodes d'authentification -----
 
-  // Retourner l'interface du service
-  return {
-    // Propriété indiquant le mode
-    mode: "direct",
-
-    // ----- Méthodes de base (utilisateurs, équipes, canaux) -----
-    authenticate: async (username, password) => {
-      try {
-        // Appel à l'API Mattermost pour obtenir un token
-        const response = await fetch(`${baseUrl}/api/v4/users/login`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            login_id: username,
-            password: password,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Échec de l'authentification");
-        }
-
-        const user = await response.json();
-        const tokenResponse = await fetch(
-          `${baseUrl}/api/v4/users/${user.id}/tokens`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${response.headers.get("Token")}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              description: "MattermostConnect Integration",
-            }),
-          },
-        );
-
-        if (!tokenResponse.ok) {
-          throw new Error("Échec de la génération du token");
-        }
-
-        const tokenData = await tokenResponse.json();
-        return {
-          token: tokenData.token,
-          serverUrl: baseUrl,
-        };
-      } catch (error) {
-        console.error("Erreur d'authentification :", error);
-        throw error;
-      }
-    },
-    validateToken: async (token) => {
-      try {
-        const response = await fetch(`${baseUrl}/api/v4/users/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        return response.ok;
-      } catch (error) {
-        console.error("Erreur de validation du token :", error);
-        return false;
-      }
-    },
-
-    // Modification de getCurrentUser pour gérer les erreurs
-    getCurrentUser: async () => {
-      try {
-        return await apiCall("users/me");
-      } catch (error) {
-        console.error(
-          "Erreur lors de la récupération de l'utilisateur :",
-          error,
-        );
-        throw error;
-      }
-    },
-
-    getTeams: async () => {
-      return apiCall("users/me/teams");
-    },
-
-    getTeam: async (teamId) => {
-      return apiCall(`teams/${teamId}`);
-    },
-
-    getChannels: async (teamId) => {
-      return apiCall(`users/me/teams/${teamId}/channels`);
-    },
-
-    getChannel: async (channelId) => {
-      return apiCall(`channels/${channelId}`);
-    },
-
-    // ----- Méthodes pour les messages -----
-    getChannelMessages: async (channelId, options: GetMessagesOptions = {}) => {
-      const { page = 0, perPage = 60, since = 0, before, after } = options;
-
-      let endpoint = `channels/${channelId}/posts?page=${page}&per_page=${perPage}`;
-
-      if (since) endpoint += `&since=${since}`;
-      if (before) endpoint += `&before=${before}`;
-      if (after) endpoint += `&after=${after}`;
-
-      return apiCall<MessagesResponse>(endpoint);
-    },
-
-    postMessage: async (channelId, message) => {
-      return apiCall("posts", {
-        method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-          message,
-        }),
-      });
-    },
-
-    // ----- Méthodes pour les utilisateurs -----
-    getUsers: async (options: GetUsersOptions = {}) => {
-      const params = new URLSearchParams();
-
-      if (options.inChannel) params.append("in_channel", options.inChannel);
-      if (options.inTeam) params.append("in_team", options.inTeam);
-      if (options.perPage)
-        params.append("per_page", options.perPage.toString());
-      if (options.page) params.append("page", options.page.toString());
-
-      // Si des IDs spécifiques sont demandés, utiliser un endpoint différent
-      if (options.ids && options.ids.length > 0) {
-        return apiCall("users/ids", {
-          method: "POST",
-          body: JSON.stringify(options.ids),
-        });
-      }
-
-      return apiCall(`users?${params.toString()}`);
-    },
-
-    getUserStatus: async (userId) => {
-      return apiCall(`users/${userId}/status`);
-    },
-
-    // ----- Méthodes pour les emojis et réactions -----
-    getFrequentEmojis: async () => {
-      // Utiliser la fonction utilitaire centralisée
-      return getFrequentEmojis();
-    },
-
-    addReaction: async (messageId, emoji) => {
-      // D'abord récupérer l'utilisateur actuel pour obtenir son ID
-      try {
-        const currentUser = await apiCall("users/me");
-
-        // Mettre à jour les options avec l'ID utilisateur actuel
-        const optionsWithUser = {
-          ...emojiOptions,
-          currentUserId: currentUser.id,
-        };
-
-        // Utiliser la fonction utilitaire centralisée avec l'ID utilisateur
-        return addReaction(messageId, emoji, optionsWithUser);
-      } catch (error) {
-        console.error(
-          "Erreur lors de la récupération de l'utilisateur pour la réaction:",
-          error,
-        );
-        throw error;
-      }
-    },
-
-    removeReaction: async (channelId, messageId, emoji) => {
-      // Utiliser la fonction utilitaire centralisée
-      return removeReaction(channelId, messageId, emoji, emojiOptions);
-    },
-
-    hasReacted: async (channelId, messageId, emoji) => {
-      // Utiliser la fonction utilitaire centralisée avec l'option de récupérer l'utilisateur actuel
-      return hasReacted(channelId, messageId, emoji, emojiOptions);
-    },
-
-    // ----- Méthodes pour les GIFs -----
-    searchGifs: async (query, category) => {
-      // Utiliser la fonction utilitaire centralisée
-      return searchGifs(query, gifOptions, category);
-    },
-
-    getGifs: async (category, limit = 20) => {
-      // Utiliser la fonction utilitaire centralisée
-      return getGifs(category, gifOptions, limit);
-    },
-
-    // ----- Méthodes pour WebSocket -----
-    getWebsocketUrl: () => {
-      // Convertir http(s) en ws(s)
-      return baseUrl.replace(/^http/, "ws") + "/api/v4/websocket";
-    },
-
-    getWebsocketToken: async () => {
-      // En mode direct, nous utilisons le même token
-      return token;
-    },
-
-    // ----- Méthodes pour les fichiers -----
-    uploadFiles: async (formData) => {
-      const response = await fetch(`${baseUrl}/api/v4/files`, {
+  async authenticate(
+    username: string,
+    password: string,
+  ): Promise<{ token: string; serverUrl?: string }> {
+    try {
+      // Appel à l'API Mattermost pour obtenir un token
+      const response = await fetch(`${this.baseUrl}/api/v4/users/login`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        body: formData,
+        body: JSON.stringify({
+          login_id: username,
+          password: password,
+        }),
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-          error.message || `File upload error: ${response.status}`,
-        );
+        throw new Error("Échec de l'authentification");
       }
 
-      return response.json();
-    },
+      const user = await response.json();
 
-    // ----- Méthodes utilitaires -----
-    getBaseUrl: () => baseUrl,
-  };
+      // Stocker l'utilisateur dans le cache
+      this.setCurrentUser(user);
+
+      const tokenResponse = await fetch(
+        `${this.baseUrl}/api/v4/users/${user.id}/tokens`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${response.headers.get("Token")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            description: "MattermostConnect Integration",
+          }),
+        },
+      );
+
+      if (!tokenResponse.ok) {
+        throw new Error("Échec de la génération du token");
+      }
+
+      const tokenData = await tokenResponse.json();
+
+      // Mettre à jour le token du service
+      this.token = tokenData.token;
+
+      return {
+        token: tokenData.token,
+        serverUrl: this.baseUrl,
+      };
+    } catch (error) {
+      console.error("Erreur d'authentification :", error);
+      throw error;
+    }
+  }
+
+  async validateToken(tokenToValidate: string): Promise<boolean> {
+    try {
+      // Sauvegarde du token actuel
+      const originalToken = this.token;
+
+      // Utiliser temporairement le token à valider
+      this.token = tokenToValidate;
+
+      try {
+        // Tenter de récupérer l'utilisateur courant
+        const user = await this.fetchCurrentUser();
+
+        // Si réussi, stocker l'utilisateur et garder le nouveau token
+        this.setCurrentUser(user);
+        return true;
+      } catch (error) {
+        // Si échec, restaurer le token d'origine
+        this.token = originalToken;
+        return false;
+      }
+    } catch (error) {
+      console.error("Erreur de validation du token :", error);
+      return false;
+    }
+  }
+
+  // ----- Méthodes pour les équipes et canaux -----
+
+  async getTeams() {
+    return this.apiCall("users/me/teams");
+  }
+
+  async getTeam(teamId: string) {
+    return this.apiCall(`teams/${teamId}`);
+  }
+
+  async getChannels(teamId: string) {
+    return this.apiCall(`users/me/teams/${teamId}/channels`);
+  }
+
+  async getChannel(channelId: string) {
+    return this.apiCall(`channels/${channelId}`);
+  }
+
+  // ----- Méthodes pour les messages -----
+
+  async getChannelMessages(
+    channelId: string,
+    options: GetMessagesOptions = {},
+  ) {
+    const { page = 0, perPage = 60, since = 0, before, after } = options;
+
+    let endpoint = `channels/${channelId}/posts?page=${page}&per_page=${perPage}`;
+
+    if (since) endpoint += `&since=${since}`;
+    if (before) endpoint += `&before=${before}`;
+    if (after) endpoint += `&after=${after}`;
+
+    return this.apiCall<MessagesResponse>(endpoint);
+  }
+
+  async postMessage(channelId: string, message: string) {
+    return this.apiCall("posts", {
+      method: "POST",
+      body: JSON.stringify({
+        channel_id: channelId,
+        message,
+      }),
+    });
+  }
+
+  // ----- Méthodes pour les utilisateurs -----
+
+  async getUsers(options: GetUsersOptions = {}) {
+    const params = new URLSearchParams();
+
+    if (options.inChannel) params.append("in_channel", options.inChannel);
+    if (options.inTeam) params.append("in_team", options.inTeam);
+    if (options.perPage) params.append("per_page", options.perPage.toString());
+    if (options.page) params.append("page", options.page.toString());
+
+    // Si des IDs spécifiques sont demandés, utiliser un endpoint différent
+    if (options.ids && options.ids.length > 0) {
+      return this.apiCall("users/ids", {
+        method: "POST",
+        body: JSON.stringify(options.ids),
+      });
+    }
+
+    return this.apiCall(`users?${params.toString()}`);
+  }
+
+  async getUserStatus(userId: string) {
+    return this.apiCall(`users/${userId}/status`);
+  }
+
+  // ----- Méthodes pour les emojis et réactions -----
+
+  getEmojiApiOptions(): EmojiApiOptions {
+    return {
+      baseUrl: this.baseUrl,
+      token: this.token,
+      mode: "direct",
+      isAuthenticated: !!this.token,
+      currentUserId: this._currentUser?.id, // Utiliser l'ID de l'utilisateur mis en cache
+    };
+  }
+
+  getGifApiOptions(): GifApiOptions {
+    return {
+      baseUrl: this.baseUrl,
+      token: this.token,
+      mode: "direct",
+      useRealApi: false,
+    };
+  }
+
+  async getFrequentEmojis() {
+    return getFrequentEmojis();
+  }
+
+  async addReaction(messageId: string, emoji: string) {
+    // Assurer que nous avons l'utilisateur courant
+    if (!this._currentUser) {
+      await this.getCurrentUser();
+    }
+
+    return addReaction(messageId, emoji, this.getEmojiApiOptions());
+  }
+
+  async removeReaction(channelId: string, messageId: string, emoji: string) {
+    return removeReaction(
+      channelId,
+      messageId,
+      emoji,
+      this.getEmojiApiOptions(),
+    );
+  }
+
+  async hasReacted(channelId: string, messageId: string, emoji: string) {
+    return hasReacted(channelId, messageId, emoji, this.getEmojiApiOptions());
+  }
+
+  // ----- Méthodes pour les GIFs -----
+
+  async searchGifs(query: string, category?: string) {
+    return searchGifs(query, this.getGifApiOptions(), category);
+  }
+
+  async getGifs(category: string, limit: number = 20) {
+    return getGifs(category, this.getGifApiOptions(), limit);
+  }
+
+  // ----- Méthodes pour WebSocket -----
+
+  getWebsocketUrl(): string {
+    return this.baseUrl.replace(/^http/, "ws") + "/api/v4/websocket";
+  }
+
+  async getWebsocketToken(): Promise<string> {
+    return this.token || "";
+  }
+
+  // ----- Méthodes pour les fichiers -----
+
+  async uploadFiles(formData: FormData) {
+    const response = await fetch(`${this.baseUrl}/api/v4/files`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `File upload error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // ----- Méthodes utilitaires -----
+
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+}
+
+/**
+ * Crée un service pour communiquer directement avec un serveur Mattermost
+ * en utilisant un token d'API utilisateur
+ *
+ * @param config - Configuration avec serverUrl et token
+ * @returns Implémentation du service Mattermost
+ */
+export function createDirectService(config: {
+  serverUrl: string;
+  token?: string;
+}): MattermostService {
+  const { serverUrl, token } = config;
+
+  // Validation des paramètres obligatoires
+  if (!serverUrl) {
+    throw new Error("serverUrl est requis pour le mode direct");
+  }
+
+  return new DirectService(serverUrl, token);
 }

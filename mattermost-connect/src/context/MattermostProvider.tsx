@@ -15,6 +15,8 @@ import type {
   WebSocketConnection,
 } from "../types";
 import { setupWebsocket } from "../services/websocket.service";
+import { DirectService } from "../services/direct.service";
+import { ProxyService } from "../services/proxy.service";
 
 /**
  * Type du contexte Mattermost qui fournit l'accès à
@@ -34,7 +36,7 @@ export interface MattermostContextType {
   currentUser: User | null;
 
   /** L'instance du service */
-  service: MattermostService | null;
+  service: MattermostService;
 
   /** Instance de connexion WebSocket */
   websocket: WebSocketConnection | null;
@@ -114,8 +116,6 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       return;
     }
 
-    // Modifications à apporter dans la méthode initService
-
     const initService = async () => {
       try {
         // Créer l'instance de service avec notre factory centralisée
@@ -133,10 +133,43 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         // Tester la connexion (sauf pour les services personnalisés qui spécifient de sauter le test)
         if (mode !== "custom" || !serviceProvider?.skipConnectionTest) {
           try {
+            // Récupérer l'utilisateur courant - exploite maintenant le cache
             const user = await serviceInstance.getCurrentUser();
             setCurrentUser(user);
             setIsConnected(true);
             setError(null);
+
+            // Si le WebSocket est activé, l'initialiser
+            if (enableWebsocket) {
+              try {
+                // Obtenir l'URL WebSocket et le token
+                const wsUrl = serviceInstance.getWebsocketUrl();
+                const wsToken = await serviceInstance.getWebsocketToken();
+
+                // Configurer la connexion WebSocket
+                const ws = await setupWebsocket({
+                  mode: mode as "direct" | "proxy" | "custom",
+                  serverUrl: wsUrl,
+                  token: wsToken,
+                  onMessage: (msg) => {
+                    console.log("WebSocket message:", msg);
+                    // Traiter les messages WebSocket selon les besoins
+                  },
+                  onError: (err) => {
+                    console.error("WebSocket error:", err);
+                  },
+                  onClose: (closeEvent) => {
+                    console.log("WebSocket closed:", closeEvent);
+                    setWebsocket(null);
+                  },
+                });
+
+                setWebsocket(ws);
+              } catch (wsError) {
+                console.error("Failed to initialize WebSocket:", wsError);
+                // Considérer cela comme un avertissement, pas une erreur fatale
+              }
+            }
           } catch (connErr) {
             console.error("Erreur de connexion :", connErr);
             const errorMessage =
@@ -152,9 +185,38 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           // Pour les services personnalisés qui fournissent un utilisateur actuel
           setCurrentUser(serviceProvider.currentUser);
           setIsConnected(true);
+
+          // Si le service personnalisé fournit un cache d'utilisateur
+          if ((serviceInstance as any)._currentUser) {
+            setCurrentUser((serviceInstance as any)._currentUser);
+          }
         }
 
-        // Reste du code d'initialisation WebSocket...
+        // Configurer un intervalle pour rafraîchir l'utilisateur courant si nécessaire
+        // Cela est utile pour maintenir à jour le statut, les permissions, etc.
+        if (refreshInterval > 0 && serviceInstance) {
+          const intervalId = setInterval(async () => {
+            try {
+              // Si le service implémente refreshCurrentUser, l'utiliser
+              if (
+                (serviceInstance instanceof DirectService ||
+                  serviceInstance instanceof ProxyService) &&
+                isConnected
+              ) {
+                const freshUser = await serviceInstance.refreshCurrentUser();
+                setCurrentUser(freshUser);
+              }
+            } catch (refreshError) {
+              console.warn(
+                "Erreur lors du rafraîchissement de l'utilisateur:",
+                refreshError,
+              );
+            }
+          }, refreshInterval);
+
+          // Nettoyer l'intervalle lors du démontage
+          return () => clearInterval(intervalId);
+        }
       } catch (err) {
         console.error("Erreur d'initialisation du service :", err);
         const errorMessage =
@@ -168,7 +230,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       }
     };
 
-    initService();
+    void initService();
 
     // Nettoyage lors du démontage
     return () => {
@@ -185,6 +247,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     userId,
     enableWebsocket,
     serviceProvider,
+    refreshInterval,
   ]);
 
   if (!service) return null;

@@ -1,7 +1,7 @@
 // src/utils/emoji.utils.ts
 /**
  * Utilitaires centralisés pour les fonctionnalités liées aux emojis
- * Ce module permet d'éviter la duplication de code entre les différents services
+ * Mis à jour pour utiliser l'ID utilisateur en cache lorsqu'il est disponible
  */
 
 import { GifData } from "../types";
@@ -24,11 +24,11 @@ interface ApiCallParams {
 }
 
 /**
- * Options pour les appels liés aux emojis
+ * Options pour les appels liés aux emojis, avec support pour l'utilisateur en cache
  */
 export interface EmojiApiOptions extends ApiCallParams {
   isAuthenticated: boolean;
-  currentUserId?: string; // Ajout de l'ID utilisateur actuel
+  currentUserId?: string; // ID de l'utilisateur mis en cache
 }
 
 /**
@@ -54,7 +54,7 @@ export const getFrequentEmojis = async (): Promise<string[]> => {
  *
  * @param messageId ID du message
  * @param emoji Emoji à ajouter
- * @param options Options d'API (URL, token, etc.)
+ * @param options Options d'API (URL, token, utilisateur en cache, etc.)
  */
 export const addReaction = async (
   messageId: string,
@@ -64,17 +64,16 @@ export const addReaction = async (
   const { baseUrl, token, headers = {}, mode, currentUserId } = options;
   const emojiName = getEmojiName(emoji);
 
+  // Vérifier si l'ID utilisateur est fourni par le cache, sinon lancer une erreur
+  if (!currentUserId && mode === "direct") {
+    throw new Error("L'ID utilisateur est requis pour ajouter une réaction");
+  }
+
   let url: string;
   let body: any;
 
   if (mode === "direct") {
     url = `${baseUrl}/api/v4/reactions`;
-
-    // Vérifier si l'ID utilisateur est fourni, sinon lancer une erreur
-    if (!currentUserId) {
-      throw new Error("L'ID utilisateur est requis pour ajouter une réaction");
-    }
-
     body = {
       post_id: messageId,
       emoji_name: emojiName,
@@ -134,15 +133,15 @@ export const removeReaction = async (
   emoji: string,
   options: EmojiApiOptions,
 ): Promise<any> => {
-  const { baseUrl, token, headers = {}, mode } = options;
+  const { baseUrl, token, headers = {}, mode, currentUserId } = options;
   const emojiName = getEmojiName(emoji);
 
   let url: string;
 
   if (mode === "direct") {
     // Dans l'API Mattermost, on a besoin de l'ID utilisateur
-    // "me" est utilisé pour l'utilisateur actuel
-    const userId = "me";
+    // "me" est utilisé pour l'utilisateur actuel si l'ID n'est pas disponible
+    const userId = currentUserId || "me";
     url = `${baseUrl}/api/v4/users/${userId}/posts/${messageId}/reactions/${emojiName}`;
   } else {
     // Mode proxy
@@ -191,17 +190,20 @@ export const removeReaction = async (
  * @param messageId ID du message
  * @param emoji Emoji à vérifier
  * @param options Options d'API (URL, token, etc.)
- * @param currentUserId ID de l'utilisateur actuel (optionnel)
+ * @param userId ID de l'utilisateur à vérifier (si différent de l'utilisateur courant)
  */
 export const hasReacted = async (
   channelId: string,
   messageId: string,
   emoji: string,
   options: EmojiApiOptions,
-  currentUserId?: string,
+  userId?: string,
 ): Promise<boolean> => {
-  const { baseUrl, token, headers = {}, mode } = options;
+  const { baseUrl, token, headers = {}, mode, currentUserId } = options;
   const emojiName = getEmojiName(emoji);
+
+  // Utiliser l'ID fourni, ou celui en cache dans les options
+  const userIdToCheck = userId || currentUserId;
 
   let url: string;
 
@@ -235,27 +237,43 @@ export const hasReacted = async (
 
     const reactions = await response.json();
 
-    // Si l'ID utilisateur n'est pas fourni, on doit le récupérer
-    let userIdToCheck = currentUserId;
+    // Si l'ID utilisateur est fourni, vérifier directement
+    if (userIdToCheck) {
+      return reactions.some(
+        (reaction: any) =>
+          reaction.emoji_name === emojiName &&
+          reaction.user_id === userIdToCheck,
+      );
+    }
 
-    if (!userIdToCheck && mode === "direct") {
-      // Récupérer l'utilisateur actuel
-      const userResponse = await fetch(`${baseUrl}/api/v4/users/me`, {
-        headers: { ...requestHeaders },
-      });
+    // Sinon, on doit récupérer l'utilisateur courant (fallback)
+    if (mode === "direct" && !userIdToCheck) {
+      try {
+        const userResponse = await fetch(`${baseUrl}/api/v4/users/me`, {
+          headers: {
+            ...requestHeaders,
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      if (userResponse.ok) {
-        const user = await userResponse.json();
-        userIdToCheck = user.id;
+        if (userResponse.ok) {
+          const user = await userResponse.json();
+          // Vérifier avec l'ID utilisateur récupéré
+          return reactions.some(
+            (reaction: any) =>
+              reaction.emoji_name === emojiName && reaction.user_id === user.id,
+          );
+        }
+      } catch (userError) {
+        console.error(
+          "Erreur lors de la récupération de l'utilisateur:",
+          userError,
+        );
       }
     }
 
-    // Vérifier si l'utilisateur a réagi avec cet emoji
-    return reactions.some(
-      (reaction: any) =>
-        reaction.emoji_name === emojiName &&
-        (userIdToCheck ? reaction.user_id === userIdToCheck : true),
-    );
+    // Si on ne peut pas déterminer l'utilisateur, supposer qu'il n'a pas réagi
+    return false;
   } catch (error) {
     console.error(`Erreur lors de la vérification de la réaction:`, error);
     return false;
