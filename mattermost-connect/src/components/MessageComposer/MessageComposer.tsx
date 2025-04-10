@@ -211,16 +211,20 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
                     info.name === status.file.name &&
                     (!info.size || info.size === status.file.size),
                 );
-
+                console.debug("fileInfo", fileInfo);
+                console.debug("status", status);
                 if (
                   fileInfo &&
-                  filesToUpload.some((f) => f.file === status.file)
+                  filesToUpload.some((f) => f.file.name === status.file.name)
                 ) {
                   return {
                     ...status,
                     uploading: false,
                     uploaded: true,
-                    id: fileInfo.id,
+                    file: {
+                      ...status.file,
+                      id: fileInfo.id,
+                    },
                   };
                 }
                 return status;
