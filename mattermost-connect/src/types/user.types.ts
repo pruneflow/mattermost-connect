@@ -9,6 +9,7 @@ export interface User {
   email?: string;
   first_name?: string;
   last_name?: string;
+  nickname?: string;
   roles?: string;
   props?: Record<string, unknown>;
   last_picture_update?: number;

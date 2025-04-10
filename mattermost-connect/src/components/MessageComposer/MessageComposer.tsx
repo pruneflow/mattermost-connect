@@ -46,8 +46,11 @@ export enum MessageComposerMode {
  * File upload status tracking
  */
 interface FileUploadStatus {
+  // The original File object
   file: File;
-  id?: string;
+  // Mattermost file information after successful upload
+  mattermostFile?: MattermostFile;
+  // Upload state
   uploading: boolean;
   uploaded: boolean;
   error?: string;
@@ -153,8 +156,8 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     (status) => status.uploading,
   );
   const uploadedFileIds = attachmentStatus
-    .filter((status) => status.uploaded && status.id)
-    .map((status) => status.id as string);
+    .filter((status) => status.uploaded && status.mattermostFile?.id)
+    .map((status) => status.mattermostFile!.id);
 
   // Focus on the text field when the component is mounted
   useEffect(() => {
@@ -211,20 +214,25 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
                     info.name === status.file.name &&
                     (!info.size || info.size === status.file.size),
                 );
-                console.debug("fileInfo", fileInfo);
-                console.debug("status", status);
+
                 if (
                   fileInfo &&
                   filesToUpload.some((f) => f.file.name === status.file.name)
                 ) {
+                  // Create a MattermostFile object with the server response
+                  const mattermostFile: MattermostFile = {
+                    id: fileInfo.id,
+                    name: fileInfo.name,
+                    type: fileInfo.type || status.file.type,
+                    size: fileInfo.size || status.file.size,
+                    url: fileInfo.url,
+                  };
+
                   return {
                     ...status,
                     uploading: false,
                     uploaded: true,
-                    file: {
-                      ...status.file,
-                      id: fileInfo.id,
-                    },
+                    mattermostFile, // Store the MattermostFile separately
                   };
                 }
                 return status;
@@ -256,6 +264,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       void uploadFiles();
     }
   }, [attachmentStatus, uploadInProgress, service, channelId]);
+
   // Handle file input change
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -419,7 +428,6 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  console.debug("attachmentStatus", attachmentStatus);
   return (
     <Box
       className={className}
@@ -484,7 +492,11 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           {attachmentStatus.map((status, index) => (
             <AttachmentPreview
               key={index}
-              file={status.file}
+              file={
+                status.uploaded && status.mattermostFile
+                  ? status.mattermostFile
+                  : status.file
+              }
               onRemove={() => handleRemoveAttachment(status.file)}
               isUploading={status.uploading}
               isUploaded={status.uploaded}

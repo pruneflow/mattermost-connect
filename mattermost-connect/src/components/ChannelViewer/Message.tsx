@@ -397,28 +397,6 @@ const Message: React.FC<MessageProps> = ({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Indicateur de réponse pour la traçabilité */}
-        {isReplyMessage(message) && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: -22,
-              left: isFromCurrentUser ? "auto" : 20,
-              right: isFromCurrentUser ? 20 : "auto",
-              fontSize: "0.7rem",
-              color: "text.secondary",
-              bgcolor: "background.paper",
-              border: "1px solid",
-              borderColor: "divider",
-              borderRadius: 10,
-              px: 1,
-              py: 0.25,
-            }}
-          >
-            reply
-          </Box>
-        )}
-
         {/* Message header */}
         <Box
           sx={{

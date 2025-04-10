@@ -10,6 +10,8 @@ import {
   Badge,
   SxProps,
   Theme,
+  Typography,
+  Box,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -119,8 +121,19 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
 
       <ListItemText
         primary={
-          <div style={{ display: "flex", alignItems: "center" }}>
-            {channel.display_name}
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <Typography
+              variant="body2"
+              component="span"
+              noWrap
+              sx={{
+                fontWeight: hasUnread || isSelected ? 600 : 400,
+                color:
+                  hasUnread || isSelected ? "text.primary" : "text.secondary",
+              }}
+            >
+              {channel.display_name}
+            </Typography>
 
             {/* Status indicator for direct messages */}
             {isDirectMessage && (
@@ -133,17 +146,21 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
                 }}
               />
             )}
-          </div>
+          </Box>
         }
-        slotProps={{
-          primary: {
-            variant: "body2",
-            component: "div",
-            noWrap: true,
-            fontWeight: hasUnread || isSelected ? 600 : 400,
-            color: hasUnread || isSelected ? "text.primary" : "text.secondary",
-          },
-        }}
+        secondary={
+          // Ajouter cette partie pour afficher des informations supplémentaires pour les messages directs
+          isDirectMessage && channel.purpose ? (
+            <Typography
+              component="span"
+              variant="caption"
+              color="text.secondary"
+              noWrap
+            >
+              {channel.purpose}
+            </Typography>
+          ) : null
+        }
       />
 
       {/* Mention badge */}

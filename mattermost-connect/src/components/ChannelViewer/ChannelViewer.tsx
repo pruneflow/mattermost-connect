@@ -161,9 +161,33 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (autoScrollToBottom && messagesEndRef.current && messages.length > 0) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      // Utilisation d'un court délai pour s'assurer que le rendu est terminé
+      const timer = setTimeout(() => {
+        if (messagesContainerRef.current) {
+          // Défilement complet vers le bas en utilisant scrollHeight
+          messagesContainerRef.current.scrollTop =
+            messagesContainerRef.current.scrollHeight;
+        } else if (messagesEndRef.current) {
+          // Fallback au cas où la référence du conteneur n'est pas disponible
+          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 750);
+
+      return () => clearTimeout(timer);
     }
   }, [messages, autoScrollToBottom]);
+
+  useEffect(() => {
+    if (
+      !loading &&
+      autoScrollToBottom &&
+      messages.length > 0 &&
+      messagesContainerRef.current
+    ) {
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
+    }
+  }, [loading, autoScrollToBottom, messages.length]);
 
   // Load more messages (when scrolling up)
   const loadMoreMessages = async () => {

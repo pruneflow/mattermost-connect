@@ -1,7 +1,7 @@
 // src/components/ChannelList/ChannelList.tsx
 import React, { useState, useEffect, useMemo } from "react";
 import { useMattermost } from "../../context/MattermostProvider";
-import { Channel } from "../../types";
+import { Channel, User } from "../../types";
 
 // Material-UI Components
 import {
@@ -96,11 +96,14 @@ const ChannelList: React.FC<ChannelListProps> = ({
   channelsContainerSx,
 }) => {
   const theme = useTheme();
-  const { service, isConnected } = useMattermost();
+  const { service, isConnected, currentUser } = useMattermost();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [directMessageUsers, setDirectMessageUsers] = useState<
+    Record<string, User>
+  >({});
 
   // State for collapsible sections
   const [openSections, setOpenSections] = useState<{
@@ -112,6 +115,36 @@ const ChannelList: React.FC<ChannelListProps> = ({
     private: true,
     direct: true,
   });
+
+  const getChannelDisplayName = (channel: Channel): string => {
+    // Pour les canaux normaux, utiliser le nom d'affichage standard
+    if (channel.type !== "D" && channel.type !== "G") {
+      return channel.display_name;
+    }
+
+    // Pour les canaux directs, essayer de déterminer avec qui l'utilisateur discute
+    if (channel.name && channel.name.includes("__") && currentUser) {
+      const parts = channel.name.split("__");
+
+      // Trouver l'ID qui n'est pas celui de l'utilisateur actuel
+      const otherUserId = parts.find((id) => id !== currentUser.id);
+
+      if (otherUserId && directMessageUsers[otherUserId]) {
+        const otherUser = directMessageUsers[otherUserId];
+        // Construire un nom d'affichage basé sur les informations de l'utilisateur
+        if (otherUser.first_name && otherUser.last_name) {
+          return `${otherUser.first_name} ${otherUser.last_name}`;
+        } else {
+          return (
+            otherUser.nickname || otherUser.username || channel.display_name
+          );
+        }
+      }
+    }
+
+    // Fallback sur le nom d'affichage par défaut
+    return channel.display_name;
+  };
 
   // Load channels when teamId changes
   useEffect(() => {
@@ -168,6 +201,54 @@ const ChannelList: React.FC<ChannelListProps> = ({
       return true;
     });
   }, [channels, showPrivateChannels, showDirectMessages, searchQuery]);
+
+  useEffect(() => {
+    if (!isConnected || !filteredChannels || !service?.getUsers) return;
+
+    const loadDirectMessageUsers = async () => {
+      // Identifier les canaux directs
+      const directChannels = filteredChannels.filter(
+        (c) => c.type === "D" || c.type === "G",
+      );
+
+      if (directChannels.length === 0) return;
+
+      try {
+        // Collecter tous les IDs utilisateurs depuis les noms des canaux
+        const userIds: string[] = [];
+
+        directChannels.forEach((channel) => {
+          // Dans Mattermost, les canaux directs ont généralement un nom au format "user1__user2"
+          if (channel.name && channel.name.includes("__")) {
+            const parts = channel.name.split("__");
+            // Ajouter les deux parties (qui sont généralement des IDs utilisateurs)
+            parts.forEach((part) => {
+              if (!userIds.includes(part)) {
+                userIds.push(part);
+              }
+            });
+          }
+        });
+
+        if (userIds.length === 0) return;
+
+        // Charger les informations des utilisateurs
+        const users = await service.getUsers({ ids: userIds });
+
+        // Construire un dictionnaire des utilisateurs
+        const usersMap: Record<string, User> = {};
+        users.forEach((user) => {
+          usersMap[user.id] = user;
+        });
+
+        setDirectMessageUsers(usersMap);
+      } catch (err) {
+        console.error("Error loading direct message users:", err);
+      }
+    };
+
+    void loadDirectMessageUsers();
+  }, [isConnected, filteredChannels, service]);
 
   // Group channels by type if requested
   const groupedChannels = useMemo(() => {
@@ -261,7 +342,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
             {channelsList.map((channel) => (
               <ChannelItem
                 key={channel.id}
-                channel={channel}
+                channel={{
+                  ...channel,
+                  display_name: getChannelDisplayName(channel),
+                }}
                 isSelected={channel.id === selectedChannelId}
                 onClick={() => onSelectChannel && onSelectChannel(channel)}
               />
