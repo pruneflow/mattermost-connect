@@ -1,518 +1,463 @@
-import React, { useState, useRef } from "react";
+// src/components/ChannelViewer/ChannelViewer.tsx
+import React, { useState, useEffect, useRef } from "react";
+import { useMattermost } from "../../context/MattermostProvider";
+import { Channel, Message as MessageType, User } from "../../types";
+
+// Material-UI Components
 import {
   Box,
-  TextField,
-  IconButton,
-  Tooltip,
-  Popover,
-  InputAdornment,
-  Collapse,
+  Typography,
+  Button,
   Divider,
-  useMediaQuery,
-  useTheme,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
+  CircularProgress,
+  Skeleton,
+  Alert,
+  SxProps,
+  Theme,
+  Paper,
+  IconButton,
 } from "@mui/material";
 
 // Material-UI Icons
 import {
-  Send as SendIcon,
-  FormatBold as BoldIcon,
-  FormatItalic as ItalicIcon,
-  FormatStrikethrough as StrikethroughIcon,
-  TextFormat as HeadingIcon,
-  Link as LinkIcon,
-  Code as CodeIcon,
-  FormatQuote as QuoteIcon,
-  AttachFile as AttachmentIcon,
-  EmojiEmotions as EmojiIcon,
-  Visibility as ShowFormattingIcon,
-  VisibilityOff as HideFormattingIcon,
-  MoreHoriz as MoreIcon,
+  ExpandMore as ExpandMoreIcon,
+  Info as InfoIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 
-import { EmojiPicker, PickerMode, EmojiSelectionResult } from "../EmojiPicker";
-import { EmojiProvider } from "../../context/EmojiProvider";
+// Related components
+import Message from "./Message";
+import ChannelHeader from "./ChannelHeader";
+import MessageComposer from "../MessageComposer/MessageComposer";
 
 /**
- * Formateur de texte pour représenter les outils de formatage
+ * Props for the ChannelViewer component
  */
-interface FormatOption {
-  label: string;
-  icon: React.ReactNode;
-  action: () => void;
-}
-
-/**
- * Props pour le composant MessageComposer
- */
-export interface MessageComposerProps {
-  /** ID du canal pour envoyer des messages */
+export interface ChannelViewerProps {
+  /** Channel ID to display */
   channelId?: string;
 
-  /** Texte de placeholder pour l'input */
-  placeholder?: string;
+  /** Whether the channel is read-only */
+  readOnly?: boolean;
 
-  /** Autoriser les pièces jointes */
-  allowAttachments?: boolean;
+  /** Whether to show the channel header */
+  showHeader?: boolean;
 
-  /** Callback quand un message est envoyé */
-  onMessageSent?: (message: string) => void;
+  /** Number of messages to load at once */
+  loadMessageCount?: number;
 
-  /** Texte initial du message */
-  initialText?: string;
+  /** Whether to auto-scroll to bottom on new messages */
+  autoScrollToBottom?: boolean;
 
-  /** Désactiver le composant */
-  disabled?: boolean;
+  /** Custom message renderer */
+  messageRenderer?: (props: {
+    message: MessageType;
+    author: User | null;
+    formattedText: string;
+  }) => React.ReactNode;
 
-  /** Styles personnalisés */
-  sx?: React.CSSProperties;
+  /** Additional CSS class */
+  className?: string;
+
+  /** Additional inline style */
+  style?: React.CSSProperties;
+
+  /** Material-UI sx prop for additional styling */
+  sx?: SxProps<Theme>;
+
+  /** Styling for the header */
+  headerSx?: SxProps<Theme>;
+
+  /** Styling for the messages container */
+  messagesContainerSx?: SxProps<Theme>;
+
+  /** Custom message component props */
+  messageProps?: Partial<React.ComponentProps<typeof Message>>;
+
+  /** Current user ID (used to determine message ownership) */
+  currentUserId?: string;
+
+  /** Flag indicating if the component should render its own message composer
+   * If false, it's expected that a parent component will render MessageComposer
+   */
+  showMessageComposer?: boolean;
 }
 
 /**
- * Composant pour composer et envoyer des messages
- * Interface fluide avec contrôles intégrés au bas de la zone de saisie
- * Adaptation responsive pour mobile et desktop
+ * A component that displays messages from a Mattermost channel
  */
-const MessageComposer: React.FC<MessageComposerProps> = ({
+const ChannelViewer: React.FC<ChannelViewerProps> = ({
   channelId,
-  placeholder = "Type a message...",
-  allowAttachments = true,
-  onMessageSent,
-  initialText = "",
-  disabled = false,
+  readOnly = false,
+  showHeader = true,
+  loadMessageCount = 50,
+  autoScrollToBottom = true,
+  messageRenderer,
+  className,
+  style,
   sx,
+  headerSx,
+  messagesContainerSx,
+  messageProps,
+  currentUserId,
+  showMessageComposer = false, // Par défaut, ne pas montrer le message composer interne
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isConnected, service, currentUser } = useMattermost();
+  const [channel, setChannel] = useState<Channel | null>(null);
+  const [messages, setMessages] = useState<MessageType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
-  // État pour le message, la visibilité du formatting, et l'ancre des emojis
-  const [message, setMessage] = useState(initialText);
-  const [showFormatting, setShowFormatting] = useState(false);
-  const [moreMenuAnchorEl, setMoreMenuAnchorEl] = useState<HTMLElement | null>(
-    null,
-  );
-  const textFieldRef = useRef<HTMLTextAreaElement>(null);
+  // État pour la gestion des réponses
+  const [replyTo, setReplyTo] = useState<MessageType | null>(null);
 
-  // Ancre pour le popover d'emoji
-  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Gestionnaire pour ouvrir le popover
-  const handleEmojiButtonClick = (event: React.MouseEvent<HTMLElement>) => {
-    setEmojiAnchorEl(event.currentTarget);
-  };
+  // User ID to use (from props or from context)
+  const userIdToUse = currentUserId || currentUser?.id;
 
-  // Gestionnaire pour fermer le popover
-  const handleCloseEmojiPicker = () => {
-    setEmojiAnchorEl(null);
-  };
+  // Load channel information
+  useEffect(() => {
+    if (!isConnected || !channelId) return;
 
-  // Gestionnaire pour la sélection d'emoji
-  const handleEmojiSelect = (result: EmojiSelectionResult) => {
-    if (!textFieldRef.current) return;
+    const fetchChannel = async () => {
+      try {
+        const channelData = await service.getChannel(channelId);
+        setChannel(channelData);
+        setError(null);
+      } catch (err) {
+        console.error("Error loading channel:", err);
+        setError(err instanceof Error ? err.message : "Failed to load channel");
+      }
+    };
 
-    const input = textFieldRef.current;
-    const start = input.selectionStart || 0;
+    void fetchChannel();
+  }, [isConnected, channelId, service]);
 
-    if (result.type === "emoji") {
-      // Insérer l'emoji à la position du curseur
-      const newMessage =
-        message.substring(0, start) + result.emoji + message.substring(start);
+  // Load messages
+  useEffect(() => {
+    if (!isConnected || !channelId) return;
 
-      setMessage(newMessage);
+    const fetchMessages = async () => {
+      setLoading(true);
+      try {
+        const response = await service.getChannelMessages(channelId, {
+          perPage: loadMessageCount,
+        });
 
-      // Repositionner le curseur
-      setTimeout(() => {
-        input.focus();
-        input.setSelectionRange(
-          start + result.emoji.length,
-          start + result.emoji.length,
+        // Convert posts object to array and sort by creation time
+        const postsArray = Object.values(response.posts || {});
+        const sortedPosts = postsArray.sort(
+          (a, b) => a.create_at - b.create_at,
         );
-      }, 0);
-    } else if (result.type === "gif" && result.gifUrl) {
-      // Pour les GIFs, on pourrait insérer une référence ou un placeholder
-      // En fonction de la façon dont l'application gère les GIFs
-      const gifPlaceholder = `[GIF: ${result.gifId}]`;
-      const newMessage =
-        message.substring(0, start) + gifPlaceholder + message.substring(start);
 
-      setMessage(newMessage);
-
-      // Stocker les métadonnées du GIF séparément si nécessaire
-      // setAttachments([...attachments, { type: 'gif', id: result.gifId, url: result.gifUrl }]);
-    }
-
-    handleCloseEmojiPicker();
-  };
-
-  /**
-   * Applique un format de texte (gras, italique, etc.)
-   * @param prefix Préfixe du format
-   * @param suffix Suffixe optionnel du format
-   */
-  const applyFormat = (prefix: string, suffix?: string) => {
-    if (!textFieldRef.current) return;
-
-    const input = textFieldRef.current;
-    const start = input.selectionStart || 0;
-    const end = input.selectionEnd || 0;
-    const selectedText = message.substring(start, end);
-
-    // Si du texte est sélectionné, l'entourer du format
-    if (selectedText) {
-      const formattedText = prefix + selectedText + (suffix || prefix);
-      const newMessage =
-        message.substring(0, start) + formattedText + message.substring(end);
-
-      setMessage(newMessage);
-
-      // Repositionner le curseur
-      setTimeout(() => {
-        input.focus();
-        input.setSelectionRange(
-          start + prefix.length,
-          start + prefix.length + selectedText.length,
+        setMessages(sortedPosts);
+        setHasMoreMessages(sortedPosts.length >= loadMessageCount);
+        setError(null);
+      } catch (err) {
+        console.error("Error loading messages:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to load messages",
         );
-      }, 0);
-    } else {
-      // Insérer le format à la position du curseur
-      const newMessage =
-        message.substring(0, start) +
-        prefix +
-        (suffix || "") +
-        message.substring(start);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      setMessage(newMessage);
+    void fetchMessages();
+  }, [isConnected, channelId, service, loadMessageCount]);
 
-      // Positionner le curseur
-      setTimeout(() => {
-        input.focus();
-        input.setSelectionRange(start + prefix.length, start + prefix.length);
-      }, 0);
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (autoScrollToBottom && messagesEndRef.current && messages.length > 0) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
+  }, [messages, autoScrollToBottom]);
 
-    // Fermer le menu "more" si ouvert
-    if (moreMenuAnchorEl) {
-      setMoreMenuAnchorEl(null);
+  // Load more messages (when scrolling up)
+  const loadMoreMessages = async () => {
+    if (loadingMore || !isConnected || !channelId || messages.length === 0)
+      return;
+
+    setLoadingMore(true);
+    try {
+      // Get messages before the first displayed message
+      const firstMessage = messages[0];
+
+      const response = await service.getChannelMessages(channelId, {
+        perPage: loadMessageCount,
+        before: firstMessage.id,
+      });
+
+      // Convert and sort the new messages
+      const newPostsArray = Object.values(response.posts || {});
+      const sortedNewPosts = newPostsArray.sort(
+        (a, b) => a.create_at - b.create_at,
+      );
+
+      // Update state with new messages
+      setMessages([...sortedNewPosts, ...messages]);
+      setHasMoreMessages(sortedNewPosts.length >= loadMessageCount);
+    } catch (err) {
+      console.error("Error loading more messages:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load more messages",
+      );
+    } finally {
+      setLoadingMore(false);
     }
   };
 
-  /**
-   * Envoie le message
-   */
-  const sendMessage = () => {
-    if (!message.trim()) return;
-
-    onMessageSent?.(message);
-    setMessage("");
+  // Gestionnaire pour les réponses aux messages
+  const handleReply = (messageToReply: MessageType) => {
+    setReplyTo(messageToReply);
+    // Mise au point sur le MessageComposer si nécessaire
+    setTimeout(() => {
+      const composerInput = document.querySelector(".message-composer-input");
+      if (composerInput) {
+        (composerInput as HTMLElement).focus();
+      }
+    }, 100);
   };
 
-  // Définir toutes les options de formatage
-  const formatOptions: FormatOption[] = [
-    {
-      label: "Gras",
-      icon: <BoldIcon fontSize="small" />,
-      action: () => applyFormat("**"),
-    },
-    {
-      label: "Italique",
-      icon: <ItalicIcon fontSize="small" />,
-      action: () => applyFormat("*"),
-    },
-    {
-      label: "Barré",
-      icon: <StrikethroughIcon fontSize="small" />,
-      action: () => applyFormat("~~"),
-    },
-    {
-      label: "Titre",
-      icon: <HeadingIcon fontSize="small" />,
-      action: () => applyFormat("## "),
-    },
-    {
-      label: "Lien",
-      icon: <LinkIcon fontSize="small" />,
-      action: () => applyFormat("[", "](url)"),
-    },
-    {
-      label: "Code",
-      icon: <CodeIcon fontSize="small" />,
-      action: () => applyFormat("`"),
-    },
-    {
-      label: "Bloc de code",
-      icon: <CodeIcon fontSize="small" />,
-      action: () => applyFormat("```\n", "\n```"),
-    },
-    {
-      label: "Citation",
-      icon: <QuoteIcon fontSize="small" />,
-      action: () => applyFormat("> "),
-    },
-  ];
+  // Gestionnaire pour l'envoi d'une réponse
+  const handleSendReply = async (responseText: string) => {
+    if (!replyTo || !channelId) return;
 
-  // Sur mobile, on n'affiche que les 4 premières options
-  const primaryOptions = formatOptions.slice(0, 4);
-  const secondaryOptions = formatOptions.slice(4);
+    try {
+      // Utiliser la nouvelle méthode de réponse si disponible
+      if (service.replyToMessage) {
+        await service.replyToMessage(channelId, replyTo.id, responseText);
+      } else {
+        // Sinon, utiliser postMessage avec des propriétés personnalisées
+        await service.postMessage(channelId, responseText);
+      }
 
-  // Boutons d'action principaux (formatage, pièces jointes, emoji, envoi)
-  const actionBar = (
-    <Box sx={{ display: "flex", alignItems: "center" }}>
-      <Tooltip
-        title={
-          showFormatting ? "Masquer le formatage" : "Afficher le formatage"
-        }
-      >
-        <IconButton
-          size="small"
-          onClick={() => setShowFormatting(!showFormatting)}
-        >
-          {showFormatting ? (
-            <HideFormattingIcon fontSize="small" />
-          ) : (
-            <ShowFormattingIcon fontSize="small" />
-          )}
-        </IconButton>
-      </Tooltip>
+      // Rafraîchir les messages après l'envoi
+      const response = await service.getChannelMessages(channelId, {
+        perPage: loadMessageCount,
+      });
 
-      {allowAttachments && (
-        <Tooltip title="Ajouter des fichiers">
-          <IconButton size="small">
-            <AttachmentIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      )}
+      const postsArray = Object.values(response.posts || {});
+      const sortedPosts = postsArray.sort((a, b) => a.create_at - b.create_at);
 
-      <Tooltip title="Ajouter un emoji">
-        <IconButton size="small" onClick={handleEmojiButtonClick}>
-          <EmojiIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
+      setMessages(sortedPosts);
 
-      <Tooltip title="Envoyer">
-        <span>
-          <IconButton
-            size="small"
-            color="primary"
-            onClick={sendMessage}
-            disabled={!message.trim() || disabled}
-            sx={{ ml: 0.5 }}
-          >
-            <SendIcon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
+      // Réinitialiser l'état de réponse
+      setReplyTo(null);
+    } catch (error) {
+      console.error("Error sending reply:", error);
+      setError("Failed to send reply. Please try again.");
+    }
+  };
+
+  // Gestionnaire pour l'édition d'un message
+  const handleEditMessage = async (messageToEdit: MessageType) => {
+    // Cette fonctionnalité serait implémentée dans une interface dédiée
+    console.log("Editing message:", messageToEdit);
+    // Vous pourriez ouvrir un dialogue ou modifier le message sur place
+  };
+
+  // Gestionnaire pour la suppression d'un message
+  const handleDeleteMessage = async (messageToDelete: MessageType) => {
+    if (!service.deleteMessage) {
+      console.error("Delete message functionality not available");
+      return;
+    }
+
+    try {
+      await service.deleteMessage(messageToDelete.id);
+
+      // Mettre à jour la liste des messages en retirant le message supprimé
+      setMessages(messages.filter((msg) => msg.id !== messageToDelete.id));
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      setError("Failed to delete message. Please try again.");
+    }
+  };
+
+  // Annuler la réponse
+  const cancelReply = () => {
+    setReplyTo(null);
+  };
+
+  // Render loading skeletons
+  const renderSkeletons = () => (
+    <Box sx={{ p: 2 }}>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <Box key={index} sx={{ display: "flex", mb: 2 }}>
+          <Skeleton variant="circular" width={40} height={40} sx={{ mr: 2 }} />
+          <Box sx={{ width: "100%" }}>
+            <Skeleton variant="text" width={120} height={24} />
+            <Skeleton
+              variant="rectangular"
+              height={40}
+              width={`${Math.random() * 50 + 30}%`}
+              sx={{ mt: 1 }}
+            />
+          </Box>
+        </Box>
+      ))}
     </Box>
   );
 
   return (
     <Box
+      className={className}
+      style={style}
       sx={{
         display: "flex",
         flexDirection: "column",
-        bgcolor: "background.paper",
-        ...(!isMobile
-          ? {
-              m: 1,
-              position: "relative",
-            }
-          : {
-              position: "fixed", // Changement de sticky à fixed
-              bottom: 0,
-              left: 0,
-              right: 0,
-              width: "100%",
-              borderTop: "1px solid",
-              borderColor: "divider",
-              zIndex: 1200, // Augmenter le z-index pour s'assurer qu'il est au-dessus des autres éléments
-              boxShadow: "0 -2px 10px rgba(0, 0, 0, 0.05)", // Ajouter une ombre légère
-            }),
+        height: "100%",
+        bgcolor: "background.default",
         ...sx,
       }}
     >
+      {/* Channel header */}
+      {showHeader && channel && (
+        <ChannelHeader channel={channel} sx={headerSx} />
+      )}
+
+      <Divider />
+
+      {/* Messages area */}
       <Box
+        ref={messagesContainerRef}
         sx={{
+          flexGrow: 1,
+          overflow: "auto",
           display: "flex",
           flexDirection: "column",
-          ...(isMobile
-            ? {
-                borderRadius: 0,
-                px: 1, // Ajouter un peu de padding horizontal
-                py: 1, // Ajouter un peu de padding vertical
-              }
-            : {
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: "4px",
-                overflow: "hidden",
-              }),
+          p: 2,
+          ...messagesContainerSx,
         }}
       >
-        <TextField
-          inputRef={textFieldRef}
-          multiline
-          minRows={1}
-          maxRows={isMobile ? 3 : 4}
-          fullWidth
-          variant="outlined"
-          placeholder={placeholder}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          disabled={disabled}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              padding: "8px 12px",
-              "& fieldset": {
-                border: "none",
-              },
-              "&.Mui-focused fieldset": {
-                border: "none",
-              },
-              "&:hover fieldset": {
-                border: "none",
-              },
-            },
-          }}
-          slotProps={{
-            input: {
-              endAdornment: !showFormatting && (
-                <InputAdornment position="end">{actionBar}</InputAdornment>
-              ),
-            },
-          }}
-        />
-
-        {/* Barre de formatage pour desktop (cachée sur mobile) */}
-        {!isMobile && (
-          <Collapse in={showFormatting}>
-            <Box
-              sx={{
-                borderTop: "1px solid",
-                borderColor: "divider",
-                bgcolor: "background.paper",
-              }}
-            >
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  p: 1,
-                }}
-              >
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  {formatOptions.map((option, index) => (
-                    <React.Fragment key={option.label}>
-                      <Tooltip title={option.label}>
-                        <IconButton size="small" onClick={option.action}>
-                          {option.icon}
-                        </IconButton>
-                      </Tooltip>
-                      {index === 3 && (
-                        <Divider
-                          orientation="vertical"
-                          flexItem
-                          sx={{ mx: 0.5, height: 20 }}
-                        />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </Box>
-
-                {/* Actions à droite */}
-                {actionBar}
-              </Box>
-            </Box>
-          </Collapse>
-        )}
-
-        {/* Barre de formatage pour mobile (toujours visible si le formatage est activé) */}
-        {isMobile && showFormatting && (
+        {/* Loading state */}
+        {loading ? (
+          renderSkeletons()
+        ) : error ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        ) : messages.length === 0 ? (
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
-              p: 1,
-              borderTop: "1px solid",
-              borderColor: "divider",
-              bgcolor: "background.paper",
+              justifyContent: "center",
+              height: "100%",
+              flexDirection: "column",
+              color: "text.secondary",
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              {/* Afficher seulement les 4 premiers outils de formatage sur mobile */}
-              {primaryOptions.map((option) => (
-                <Tooltip key={option.label} title={option.label}>
-                  <IconButton size="small" onClick={option.action}>
-                    {option.icon}
-                  </IconButton>
-                </Tooltip>
-              ))}
-
-              {/* Bouton "Plus" pour afficher les outils restants */}
-              <Tooltip title="Plus d'options">
-                <IconButton
-                  size="small"
-                  onClick={(e) => setMoreMenuAnchorEl(e.currentTarget)}
-                >
-                  <MoreIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-
-            {/* Bouton pour masquer la barre de formatage sur mobile */}
-            {actionBar}
+            <InfoIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+            <Typography component={"div"} variant="body1">
+              No messages in this channel
+            </Typography>
+            <Typography component={"div"} variant="body2" sx={{ mt: 1 }}>
+              Be the first to start a conversation!
+            </Typography>
           </Box>
+        ) : (
+          // Messages list
+          <>
+            {/* Load more button */}
+            {hasMoreMessages && (
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  mb: 2,
+                }}
+              >
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={loadMoreMessages}
+                  disabled={loadingMore}
+                  startIcon={
+                    loadingMore ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <ExpandMoreIcon />
+                    )
+                  }
+                >
+                  {loadingMore ? "Loading..." : "Load more messages"}
+                </Button>
+              </Box>
+            )}
+
+            {/* Message list */}
+            <Box sx={{ flexGrow: 1 }}>
+              {messages.map((message) => (
+                <Message
+                  key={message.id}
+                  message={message}
+                  renderer={messageRenderer}
+                  isFromCurrentUser={message.user_id === userIdToUse}
+                  showActions={!readOnly}
+                  onReply={handleReply}
+                  onEdit={handleEditMessage}
+                  onDelete={handleDeleteMessage}
+                  {...messageProps}
+                />
+              ))}
+              <div ref={messagesEndRef} />
+            </Box>
+          </>
         )}
       </Box>
 
-      {/* Popover pour le sélecteur d'emojis avec Provider */}
-      <Popover
-        open={Boolean(emojiAnchorEl)}
-        anchorEl={emojiAnchorEl}
-        onClose={handleCloseEmojiPicker}
-        anchorOrigin={{
-          vertical: "top",
-          horizontal: "right",
-        }}
-        transformOrigin={{
-          vertical: "bottom",
-          horizontal: "right",
-        }}
-      >
-        <EmojiProvider>
-          <EmojiPicker
-            onSelect={handleEmojiSelect}
-            onClose={handleCloseEmojiPicker}
-            mode={PickerMode.MESSAGE}
-            channelId={channelId}
-          />
-        </EmojiProvider>
-      </Popover>
+      {/* Message composer with reply context - only shown if showMessageComposer is true */}
+      {showMessageComposer && !readOnly && channelId && (
+        <Box sx={{ position: "relative" }}>
+          {/* Reply context notification */}
+          {replyTo && (
+            <Paper
+              elevation={0}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                p: 1,
+                borderTop: "1px solid",
+                borderColor: "divider",
+                bgcolor: "action.hover",
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <Typography component={"div"} variant="body2" sx={{ ml: 1 }}>
+                  Replying to:{" "}
+                  <strong>
+                    {replyTo.message.length > 50
+                      ? replyTo.message.substring(0, 50) + "..."
+                      : replyTo.message}
+                  </strong>
+                </Typography>
+              </Box>
+              <IconButton size="small" onClick={cancelReply}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Paper>
+          )}
 
-      {/* Menu pour les options de formatage supplémentaires sur mobile */}
-      <Menu
-        anchorEl={moreMenuAnchorEl}
-        open={Boolean(moreMenuAnchorEl)}
-        onClose={() => setMoreMenuAnchorEl(null)}
-      >
-        {secondaryOptions.map((option) => (
-          <MenuItem key={option.label} onClick={option.action}>
-            <ListItemIcon>{option.icon}</ListItemIcon>
-            <ListItemText primary={option.label} />
-          </MenuItem>
-        ))}
-      </Menu>
+          {/* Composer component */}
+          <MessageComposer
+            channelId={channelId}
+            placeholder={replyTo ? "Type your reply..." : "Type a message..."}
+            allowAttachments={true}
+            initialText=""
+            className="message-composer-input"
+            onMessageSent={replyTo ? handleSendReply : undefined}
+          />
+        </Box>
+      )}
     </Box>
   );
 };
 
-export default MessageComposer;
+export default ChannelViewer;

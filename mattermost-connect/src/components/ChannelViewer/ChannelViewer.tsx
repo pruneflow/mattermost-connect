@@ -92,7 +92,8 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   messageProps,
   currentUserId,
 }) => {
-  const { isConnected, service, currentUser } = useMattermost();
+  const { isConnected, service, currentUser, setReplyTo } = useMattermost();
+
   const [channel, setChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,6 +196,63 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       );
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  // Gestionnaire pour les réponses aux messages
+  const handleReply = (messageToReply: MessageType) => {
+    // Utiliser le contexte central pour définir le message de réponse
+    setReplyTo(messageToReply);
+
+    // Mise au point sur le MessageComposer si nécessaire
+    setTimeout(() => {
+      const composerInput = document.querySelector(".message-composer-input");
+      if (composerInput) {
+        (composerInput as HTMLElement).focus();
+      }
+    }, 100);
+  };
+
+  // Gestionnaire pour l'édition d'un message
+  const handleEditMessage = async (messageToEdit: MessageType) => {
+    if (!service.editMessage) {
+      console.error("Edit message functionality not available");
+      return;
+    }
+
+    try {
+      // Pour l'instant, cette fonction pourrait ouvrir une boîte de dialogue d'édition
+      // Ou implémenter l'édition en ligne
+      console.log("Editing message:", messageToEdit);
+
+      // Dans une implémentation complète, vous pourriez:
+      // 1. Ouvrir une boîte de dialogue avec le texte actuel
+      // 2. Permettre à l'utilisateur de modifier le texte
+      // 3. Envoyer la mise à jour via l'API
+      // const updatedMessage = await service.editMessage(messageToEdit.id, newText);
+
+      // 4. Mettre à jour l'état local des messages
+      // setMessages(messages.map(msg => msg.id === updatedMessage.id ? updatedMessage : msg));
+    } catch (error) {
+      console.error("Error editing message:", error);
+    }
+  };
+
+  // Gestionnaire pour la suppression d'un message
+  const handleDeleteMessage = async (messageToDelete: MessageType) => {
+    if (!service.deleteMessage) {
+      console.error("Delete message functionality not available");
+      return;
+    }
+
+    try {
+      await service.deleteMessage(messageToDelete.id);
+
+      // Mettre à jour la liste des messages en retirant le message supprimé
+      setMessages(messages.filter((msg) => msg.id !== messageToDelete.id));
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      setError("Failed to delete message. Please try again.");
     }
   };
 
@@ -314,6 +372,9 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
                   renderer={messageRenderer}
                   isFromCurrentUser={message.user_id === userIdToUse}
                   showActions={!readOnly}
+                  onReply={handleReply}
+                  onEdit={handleEditMessage}
+                  onDelete={handleDeleteMessage}
                   {...messageProps}
                 />
               ))}

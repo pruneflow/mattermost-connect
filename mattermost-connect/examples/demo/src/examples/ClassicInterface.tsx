@@ -56,6 +56,7 @@ const ClassicInterface: React.FC = () => {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [replyTo, setReplyTo] = useState<any | null>(null);
 
   // Height for spacing below the chat to accommodate the fixed MessageComposer on mobile
   const messageComposerHeight = isMobile ? 64 : 0; // Hauteur estimée du MessageComposer
@@ -117,6 +118,24 @@ const ClassicInterface: React.FC = () => {
 
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
+  };
+
+  // Handler for sending messages
+  const handleSendMessage = async (message: string) => {
+    if (!selectedChannel) return;
+
+    try {
+      // Post the message to the selected channel
+      const response = await service.postMessage(selectedChannel.id, message);
+      console.log("Message sent:", response);
+
+      // Clear reply state if any
+      if (replyTo) {
+        setReplyTo(null);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   };
 
   if (error) {
@@ -218,6 +237,8 @@ const ClassicInterface: React.FC = () => {
                   showHeader={false} // We already show the header in the app bar
                   autoScrollToBottom
                   sx={{ height: "100%" }}
+                  // Ne pas afficher son propre message composer
+                  showMessageComposer={false}
                 />
               </Box>
 
@@ -225,7 +246,7 @@ const ClassicInterface: React.FC = () => {
                 channelId={selectedChannel.id}
                 placeholder={`Message ${selectedChannel.display_name}`}
                 allowAttachments
-                showSendButton
+                onMessageSent={handleSendMessage}
               />
             </>
           ) : (
@@ -420,6 +441,8 @@ const ClassicInterface: React.FC = () => {
                   showHeader
                   autoScrollToBottom
                   sx={{ height: "100%" }}
+                  // Ne pas afficher son propre message composer
+                  showMessageComposer={false}
                 />
               </Box>
 
@@ -428,7 +451,7 @@ const ClassicInterface: React.FC = () => {
                   channelId={selectedChannel.id}
                   placeholder={`Message ${selectedChannel.display_name}`}
                   allowAttachments
-                  showSendButton
+                  onMessageSent={handleSendMessage}
                 />
               </Box>
             </>

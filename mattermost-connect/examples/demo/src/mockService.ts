@@ -514,6 +514,56 @@ const createMockService = (): MattermostService => {
       return { ...foundChannel };
     },
 
+    editMessage: async (messageId: string, newMessage: string) => {
+      // Simuler la modification d'un message
+      console.log(
+        `Mock: Message ${messageId} modifié avec le texte:`,
+        newMessage,
+      );
+
+      return {
+        id: messageId,
+        user_id: "user1",
+        channel_id: "channel1",
+        message: newMessage,
+        create_at: Date.now() - 1000 * 60 * 5, // Conserver l'horodatage de création
+        update_at: Date.now(), // Mettre à jour l'horodatage de modification
+      };
+    },
+
+    deleteMessage: async (messageId: string) => {
+      // Simuler la suppression d'un message
+      console.log(`Mock: Message ${messageId} supprimé`);
+
+      return { success: true };
+    },
+
+    replyToMessage: async (
+      channelId: string,
+      messageId: string,
+      responseMessage: string,
+    ) => {
+      // Simuler la réponse à un message
+      console.log(
+        `Mock: Réponse au message ${messageId} dans le canal ${channelId}:`,
+        responseMessage,
+      );
+
+      return {
+        id: `post-reply-${Date.now()}`,
+        user_id: "user1",
+        channel_id: channelId,
+        message: responseMessage,
+        create_at: Date.now(),
+        update_at: Date.now(),
+        // Propriétés spécifiques à la réponse
+        root_id: messageId,
+        props: {
+          quoted_message_id: messageId,
+        },
+      };
+    },
+
     // Messages management
     getChannelMessages: async (
       channelId: string,

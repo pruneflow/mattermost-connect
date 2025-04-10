@@ -5,6 +5,7 @@ import React, {
   useState,
   useEffect,
   useMemo,
+  useCallback,
   ReactNode,
 } from "react";
 import { createMattermostService } from "../services";
@@ -13,6 +14,7 @@ import type {
   ProviderConfig,
   MattermostService,
   WebSocketConnection,
+  Message,
 } from "../types";
 import { setupWebsocket } from "../services/websocket.service";
 import { DirectService } from "../services/direct.service";
@@ -40,6 +42,18 @@ export interface MattermostContextType {
 
   /** Instance de connexion WebSocket */
   websocket: WebSocketConnection | null;
+
+  /** Message en cours de réponse (null si aucun) */
+  replyTo: Message | null;
+
+  /** Fonction pour définir le message en cours de réponse */
+  setReplyTo: (message: Message | null) => void;
+
+  /** Fonction pour effacer la réponse en cours */
+  clearReply: () => void;
+
+  /** Si l'utilisateur est en train de répondre à un message */
+  isReplying: boolean;
 }
 
 // Créer le contexte
@@ -97,6 +111,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   const [websocket, setWebsocket] = useState<WebSocketConnection | null>(null);
   const [service, setService] = useState<MattermostService | null>(null);
 
+  // État pour la fonctionnalité de réponse
+  const [replyTo, setReplyToState] = useState<Message | null>(null);
+
   // Déterminer le mode en fonction des props fournies
   const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
     if (serviceProvider) return "custom";
@@ -104,6 +121,19 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     if (proxyUrl && clientId) return "proxy";
     return null;
   }, [serviceProvider, serverUrl, token, proxyUrl, clientId]);
+
+  // Fonction pour définir le message en cours de réponse
+  const setReplyTo = useCallback((message: Message | null) => {
+    setReplyToState(message);
+  }, []);
+
+  // Fonction pour effacer la réponse en cours
+  const clearReply = useCallback(() => {
+    setReplyToState(null);
+  }, []);
+
+  // Si l'utilisateur est en train de répondre
+  const isReplying = replyTo !== null;
 
   // Initialiser le service approprié en fonction du mode
   useEffect(() => {
@@ -261,6 +291,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     currentUser,
     service,
     websocket,
+
+    // Fonctionnalités de réponse
+    replyTo,
+    setReplyTo,
+    clearReply,
+    isReplying,
   };
 
   return (

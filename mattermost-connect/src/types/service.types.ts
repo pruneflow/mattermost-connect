@@ -87,6 +87,34 @@ export interface MattermostService {
   ): Promise<MessagesResponse>;
   postMessage(channelId: string, message: string): Promise<Message>;
 
+  /**
+   * Modifie un message existant
+   * @param messageId ID du message à modifier
+   * @param newMessage Nouveau texte du message
+   * @returns Message mis à jour
+   */
+  editMessage?(messageId: string, newMessage: string): Promise<Message>;
+
+  /**
+   * Supprime un message
+   * @param messageId ID du message à supprimer
+   * @returns Statut de suppression
+   */
+  deleteMessage?(messageId: string): Promise<{ success: boolean }>;
+
+  /**
+   * Répond à un message (avec citation)
+   * @param channelId ID du canal où se trouve le message
+   * @param messageId ID du message auquel répondre
+   * @param responseMessage Texte de la réponse
+   * @returns Message de réponse créé
+   */
+  replyToMessage?(
+    channelId: string,
+    messageId: string,
+    responseMessage: string,
+  ): Promise<Message>;
+
   // ----- Méthodes pour les utilisateurs -----
   /**
    * Méthode d'authentification pour obtenir un token

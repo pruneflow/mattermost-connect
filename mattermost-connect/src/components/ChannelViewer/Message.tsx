@@ -37,6 +37,7 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   AddReaction as AddReactionIcon,
+  QuoteLeft as QuoteIcon,
 } from "@mui/icons-material";
 
 // Related components
@@ -126,6 +127,9 @@ const Message: React.FC<MessageProps> = ({
   const [loading, setLoading] = useState(true);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(menuAnchor);
+  const [referencedMessage, setReferencedMessage] =
+    useState<MessageType | null>(null);
+  const [referencedAuthor, setReferencedAuthor] = useState<User | null>(null);
 
   // État pour le menu des réactions
   const [reactionAnchorEl, setReactionAnchorEl] = useState<HTMLElement | null>(
@@ -152,6 +156,48 @@ const Message: React.FC<MessageProps> = ({
       console.error("Error adding reaction:", error);
     }
   };
+
+  // Vérifier si le message est une réponse à un autre message
+  useEffect(() => {
+    if (message?.props?.quoted_message_id) {
+      // Récupérer le message référencé si disponible
+      const fetchReferencedMessage = async () => {
+        try {
+          // Implémenter la récupération du message référencé
+          // Cette partie dépendra de la façon dont votre API expose cette fonctionnalité
+          const response = await service.getChannelMessages(
+            message.channel_id,
+            {
+              perPage: 1,
+              // Utilisez l'ID du message cité pour le récupérer
+              // Note: Ceci est une approximation, l'API réelle pourrait être différente
+              after: message.props.quoted_message_id,
+            },
+          );
+
+          if (response.posts[message.props.quoted_message_id]) {
+            setReferencedMessage(
+              response.posts[message.props.quoted_message_id],
+            );
+
+            // Récupérer également l'auteur du message référencé
+            if (response.posts[message.props.quoted_message_id].user_id) {
+              const users = await service?.getUsers({
+                ids: [response.posts[message.props.quoted_message_id].user_id],
+              });
+              if (users && users.length > 0) {
+                setReferencedAuthor(users[0]);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching referenced message:", error);
+        }
+      };
+
+      void fetchReferencedMessage();
+    }
+  }, [message, service]);
 
   // For messages with attachments
   let hasAttachments: boolean = false;
@@ -239,6 +285,25 @@ const Message: React.FC<MessageProps> = ({
     handleMenuClose();
   };
 
+  // Fonction pour naviguer au message référencé
+  const navigateToReferencedMessage = () => {
+    if (message?.props?.quoted_message_id) {
+      // Implémenter la navigation vers le message référencé
+      // Par exemple, en utilisant un scrollIntoView ou en mettant à jour l'état pour faire défiler jusqu'au message
+      const messageElement = document.getElementById(
+        `message-${message.props.quoted_message_id}`,
+      );
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Mettre en évidence le message brièvement
+        messageElement.classList.add("highlight");
+        setTimeout(() => {
+          messageElement.classList.remove("highlight");
+        }, 2000);
+      }
+    }
+  };
+
   // Render loading skeleton
   if (loading) {
     return (
@@ -272,6 +337,7 @@ const Message: React.FC<MessageProps> = ({
   return (
     <>
       <Box
+        id={`message-${message.id}`} // Add ID for reference navigation
         className={className}
         style={style}
         sx={{
@@ -281,6 +347,7 @@ const Message: React.FC<MessageProps> = ({
           mb: 2,
           maxWidth: { xs: "95%", sm: "85%" },
           alignSelf: messageAlignment,
+          width: "auto", // Ajout pour éviter que les messages occupent toute la largeur
           ...sx,
         }}
         onMouseEnter={() => setIsHovered(true)}
@@ -357,6 +424,51 @@ const Message: React.FC<MessageProps> = ({
               ...bubbleSx,
             }}
           >
+            {/* Referenced message (if this is a reply) */}
+            {referencedMessage && (
+              <Box
+                onClick={navigateToReferencedMessage}
+                sx={{
+                  p: 1,
+                  mb: 1.5,
+                  borderLeft: "3px solid",
+                  borderColor: "primary.light",
+                  backgroundColor: (theme) =>
+                    alpha(theme.palette.background.default, 0.5),
+                  borderRadius: 1,
+                  cursor: "pointer",
+                  "&:hover": {
+                    backgroundColor: (theme) =>
+                      alpha(theme.palette.primary.light, 0.1),
+                  },
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{ fontWeight: "bold" }}
+                  component="div"
+                >
+                  {referencedAuthor
+                    ? `${referencedAuthor.first_name || ""} ${referencedAuthor.last_name || ""}`.trim()
+                    : "Unknown User"}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                  sx={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {referencedMessage.message}
+                </Typography>
+              </Box>
+            )}
+
             {/* Text content */}
             <Box
               sx={{ ...contentSx }}
@@ -473,6 +585,9 @@ const Message: React.FC<MessageProps> = ({
             flexWrap: "wrap",
             gap: 0.5,
             mt: 0.5,
+            justifyContent: isFromCurrentUser ? "flex-end" : "flex-start",
+            maxWidth: { xs: "95%", sm: "85%" },
+            alignSelf: messageAlignment,
           }}
         >
           {message.metadata.reactions.map((reaction, idx) => (

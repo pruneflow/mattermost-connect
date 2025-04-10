@@ -241,6 +241,86 @@ export class ProxyService extends BaseService implements MattermostService {
     }
   }
 
+  /**
+   * Modifie un message existant via le proxy
+   *
+   * @param messageId ID du message à modifier
+   * @param newMessage Nouveau texte du message
+   * @returns Message mis à jour
+   */
+  async editMessage(messageId: string, newMessage: string): Promise<Message> {
+    try {
+      // Dans le mode proxy, nous passons par le point d'API du proxy
+      return await this.apiCall<Message>(`messages/${messageId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          message: newMessage,
+        }),
+      });
+    } catch (error) {
+      console.error(
+        `Erreur lors de la modification du message ${messageId} via proxy:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Supprime un message via le proxy
+   *
+   * @param messageId ID du message à supprimer
+   * @returns Statut de suppression
+   */
+  async deleteMessage(messageId: string): Promise<{ success: boolean }> {
+    try {
+      // Dans le mode proxy, nous utilisons le point d'API du proxy
+      await this.apiCall(`messages/${messageId}`, {
+        method: "DELETE",
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error(
+        `Erreur lors de la suppression du message ${messageId} via proxy:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Répond à un message (avec citation) via le proxy
+   *
+   * @param channelId ID du canal où se trouve le message
+   * @param messageId ID du message auquel répondre
+   * @param responseMessage Texte de la réponse
+   * @returns Message de réponse créé
+   */
+  async replyToMessage(
+    channelId: string,
+    messageId: string,
+    responseMessage: string,
+  ): Promise<Message> {
+    try {
+      // Dans le mode proxy, nous utilisons un point d'API spécifique pour les réponses
+      return await this.apiCall<Message>(`messages/reply`, {
+        method: "POST",
+        body: JSON.stringify({
+          channel_id: channelId,
+          quoted_message_id: messageId,
+          message: responseMessage,
+        }),
+      });
+    } catch (error) {
+      console.error(
+        `Erreur lors de la réponse au message ${messageId} via proxy:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   // ----- Méthodes pour les utilisateurs -----
 
   async getUsers(options: GetUsersOptions = {}) {

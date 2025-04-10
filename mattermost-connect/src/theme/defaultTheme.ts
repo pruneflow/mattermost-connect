@@ -153,6 +153,40 @@ export const createDefaultTheme = (): Theme => {
           },
         },
       },
+      MuiCssBaseline: {
+        styleOverrides: `
+          .highlight {
+            animation: highlightMessage 2s ease-in-out;
+          }
+          
+          @keyframes highlightMessage {
+            0% {
+              background-color: rgba(25, 118, 210, 0.1);
+              transform: scale(1);
+            }
+            50% {
+              background-color: rgba(25, 118, 210, 0.2);
+              transform: scale(1.02);
+            }
+            100% {
+              background-color: transparent;
+              transform: scale(1);
+            }
+          }
+          
+          @media (max-width: 600px) {
+            .message-bubble {
+              max-width: 90% !important;
+            }
+            
+            .message-actions {
+              top: -12px !important;
+              right: -6px !important;
+              left: -6px !important;
+            }
+          }
+        `,
+      },
     },
   });
 

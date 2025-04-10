@@ -227,6 +227,98 @@ export class DirectService extends BaseService implements MattermostService {
     });
   }
 
+  /**
+   * Modifie un message existant
+   *
+   * @param messageId ID du message à modifier
+   * @param newMessage Nouveau texte du message
+   * @returns Message mis à jour
+   */
+  async editMessage(messageId: string, newMessage: string): Promise<Message> {
+    try {
+      // Récupérer d'abord le message pour obtenir le channel_id
+      // (Cette étape peut être facultative si vous avez déjà le channel_id)
+      const message = await this.apiCall<Message>(`posts/${messageId}`);
+
+      // Ensuite, mettre à jour le message
+      return this.apiCall<Message>(`posts/${messageId}/patch`, {
+        method: "PUT",
+        body: JSON.stringify({
+          message: newMessage,
+          // Conserver les propriétés existantes
+          file_ids: message.file_ids,
+          has_reactions: message.has_reactions,
+          props: message.props,
+        }),
+      });
+    } catch (error) {
+      console.error(
+        `Erreur lors de la modification du message ${messageId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Supprime un message
+   *
+   * @param messageId ID du message à supprimer
+   * @returns Statut de suppression
+   */
+  async deleteMessage(messageId: string): Promise<{ success: boolean }> {
+    try {
+      await this.apiCall(`posts/${messageId}`, {
+        method: "DELETE",
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error(
+        `Erreur lors de la suppression du message ${messageId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Répond à un message (avec citation)
+   *
+   * @param channelId ID du canal où se trouve le message
+   * @param messageId ID du message auquel répondre
+   * @param responseMessage Texte de la réponse
+   * @returns Message de réponse créé
+   */
+  async replyToMessage(
+    channelId: string,
+    messageId: string,
+    responseMessage: string,
+  ): Promise<Message> {
+    try {
+      // Créer un nouveau message avec les propriétés pour le référencement
+      return this.apiCall<Message>("posts", {
+        method: "POST",
+        body: JSON.stringify({
+          channel_id: channelId,
+          message: responseMessage,
+          // Ajouter les propriétés pour indiquer qu'il s'agit d'une réponse
+          root_id: messageId, // Pour les threads Mattermost
+          // Propriétés personnalisées pour le suivi de la citation
+          props: {
+            quoted_message_id: messageId,
+          },
+        }),
+      });
+    } catch (error) {
+      console.error(
+        `Erreur lors de la réponse au message ${messageId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   // ----- Méthodes pour les utilisateurs -----
 
   async getUsers(options: GetUsersOptions = {}) {
