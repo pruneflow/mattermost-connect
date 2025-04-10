@@ -123,7 +123,6 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                     <Typography
                       component={"div"}
                       variant="h6"
-                      component="div"
                       gutterBottom
                       sx={{
                         fontWeight: 600,

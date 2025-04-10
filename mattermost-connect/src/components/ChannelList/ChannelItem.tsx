@@ -138,6 +138,7 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
         slotProps={{
           primary: {
             variant: "body2",
+            component: "div",
             noWrap: true,
             fontWeight: hasUnread || isSelected ? 600 : 400,
             color: hasUnread || isSelected ? "text.primary" : "text.secondary",

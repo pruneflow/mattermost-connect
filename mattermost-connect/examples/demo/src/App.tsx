@@ -207,8 +207,8 @@ const LoginForm: React.FC<{
           marginTop: 8,
         }}
       >
-        <Typography variant="h5" component="div">
-          <h1>Connexion à Mattermost</h1>
+        <Typography variant="h4" component="div">
+          Connexion à Mattermost
         </Typography>
 
         {error && (

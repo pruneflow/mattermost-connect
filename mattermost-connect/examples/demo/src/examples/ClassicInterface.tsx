@@ -443,7 +443,7 @@ const ClassicInterface: React.FC = () => {
                 p: 3,
               }}
             >
-              <Typography variant="h5" component="div" gutterBottom>
+              <Typography variant="body2" component="div" gutterBottom>
                 {selectedTeam
                   ? "Select a channel to start messaging"
                   : "Select a team to view channels"}

@@ -150,11 +150,11 @@ const ChannelHeader: React.FC<ChannelHeaderProps> = ({
           <Box sx={{ mr: 1, color: "text.secondary" }}>{getChannelIcon()}</Box>
 
           <Typography
-            variant="subtitle1"
+            variant="h6"
             component="div"
             sx={{ fontWeight: 600, mr: 1 }}
           >
-            <h2>{channel.display_name}</h2>
+            {channel.display_name}
           </Typography>
 
           <Chip

@@ -124,10 +124,15 @@ const TeamList: React.FC<TeamListProps> = ({
                 }
                 slotProps={{
                   primary: {
+                    component: "div",
                     fontWeight: isSelected ? 600 : 400,
                     variant: "body1",
                   },
-                  secondary: { noWrap: true, variant: "body2" },
+                  secondary: {
+                    noWrap: true,
+                    variant: "body2",
+                    component: "div",
+                  },
                 }}
               />
 

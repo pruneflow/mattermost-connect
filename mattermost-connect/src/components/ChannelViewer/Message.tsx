@@ -457,7 +457,7 @@ const Message: React.FC<MessageProps> = ({
                 <ListItemText
                   primary="Delete"
                   slotProps={{
-                    primary: { color: "error" },
+                    primary: { color: "error", component: "div" },
                   }}
                 />
               </MenuItem>
