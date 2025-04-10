@@ -224,18 +224,34 @@ export class ProxyService extends BaseService implements MattermostService {
     }
   }
 
-  async postMessage(channelId: string, message: string) {
+  async postMessage(channelId: string, message: string, fileIds?: string[]) {
     try {
       return await this.apiCall("messages", {
         method: "POST",
         body: JSON.stringify({
           channel_id: channelId,
           message,
+          file_ids: fileIds || [], // Ajout du support pour file_ids
         }),
       });
     } catch (error) {
       console.error(
         `Erreur lors de l'envoi du message dans le canal ${channelId} :`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Récupère un message spécifique par son ID
+   */
+  async getPost(messageId: string) {
+    try {
+      return await this.apiCall<Message>(`messages/${messageId}`);
+    } catch (error) {
+      console.error(
+        `Erreur lors de la récupération du message ${messageId}:`,
         error,
       );
       throw error;
@@ -302,26 +318,20 @@ export class ProxyService extends BaseService implements MattermostService {
     channelId: string,
     messageId: string,
     responseMessage: string,
+    fileIds?: string[],
   ): Promise<Message> {
     if (!channelId || !messageId || !responseMessage.trim()) {
       throw new Error("Paramètres invalides pour la réponse à un message");
     }
 
-    console.log(
-      `ProxyService.replyToMessage appelé avec channelId=${channelId}, messageId=${messageId}`,
-    );
-
     try {
-      // Dans le mode proxy, utiliser directement l'endpoint pour les réponses
       // Structure de la requête standard
       const requestBody = {
         channel_id: channelId,
         root_id: messageId,
         message: responseMessage.trim(),
-        // Pas de champs supplémentaires pour éviter les problèmes
+        file_ids: fileIds || [], // Ajout du support pour file_ids
       };
-
-      console.log("Envoi de la requête API proxy pour répondre:", requestBody);
 
       // Utiliser l'endpoint messages/reply ou posts selon l'implémentation du proxy
       const endpoint = this.baseUrl.includes("/api/v4")
@@ -333,14 +343,13 @@ export class ProxyService extends BaseService implements MattermostService {
         body: JSON.stringify(requestBody),
       });
 
-      console.log("Réponse API proxy reçue:", response);
       return response;
     } catch (error) {
       console.error(
         `ProxyService: Erreur lors de la réponse au message ${messageId} via proxy:`,
         error,
       );
-      throw error; // Propager l'erreur sans traitement supplémentaire
+      throw error;
     }
   }
 

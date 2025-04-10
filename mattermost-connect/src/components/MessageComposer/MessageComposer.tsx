@@ -16,6 +16,7 @@ import {
   Theme,
   Collapse,
   Fade,
+  CircularProgress,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -27,7 +28,7 @@ import {
 } from "@mui/icons-material";
 
 // Components
-import AttachmentPreview from "./AttachmentPreview";
+import AttachmentPreview, { MattermostFile } from "./AttachmentPreview";
 import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../context/EmojiProvider";
 
@@ -42,6 +43,17 @@ export enum MessageComposerMode {
 }
 
 /**
+ * File upload status tracking
+ */
+interface FileUploadStatus {
+  file: File;
+  id?: string;
+  uploading: boolean;
+  uploaded: boolean;
+  error?: string;
+}
+
+/**
  * Message data structure returned when using manual mode
  */
 export interface MessageData {
@@ -51,6 +63,8 @@ export interface MessageData {
   channelId: string;
   /** File attachments to send with the message */
   attachments: File[];
+  /** File IDs of uploaded attachments */
+  fileIds?: string[];
   /** If this is a reply to another message, the ID of that message */
   replyToMessageId?: string;
 }
@@ -100,6 +114,7 @@ export interface MessageComposerProps {
 
 /**
  * A component that allows users to compose and send messages in a channel
+ * with support for file attachments and emoji selection
  */
 const MessageComposer: React.FC<MessageComposerProps> = ({
   channelId,
@@ -118,16 +133,28 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
   // State
   const [message, setMessage] = useState(initialText);
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentStatus, setAttachmentStatus] = useState<FileUploadStatus[]>(
+    [],
+  );
   const [sending, setSending] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadInProgress, setUploadInProgress] = useState(false);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const isSubmittingRef = useRef(false); // Pour éviter les soumissions multiples
+
+  // Calculated properties
+  const files = attachmentStatus.map((status) => status.file);
+  const hasUploadsInProgress = attachmentStatus.some(
+    (status) => status.uploading,
+  );
+  const uploadedFileIds = attachmentStatus
+    .filter((status) => status.uploaded && status.id)
+    .map((status) => status.id as string);
 
   // Focus on the text field when the component is mounted
   useEffect(() => {
@@ -139,15 +166,107 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   // Reset when the channel changes
   useEffect(() => {
     setMessage(initialText);
-    setAttachments([]);
+    setAttachmentStatus([]);
     setError(null);
   }, [channelId, initialText]);
+
+  // Upload files as they are added
+  useEffect(() => {
+    // Find files that need to be uploaded
+    const filesToUpload = attachmentStatus.filter(
+      (status) => !status.uploading && !status.uploaded && !status.error,
+    );
+
+    if (filesToUpload.length > 0 && !uploadInProgress && service?.uploadFiles) {
+      const uploadFiles = async () => {
+        setUploadInProgress(true);
+
+        // Mark files as uploading
+        setAttachmentStatus((prev) =>
+          prev.map((status) =>
+            filesToUpload.some((f) => f.file === status.file)
+              ? { ...status, uploading: true }
+              : status,
+          ),
+        );
+
+        try {
+          // Create FormData with files to upload
+          const formData = new FormData();
+          filesToUpload.forEach((fileStatus) => {
+            formData.append("files", fileStatus.file);
+          });
+          formData.append("channel_id", channelId);
+
+          // Upload the files
+          const response = await service.uploadFiles(formData);
+
+          // Update the status of uploaded files
+          if (response && response.file_infos) {
+            setAttachmentStatus((prev) => {
+              return prev.map((status) => {
+                // Find matching file info by comparing file name and size
+                const fileInfo = response.file_infos.find(
+                  (info: any) =>
+                    info.name === status.file.name &&
+                    (!info.size || info.size === status.file.size),
+                );
+
+                if (
+                  fileInfo &&
+                  filesToUpload.some((f) => f.file === status.file)
+                ) {
+                  return {
+                    ...status,
+                    uploading: false,
+                    uploaded: true,
+                    id: fileInfo.id,
+                  };
+                }
+                return status;
+              });
+            });
+          }
+        } catch (err) {
+          console.error("Error uploading files:", err);
+
+          // Mark files with error
+          setAttachmentStatus((prev) =>
+            prev.map((status) =>
+              filesToUpload.some((f) => f.file === status.file)
+                ? {
+                    ...status,
+                    uploading: false,
+                    error: err instanceof Error ? err.message : "Upload failed",
+                  }
+                : status,
+            ),
+          );
+
+          setError("Failed to upload one or more files");
+        } finally {
+          setUploadInProgress(false);
+        }
+      };
+
+      void uploadFiles();
+    }
+  }, [attachmentStatus, uploadInProgress, service, channelId]);
 
   // Handle file input change
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       const newFiles = Array.from(event.target.files);
-      setAttachments((prev) => [...prev, ...newFiles]);
+
+      // Add new files to attachment status
+      setAttachmentStatus((prev) => [
+        ...prev,
+        ...newFiles.map((file) => ({
+          file,
+          uploading: false,
+          uploaded: false,
+        })),
+      ]);
     }
   };
 
@@ -160,7 +279,9 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
   // Handle removal of an attachment
   const handleRemoveAttachment = (fileToRemove: File) => {
-    setAttachments((prev) => prev.filter((file) => file !== fileToRemove));
+    setAttachmentStatus((prev) =>
+      prev.filter((status) => status.file !== fileToRemove),
+    );
   };
 
   // Handle emoji selection
@@ -187,10 +308,16 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   // Handle send message
   const handleSendMessage = async () => {
     // Validation de base
-    if (!message.trim() && attachments.length === 0) return;
+    if (!message.trim() && attachmentStatus.length === 0) return;
 
     // Protection contre les soumissions multiples
     if (isSubmittingRef.current || sending) return;
+
+    // Vérifier si tous les uploads sont terminés
+    if (hasUploadsInProgress) {
+      setError("Please wait for all files to finish uploading");
+      return;
+    }
 
     isSubmittingRef.current = true;
 
@@ -200,7 +327,8 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         const messageData: MessageData = {
           message: message.trim(),
           channelId,
-          attachments,
+          attachments: files,
+          fileIds: uploadedFileIds,
           replyToMessageId: isReplying && replyTo ? replyTo.id : undefined,
         };
 
@@ -211,7 +339,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
         // Réinitialiser l'état
         setMessage("");
-        setAttachments([]);
+        setAttachmentStatus([]);
 
         // Effacer l'état de réponse
         if (isReplying && clearReply) {
@@ -233,46 +361,32 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       setSending(true);
       setError(null);
 
-      // Handle attachments if present
-      let fileIds: string[] = [];
-      if (attachments.length > 0 && service.uploadFiles) {
-        const formData = new FormData();
-        attachments.forEach((file) => {
-          formData.append("files", file);
-        });
-
-        formData.append("channel_id", channelId);
-
-        const uploadResponse = await service.uploadFiles(formData);
-        fileIds = uploadResponse.file_infos.map((file: any) => file.id);
-      }
-
       let response;
 
       if (isReplying && replyTo && replyTo.id) {
-        console.log(`Envoi d'une réponse au message ${replyTo.id}`);
-
+        // Envoi d'une réponse à un message
         if (service.replyToMessage) {
           response = await service.replyToMessage(
             channelId,
             replyTo.id,
             message,
+            uploadedFileIds,
           );
-          console.log("Réponse envoyée avec succès", response);
         } else {
-          // Si la méthode replyToMessage n'existe pas, lever une erreur
-          throw new Error("La fonctionnalité de réponse n'est pas disponible");
+          throw new Error("Reply functionality is not available");
         }
       } else {
-        // Message normal
-        console.log("Envoi d'un message normal");
-        response = await service.postMessage(channelId, message);
-        console.log("Message envoyé avec succès", response);
+        // Message normal avec les IDs de fichiers uploadés
+        response = await service.postMessage(
+          channelId,
+          message,
+          uploadedFileIds,
+        );
       }
 
       // Reset state
       setMessage("");
-      setAttachments([]);
+      setAttachmentStatus([]);
 
       // Call the callback if provided (in auto mode, just the message text)
       if (onMessageSent) {
@@ -354,7 +468,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       </Collapse>
 
       {/* Attachment previews */}
-      {attachments.length > 0 && (
+      {attachmentStatus.length > 0 && (
         <Box
           sx={{
             display: "flex",
@@ -363,11 +477,13 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
             mb: 1,
           }}
         >
-          {attachments.map((file, index) => (
+          {attachmentStatus.map((status, index) => (
             <AttachmentPreview
               key={index}
-              file={file}
-              onRemove={() => handleRemoveAttachment(file)}
+              file={status.file}
+              onRemove={() => handleRemoveAttachment(status.file)}
+              isUploading={status.uploading}
+              isUploaded={status.uploaded}
             />
           ))}
         </Box>
@@ -406,6 +522,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
                     mr: 1,
                   }}
                 >
+                  <CircularProgress size={16} sx={{ mr: 1 }} />
                   Sending...
                 </Box>
               </InputAdornment>
@@ -434,9 +551,13 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
               <IconButton
                 color="primary"
                 onClick={handleAttachmentClick}
-                disabled={disabled || sending}
+                disabled={disabled || sending || uploadInProgress}
               >
-                <AttachmentIcon />
+                {uploadInProgress ? (
+                  <CircularProgress size={24} />
+                ) : (
+                  <AttachmentIcon />
+                )}
               </IconButton>
             </Tooltip>
           )}
@@ -449,7 +570,8 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
               disabled={
                 disabled ||
                 sending ||
-                (!message.trim() && attachments.length === 0)
+                hasUploadsInProgress ||
+                (!message.trim() && attachmentStatus.length === 0)
               }
             >
               <SendIcon />

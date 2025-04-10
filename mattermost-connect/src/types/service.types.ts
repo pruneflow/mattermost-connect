@@ -85,7 +85,26 @@ export interface MattermostService {
     channelId: string,
     options?: GetMessagesOptions,
   ): Promise<MessagesResponse>;
-  postMessage(channelId: string, message: string): Promise<Message>;
+
+  /**
+   * Envoie un message dans un canal
+   * @param channelId ID du canal où envoyer le message
+   * @param message Texte du message
+   * @param fileIds IDs des fichiers attachés au message (optionnel)
+   * @returns Message créé
+   */
+  postMessage(
+    channelId: string,
+    message: string,
+    fileIds?: string[],
+  ): Promise<Message>;
+
+  /**
+   * Récupère un message spécifique par son ID
+   * @param messageId ID du message à récupérer
+   * @returns Message récupéré
+   */
+  getPost?(messageId: string): Promise<Message>;
 
   /**
    * Modifie un message existant
@@ -107,12 +126,14 @@ export interface MattermostService {
    * @param channelId ID du canal où se trouve le message
    * @param messageId ID du message auquel répondre
    * @param responseMessage Texte de la réponse
+   * @param fileIds IDs des fichiers attachés à la réponse (optionnel)
    * @returns Message de réponse créé
    */
   replyToMessage?(
     channelId: string,
     messageId: string,
     responseMessage: string,
+    fileIds?: string[],
   ): Promise<Message>;
 
   // ----- Méthodes pour les utilisateurs -----
@@ -158,8 +179,25 @@ export interface MattermostService {
   getWebsocketToken(): Promise<string>;
 
   // ----- Méthodes pour les fichiers -----
-  uploadFiles(formData: FormData): Promise<any>;
+  /**
+   * Télécharge des fichiers vers le serveur Mattermost
+   * @param formData FormData contenant les fichiers à télécharger
+   * @returns Informations sur les fichiers téléchargés, y compris leurs IDs
+   */
+  uploadFiles(formData: FormData): Promise<{
+    file_infos: Array<{
+      id: string;
+      name: string;
+      type?: string;
+      size?: number;
+      url?: string;
+    }>;
+  }>;
 
   // ----- Méthodes utilitaires -----
+  /**
+   * Récupère l'URL de base du serveur Mattermost
+   * @returns URL de base du serveur
+   */
   getBaseUrl(): string;
 }

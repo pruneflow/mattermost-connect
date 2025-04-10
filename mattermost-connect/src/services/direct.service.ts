@@ -218,14 +218,19 @@ export class DirectService extends BaseService implements MattermostService {
     return this.apiCall<MessagesResponse>(endpoint);
   }
 
-  async postMessage(channelId: string, message: string) {
+  async postMessage(channelId: string, message: string, fileIds?: string[]) {
     return this.apiCall("posts", {
       method: "POST",
       body: JSON.stringify({
         channel_id: channelId,
         message,
+        file_ids: fileIds || [], // Ajout du support pour file_ids
       }),
     });
+  }
+
+  async getPost(messageId: string) {
+    return this.apiCall<Message>(`posts/${messageId}`);
   }
 
   /**
@@ -295,23 +300,19 @@ export class DirectService extends BaseService implements MattermostService {
     channelId: string,
     messageId: string,
     responseMessage: string,
+    fileIds?: string[],
   ): Promise<Message> {
     if (!channelId || !messageId || !responseMessage.trim()) {
       throw new Error("Paramètres invalides pour la réponse à un message");
     }
-
-    console.log(
-      `DirectService.replyToMessage appelé avec channelId=${channelId}, messageId=${messageId}`,
-    );
 
     try {
       const requestBody = {
         channel_id: channelId,
         message: responseMessage.trim(),
         root_id: messageId,
+        file_ids: fileIds || [], // Ajout du support pour file_ids
       };
-
-      console.log("Envoi de la requête API pour répondre:", requestBody);
 
       // Appel direct à l'API
       const response = await this.apiCall<Message>("posts", {
@@ -319,14 +320,13 @@ export class DirectService extends BaseService implements MattermostService {
         body: JSON.stringify(requestBody),
       });
 
-      console.log("Réponse API reçue:", response);
       return response;
     } catch (error) {
       console.error(
         `DirectService: Erreur lors de la réponse au message ${messageId}:`,
         error,
       );
-      throw error; // Remonter l'erreur sans traitement supplémentaire
+      throw error;
     }
   }
 
