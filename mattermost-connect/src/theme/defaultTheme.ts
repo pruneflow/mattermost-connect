@@ -110,6 +110,15 @@ export const createDefaultTheme = (): Theme => {
           rounded: {
             borderRadius: 8,
           },
+          root: {
+            borderRadius: 8,
+            "&.reply-context": {
+              backgroundColor: "rgba(25, 118, 210, 0.08)",
+              borderLeft: "3px solid",
+              borderColor: "primary.main",
+              transition: "all 0.2s ease-in-out",
+            },
+          },
         },
       },
       MuiTextField: {
@@ -117,6 +126,15 @@ export const createDefaultTheme = (): Theme => {
           root: {
             "& .MuiOutlinedInput-root": {
               borderRadius: 8,
+            },
+          },
+        },
+      },
+      MuiCollapse: {
+        styleOverrides: {
+          root: {
+            "&.reply-transition": {
+              transition: "all 0.3s ease-in-out",
             },
           },
         },

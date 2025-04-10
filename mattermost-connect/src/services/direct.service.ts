@@ -290,24 +290,30 @@ export class DirectService extends BaseService implements MattermostService {
    * @param responseMessage Texte de la réponse
    * @returns Message de réponse créé
    */
+  // Méthode corrigée pour DirectService
   async replyToMessage(
     channelId: string,
     messageId: string,
     responseMessage: string,
   ): Promise<Message> {
     try {
-      // Créer un nouveau message avec les propriétés pour le référencement
+      // Vérifier que le message parent existe réellement avant de répondre
+      try {
+        await this.apiCall<any>(`posts/${messageId}`);
+      } catch (error) {
+        console.error(`Message parent ${messageId} introuvable:`, error);
+        // Si le message parent n'existe pas, envoyons un message normal au lieu d'échouer
+        return this.postMessage(channelId, responseMessage);
+      }
+
+      // Structure de la réponse selon l'API Mattermost
       return this.apiCall<Message>("posts", {
         method: "POST",
         body: JSON.stringify({
           channel_id: channelId,
           message: responseMessage,
-          // Ajouter les propriétés pour indiquer qu'il s'agit d'une réponse
-          root_id: messageId, // Pour les threads Mattermost
-          // Propriétés personnalisées pour le suivi de la citation
-          props: {
-            quoted_message_id: messageId,
-          },
+          root_id: messageId,
+          // Nous n'ajoutons pas de propriétés personnalisées qui pourraient causer des problèmes
         }),
       });
     } catch (error) {
@@ -315,7 +321,13 @@ export class DirectService extends BaseService implements MattermostService {
         `Erreur lors de la réponse au message ${messageId}:`,
         error,
       );
-      throw error;
+      // Essayer d'envoyer comme message normal en cas d'échec
+      try {
+        return await this.postMessage(channelId, responseMessage);
+      } catch (fallbackError) {
+        console.error("Échec du fallback vers message normal:", fallbackError);
+        throw error; // Remonter l'erreur originale
+      }
     }
   }
 

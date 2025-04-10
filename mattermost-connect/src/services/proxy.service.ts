@@ -297,18 +297,20 @@ export class ProxyService extends BaseService implements MattermostService {
    * @param responseMessage Texte de la réponse
    * @returns Message de réponse créé
    */
+  // Méthode corrigée pour ProxyService
   async replyToMessage(
     channelId: string,
     messageId: string,
     responseMessage: string,
   ): Promise<Message> {
     try {
-      // Dans le mode proxy, nous utilisons un point d'API spécifique pour les réponses
+      // Dans le mode proxy, ajuster la structure pour s'assurer qu'elle est correcte
+      // Inclure à la fois root_id et channel_id comme exigé par l'API Mattermost
       return await this.apiCall<Message>(`messages/reply`, {
         method: "POST",
         body: JSON.stringify({
           channel_id: channelId,
-          quoted_message_id: messageId,
+          root_id: messageId, // Assurez-vous d'inclure root_id
           message: responseMessage,
         }),
       });
@@ -317,7 +319,23 @@ export class ProxyService extends BaseService implements MattermostService {
         `Erreur lors de la réponse au message ${messageId} via proxy:`,
         error,
       );
-      throw error;
+
+      // Fallback en cas d'échec - essayer d'envoyer comme message normal
+      try {
+        console.log(
+          "Tentative d'envoi comme message normal après échec de la réponse",
+        );
+        return await this.apiCall<Message>("messages", {
+          method: "POST",
+          body: JSON.stringify({
+            channel_id: channelId,
+            message: responseMessage,
+          }),
+        });
+      } catch (fallbackError) {
+        console.error("Échec du fallback vers message normal:", fallbackError);
+        throw error; // Remonter l'erreur originale
+      }
     }
   }
 

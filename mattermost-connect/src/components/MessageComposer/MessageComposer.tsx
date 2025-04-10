@@ -1,60 +1,57 @@
-// src/components/ChannelViewer/ChannelViewer.tsx
-import React, { useState, useEffect, useRef } from "react";
+// src/components/MessageComposer/MessageComposer.tsx
+import React, { useState, useRef, useEffect } from "react";
 import { useMattermost } from "../../context/MattermostProvider";
-import { Channel, Message as MessageType, User } from "../../types";
 
 // Material-UI Components
 import {
   Box,
+  TextField,
+  IconButton,
+  Tooltip,
+  Paper,
   Typography,
-  Button,
-  Divider,
-  CircularProgress,
-  Skeleton,
-  Alert,
+  InputAdornment,
+  useTheme,
   SxProps,
   Theme,
-  Paper,
-  IconButton,
+  Collapse,
+  Fade,
 } from "@mui/material";
 
 // Material-UI Icons
 import {
-  ExpandMore as ExpandMoreIcon,
-  Info as InfoIcon,
+  Send as SendIcon,
+  Attachment as AttachmentIcon,
+  EmojiEmotions as EmojiIcon,
   Close as CloseIcon,
 } from "@mui/icons-material";
 
-// Related components
-import Message from "./Message";
-import ChannelHeader from "./ChannelHeader";
-import MessageComposer from "../MessageComposer/MessageComposer";
+// Components
+import AttachmentPreview from "./AttachmentPreview";
+import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
+import { EmojiProvider } from "../../context/EmojiProvider";
 
 /**
- * Props for the ChannelViewer component
+ * Props for the MessageComposer component
  */
-export interface ChannelViewerProps {
-  /** Channel ID to display */
-  channelId?: string;
+export interface MessageComposerProps {
+  /** Channel ID where to send the message */
+  channelId: string;
 
-  /** Whether the channel is read-only */
-  readOnly?: boolean;
+  /** Placeholder text for the input */
+  placeholder?: string;
 
-  /** Whether to show the channel header */
-  showHeader?: boolean;
+  /** Whether to allow file attachments */
+  allowAttachments?: boolean;
 
-  /** Number of messages to load at once */
-  loadMessageCount?: number;
+  /** Whether the composer is disabled */
+  disabled?: boolean;
 
-  /** Whether to auto-scroll to bottom on new messages */
-  autoScrollToBottom?: boolean;
+  /** Initial text for the input */
+  initialText?: string;
 
-  /** Custom message renderer */
-  messageRenderer?: (props: {
-    message: MessageType;
-    author: User | null;
-    formattedText: string;
-  }) => React.ReactNode;
+  /** Callback when a message is sent */
+  onMessageSent?: (message: string) => void;
 
   /** Additional CSS class */
   className?: string;
@@ -64,245 +61,166 @@ export interface ChannelViewerProps {
 
   /** Material-UI sx prop for additional styling */
   sx?: SxProps<Theme>;
-
-  /** Styling for the header */
-  headerSx?: SxProps<Theme>;
-
-  /** Styling for the messages container */
-  messagesContainerSx?: SxProps<Theme>;
-
-  /** Custom message component props */
-  messageProps?: Partial<React.ComponentProps<typeof Message>>;
-
-  /** Current user ID (used to determine message ownership) */
-  currentUserId?: string;
-
-  /** Flag indicating if the component should render its own message composer
-   * If false, it's expected that a parent component will render MessageComposer
-   */
-  showMessageComposer?: boolean;
 }
 
 /**
- * A component that displays messages from a Mattermost channel
+ * A component that allows users to compose and send messages in a channel
  */
-const ChannelViewer: React.FC<ChannelViewerProps> = ({
+const MessageComposer: React.FC<MessageComposerProps> = ({
   channelId,
-  readOnly = false,
-  showHeader = true,
-  loadMessageCount = 50,
-  autoScrollToBottom = true,
-  messageRenderer,
+  placeholder = "Type a message...",
+  allowAttachments = true,
+  disabled = false,
+  initialText = "",
+  onMessageSent,
   className,
   style,
   sx,
-  headerSx,
-  messagesContainerSx,
-  messageProps,
-  currentUserId,
-  showMessageComposer = false, // Par défaut, ne pas montrer le message composer interne
 }) => {
-  const { isConnected, service, currentUser } = useMattermost();
-  const [channel, setChannel] = useState<Channel | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const theme = useTheme();
+  const { service, replyTo, clearReply, isReplying } = useMattermost();
+
+  // State
+  const [message, setMessage] = useState(initialText);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
-  // État pour la gestion des réponses
-  const [replyTo, setReplyTo] = useState<MessageType | null>(null);
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textFieldRef = useRef<HTMLTextAreaElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  // User ID to use (from props or from context)
-  const userIdToUse = currentUserId || currentUser?.id;
-
-  // Load channel information
+  // Focus on the text field when the component is mounted
   useEffect(() => {
-    if (!isConnected || !channelId) return;
+    if (textFieldRef.current) {
+      textFieldRef.current.focus();
+    }
+  }, []);
 
-    const fetchChannel = async () => {
-      try {
-        const channelData = await service.getChannel(channelId);
-        setChannel(channelData);
-        setError(null);
-      } catch (err) {
-        console.error("Error loading channel:", err);
-        setError(err instanceof Error ? err.message : "Failed to load channel");
-      }
-    };
-
-    void fetchChannel();
-  }, [isConnected, channelId, service]);
-
-  // Load messages
+  // Reset when the channel changes
   useEffect(() => {
-    if (!isConnected || !channelId) return;
+    setMessage(initialText);
+    setAttachments([]);
+    setError(null);
+  }, [channelId, initialText]);
 
-    const fetchMessages = async () => {
-      setLoading(true);
-      try {
-        const response = await service.getChannelMessages(channelId, {
-          perPage: loadMessageCount,
+  // Handle file input change
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      const newFiles = Array.from(event.target.files);
+      setAttachments((prev) => [...prev, ...newFiles]);
+    }
+  };
+
+  // Handle attachment button click
+  const handleAttachmentClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle removal of an attachment
+  const handleRemoveAttachment = (fileToRemove: File) => {
+    setAttachments((prev) => prev.filter((file) => file !== fileToRemove));
+  };
+
+  // Handle emoji selection
+  const handleEmojiSelect = (result: EmojiSelectionResult) => {
+    setMessage((prev) => prev + result.emoji);
+    setShowEmojiPicker(false);
+
+    // Focus back on the text field
+    if (textFieldRef.current) {
+      textFieldRef.current.focus();
+    }
+  };
+
+  // Toggle emoji picker
+  const toggleEmojiPicker = () => {
+    setShowEmojiPicker((prev) => !prev);
+  };
+
+  // Close emoji picker
+  const closeEmojiPicker = () => {
+    setShowEmojiPicker(false);
+  };
+
+  // Handle send message
+  const handleSendMessage = async () => {
+    if (!message.trim() && attachments.length === 0) return;
+
+    try {
+      setSending(true);
+      setError(null);
+
+      // Handle attachments if present
+      let fileIds: string[] = [];
+      if (attachments.length > 0 && service.uploadFiles) {
+        const formData = new FormData();
+        attachments.forEach((file) => {
+          formData.append("files", file);
         });
 
-        // Convert posts object to array and sort by creation time
-        const postsArray = Object.values(response.posts || {});
-        const sortedPosts = postsArray.sort(
-          (a, b) => a.create_at - b.create_at,
-        );
+        formData.append("channel_id", channelId);
 
-        setMessages(sortedPosts);
-        setHasMoreMessages(sortedPosts.length >= loadMessageCount);
-        setError(null);
-      } catch (err) {
-        console.error("Error loading messages:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to load messages",
-        );
-      } finally {
-        setLoading(false);
+        const uploadResponse = await service.uploadFiles(formData);
+        fileIds = uploadResponse.file_infos.map((file: any) => file.id);
       }
-    };
 
-    void fetchMessages();
-  }, [isConnected, channelId, service, loadMessageCount]);
+      // Send the message
+      let response;
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    if (autoScrollToBottom && messagesEndRef.current && messages.length > 0) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, autoScrollToBottom]);
-
-  // Load more messages (when scrolling up)
-  const loadMoreMessages = async () => {
-    if (loadingMore || !isConnected || !channelId || messages.length === 0)
-      return;
-
-    setLoadingMore(true);
-    try {
-      // Get messages before the first displayed message
-      const firstMessage = messages[0];
-
-      const response = await service.getChannelMessages(channelId, {
-        perPage: loadMessageCount,
-        before: firstMessage.id,
-      });
-
-      // Convert and sort the new messages
-      const newPostsArray = Object.values(response.posts || {});
-      const sortedNewPosts = newPostsArray.sort(
-        (a, b) => a.create_at - b.create_at,
-      );
-
-      // Update state with new messages
-      setMessages([...sortedNewPosts, ...messages]);
-      setHasMoreMessages(sortedNewPosts.length >= loadMessageCount);
-    } catch (err) {
-      console.error("Error loading more messages:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load more messages",
-      );
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  // Gestionnaire pour les réponses aux messages
-  const handleReply = (messageToReply: MessageType) => {
-    setReplyTo(messageToReply);
-    // Mise au point sur le MessageComposer si nécessaire
-    setTimeout(() => {
-      const composerInput = document.querySelector(".message-composer-input");
-      if (composerInput) {
-        (composerInput as HTMLElement).focus();
-      }
-    }, 100);
-  };
-
-  // Gestionnaire pour l'envoi d'une réponse
-  const handleSendReply = async (responseText: string) => {
-    if (!replyTo || !channelId) return;
-
-    try {
-      // Utiliser la nouvelle méthode de réponse si disponible
-      if (service.replyToMessage) {
-        await service.replyToMessage(channelId, replyTo.id, responseText);
+      // If replying to a message
+      if (isReplying && replyTo && service.replyToMessage) {
+        try {
+          console.log(`Tentative de réponse au message ${replyTo.id}`);
+          response = await service.replyToMessage(
+            channelId,
+            replyTo.id,
+            message,
+          );
+          console.log("Réponse envoyée avec succès");
+        } catch (replyError) {
+          console.error(
+            "Erreur lors de la réponse, tentative d'envoi comme message normal:",
+            replyError,
+          );
+          // Fallback - envoyer comme message normal si la réponse échoue
+          response = await service.postMessage(channelId, message);
+        } finally {
+          // Clear reply state dans tous les cas
+          clearReply();
+        }
       } else {
-        // Sinon, utiliser postMessage avec des propriétés personnalisées
-        await service.postMessage(channelId, responseText);
+        // Regular message
+        response = await service.postMessage(channelId, message);
       }
 
-      // Rafraîchir les messages après l'envoi
-      const response = await service.getChannelMessages(channelId, {
-        perPage: loadMessageCount,
-      });
+      // Reset state
+      setMessage("");
+      setAttachments([]);
 
-      const postsArray = Object.values(response.posts || {});
-      const sortedPosts = postsArray.sort((a, b) => a.create_at - b.create_at);
-
-      setMessages(sortedPosts);
-
-      // Réinitialiser l'état de réponse
-      setReplyTo(null);
-    } catch (error) {
-      console.error("Error sending reply:", error);
-      setError("Failed to send reply. Please try again.");
+      // Call the callback if provided
+      if (onMessageSent) {
+        onMessageSent(message);
+      }
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError(err instanceof Error ? err.message : "Failed to send message");
+    } finally {
+      setSending(false);
     }
   };
 
-  // Gestionnaire pour l'édition d'un message
-  const handleEditMessage = async (messageToEdit: MessageType) => {
-    // Cette fonctionnalité serait implémentée dans une interface dédiée
-    console.log("Editing message:", messageToEdit);
-    // Vous pourriez ouvrir un dialogue ou modifier le message sur place
-  };
-
-  // Gestionnaire pour la suppression d'un message
-  const handleDeleteMessage = async (messageToDelete: MessageType) => {
-    if (!service.deleteMessage) {
-      console.error("Delete message functionality not available");
-      return;
-    }
-
-    try {
-      await service.deleteMessage(messageToDelete.id);
-
-      // Mettre à jour la liste des messages en retirant le message supprimé
-      setMessages(messages.filter((msg) => msg.id !== messageToDelete.id));
-    } catch (error) {
-      console.error("Error deleting message:", error);
-      setError("Failed to delete message. Please try again.");
+  // Handle keypress (send on Enter)
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSendMessage();
     }
   };
-
-  // Annuler la réponse
-  const cancelReply = () => {
-    setReplyTo(null);
-  };
-
-  // Render loading skeletons
-  const renderSkeletons = () => (
-    <Box sx={{ p: 2 }}>
-      {Array.from({ length: 3 }).map((_, index) => (
-        <Box key={index} sx={{ display: "flex", mb: 2 }}>
-          <Skeleton variant="circular" width={40} height={40} sx={{ mr: 2 }} />
-          <Box sx={{ width: "100%" }}>
-            <Skeleton variant="text" width={120} height={24} />
-            <Skeleton
-              variant="rectangular"
-              height={40}
-              width={`${Math.random() * 50 + 30}%`}
-              sx={{ mt: 1 }}
-            />
-          </Box>
-        </Box>
-      ))}
-    </Box>
-  );
 
   return (
     <Box
@@ -311,153 +229,197 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       sx={{
         display: "flex",
         flexDirection: "column",
-        height: "100%",
-        bgcolor: "background.default",
+        borderTop: "1px solid",
+        borderColor: "divider",
+        bgcolor: "background.paper",
+        p: 1,
+        position: "relative",
         ...sx,
       }}
     >
-      {/* Channel header */}
-      {showHeader && channel && (
-        <ChannelHeader channel={channel} sx={headerSx} />
-      )}
-
-      <Divider />
-
-      {/* Messages area */}
-      <Box
-        ref={messagesContainerRef}
-        sx={{
-          flexGrow: 1,
-          overflow: "auto",
-          display: "flex",
-          flexDirection: "column",
-          p: 2,
-          ...messagesContainerSx,
-        }}
-      >
-        {/* Loading state */}
-        {loading ? (
-          renderSkeletons()
-        ) : error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        ) : messages.length === 0 ? (
-          <Box
+      {/* Reply context */}
+      <Collapse in={isReplying}>
+        {replyTo && (
+          <Paper
+            elevation={0}
             sx={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              flexDirection: "column",
-              color: "text.secondary",
+              justifyContent: "space-between",
+              p: 1,
+              mb: 1,
+              bgcolor: "action.hover",
+              borderRadius: theme.shape.borderRadius,
             }}
           >
-            <InfoIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-            <Typography component={"div"} variant="body1">
-              No messages in this channel
-            </Typography>
-            <Typography component={"div"} variant="body2" sx={{ mt: 1 }}>
-              Be the first to start a conversation!
-            </Typography>
-          </Box>
-        ) : (
-          // Messages list
-          <>
-            {/* Load more button */}
-            {hasMoreMessages && (
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  mb: 2,
-                }}
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <Typography
+                variant="body2"
+                component="div"
+                color="text.secondary"
               >
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={loadMoreMessages}
-                  disabled={loadingMore}
-                  startIcon={
-                    loadingMore ? (
-                      <CircularProgress size={16} />
-                    ) : (
-                      <ExpandMoreIcon />
-                    )
-                  }
-                >
-                  {loadingMore ? "Loading..." : "Load more messages"}
-                </Button>
-              </Box>
-            )}
-
-            {/* Message list */}
-            <Box sx={{ flexGrow: 1 }}>
-              {messages.map((message) => (
-                <Message
-                  key={message.id}
-                  message={message}
-                  renderer={messageRenderer}
-                  isFromCurrentUser={message.user_id === userIdToUse}
-                  showActions={!readOnly}
-                  onReply={handleReply}
-                  onEdit={handleEditMessage}
-                  onDelete={handleDeleteMessage}
-                  {...messageProps}
-                />
-              ))}
-              <div ref={messagesEndRef} />
+                Replying to:{" "}
+                <strong>
+                  {replyTo.message.length > 50
+                    ? replyTo.message.substring(0, 50) + "..."
+                    : replyTo.message}
+                </strong>
+              </Typography>
             </Box>
-          </>
+            <IconButton size="small" onClick={clearReply}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Paper>
         )}
-      </Box>
+      </Collapse>
 
-      {/* Message composer with reply context - only shown if showMessageComposer is true */}
-      {showMessageComposer && !readOnly && channelId && (
-        <Box sx={{ position: "relative" }}>
-          {/* Reply context notification */}
-          {replyTo && (
-            <Paper
-              elevation={0}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                p: 1,
-                borderTop: "1px solid",
-                borderColor: "divider",
-                bgcolor: "action.hover",
-              }}
-            >
-              <Box sx={{ display: "flex", alignItems: "center" }}>
-                <Typography component={"div"} variant="body2" sx={{ ml: 1 }}>
-                  Replying to:{" "}
-                  <strong>
-                    {replyTo.message.length > 50
-                      ? replyTo.message.substring(0, 50) + "..."
-                      : replyTo.message}
-                  </strong>
-                </Typography>
-              </Box>
-              <IconButton size="small" onClick={cancelReply}>
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </Paper>
-          )}
-
-          {/* Composer component */}
-          <MessageComposer
-            channelId={channelId}
-            placeholder={replyTo ? "Type your reply..." : "Type a message..."}
-            allowAttachments={true}
-            initialText=""
-            className="message-composer-input"
-            onMessageSent={replyTo ? handleSendReply : undefined}
-          />
+      {/* Attachment previews */}
+      {attachments.length > 0 && (
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1,
+            mb: 1,
+          }}
+        >
+          {attachments.map((file, index) => (
+            <AttachmentPreview
+              key={index}
+              file={file}
+              onRemove={() => handleRemoveAttachment(file)}
+            />
+          ))}
         </Box>
       )}
+
+      {/* Message input row */}
+      <Box sx={{ display: "flex", alignItems: "flex-end" }}>
+        {/* Text input */}
+        <TextField
+          fullWidth
+          multiline
+          maxRows={4}
+          placeholder={placeholder}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyPress={handleKeyPress}
+          disabled={disabled || sending}
+          inputRef={textFieldRef}
+          variant="outlined"
+          size="small"
+          sx={{
+            flex: 1,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 4,
+              padding: 1,
+            },
+          }}
+          InputProps={{
+            endAdornment: sending ? (
+              <InputAdornment position="end">
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    color: "text.secondary",
+                    mr: 1,
+                  }}
+                >
+                  Sending...
+                </Box>
+              </InputAdornment>
+            ) : null,
+            className: "message-composer-input", // Classe pour faciliter la mise au point
+          }}
+        />
+
+        {/* Action buttons */}
+        <Box sx={{ display: "flex", ml: 1 }}>
+          {/* Emoji picker button */}
+          <Tooltip title="Add emoji">
+            <IconButton
+              color="primary"
+              onClick={toggleEmojiPicker}
+              disabled={disabled || sending}
+              ref={emojiButtonRef}
+            >
+              <EmojiIcon />
+            </IconButton>
+          </Tooltip>
+
+          {/* Attachment button */}
+          {allowAttachments && (
+            <Tooltip title="Add attachment">
+              <IconButton
+                color="primary"
+                onClick={handleAttachmentClick}
+                disabled={disabled || sending}
+              >
+                <AttachmentIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {/* Send button */}
+          <Tooltip title="Send message">
+            <IconButton
+              color="primary"
+              onClick={handleSendMessage}
+              disabled={
+                disabled ||
+                sending ||
+                (!message.trim() && attachments.length === 0)
+              }
+            >
+              <SendIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        {/* Hidden file input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+          multiple
+        />
+      </Box>
+
+      {/* Error message */}
+      {error && (
+        <Typography
+          variant="caption"
+          color="error"
+          component="div"
+          sx={{ mt: 1 }}
+        >
+          {error}
+        </Typography>
+      )}
+
+      {/* Emoji picker popover */}
+      <Fade in={showEmojiPicker}>
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: "100%",
+            right: 16,
+            zIndex: 1200,
+          }}
+        >
+          <EmojiProvider>
+            <EmojiPicker
+              onSelect={handleEmojiSelect}
+              onClose={closeEmojiPicker}
+              mode={PickerMode.MESSAGE}
+            />
+          </EmojiProvider>
+        </Box>
+      </Fade>
     </Box>
   );
 };
 
-export default ChannelViewer;
+export default MessageComposer;
