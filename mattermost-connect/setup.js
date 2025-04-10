@@ -69,7 +69,7 @@ if (command === "demo") {
   console.log("Installation des dépendances de la démo...");
   run("pnpm build && cd examples/demo && pnpm install");
   console.log("Lancement de l'application démo...");
-  run("pnpm --filter mattermost-connect-demo start");
+  run("pnpm --filter mattermost-connect-demo start --host");
 } else if (command === "dev") {
   console.log("Lancement du mode développement...");
   run("pnpm dev");

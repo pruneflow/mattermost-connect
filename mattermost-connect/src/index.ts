@@ -14,9 +14,7 @@ export { default as ChannelItem } from "./components/ChannelList/ChannelItem";
 export { default as ChannelViewer } from "./components/ChannelViewer/ChannelViewer";
 export { default as ChannelHeader } from "./components/ChannelViewer/ChannelHeader";
 export { default as Message } from "./components/ChannelViewer/Message";
-export { default as MessageAttachment } from "./components/ChannelViewer/MessageAttachment";
 export { default as MessageComposer } from "./components/MessageComposer/MessageComposer";
-export { default as AttachmentPreview } from "./components/MessageComposer/AttachmentPreview";
 
 // Exporter les composants de sélection d'équipe
 export { default as TeamSelector } from "./components/TeamSelector/TeamSelector";

@@ -1,5 +1,5 @@
 // src/components/Attachment/Attachment.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useMattermost } from "../../context/MattermostProvider";
 import { createFileService } from "../../services/file.service";
 
@@ -111,9 +111,6 @@ export interface AttachmentGroupProps {
   /** Mode d'affichage des composants */
   mode?: AttachmentMode;
 
-  /** Gestionnaire de clic optionnel (mode MESSAGE) */
-  onClick?: (file: AttachmentType) => void;
-
   /** Gestionnaire pour supprimer une pièce jointe (mode PREVIEW) */
   onRemove?: (index: number) => void;
 
@@ -131,6 +128,22 @@ export interface AttachmentGroupProps {
  * Union des types de props possibles
  */
 export type AttachmentProps = MessageAttachmentProps | PreviewAttachmentProps;
+
+/**
+ * Interface representing a file that has been uploaded to Mattermost
+ */
+export interface MattermostFile {
+  /** Mattermost file ID */
+  id: string;
+  /** File name */
+  name: string;
+  /** File type/mime-type */
+  type?: string;
+  /** File size in bytes */
+  size?: number;
+  /** URL to the file (if available) */
+  url?: string;
+}
 
 /**
  * Composant unifié pour l'affichage des pièces jointes
@@ -171,7 +184,10 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   // État
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [thumbnailError, setThumbnailError] = useState<boolean>(false);
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const [showControls, setShowControls] = useState(isMobile);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -181,7 +197,6 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
 
   // États dérivés
-  const menuOpen = Boolean(menuAnchorEl);
   const baseUrl = service?.getBaseUrl?.() || "";
 
   // Déterminer si nous avons un objet File ou un objet AttachmentType
@@ -320,11 +335,15 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
-    setMenuAnchorEl(event.currentTarget);
+    // Calculer la position basée sur l'événement
+    setMenuPosition({
+      top: event.clientY,
+      left: event.clientX,
+    });
   };
 
   const handleMenuClose = () => {
-    setMenuAnchorEl(null);
+    setMenuPosition(null);
   };
 
   // Créer un lien public
@@ -406,12 +425,12 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
             !isPreviewMode && (mattermostFile?.url || mattermostFile?.link)
               ? "pointer"
               : "default",
-          position: "relative",
           width,
           "&:hover": {
             bgcolor: (theme) => alpha(theme.palette.background.default, 0.8),
           },
           ...sx,
+          position: "relative",
         }}
         onClick={!isPreviewMode ? handleAttachmentClick : undefined}
         onMouseEnter={() => !isMobile && setShowControls(true)}
@@ -484,7 +503,11 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         {((showControls && !isPreviewMode) || isMobile) && (
           <Box sx={{ display: "flex", ml: 1 }}>
             <Tooltip title="Options">
-              <IconButton size="small" onClick={handleMenuOpen}>
+              <IconButton
+                id="options-button"
+                size="small"
+                onClick={handleMenuOpen}
+              >
                 <MoreIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -539,17 +562,11 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 
       {/* Menu contextuel - seulement avec l'option de création de lien public */}
       <Menu
-        anchorEl={menuAnchorEl}
-        open={menuOpen}
+        id="options-menu"
+        open={Boolean(menuPosition)}
         onClose={handleMenuClose}
-        anchorOrigin={{
-          vertical: "top",
-          horizontal: "right",
-        }}
-        transformOrigin={{
-          vertical: "top",
-          horizontal: "right",
-        }}
+        anchorReference="anchorPosition"
+        anchorPosition={menuPosition ? menuPosition : undefined}
       >
         <MenuItem
           onClick={handleCreatePublicLink}
@@ -599,7 +616,6 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
   files,
   mode = AttachmentMode.MESSAGE,
-  onClick,
   onRemove,
   isUploading,
   isUploaded,
@@ -617,7 +633,6 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
             <Attachment
               file={file}
               mode={mode}
-              onClick={onClick}
               onRemove={onRemove ? () => onRemove(index) : undefined}
               isUploading={isUploading ? isUploading[index] : undefined}
               isUploaded={isUploaded ? isUploaded[index] : undefined}
@@ -629,7 +644,31 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
     );
   }
 
-  // En mode desktop, afficher les pièces jointes côte à côte
+  // En mode desktop et en mode message, afficher les pièces jointes en ligne avec scroll
+  if (mode === AttachmentMode.MESSAGE) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          overflowX: "auto",
+          gap: 1,
+          pb: 1, // Espace pour le scroll horizontal
+          ...sx,
+        }}
+      >
+        {files.map((file, index) => (
+          <Attachment
+            key={index}
+            file={file}
+            mode={mode}
+            width={240} // Largeur fixe pour chaque attachment
+          />
+        ))}
+      </Box>
+    );
+  }
+
+  // En mode desktop pour d'autres modes (preview), afficher en grille
   return (
     <Grid container spacing={1} sx={sx}>
       {files.map((file, index) => (
@@ -637,7 +676,6 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
           <Attachment
             file={file}
             mode={mode}
-            onClick={onClick}
             onRemove={onRemove ? () => onRemove(index) : undefined}
             isUploading={isUploading ? isUploading[index] : undefined}
             isUploaded={isUploaded ? isUploaded[index] : undefined}

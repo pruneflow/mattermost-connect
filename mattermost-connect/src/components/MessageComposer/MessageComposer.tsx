@@ -28,10 +28,13 @@ import {
 } from "@mui/icons-material";
 
 // Components
-import { MattermostFile } from "./AttachmentPreview";
+import Attachment, {
+  AttachmentGroup,
+  AttachmentMode,
+  MattermostFile,
+} from "../Attachment/Attachment";
 import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../context/EmojiProvider";
-import Attachment, { AttachmentMode } from "../Attachment/Attachment";
 
 /**
  * Submission mode for the MessageComposer

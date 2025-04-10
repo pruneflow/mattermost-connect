@@ -236,8 +236,6 @@ const ClassicInterface: React.FC = () => {
                   showHeader={false} // We already show the header in the app bar
                   autoScrollToBottom
                   sx={{ height: "100%" }}
-                  // Ne pas afficher son propre message composer
-                  showMessageComposer={false}
                 />
               </Box>
 
@@ -440,8 +438,6 @@ const ClassicInterface: React.FC = () => {
                   showHeader
                   autoScrollToBottom
                   sx={{ height: "100%" }}
-                  // Ne pas afficher son propre message composer
-                  showMessageComposer={false}
                 />
               </Box>
 
