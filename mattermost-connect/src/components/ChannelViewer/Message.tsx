@@ -323,6 +323,7 @@ const Message: React.FC<MessageProps> = ({
             variant="caption"
             color="text.secondary"
             sx={{ fontWeight: 500 }}
+            component={"div"}
           >
             {author
               ? `${author.first_name || ""} ${author.last_name || ""} ${
@@ -331,7 +332,12 @@ const Message: React.FC<MessageProps> = ({
               : "Unknown User"}
           </Typography>
 
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+          <Typography
+            component={"div"}
+            variant="caption"
+            color="text.secondary"
+            sx={{ ml: 1 }}
+          >
             {timestamp}
           </Typography>
         </Box>
@@ -496,7 +502,7 @@ const Message: React.FC<MessageProps> = ({
               }}
             >
               {getEmojiFromName(reaction.emoji_name) || reaction.emoji_name}{" "}
-              <Typography variant="caption" sx={{ ml: 0.5 }}>
+              <Typography component={"div"} variant="caption" sx={{ ml: 0.5 }}>
                 {1} {/* Remplacer par le nombre de réactions */}
               </Typography>
             </Box>

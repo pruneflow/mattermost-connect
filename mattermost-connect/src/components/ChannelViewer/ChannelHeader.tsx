@@ -151,10 +151,10 @@ const ChannelHeader: React.FC<ChannelHeaderProps> = ({
 
           <Typography
             variant="subtitle1"
-            component="h2"
+            component="div"
             sx={{ fontWeight: 600, mr: 1 }}
           >
-            {channel.display_name}
+            <h2>{channel.display_name}</h2>
           </Typography>
 
           <Chip
@@ -247,13 +247,22 @@ const ChannelHeader: React.FC<ChannelHeaderProps> = ({
       <Collapse in={showDetails}>
         <Box sx={{ px: 2, py: 1, bgcolor: "action.hover" }}>
           {channel.purpose && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            <Typography
+              component={"div"}
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: 1 }}
+            >
               <strong>Purpose:</strong> {channel.purpose}
             </Typography>
           )}
 
           {channel.header ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              component={"div"}
+              variant="body2"
+              color="text.secondary"
+            >
               <strong>Description:</strong> {channel.header}
             </Typography>
           ) : (
@@ -261,6 +270,7 @@ const ChannelHeader: React.FC<ChannelHeaderProps> = ({
               variant="body2"
               color="text.secondary"
               sx={{ fontStyle: "italic" }}
+              component={"div"}
             >
               <InfoIcon
                 fontSize="small"
@@ -275,6 +285,7 @@ const ChannelHeader: React.FC<ChannelHeaderProps> = ({
             display="block"
             color="text.secondary"
             sx={{ mt: 1 }}
+            component={"div"}
           >
             Created: {new Date(channel.create_at).toLocaleDateString()}
           </Typography>

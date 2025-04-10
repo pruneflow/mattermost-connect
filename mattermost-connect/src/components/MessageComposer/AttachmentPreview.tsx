@@ -142,6 +142,7 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
       {/* File info */}
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography
+          component={"div"}
           variant="body2"
           noWrap
           title={file.name}
@@ -150,7 +151,7 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
           {file.name}
         </Typography>
 
-        <Typography variant="caption" color="text.secondary">
+        <Typography component={"div"} variant="caption" color="text.secondary">
           {formatFileSize()}
         </Typography>
       </Box>

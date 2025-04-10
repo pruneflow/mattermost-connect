@@ -122,6 +122,9 @@ const ChannelList: React.FC<ChannelListProps> = ({
       try {
         const channelsData = await service?.getChannels(teamId);
         setChannels(channelsData || []);
+        if (channelsData && channelsData.length > 0 && onSelectChannel) {
+          onSelectChannel(channelsData[0]);
+        }
         setError(null);
       } catch (err) {
         console.error("Error loading channels:", err);
@@ -231,6 +234,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
             <ListItemText
               primary={
                 <Typography
+                  component={"div"}
                   variant="body2"
                   sx={{
                     fontWeight: 600,
@@ -328,7 +332,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
         renderSkeletons()
       ) : error ? (
         <Box sx={{ p: 2, color: "error.main" }}>
-          <Typography variant="body2" color="error">
+          <Typography component={"div"} variant="body2" color="error">
             {error}
           </Typography>
         </Box>
@@ -365,7 +369,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
 
             {filteredChannels.length === 0 && (
               <Box sx={{ p: 2, textAlign: "center" }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  component={"div"}
+                  variant="body2"
+                  color="text.secondary"
+                >
                   {searchQuery ? "No channels found" : "No channels available"}
                 </Typography>
               </Box>

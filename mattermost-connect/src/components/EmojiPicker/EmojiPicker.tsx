@@ -187,7 +187,9 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
             alignItems: "center",
           }}
         >
-          <Typography variant="subtitle2">{getTitle()}</Typography>
+          <Typography component={"div"} variant="subtitle2">
+            {getTitle()}
+          </Typography>
           {onClose && (
             <IconButton size="small" onClick={onClose}>
               <ClearIcon fontSize="small" />
@@ -326,7 +328,12 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
           bgcolor: "background.default",
         }}
       >
-        <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+        <Typography
+          component={"div"}
+          variant="caption"
+          color="text.secondary"
+          sx={{ ml: 1 }}
+        >
           {activeTab === 0 || mode === PickerMode.REACTION
             ? "Emojis"
             : searchQuery

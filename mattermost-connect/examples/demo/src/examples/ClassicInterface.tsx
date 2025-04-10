@@ -167,7 +167,7 @@ const ClassicInterface: React.FC = () => {
         >
           {/* Teams List */}
           <Box sx={{ p: 2 }}>
-            <Typography variant="subtitle1" fontWeight="bold">
+            <Typography variant="subtitle1" component="div" fontWeight="bold">
               Teams
             </Typography>
           </Box>
@@ -239,7 +239,7 @@ const ClassicInterface: React.FC = () => {
                 p: 3,
               }}
             >
-              <Typography variant="h5" gutterBottom>
+              <Typography variant="h5" component="div" gutterBottom>
                 {selectedTeam
                   ? "Select a channel to start messaging"
                   : "Select a team to view channels"}
@@ -324,7 +324,7 @@ const ClassicInterface: React.FC = () => {
             }}
           >
             <Box sx={{ p: 2 }}>
-              <Typography variant="subtitle1" fontWeight="bold">
+              <Typography variant="subtitle1" component="div" fontWeight="bold">
                 Teams
               </Typography>
             </Box>
@@ -386,7 +386,11 @@ const ClassicInterface: React.FC = () => {
             />
           ) : (
             <Box sx={{ p: 2 }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                component="div"
+                color="text.secondary"
+              >
                 Select a team to view channels
               </Typography>
             </Box>
@@ -439,7 +443,7 @@ const ClassicInterface: React.FC = () => {
                 p: 3,
               }}
             >
-              <Typography variant="h5" gutterBottom>
+              <Typography variant="h5" component="div" gutterBottom>
                 {selectedTeam
                   ? "Select a channel to start messaging"
                   : "Select a team to view channels"}

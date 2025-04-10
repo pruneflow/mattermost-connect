@@ -117,7 +117,7 @@ export const WithSelection: Story = {
       <Box sx={{ minHeight: 500 }}>
         {selectedEmoji && (
           <Paper elevation={2} sx={{ p: 2, mb: 3, maxWidth: 300, mx: "auto" }}>
-            <Typography variant="body1" gutterBottom>
+            <Typography component={"div"} variant="body1" gutterBottom>
               Emoji sélectionné:
             </Typography>
             <Box sx={{ fontSize: "2rem", textAlign: "center" }}>
@@ -157,7 +157,7 @@ export const CategoryNavigation: Story = {
 
     return (
       <Box sx={{ textAlign: "center" }}>
-        <Typography variant="body2" gutterBottom>
+        <Typography component={"div"} variant="body2" gutterBottom>
           Vous pouvez naviguer entre les différentes catégories dans le picker
           ci-dessous
         </Typography>
@@ -183,7 +183,7 @@ export const GifTab: Story = {
   render: (args) => {
     return (
       <Box sx={{ textAlign: "center" }}>
-        <Typography variant="body2" gutterBottom>
+        <Typography component={"div"} variant="body2" gutterBottom>
           Le picker prend également en charge les GIFs (cliquez sur l'onglet
           GIFs)
         </Typography>

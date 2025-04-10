@@ -76,42 +76,42 @@ const UserCacheDemo: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
+      <Typography variant="h5" component="div" gutterBottom>
         Démonstration du Cache Utilisateur
       </Typography>
 
-      <Typography variant="body1" paragraph>
+      <Typography variant="body1" component="div" paragraph>
         Cette démo montre l'efficacité du cache utilisateur. La première requête
         utilisera l'API, tandis que les suivantes utiliseront le cache en
         mémoire, ce qui est beaucoup plus rapide.
       </Typography>
 
       <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="h6" component="div" gutterBottom>
           Utilisateur Courant
         </Typography>
 
         {currentUser ? (
           <Box>
-            <Typography variant="body1">
+            <Typography variant="body1" component="div">
               <strong>ID:</strong> {currentUser.id}
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body1" component="div">
               <strong>Nom:</strong> {currentUser.first_name}{" "}
               {currentUser.last_name}
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body1" component="div">
               <strong>Nom d'utilisateur:</strong> {currentUser.username}
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body1" component="div">
               <strong>Email:</strong> {currentUser.email || "Non disponible"}
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body1" component="div">
               <strong>Rôles:</strong> {currentUser.roles || "Non disponible"}
             </Typography>
           </Box>
         ) : (
-          <Typography color="text.secondary">
+          <Typography color="text.secondary" component="div">
             Aucun utilisateur chargé
           </Typography>
         )}
@@ -148,7 +148,7 @@ const UserCacheDemo: React.FC = () => {
 
       <Divider sx={{ my: 3 }} />
 
-      <Typography variant="h6" gutterBottom>
+      <Typography variant="h6" gutterBottom component="div">
         Mesures de Performance
       </Typography>
 
@@ -172,13 +172,18 @@ const UserCacheDemo: React.FC = () => {
           </Table>
         </TableContainer>
       ) : (
-        <Typography color="text.secondary">
+        <Typography color="text.secondary" component="div">
           Aucune mesure de performance disponible. Exécutez quelques actions
           pour voir les résultats.
         </Typography>
       )}
 
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        component="div"
+        sx={{ mt: 2 }}
+      >
         Note: Les temps peuvent varier en fonction de la connexion réseau, des
         performances du serveur et d'autres facteurs. Les appels utilisant le
         cache devraient être considérablement plus rapides que ceux faisant

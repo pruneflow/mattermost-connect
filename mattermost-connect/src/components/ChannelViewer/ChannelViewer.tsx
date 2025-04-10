@@ -268,8 +268,10 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
             }}
           >
             <InfoIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-            <Typography variant="body1">No messages in this channel</Typography>
-            <Typography variant="body2" sx={{ mt: 1 }}>
+            <Typography component={"div"} variant="body1">
+              No messages in this channel
+            </Typography>
+            <Typography component={"div"} variant="body2" sx={{ mt: 1 }}>
               Be the first to start a conversation!
             </Typography>
           </Box>

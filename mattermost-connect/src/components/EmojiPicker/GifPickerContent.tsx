@@ -94,6 +94,7 @@ const GifPickerContent: React.FC<GifPickerContentProps> = ({
                   <Typography
                     variant="caption"
                     sx={{ p: 1, textAlign: "center" }}
+                    component={"div"}
                   >
                     {gif.title}
                   </Typography>
@@ -111,6 +112,7 @@ const GifPickerContent: React.FC<GifPickerContentProps> = ({
                   }}
                 >
                   <Typography
+                    component={"div"}
                     variant="caption"
                     sx={{
                       color: "white",
@@ -141,7 +143,7 @@ const GifPickerContent: React.FC<GifPickerContentProps> = ({
             pt: 4,
           }}
         >
-          <Typography variant="body2" color="text.secondary">
+          <Typography component={"div"} variant="body2" color="text.secondary">
             {searchQuery
               ? "Aucun GIF correspondant à votre recherche"
               : "Aucun GIF disponible dans cette catégorie"}

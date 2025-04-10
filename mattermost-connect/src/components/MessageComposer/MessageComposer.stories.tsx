@@ -80,8 +80,14 @@ const MessageComposerWrapper = (args) => {
                 elevation={1}
                 sx={{ p: 2, mb: 1, maxWidth: "80%", ml: "auto" }}
               >
-                <Typography variant="body2">{msg.text}</Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography component={"div"} variant="body2">
+                  {msg.text}
+                </Typography>
+                <Typography
+                  component={"div"}
+                  variant="caption"
+                  color="text.secondary"
+                >
                   {msg.time}
                 </Typography>
               </Paper>
@@ -95,7 +101,11 @@ const MessageComposerWrapper = (args) => {
                 height: "100%",
               }}
             >
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                component={"div"}
+                variant="body2"
+                color="text.secondary"
+              >
                 Les messages envoyés apparaîtront ici
               </Typography>
             </Box>
@@ -192,7 +202,9 @@ export const Mobile: Story = {
           px: 2,
         }}
       >
-        <Typography variant="h6">Canal Général</Typography>
+        <Typography component={"div"} variant="h6">
+          Canal Général
+        </Typography>
       </Box>
       <Box
         sx={{
@@ -203,6 +215,7 @@ export const Mobile: Story = {
         }}
       >
         <Typography
+          component={"div"}
           variant="body2"
           color="text.secondary"
           sx={{ textAlign: "center", mt: 4 }}
@@ -296,7 +309,7 @@ export const ConversationExample: Story = {
             bgcolor: "background.paper",
           }}
         >
-          <Typography variant="subtitle1" fontWeight="bold">
+          <Typography component={"div"} variant="subtitle1" fontWeight="bold">
             Support technique
           </Typography>
         </Box>
@@ -323,8 +336,11 @@ export const ConversationExample: Story = {
                 color: msg.isUser ? "primary.contrastText" : "text.primary",
               }}
             >
-              <Typography variant="body2">{msg.text}</Typography>
+              <Typography component={"div"} variant="body2">
+                {msg.text}
+              </Typography>
               <Typography
+                component={"div"}
                 variant="caption"
                 color={msg.isUser ? "inherit" : "text.secondary"}
                 sx={{ opacity: 0.8 }}

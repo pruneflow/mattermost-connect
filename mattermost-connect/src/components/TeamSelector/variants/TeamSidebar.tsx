@@ -127,13 +127,17 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                 <Tooltip
                   title={
                     <Box>
-                      <Typography variant="body2">
+                      <Typography component={"div"} variant="body2">
                         {team.display_name}
                       </Typography>
                       {showDescriptions && team.description && (
                         <>
                           <Divider sx={{ my: 1 }} />
-                          <Typography variant="body2" color="white">
+                          <Typography
+                            component={"div"}
+                            variant="body2"
+                            color="white"
+                          >
                             {team.description}
                           </Typography>
                         </>
@@ -150,7 +154,11 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                             fontSize="small"
                             sx={{ mr: 0.5, color: "white" }}
                           />
-                          <Typography variant="caption" color="white">
+                          <Typography
+                            component={"div"}
+                            variant="caption"
+                            color="white"
+                          >
                             {team.member_count} members
                           </Typography>
                         </Box>

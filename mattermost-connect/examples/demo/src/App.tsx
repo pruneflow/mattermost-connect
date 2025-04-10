@@ -207,8 +207,8 @@ const LoginForm: React.FC<{
           marginTop: 8,
         }}
       >
-        <Typography component="h1" variant="h5">
-          Connexion à Mattermost
+        <Typography variant="h5" component="div">
+          <h1>Connexion à Mattermost</h1>
         </Typography>
 
         {error && (
@@ -268,7 +268,7 @@ const ExamplesContainer: React.FC<{
                 alignItems: "center",
               }}
             >
-              <Typography variant="body2">
+              <Typography variant="body2" component="div">
                 {currentUser.first_name} {currentUser.last_name}
               </Typography>
               <Button
@@ -298,11 +298,11 @@ const ExamplesContainer: React.FC<{
           justifyContent: "space-between",
         }}
       >
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" component="div" color="text.secondary">
           Mode: {mode === "custom" ? "Demo (Mock Data)" : mode}
         </Typography>
 
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" component="div" color="text.secondary">
           MattermostConnect Demo v1.0.0
         </Typography>
       </Box>

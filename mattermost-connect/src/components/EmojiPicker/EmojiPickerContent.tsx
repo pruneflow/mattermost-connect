@@ -86,6 +86,7 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
             variant="caption"
             color="text.secondary"
             sx={{ display: "block", mb: 0.5, px: 1 }}
+            component={"div"}
           >
             Récemment utilisés
           </Typography>
@@ -156,7 +157,7 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
             pt: 4,
           }}
         >
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" component={"div"}>
             {searchQuery
               ? "Aucun emoji correspondant"
               : "Aucun emoji dans cette catégorie"}

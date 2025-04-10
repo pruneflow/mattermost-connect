@@ -252,7 +252,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
         </Alert>
       ) : teams.length === 0 ? (
         <Box sx={{ p: 2, textAlign: "center" }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography component={"div"} variant="body2" color="text.secondary">
             No teams available
           </Typography>
         </Box>

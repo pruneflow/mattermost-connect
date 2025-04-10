@@ -121,6 +121,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                     )}
 
                     <Typography
+                      component={"div"}
                       variant="h6"
                       component="div"
                       gutterBottom
@@ -134,6 +135,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
 
                     {showDescriptions && team.description && (
                       <Typography
+                        component={"div"}
                         variant="body2"
                         color="text.secondary"
                         sx={{

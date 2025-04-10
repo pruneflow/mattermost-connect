@@ -123,12 +123,16 @@ const MessageAttachment: React.FC<MessageAttachmentProps> = ({
       <Box sx={{ mr: 1, color: "text.secondary" }}>{getFileIcon()}</Box>
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="body2" noWrap title={file.name}>
+        <Typography variant="body2" component={"div"} noWrap title={file.name}>
           {file.name}
         </Typography>
 
         {file.size && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            component={"div"}
+            color="text.secondary"
+          >
             {formatFileSize(file.size)}
           </Typography>
         )}
