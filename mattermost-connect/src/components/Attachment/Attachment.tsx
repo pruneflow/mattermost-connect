@@ -25,6 +25,7 @@ import {
   useMediaQuery,
   useTheme,
   CircularProgress,
+  Grid,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -98,6 +99,32 @@ interface PreviewAttachmentProps extends CommonAttachmentProps {
 
   /** Si le fichier a été téléchargé sur le serveur */
   isUploaded?: boolean;
+}
+
+/**
+ * Type pour un groupe de pièces jointes
+ */
+export interface AttachmentGroupProps {
+  /** Liste des fichiers à afficher */
+  files: (File | AttachmentType)[];
+
+  /** Mode d'affichage des composants */
+  mode?: AttachmentMode;
+
+  /** Gestionnaire de clic optionnel (mode MESSAGE) */
+  onClick?: (file: AttachmentType) => void;
+
+  /** Gestionnaire pour supprimer une pièce jointe (mode PREVIEW) */
+  onRemove?: (index: number) => void;
+
+  /** Si les fichiers sont en cours de téléchargement (mode PREVIEW) */
+  isUploading?: boolean[];
+
+  /** Si les fichiers ont été téléchargés sur le serveur (mode PREVIEW) */
+  isUploaded?: boolean[];
+
+  /** Style supplémentaire */
+  sx?: SxProps<Theme>;
 }
 
 /**
@@ -291,7 +318,6 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
   };
 
-  // Gestionnaires de menu
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
@@ -457,15 +483,13 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         {/* Boutons d'action (visibles au survol ou toujours sur mobile) */}
         {((showControls && !isPreviewMode) || isMobile) && (
           <Box sx={{ display: "flex", ml: 1 }}>
-            {/* Le menu d'options doit apparaître à gauche du bouton de téléchargement */}
-            <Tooltip title="More options">
+            <Tooltip title="Options">
               <IconButton size="small" onClick={handleMenuOpen}>
                 <MoreIcon fontSize="small" />
               </IconButton>
             </Tooltip>
 
-            {/* Bouton de téléchargement à droite du menu */}
-            <Tooltip title="Download">
+            <Tooltip title="Télécharger">
               <IconButton size="small" onClick={handleDownload}>
                 <DownloadIcon fontSize="small" />
               </IconButton>
@@ -541,7 +565,9 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           </ListItemIcon>
           <ListItemText
             primary={
-              publicLinkLoading ? "Creating link..." : "Create public link"
+              publicLinkLoading
+                ? "Création en cours..."
+                : "Créer un lien public"
             }
           />
         </MenuItem>
@@ -564,6 +590,62 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         </Alert>
       </Snackbar>
     </>
+  );
+};
+
+/**
+ * Composant pour afficher un groupe de pièces jointes côte à côte (en desktop)
+ */
+export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
+  files,
+  mode = AttachmentMode.MESSAGE,
+  onClick,
+  onRemove,
+  isUploading,
+  isUploaded,
+  sx,
+}) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  // Si on est en mode mobile, empiler les pièces jointes
+  if (isMobile) {
+    return (
+      <Box sx={sx}>
+        {files.map((file, index) => (
+          <Box key={index} sx={{ mb: 1, "&:last-child": { mb: 0 } }}>
+            <Attachment
+              file={file}
+              mode={mode}
+              onClick={onClick}
+              onRemove={onRemove ? () => onRemove(index) : undefined}
+              isUploading={isUploading ? isUploading[index] : undefined}
+              isUploaded={isUploaded ? isUploaded[index] : undefined}
+              width="100%"
+            />
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+
+  // En mode desktop, afficher les pièces jointes côte à côte
+  return (
+    <Grid container spacing={1} sx={sx}>
+      {files.map((file, index) => (
+        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
+          <Attachment
+            file={file}
+            mode={mode}
+            onClick={onClick}
+            onRemove={onRemove ? () => onRemove(index) : undefined}
+            isUploading={isUploading ? isUploading[index] : undefined}
+            isUploaded={isUploaded ? isUploaded[index] : undefined}
+            width="100%"
+          />
+        </Grid>
+      ))}
+    </Grid>
   );
 };
 

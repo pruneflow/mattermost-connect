@@ -52,40 +52,62 @@ export class FileService {
       throw new Error("File ID is required to create a public link");
     }
 
+    try {
+      // Mode direct: utiliser l'API directe
+      if (this.service.mode === "direct") {
+        return await this._createPublicLinkDirect(fileId);
+      }
+      // Mode proxy: utiliser le service proxy
+      else {
+        return await this._createPublicLinkProxy(fileId);
+      }
+    } catch (error) {
+      console.error("Error creating public link:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Implémentation de la création de lien public en mode direct
+   * @param fileId ID du fichier
+   * @returns Le lien public créé
+   * @private
+   */
+  private async _createPublicLinkDirect(fileId: string): Promise<string> {
     const baseUrl = this.service.getBaseUrl();
     const url = `${baseUrl}/api/v4/files/${fileId}/link`;
 
-    // Utiliser le mode du service pour déterminer la méthode d'appel API
-    if (this.service.mode === "direct") {
-      // Mode direct: appel direct à l'API
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await this.service.getWebsocketToken()}`, // Utiliser le token comme authorization
-        },
-      });
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${await this.service.getWebsocketToken()}`,
+      },
+    });
 
-      if (!response.ok) {
-        throw new Error(
-          `Failed to create public link: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const data = (await response.json()) as PublicLinkResponse;
-      return data.link;
-    } else {
-      // Mode proxy: utiliser le service proxy
-      // L'implémentation exacte dépend de l'API proxy
-      try {
-        // Simulation d'un appel proxy
-        // Dans une implémentation réelle, vous utiliseriez l'API proxy appropriée
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        return `${baseUrl}/files/public/${fileId}`;
-      } catch (error) {
-        throw new Error(`Failed to create public link via proxy: ${error}`);
-      }
+    if (!response.ok) {
+      throw new Error(
+        `Failed to create public link: ${response.status} ${response.statusText}`,
+      );
     }
+
+    const data = (await response.json()) as PublicLinkResponse;
+    return data.link;
+  }
+
+  /**
+   * Implémentation de la création de lien public en mode proxy
+   * @param fileId ID du fichier
+   * @returns Le lien public créé
+   * @private
+   */
+  private async _createPublicLinkProxy(fileId: string): Promise<string> {
+    const baseUrl = this.service.getBaseUrl();
+
+    // Simulation d'un appel proxy
+    // Dans une implémentation réelle, vous utiliseriez l'API proxy appropriée
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return `${baseUrl}/files/public/${fileId}`;
   }
 }
 

@@ -1,36 +1,37 @@
 // src/components/MessageComposer/MessageComposer.tsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMattermost } from "../../context/MattermostProvider";
 
 // Material-UI Components
 import {
   Box,
-  TextField,
-  IconButton,
-  Tooltip,
-  Paper,
-  Typography,
-  InputAdornment,
-  useTheme,
-  SxProps,
-  Theme,
+  CircularProgress,
   Collapse,
   Fade,
-  CircularProgress,
+  IconButton,
+  InputAdornment,
+  Paper,
+  SxProps,
+  TextField,
+  Theme,
+  Tooltip,
+  Typography,
+  useTheme,
 } from "@mui/material";
 
 // Material-UI Icons
 import {
-  Send as SendIcon,
   Attachment as AttachmentIcon,
-  EmojiEmotions as EmojiIcon,
   Close as CloseIcon,
+  EmojiEmotions as EmojiIcon,
+  Send as SendIcon,
 } from "@mui/icons-material";
 
 // Components
-import AttachmentPreview, { MattermostFile } from "./AttachmentPreview";
+import { MattermostFile } from "./AttachmentPreview";
 import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../context/EmojiProvider";
+import Attachment, { AttachmentMode } from "../Attachment/Attachment";
 
 /**
  * Submission mode for the MessageComposer
@@ -490,7 +491,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           }}
         >
           {attachmentStatus.map((status, index) => (
-            <AttachmentPreview
+            <Attachment
               key={index}
               file={
                 status.uploaded && status.mattermostFile
@@ -500,6 +501,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
               onRemove={() => handleRemoveAttachment(status.file)}
               isUploading={status.uploading}
               isUploaded={status.uploaded}
+              mode={AttachmentMode.PREVIEW}
             />
           ))}
         </Box>

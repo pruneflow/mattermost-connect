@@ -45,6 +45,7 @@ import MessageAttachment from "./MessageAttachment";
 import { EmojiPicker, PickerMode, getEmojiFromName } from "../EmojiPicker";
 import { EmojiProvider } from "../../context/EmojiProvider";
 import Popover from "@mui/material/Popover";
+import Attachment, { AttachmentMode } from "../Attachment/Attachment";
 
 /**
  * Props for the Message component
@@ -564,7 +565,7 @@ const Message: React.FC<MessageProps> = ({
                 sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}
               >
                 {message.metadata.files.map((file) => (
-                  <MessageAttachment key={file.id} file={file} />
+                  <Attachment key={file.id} file={file} />
                 ))}
               </Box>
             )}
