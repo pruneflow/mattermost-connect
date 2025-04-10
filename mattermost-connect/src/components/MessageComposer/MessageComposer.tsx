@@ -252,7 +252,6 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       void uploadFiles();
     }
   }, [attachmentStatus, uploadInProgress, service, channelId]);
-
   // Handle file input change
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -412,10 +411,11 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      handleSendMessage();
+      void handleSendMessage();
     }
   };
 
+  console.debug("attachmentStatus", attachmentStatus);
   return (
     <Box
       className={className}

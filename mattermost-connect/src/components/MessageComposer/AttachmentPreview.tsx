@@ -21,6 +21,7 @@ import {
   InsertDriveFile as FileIcon,
   Image as ImageIcon,
   PictureAsPdf as PdfIcon,
+  FolderZip as ZipIcon,
   Code as CodeIcon,
   Description as TextIcon,
   VideoFile as VideoIcon,
@@ -103,6 +104,9 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
     if (fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")) {
       return <PdfIcon fontSize="small" color="primary" />;
     }
+    if (fileType.includes("zip") || fileName.toLowerCase().endsWith(".zip")) {
+      return <ZipIcon fontSize="small" color="primary" />;
+    }
 
     // For other file types
     if (
@@ -164,6 +168,15 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
           return;
         }
 
+        if (
+          fileType.includes("zip") ||
+          fileName.toLowerCase().endsWith(".zip")
+        ) {
+          setThumbnailUrl(`${baseUrl}/static/files/48c8ed225ff4a2f7a4c1.svg`);
+          return;
+        }
+        console.debug("Use effect isUploaded", isUploaded);
+        console.debug("mattermostFile", mattermostFile);
         // For images that have been uploaded to Mattermost, use the thumbnail API
         if (isUploaded && mattermostFile?.id) {
           setThumbnailUrl(
@@ -205,6 +218,7 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
     fileType,
     fileName,
   ]);
+  console.debug("isUploaded", isUploaded);
   console.debug("thumbnailUrl", fileName, thumbnailUrl);
   return (
     <Paper
