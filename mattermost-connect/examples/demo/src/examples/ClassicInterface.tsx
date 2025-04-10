@@ -125,16 +125,15 @@ const ClassicInterface: React.FC = () => {
     if (!selectedChannel) return;
 
     try {
-      // Post the message to the selected channel
-      const response = await service.postMessage(selectedChannel.id, message);
-      console.log("Message sent:", response);
+      // Puisque nous sommes en mode AUTO (par défaut),
+      // l'envoi du message a déjà été géré par le composant MessageComposer
+      // Nous pouvons utiliser ce callback pour des actions additionnelles après envoi
+      console.log("Message envoyé avec succès:", message);
 
-      // Clear reply state if any
-      if (replyTo) {
-        setReplyTo(null);
-      }
+      // Si nécessaire, vous pouvez effectuer d'autres actions ici,
+      // mais n'essayez pas d'envoyer à nouveau le message
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error after message sent:", error);
     }
   };
 

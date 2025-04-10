@@ -32,6 +32,30 @@ import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../context/EmojiProvider";
 
 /**
+ * Submission mode for the MessageComposer
+ */
+export enum MessageComposerMode {
+  /** Component handles API calls automatically (default) */
+  AUTO = "auto",
+  /** Component only collects data and calls onMessageSent with the data */
+  MANUAL = "manual",
+}
+
+/**
+ * Message data structure returned when using manual mode
+ */
+export interface MessageData {
+  /** Message text content */
+  message: string;
+  /** Channel ID where the message will be sent */
+  channelId: string;
+  /** File attachments to send with the message */
+  attachments: File[];
+  /** If this is a reply to another message, the ID of that message */
+  replyToMessageId?: string;
+}
+
+/**
  * Props for the MessageComposer component
  */
 export interface MessageComposerProps {
@@ -50,8 +74,19 @@ export interface MessageComposerProps {
   /** Initial text for the input */
   initialText?: string;
 
-  /** Callback when a message is sent */
-  onMessageSent?: (message: string) => void;
+  /**
+   * Mode controlling how the component handles message submission
+   * - AUTO: component handles API calls automatically (default)
+   * - MANUAL: component only collects data and calls onMessageSent with the data
+   */
+  mode?: MessageComposerMode;
+
+  /**
+   * Callback when a message is sent
+   * In AUTO mode: Called after successful message submission with the message text
+   * In MANUAL mode: Called with all message data, component expects parent to handle submission
+   */
+  onMessageSent?: ((message: string) => void) | ((data: MessageData) => void);
 
   /** Additional CSS class */
   className?: string;
@@ -72,6 +107,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   allowAttachments = true,
   disabled = false,
   initialText = "",
+  mode = MessageComposerMode.AUTO,
   onMessageSent,
   className,
   style,
@@ -158,6 +194,41 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
     isSubmittingRef.current = true;
 
+    // En mode manual, on laisse le parent gérer l'envoi du message
+    if (mode === MessageComposerMode.MANUAL) {
+      try {
+        const messageData: MessageData = {
+          message: message.trim(),
+          channelId,
+          attachments,
+          replyToMessageId: isReplying && replyTo ? replyTo.id : undefined,
+        };
+
+        // Appeler le callback avec les données du message
+        if (onMessageSent) {
+          (onMessageSent as (data: MessageData) => void)(messageData);
+        }
+
+        // Réinitialiser l'état
+        setMessage("");
+        setAttachments([]);
+
+        // Effacer l'état de réponse
+        if (isReplying && clearReply) {
+          clearReply();
+        }
+      } catch (err) {
+        console.error("Error in manual send mode:", err);
+        setError(
+          err instanceof Error ? err.message : "Error processing message",
+        );
+      } finally {
+        isSubmittingRef.current = false;
+      }
+      return;
+    }
+
+    // Mode auto: le composant gère l'envoi du message
     try {
       setSending(true);
       setError(null);
@@ -203,9 +274,9 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       setMessage("");
       setAttachments([]);
 
-      // Call the callback if provided
+      // Call the callback if provided (in auto mode, just the message text)
       if (onMessageSent) {
-        onMessageSent(message);
+        (onMessageSent as (message: string) => void)(message);
       }
     } catch (err) {
       console.error("Error sending message:", err);
