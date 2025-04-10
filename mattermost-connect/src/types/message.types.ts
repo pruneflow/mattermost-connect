@@ -37,6 +37,7 @@ export interface Message {
   is_pinned?: boolean;
   has_reactions?: boolean;
   reply_count?: number;
+  root_id?: string;
   // Additional properties
   props?: Record<string, unknown>;
 }

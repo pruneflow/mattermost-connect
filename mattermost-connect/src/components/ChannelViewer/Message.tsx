@@ -137,6 +137,13 @@ const Message: React.FC<MessageProps> = ({
   );
   const reactionMenuOpen = Boolean(reactionAnchorEl);
 
+  // Fonction pour déterminer si le message est une réponse
+  const isReplyMessage = (msg: MessageType): boolean => {
+    // Dans Mattermost, les réponses ont un root_id qui est l'ID du message parent
+    // Parfois, l'information peut aussi être dans props.quoted_message_id
+    return !!msg.root_id || !!(msg.props && msg.props.quoted_message_id);
+  };
+
   // Gestionnaires pour le menu des réactions
   const handleReactionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setReactionAnchorEl(event.currentTarget);
@@ -159,39 +166,73 @@ const Message: React.FC<MessageProps> = ({
 
   // Vérifier si le message est une réponse à un autre message
   useEffect(() => {
-    if (message?.props?.quoted_message_id) {
-      // Récupérer le message référencé si disponible
+    // Identifier l'ID du message parent
+    const parentMessageId =
+      message?.root_id || (message?.props && message?.props.quoted_message_id);
+
+    if (parentMessageId) {
+      console.log(`Message ${message.id} est une réponse à ${parentMessageId}`);
+
       const fetchReferencedMessage = async () => {
         try {
-          // Implémenter la récupération du message référencé
-          // Cette partie dépendra de la façon dont votre API expose cette fonctionnalité
+          // D'abord, essayer un appel direct pour récupérer le message spécifique
+          // Cette approche dépend de l'API disponible
+          try {
+            // Certaines implémentations API permettent de récupérer un message spécifique
+            // Note: À adapter selon l'implémentation réelle du service
+            const endpoint = `posts/${parentMessageId}`;
+
+            // Si une méthode spécifique existe sur le service, l'utiliser
+            if (typeof service.getPost === "function") {
+              const parentPost = await service.getPost(parentMessageId);
+              setReferencedMessage(parentPost);
+
+              if (parentPost.user_id) {
+                const users = await service.getUsers({
+                  ids: [parentPost.user_id],
+                });
+                if (users && users.length > 0) {
+                  setReferencedAuthor(users[0]);
+                }
+              }
+              return;
+            }
+          } catch (directError) {
+            console.log(
+              "Tentative directe échouée, essai de l'approche alternative",
+              directError,
+            );
+          }
+
+          // Approche alternative: récupérer les messages du canal et chercher le message parent
           const response = await service.getChannelMessages(
             message.channel_id,
             {
-              perPage: 1,
-              // Utilisez l'ID du message cité pour le récupérer
-              // Note: Ceci est une approximation, l'API réelle pourrait être différente
-              after: message.props.quoted_message_id,
+              perPage: 100, // Augmenter pour avoir plus de chances de trouver le parent
             },
           );
 
-          if (response.posts[message.props.quoted_message_id]) {
-            setReferencedMessage(
-              response.posts[message.props.quoted_message_id],
-            );
+          if (response.posts && response.posts[parentMessageId]) {
+            setReferencedMessage(response.posts[parentMessageId]);
 
-            // Récupérer également l'auteur du message référencé
-            if (response.posts[message.props.quoted_message_id].user_id) {
-              const users = await service?.getUsers({
-                ids: [response.posts[message.props.quoted_message_id].user_id],
+            if (response.posts[parentMessageId].user_id) {
+              const users = await service.getUsers({
+                ids: [response.posts[parentMessageId].user_id],
               });
               if (users && users.length > 0) {
                 setReferencedAuthor(users[0]);
               }
             }
+          } else {
+            console.log(
+              `Message parent ${parentMessageId} non trouvé dans les résultats`,
+            );
           }
         } catch (error) {
-          console.error("Error fetching referenced message:", error);
+          console.error(
+            "Erreur lors de la récupération du message référencé:",
+            error,
+          );
         }
       };
 
@@ -287,11 +328,13 @@ const Message: React.FC<MessageProps> = ({
 
   // Fonction pour naviguer au message référencé
   const navigateToReferencedMessage = () => {
-    if (message?.props?.quoted_message_id) {
+    const parentMessageId =
+      message?.root_id || message?.props?.quoted_message_id;
+    if (parentMessageId) {
       // Implémenter la navigation vers le message référencé
       // Par exemple, en utilisant un scrollIntoView ou en mettant à jour l'état pour faire défiler jusqu'au message
       const messageElement = document.getElementById(
-        `message-${message.props.quoted_message_id}`,
+        `message-${parentMessageId}`,
       );
       if (messageElement) {
         messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -348,11 +391,34 @@ const Message: React.FC<MessageProps> = ({
           maxWidth: { xs: "95%", sm: "85%" },
           alignSelf: messageAlignment,
           width: "auto", // Ajout pour éviter que les messages occupent toute la largeur
+          position: "relative", // Nécessaire pour positionner l'indicateur de réponse
           ...sx,
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
+        {/* Indicateur de réponse pour la traçabilité */}
+        {isReplyMessage(message) && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: -22,
+              left: isFromCurrentUser ? "auto" : 20,
+              right: isFromCurrentUser ? 20 : "auto",
+              fontSize: "0.7rem",
+              color: "text.secondary",
+              bgcolor: "background.paper",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 10,
+              px: 1,
+              py: 0.25,
+            }}
+          >
+            reply
+          </Box>
+        )}
+
         {/* Message header */}
         <Box
           sx={{
@@ -424,36 +490,74 @@ const Message: React.FC<MessageProps> = ({
               ...bubbleSx,
             }}
           >
-            {/* Referenced message (if this is a reply) */}
+            {/* Fallback pour les réponses où nous n'avons pas pu récupérer le message référencé */}
+            {isReplyMessage(message) && !referencedMessage && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  mb: 2,
+                  borderLeft: "4px solid",
+                  borderColor: "divider",
+                  backgroundColor: (theme) =>
+                    alpha(theme.palette.background.default, 0.5),
+                  borderRadius: 1,
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  component="div"
+                  sx={{ fontStyle: "italic" }}
+                >
+                  Ceci est une réponse à un message antérieur qui n'est plus
+                  disponible
+                </Typography>
+              </Box>
+            )}
+
+            {/* Message référencé (si c'est une réponse) */}
             {referencedMessage && (
               <Box
                 onClick={navigateToReferencedMessage}
                 sx={{
-                  p: 1,
-                  mb: 1.5,
-                  borderLeft: "3px solid",
+                  p: 1.5,
+                  mb: 2,
+                  borderLeft: "4px solid",
                   borderColor: "primary.light",
                   backgroundColor: (theme) =>
-                    alpha(theme.palette.background.default, 0.5),
+                    alpha(theme.palette.background.default, 0.7),
                   borderRadius: 1,
                   cursor: "pointer",
+                  transition: "all 0.2s ease",
                   "&:hover": {
                     backgroundColor: (theme) =>
                       alpha(theme.palette.primary.light, 0.1),
+                    transform: "translateY(-2px)",
                   },
                 }}
               >
+                <Box sx={{ display: "flex", alignItems: "center", mb: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: "bold" }}
+                    component="div"
+                  >
+                    {referencedAuthor
+                      ? `${referencedAuthor.first_name || ""} ${referencedAuthor.last_name || ""}`.trim() ||
+                        referencedAuthor.username
+                      : "Utilisateur inconnu"}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ ml: 1 }}
+                  >
+                    {formatTimestamp(referencedMessage.create_at || 0)}
+                  </Typography>
+                </Box>
                 <Typography
-                  variant="caption"
-                  sx={{ fontWeight: "bold" }}
-                  component="div"
-                >
-                  {referencedAuthor
-                    ? `${referencedAuthor.first_name || ""} ${referencedAuthor.last_name || ""}`.trim()
-                    : "Unknown User"}
-                </Typography>
-                <Typography
-                  variant="caption"
+                  variant="body2"
                   color="text.secondary"
                   component="div"
                   sx={{
@@ -462,6 +566,7 @@ const Message: React.FC<MessageProps> = ({
                     display: "-webkit-box",
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: "vertical",
+                    fontSize: "0.875rem",
                   }}
                 >
                   {referencedMessage.message}

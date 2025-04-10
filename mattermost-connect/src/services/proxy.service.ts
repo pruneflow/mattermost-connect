@@ -6,6 +6,7 @@ import {
   GetMessagesOptions,
   GetUsersOptions,
   MessagesResponse,
+  Message,
 } from "../types";
 
 // Importer les utilitaires d'emoji
@@ -297,45 +298,49 @@ export class ProxyService extends BaseService implements MattermostService {
    * @param responseMessage Texte de la réponse
    * @returns Message de réponse créé
    */
-  // Méthode corrigée pour ProxyService
   async replyToMessage(
     channelId: string,
     messageId: string,
     responseMessage: string,
   ): Promise<Message> {
+    if (!channelId || !messageId || !responseMessage.trim()) {
+      throw new Error("Paramètres invalides pour la réponse à un message");
+    }
+
+    console.log(
+      `ProxyService.replyToMessage appelé avec channelId=${channelId}, messageId=${messageId}`,
+    );
+
     try {
-      // Dans le mode proxy, ajuster la structure pour s'assurer qu'elle est correcte
-      // Inclure à la fois root_id et channel_id comme exigé par l'API Mattermost
-      return await this.apiCall<Message>(`messages/reply`, {
+      // Dans le mode proxy, utiliser directement l'endpoint pour les réponses
+      // Structure de la requête standard
+      const requestBody = {
+        channel_id: channelId,
+        root_id: messageId,
+        message: responseMessage.trim(),
+        // Pas de champs supplémentaires pour éviter les problèmes
+      };
+
+      console.log("Envoi de la requête API proxy pour répondre:", requestBody);
+
+      // Utiliser l'endpoint messages/reply ou posts selon l'implémentation du proxy
+      const endpoint = this.baseUrl.includes("/api/v4")
+        ? "posts"
+        : "messages/reply";
+
+      const response = await this.apiCall<Message>(endpoint, {
         method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-          root_id: messageId, // Assurez-vous d'inclure root_id
-          message: responseMessage,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      console.log("Réponse API proxy reçue:", response);
+      return response;
     } catch (error) {
       console.error(
-        `Erreur lors de la réponse au message ${messageId} via proxy:`,
+        `ProxyService: Erreur lors de la réponse au message ${messageId} via proxy:`,
         error,
       );
-
-      // Fallback en cas d'échec - essayer d'envoyer comme message normal
-      try {
-        console.log(
-          "Tentative d'envoi comme message normal après échec de la réponse",
-        );
-        return await this.apiCall<Message>("messages", {
-          method: "POST",
-          body: JSON.stringify({
-            channel_id: channelId,
-            message: responseMessage,
-          }),
-        });
-      } catch (fallbackError) {
-        console.error("Échec du fallback vers message normal:", fallbackError);
-        throw error; // Remonter l'erreur originale
-      }
+      throw error; // Propager l'erreur sans traitement supplémentaire
     }
   }
 

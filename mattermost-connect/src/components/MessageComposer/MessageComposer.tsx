@@ -91,6 +91,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const isSubmittingRef = useRef(false); // Pour éviter les soumissions multiples
 
   // Focus on the text field when the component is mounted
   useEffect(() => {
@@ -149,7 +150,13 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
   // Handle send message
   const handleSendMessage = async () => {
+    // Validation de base
     if (!message.trim() && attachments.length === 0) return;
+
+    // Protection contre les soumissions multiples
+    if (isSubmittingRef.current || sending) return;
+
+    isSubmittingRef.current = true;
 
     try {
       setSending(true);
@@ -169,33 +176,27 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         fileIds = uploadResponse.file_infos.map((file: any) => file.id);
       }
 
-      // Send the message
       let response;
 
-      // If replying to a message
-      if (isReplying && replyTo && service.replyToMessage) {
-        try {
-          console.log(`Tentative de réponse au message ${replyTo.id}`);
+      if (isReplying && replyTo && replyTo.id) {
+        console.log(`Envoi d'une réponse au message ${replyTo.id}`);
+
+        if (service.replyToMessage) {
           response = await service.replyToMessage(
             channelId,
             replyTo.id,
             message,
           );
-          console.log("Réponse envoyée avec succès");
-        } catch (replyError) {
-          console.error(
-            "Erreur lors de la réponse, tentative d'envoi comme message normal:",
-            replyError,
-          );
-          // Fallback - envoyer comme message normal si la réponse échoue
-          response = await service.postMessage(channelId, message);
-        } finally {
-          // Clear reply state dans tous les cas
-          clearReply();
+          console.log("Réponse envoyée avec succès", response);
+        } else {
+          // Si la méthode replyToMessage n'existe pas, lever une erreur
+          throw new Error("La fonctionnalité de réponse n'est pas disponible");
         }
       } else {
-        // Regular message
+        // Message normal
+        console.log("Envoi d'un message normal");
         response = await service.postMessage(channelId, message);
+        console.log("Message envoyé avec succès", response);
       }
 
       // Reset state
@@ -211,6 +212,14 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
       setSending(false);
+
+      // Toujours nettoyer l'état de réponse, que l'envoi réussisse ou échoue
+      if (isReplying && clearReply) {
+        clearReply();
+      }
+
+      // Réinitialiser le verrou de soumission
+      isSubmittingRef.current = false;
     }
   };
 

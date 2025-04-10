@@ -6,6 +6,7 @@ import {
   GetMessagesOptions,
   GetUsersOptions,
   MessagesResponse,
+  Message,
 } from "../types";
 
 // Importer les utilitaires d'emoji
@@ -290,44 +291,42 @@ export class DirectService extends BaseService implements MattermostService {
    * @param responseMessage Texte de la réponse
    * @returns Message de réponse créé
    */
-  // Méthode corrigée pour DirectService
   async replyToMessage(
     channelId: string,
     messageId: string,
     responseMessage: string,
   ): Promise<Message> {
-    try {
-      // Vérifier que le message parent existe réellement avant de répondre
-      try {
-        await this.apiCall<any>(`posts/${messageId}`);
-      } catch (error) {
-        console.error(`Message parent ${messageId} introuvable:`, error);
-        // Si le message parent n'existe pas, envoyons un message normal au lieu d'échouer
-        return this.postMessage(channelId, responseMessage);
-      }
+    if (!channelId || !messageId || !responseMessage.trim()) {
+      throw new Error("Paramètres invalides pour la réponse à un message");
+    }
 
-      // Structure de la réponse selon l'API Mattermost
-      return this.apiCall<Message>("posts", {
+    console.log(
+      `DirectService.replyToMessage appelé avec channelId=${channelId}, messageId=${messageId}`,
+    );
+
+    try {
+      const requestBody = {
+        channel_id: channelId,
+        message: responseMessage.trim(),
+        root_id: messageId,
+      };
+
+      console.log("Envoi de la requête API pour répondre:", requestBody);
+
+      // Appel direct à l'API
+      const response = await this.apiCall<Message>("posts", {
         method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-          message: responseMessage,
-          root_id: messageId,
-          // Nous n'ajoutons pas de propriétés personnalisées qui pourraient causer des problèmes
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      console.log("Réponse API reçue:", response);
+      return response;
     } catch (error) {
       console.error(
-        `Erreur lors de la réponse au message ${messageId}:`,
+        `DirectService: Erreur lors de la réponse au message ${messageId}:`,
         error,
       );
-      // Essayer d'envoyer comme message normal en cas d'échec
-      try {
-        return await this.postMessage(channelId, responseMessage);
-      } catch (fallbackError) {
-        console.error("Échec du fallback vers message normal:", fallbackError);
-        throw error; // Remonter l'erreur originale
-      }
+      throw error; // Remonter l'erreur sans traitement supplémentaire
     }
   }
 
