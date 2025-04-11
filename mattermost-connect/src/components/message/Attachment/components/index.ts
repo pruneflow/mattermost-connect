@@ -1,8 +1,5 @@
 // src/components/Attachment/attachments/index.ts
 export { default as ImageAttachment } from "./ImageAttachment";
-export { default as DocumentAttachment } from "./DocumentAttachment";
-export { default as MediaAttachment } from "./MediaAttachment";
-export { default as GenericAttachment } from "./GenericAttachment";
 export { default as AttachmentActions } from "./AttachmentActions";
 export { default as AttachmentInfo } from "./AttachmentInfo";
 export { default as AttachmentContextMenu } from "./AttachmentContextMenu";
@@ -18,15 +15,9 @@ export const isImageType = (type: string, fileName?: string): boolean => {
   );
 };
 
-export const isDocumentType = (type: string, fileName?: string): boolean => {
+export const isPdfType = (type: string, fileName?: string): boolean => {
   return (
-    type.includes("pdf") ||
-    type.includes("text") ||
-    (fileName
-      ? /\.(pdf|txt|md|rtf|doc|docx|js|jsx|ts|tsx|html|css|java|py|c|cpp|php|rb)$/i.test(
-          fileName,
-        )
-      : false)
+    type.includes("pdf") || (fileName ? /\.(pdf)$/i.test(fileName) : false)
   );
 };
 
@@ -44,6 +35,7 @@ export const isArchiveType = (type: string, fileName?: string): boolean => {
   return (
     type.includes("zip") ||
     type.includes("archive") ||
+    type.includes("odt") ||
     (fileName ? /\.(zip|rar|7z|tar|gz)$/i.test(fileName) : false)
   );
 };

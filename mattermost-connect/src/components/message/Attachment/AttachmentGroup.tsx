@@ -55,7 +55,7 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
   // If on mobile, stack the attachments
   if (isMobile) {
     return (
-      <Box sx={sx}>
+      <Box sx={{ width: "100%", maxWidth: "280px", ...sx }}>
         {files.map((file, index) => (
           <Box key={index} sx={{ mb: 1, "&:last-child": { mb: 0 } }}>
             <Attachment

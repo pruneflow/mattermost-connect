@@ -1,4 +1,4 @@
-// src/components/EmojiPicker/CategoryBar.tsx
+// src/components/EmojiPicker/EmojiPickerCategoryBar.tsx
 import React from "react";
 import { Tabs, Tab, Box, useTheme, useMediaQuery } from "@mui/material";
 
@@ -24,7 +24,7 @@ import {
 } from "@mui/icons-material";
 
 // Types
-import { CategoryBarProps } from "../../../types";
+import { CategoryBarProps } from "../../../../types";
 
 // Mapping par défaut des icônes pour les catégories
 export const DEFAULT_CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -53,7 +53,7 @@ export const DEFAULT_CATEGORY_ICONS: Record<string, React.ReactNode> = {
 /**
  * Barre de catégories réutilisable pour les emojis et GIFs
  */
-const CategoryBar: React.FC<CategoryBarProps> = ({
+const EmojiPickerCategoryBar: React.FC<CategoryBarProps> = ({
   categories,
   activeCategory,
   onCategoryChange,
@@ -89,7 +89,7 @@ const CategoryBar: React.FC<CategoryBarProps> = ({
         <Tab
           key={category}
           value={category}
-          icon={categoryIcons[category] || undefined}
+          icon={categoryIcons[category] || (undefined as any)}
           iconPosition="start"
           label={showIconsOnly ? undefined : getCategoryLabel(category)}
           aria-label={category}
@@ -109,4 +109,4 @@ const getCategoryLabel = (category: string): string => {
   return category.split(" ")[0];
 };
 
-export default CategoryBar;
+export default EmojiPickerCategoryBar;

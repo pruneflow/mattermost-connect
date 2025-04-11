@@ -1,7 +1,7 @@
 // src/components/EmojiPicker/GifPickerContent.tsx
 import React from "react";
 import { Box, Grid, Typography, Skeleton, useTheme } from "@mui/material";
-import { GifPickerContentProps } from "../../../types";
+import { GifPickerContentProps } from "../../../../types";
 
 /**
  * Affichage du contenu GIF avec gestion des états de chargement et des résultats vides

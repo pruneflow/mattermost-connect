@@ -9,8 +9,8 @@ import {
   useTheme,
   useMediaQuery,
 } from "@mui/material";
-import { EmojiPickerContentProps } from "../../../types";
-import { EMOJI_MAP, getEmojiName } from "./data/emojiData";
+import { EmojiPickerContentProps } from "../../../../types";
+import { EMOJI_MAP, getEmojiName } from "../data/emojiData";
 
 /**
  * Affiche une grille d'emojis catégorisée ou filtrée par recherche

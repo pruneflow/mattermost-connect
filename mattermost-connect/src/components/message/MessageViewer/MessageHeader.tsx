@@ -2,7 +2,7 @@
 import React from "react";
 import { Box, Typography, Avatar } from "@mui/material";
 import { MessageHeaderProps } from "./MessageTypes";
-import { getInitials, generateColorFromString } from "../../../../utils";
+import { getInitials, generateColorFromString } from "../../../utils";
 
 /**
  * Displays the header of a message including author info and timestamp

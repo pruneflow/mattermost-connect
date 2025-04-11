@@ -50,12 +50,9 @@ export interface PreviewAttachmentProps extends BaseAttachmentProps {
 }
 
 /**
- * Props for document type attachments (PDF, text, etc.)
+ * Props for document type attachments (zip, odt, etc.)
  */
-export interface DocumentAttachmentProps extends BaseAttachmentProps {
-  /** File type/mime-type */
-  fileType: string;
-
+export interface ArchiveAttachmentProps extends BaseAttachmentProps {
   /** File name */
   fileName: string;
 
@@ -63,7 +60,21 @@ export interface DocumentAttachmentProps extends BaseAttachmentProps {
   fileSize?: number;
 
   /** Custom handling for document click */
-  onDocumentClick?: () => void;
+  onArchiveClick?: () => void;
+}
+
+/**
+ * Props for pdf type attachments
+ */
+export interface PdfAttachmentProps extends BaseAttachmentProps {
+  /** File name */
+  fileName: string;
+
+  /** File size in bytes */
+  fileSize?: number;
+
+  /** Custom handling for document click */
+  onPdfClick?: () => void;
 }
 
 /**

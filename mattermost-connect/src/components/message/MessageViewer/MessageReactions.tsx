@@ -2,8 +2,8 @@
 import React from "react";
 import { Box, Typography } from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
-import { useMattermost } from "../../../../context/MattermostProvider";
-import { getEmojiFromName } from "../../../message/EmojiPicker";
+import { useMattermost } from "../../../context/MattermostProvider";
+import { getEmojiFromName } from "../EmojiPicker";
 
 /**
  * Displays reactions to a message

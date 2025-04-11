@@ -104,7 +104,7 @@ export interface GifPickerContentProps {
 }
 
 /**
- * Props pour le composant CategoryBar
+ * Props pour le composant EmojiPickerCategoryBar
  */
 export interface CategoryBarProps {
   /** Liste des catégories */

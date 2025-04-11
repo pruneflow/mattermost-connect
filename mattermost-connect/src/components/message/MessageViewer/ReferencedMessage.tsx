@@ -2,7 +2,7 @@
 import React from "react";
 import { Box, Typography, alpha } from "@mui/material";
 import { ReferencedMessageProps } from "./MessageTypes";
-import { formatTimestamp } from "../../../../utils";
+import { formatTimestamp } from "../../../utils";
 
 /**
  * Displays a referenced message in a reply

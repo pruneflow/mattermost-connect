@@ -1,31 +1,12 @@
 // src/components/EmojiPicker/EmojiPicker.tsx
 import React, { useState } from "react";
-import {
-  Box,
-  Typography,
-  InputBase,
-  IconButton,
-  Tooltip,
-  InputAdornment,
-  Tabs,
-  Tab,
-  useTheme,
-  useMediaQuery,
-} from "@mui/material";
-
-// Material-UI Icons
-import {
-  Search as SearchIcon,
-  Clear as ClearIcon,
-  Image as ImageIcon,
-  EmojiEmotions as EmojiIcon,
-} from "@mui/icons-material";
+import { Box, useTheme, useMediaQuery } from "@mui/material";
 
 // Composants
-import EmojiPickerContent from "./EmojiPickerContent";
-import GifPickerContent from "./GifPickerContent";
-import CategoryBar from "./CategoryBar";
-import { DEFAULT_CATEGORY_ICONS } from "./CategoryBar";
+import EmojiPickerContent from "./components/EmojiPickerContent";
+import GifPickerContent from "./components/GifPickerContent";
+import EmojiPickerCategoryBar from "./components/EmojiPickerCategoryBar";
+import { DEFAULT_CATEGORY_ICONS } from "./components/EmojiPickerCategoryBar";
 
 // Context et types
 import { useEmoji } from "../../../context/EmojiProvider";
@@ -34,6 +15,10 @@ import {
   PickerMode,
   EmojiSelectionResult,
 } from "../../../types";
+import { EmojiPickerFooter } from "./components/EmojiPickerFooter";
+import { EmojiSearchBar } from "./components/EmojiSearchBar";
+import { EmojiPickerHeader } from "./components/EmojiPickerHeader";
+import { EmojiPickerTabs } from "./components/EmojiPickerTabs";
 
 /**
  * Sélecteur d'emojis et de GIFs
@@ -175,108 +160,32 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         ...sx,
       }}
     >
-      {/* Titre du picker en mode réaction */}
-      {mode === PickerMode.REACTION && (
-        <Box
-          sx={{
-            p: 1,
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <Typography component={"div"} variant="subtitle2">
-            {getTitle()}
-          </Typography>
-          {onClose && (
-            <IconButton size="small" onClick={onClose}>
-              <ClearIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
-      )}
+      {/* En-tête (uniquement en mode réaction) */}
+      <EmojiPickerHeader mode={mode} activeTab={activeTab} onClose={onClose} />
 
-      {/* Onglets principaux (Emojis/GIFs) - masqués en mode réaction */}
-      {mode === PickerMode.MESSAGE && (
-        <Tabs
-          value={activeTab}
-          onChange={(_, newValue) => {
-            setActiveTab(newValue);
-            setSearchQuery(""); // Réinitialiser la recherche lors du changement d'onglet
-          }}
-          variant="fullWidth"
-          sx={{
-            minHeight: "40px",
-            "& .MuiTab-root": {
-              minHeight: "40px",
-              py: 0.5,
-            },
-          }}
-        >
-          <Tab
-            icon={<EmojiIcon fontSize="small" />}
-            iconPosition="start"
-            label="Emojis"
-            value={0}
-          />
-          <Tab
-            icon={<ImageIcon fontSize="small" />}
-            iconPosition="start"
-            label="GIFs"
-            value={1}
-          />
-        </Tabs>
-      )}
+      {/* Onglets principaux (uniquement en mode message) */}
+      <EmojiPickerTabs
+        mode={mode}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        clearSearch={clearSearch}
+      />
 
       {/* Barre de recherche */}
-      <Box sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: "divider" }}>
-        <InputBase
-          placeholder={
-            activeTab === 0 ? "Rechercher un emoji..." : "Rechercher un GIF..."
-          }
-          fullWidth
-          value={searchQuery}
-          onChange={handleSearchChange}
-          startAdornment={
-            <InputAdornment position="start">
-              <SearchIcon
-                fontSize="small"
-                sx={{ color: "text.secondary", mr: 0.5 }}
-              />
-            </InputAdornment>
-          }
-          endAdornment={
-            searchQuery && (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  onClick={clearSearch}
-                  edge="end"
-                  sx={{ p: 0.5 }}
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            )
-          }
-          sx={{
-            fontSize: "0.875rem",
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            bgcolor: "action.hover",
-          }}
-        />
-      </Box>
+      <EmojiSearchBar
+        activeTab={activeTab}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        clearSearch={clearSearch}
+      />
 
+      {/* Contenu principal */}
       {activeTab === 0 || mode === PickerMode.REACTION ? (
         // SECTION EMOJIS
         <>
-          {/* Sous-catégories des Emojis (visibles uniquement si pas de recherche) */}
+          {/* Barre de catégories (visible uniquement sans recherche) */}
           {!searchQuery && (
-            <CategoryBar
+            <EmojiPickerCategoryBar
               categories={emojiCategories}
               activeCategory={activeEmojiCategory}
               onCategoryChange={setActiveEmojiCategory}
@@ -294,9 +203,9 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
       ) : (
         // SECTION GIFS
         <>
-          {/* Sous-catégories de GIFs (visibles uniquement si pas de recherche) */}
+          {/* Barre de catégories GIF (visible uniquement sans recherche) */}
           {!searchQuery && (
-            <CategoryBar
+            <EmojiPickerCategoryBar
               categories={gifCategories}
               activeCategory={activeGifCategory}
               onCategoryChange={setActiveGifCategory}
@@ -304,8 +213,6 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
               iconsOnly={isMobile}
             />
           )}
-
-          {/* Grille des GIFs */}
           <GifPickerContent
             onGifSelect={handleGifSelect}
             searchQuery={searchQuery}
@@ -316,39 +223,15 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         </>
       )}
 
-      {/* Barre d'état en bas (optionnelle) */}
-      <Box
-        sx={{
-          p: 0.5,
-          borderTop: "1px solid",
-          borderColor: "divider",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          bgcolor: "background.default",
-        }}
-      >
-        <Typography
-          component={"div"}
-          variant="caption"
-          color="text.secondary"
-          sx={{ ml: 1 }}
-        >
-          {activeTab === 0 || mode === PickerMode.REACTION
-            ? "Emojis"
-            : searchQuery
-              ? "Recherche de GIFs..."
-              : `GIFs ${activeGifCategory}`}
-        </Typography>
-
-        {onClose && mode === PickerMode.MESSAGE && (
-          <Tooltip title="Fermer">
-            <IconButton size="small" onClick={onClose}>
-              <ClearIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
-      </Box>
+      {/* Pied de page avec statut et bouton de fermeture */}
+      <EmojiPickerFooter
+        mode={mode}
+        activeTab={activeTab}
+        searchQuery={searchQuery}
+        activeEmojiCategory={activeEmojiCategory}
+        activeGifCategory={activeGifCategory}
+        onClose={onClose}
+      />
     </Box>
   );
 };

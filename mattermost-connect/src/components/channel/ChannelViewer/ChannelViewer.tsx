@@ -4,27 +4,16 @@ import { useMattermost } from "../../../context/MattermostProvider";
 import { Channel, Message as MessageType, User } from "../../../types";
 
 // Material-UI Components
-import {
-  Box,
-  Typography,
-  Button,
-  Divider,
-  CircularProgress,
-  Skeleton,
-  Alert,
-  SxProps,
-  Theme,
-} from "@mui/material";
-
-// Material-UI Icons
-import {
-  ExpandMore as ExpandMoreIcon,
-  Info as InfoIcon,
-} from "@mui/icons-material";
+import { Box, Divider, SxProps, Theme } from "@mui/material";
 
 // Related components
-import Message from "./message/Message";
-import ChannelHeader from "./ChannelHeader";
+import Message from "../../message/MessageViewer";
+import ChannelHeader from "./components/ChannelHeader";
+import { ChannelLoadingState } from "./components/ChannelLoadingState";
+import { ChannelErrorState } from "./components/ChannelErrorState";
+import { ChannelEmptyState } from "./components/ChannelEmptyState";
+import { ChannelLoadMoreButton } from "./components/ChannelLoadMoreButton";
+import { MessageList } from "../../message/MessageViewer/MessageList";
 
 /**
  * Props for the ChannelViewer component
@@ -171,7 +160,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           // Fallback au cas où la référence du conteneur n'est pas disponible
           messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
         }
-      }, 750);
+      }, 1000);
 
       return () => clearTimeout(timer);
     }
@@ -280,26 +269,6 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     }
   };
 
-  // Render loading skeletons
-  const renderSkeletons = () => (
-    <Box sx={{ p: 2 }}>
-      {Array.from({ length: 3 }).map((_, index) => (
-        <Box key={index} sx={{ display: "flex", mb: 2 }}>
-          <Skeleton variant="circular" width={40} height={40} sx={{ mr: 2 }} />
-          <Box sx={{ width: "100%" }}>
-            <Skeleton variant="text" width={120} height={24} />
-            <Skeleton
-              variant="rectangular"
-              height={40}
-              width={`${Math.random() * 50 + 30}%`}
-              sx={{ mt: 1 }}
-            />
-          </Box>
-        </Box>
-      ))}
-    </Box>
-  );
-
   return (
     <Box
       className={className}
@@ -333,77 +302,32 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       >
         {/* Loading state */}
         {loading ? (
-          renderSkeletons()
+          <ChannelLoadingState />
         ) : error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
+          <ChannelErrorState error={error} />
         ) : messages.length === 0 ? (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              flexDirection: "column",
-              color: "text.secondary",
-            }}
-          >
-            <InfoIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-            <Typography component={"div"} variant="body1">
-              No messages in this channel
-            </Typography>
-            <Typography component={"div"} variant="body2" sx={{ mt: 1 }}>
-              Be the first to start a conversation!
-            </Typography>
-          </Box>
+          <ChannelEmptyState />
         ) : (
           // Messages list
           <>
             {/* Load more button */}
-            {hasMoreMessages && (
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  mb: 2,
-                }}
-              >
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={loadMoreMessages}
-                  disabled={loadingMore}
-                  startIcon={
-                    loadingMore ? (
-                      <CircularProgress size={16} />
-                    ) : (
-                      <ExpandMoreIcon />
-                    )
-                  }
-                >
-                  {loadingMore ? "Loading..." : "Load more messages"}
-                </Button>
-              </Box>
-            )}
+            <ChannelLoadMoreButton
+              hasMoreMessages={hasMoreMessages}
+              loadingMore={loadingMore}
+              loadMoreMessages={loadMoreMessages}
+            />
 
             {/* Message list */}
-            <Box sx={{ flexGrow: 1 }}>
-              {messages.map((message) => (
-                <Message
-                  key={message.id}
-                  message={message}
-                  renderer={messageRenderer}
-                  isFromCurrentUser={message.user_id === userIdToUse}
-                  showActions={!readOnly}
-                  onReply={handleReply}
-                  onEdit={handleEditMessage}
-                  onDelete={handleDeleteMessage}
-                  {...messageProps}
-                />
-              ))}
-              <div ref={messagesEndRef} />
-            </Box>
+            <MessageList
+              messages={messages}
+              readOnly={readOnly}
+              currentUserId={userIdToUse}
+              messageRenderer={messageRenderer}
+              handleReply={handleReply}
+              handleEditMessage={handleEditMessage}
+              handleDeleteMessage={handleDeleteMessage}
+              messageProps={messageProps}
+            />
           </>
         )}
       </Box>

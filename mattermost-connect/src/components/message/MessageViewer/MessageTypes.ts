@@ -1,6 +1,6 @@
 // src/components/ChannelViewer/message/MessageTypes.ts
 import React from "react";
-import { Message as MessageType, User } from "../../../../types";
+import { Message as MessageType, User } from "../../../types";
 import { SxProps, Theme } from "@mui/material";
 
 /**

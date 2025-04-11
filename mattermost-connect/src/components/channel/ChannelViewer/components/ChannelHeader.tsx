@@ -1,6 +1,6 @@
 // src/components/ChannelViewer/ChannelHeader.tsx
 import React, { useState } from "react";
-import { Channel } from "../../../types";
+import { Channel } from "../../../../types";
 
 // Material-UI Components
 import {

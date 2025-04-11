@@ -12,8 +12,8 @@ export {
 export { default as ChannelList } from "./components/channel/ChannelList/ChannelList";
 export { default as ChannelItem } from "./components/channel/ChannelList/ChannelItem";
 export { default as ChannelViewer } from "./components/channel/ChannelViewer/ChannelViewer";
-export { default as ChannelHeader } from "./components/channel/ChannelViewer/ChannelHeader";
-export { default as Message } from "./components/channel/ChannelViewer/message/Message";
+export { default as ChannelHeader } from "./components/channel/ChannelViewer/components/ChannelHeader";
+export { default as Message } from "./components/message/MessageViewer/Message";
 export { default as MessageComposer } from "./components/message/MessageComposer/MessageComposer";
 
 // Exporter les composants de sélection d'équipe

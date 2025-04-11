@@ -22,7 +22,6 @@ import {
   MediaAttachment,
   GenericAttachment,
   isImageType,
-  isDocumentType,
   isMediaType,
   AttachmentNotification,
   AttachmentInfo,
@@ -30,7 +29,11 @@ import {
   AttachmentActions,
   AttachmentPreviewControls,
   AttachmentUploadIndicator,
+  isArchiveType,
+  isPdfType,
 } from "./components";
+import ArchiveAttachment from "./components/ArchiveAttachment";
+import PdfAttachment from "./components/PdfAttachment";
 
 /**
  * Modes available for the Attachment component
@@ -185,21 +188,14 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
       try {
         // Reset error
         setThumbnailError(false);
-
         // For PDF files, use a static SVG icon
-        if (
-          fileType.includes("pdf") ||
-          fileName.toLowerCase().endsWith(".pdf")
-        ) {
+        if (isPdfType(fileType, fileName)) {
           setThumbnailUrl(`${baseUrl}/static/files/00301d72e07c55d59df5.svg`);
           return;
         }
 
         // For ZIP files, use the ZIP icon
-        if (
-          fileType.includes("zip") ||
-          fileName.toLowerCase().endsWith(".zip")
-        ) {
+        if (isArchiveType(fileType, fileName)) {
           setThumbnailUrl(`${baseUrl}/static/files/48c8ed225ff4a2f7a4c1.svg`);
           return;
         }
@@ -339,48 +335,16 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 
   // Get the appropriate attachment component based on file type
   const renderAttachmentIcon = () => {
-    if (isImageType(fileType, fileName)) {
-      return (
-        <ImageAttachment
-          file={file}
-          thumbnailUrl={thumbnailUrl}
-          thumbnailError={thumbnailError}
-          setThumbnailError={setThumbnailError}
-          fileName={fileName}
-          onImageClick={handleAttachmentClick}
-        />
-      );
-    } else if (isDocumentType(fileType, fileName)) {
-      return (
-        <DocumentAttachment
-          file={file}
-          fileType={fileType}
-          fileName={fileName}
-          onDocumentClick={handleAttachmentClick}
-          iconSx={iconSx}
-        />
-      );
-    } else if (isMediaType(fileType, fileName)) {
-      return (
-        <MediaAttachment
-          file={file}
-          fileType={fileType}
-          fileName={fileName}
-          onMediaClick={handleAttachmentClick}
-          iconSx={iconSx}
-        />
-      );
-    } else {
-      return (
-        <GenericAttachment
-          file={file}
-          fileType={fileType}
-          fileName={fileName}
-          onAttachmentClick={handleAttachmentClick}
-          iconSx={iconSx}
-        />
-      );
-    }
+    return (
+      <ImageAttachment
+        file={file}
+        thumbnailUrl={thumbnailUrl}
+        thumbnailError={thumbnailError}
+        setThumbnailError={setThumbnailError}
+        fileName={fileName}
+        onImageClick={handleAttachmentClick}
+      />
+    );
   };
 
   return (

@@ -6,9 +6,9 @@
 
 // Composants
 export { default as EmojiPicker } from "./EmojiPicker";
-export { default as EmojiPickerContent } from "./EmojiPickerContent";
-export { default as GifPickerContent } from "./GifPickerContent";
-export { default as CategoryBar } from "./CategoryBar";
+export { default as EmojiPickerContent } from "./components/EmojiPickerContent";
+export { default as GifPickerContent } from "./components/GifPickerContent";
+export { default as EmojiPickerCategoryBar } from "./components/EmojiPickerCategoryBar";
 
 // Types
 export { PickerMode } from "../../../types";
@@ -42,4 +42,4 @@ export {
 export { useEmoji } from "../../../context/EmojiProvider";
 
 // Icônes standard pour les catégories
-export { DEFAULT_CATEGORY_ICONS } from "./CategoryBar";
+export { DEFAULT_CATEGORY_ICONS } from "./components/EmojiPickerCategoryBar";

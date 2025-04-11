@@ -1,6 +1,6 @@
 // src/components/ChannelViewer/message/Message.tsx
 import React, { useState, useEffect } from "react";
-import { useMattermost } from "../../../../context/MattermostProvider";
+import { useMattermost } from "../../../context/MattermostProvider";
 import {
   Box,
   Paper,
@@ -11,15 +11,15 @@ import {
   alpha,
 } from "@mui/material";
 import { MessageProps } from "./MessageTypes";
-import { formatMessageText, formatTimestamp } from "../../../../utils";
-import { EmojiPicker, PickerMode } from "../../../message/EmojiPicker";
-import { EmojiProvider } from "../../../../context/EmojiProvider";
+import { formatMessageText, formatTimestamp } from "../../../utils";
+import { EmojiPicker, PickerMode } from "../EmojiPicker";
+import { EmojiProvider } from "../../../context/EmojiProvider";
 import MessageHeader from "./MessageHeader";
 import MessageContent from "./MessageContent";
 import MessageActions from "./MessageActions";
 import MessageReactions from "./MessageReactions";
 import ReferencedMessage from "./ReferencedMessage";
-import { User, Message as MessageType } from "../../../../types";
+import { User, Message as MessageType } from "../../../types";
 
 /**
  * A component that renders a single message in the channel view
@@ -67,7 +67,7 @@ const Message: React.FC<MessageProps> = ({
   };
 
   // Handle selecting a reaction
-  const handleReactionSelect = async (result: any) => {
+  const handleReactionSelect = async () => {
     handleReactionMenuClose();
   };
 
@@ -86,7 +86,9 @@ const Message: React.FC<MessageProps> = ({
             // Some API implementations allow retrieving a specific message
             // Note: To adapt based on the actual service implementation
             if (typeof service.getPost === "function") {
-              const parentPost = await service.getPost(parentMessageId);
+              const parentPost = await service.getPost(
+                parentMessageId as string,
+              );
               setReferencedMessage(parentPost);
 
               if (parentPost.user_id) {
@@ -114,12 +116,12 @@ const Message: React.FC<MessageProps> = ({
             },
           );
 
-          if (response.posts && response.posts[parentMessageId]) {
-            setReferencedMessage(response.posts[parentMessageId]);
+          if (response.posts && response.posts[parentMessageId as string]) {
+            setReferencedMessage(response.posts[parentMessageId as string]);
 
-            if (response.posts[parentMessageId].user_id) {
+            if (response.posts[parentMessageId as string].user_id) {
               const users = await service.getUsers({
-                ids: [response.posts[parentMessageId].user_id],
+                ids: [response.posts[parentMessageId as string].user_id],
               });
               if (users && users.length > 0) {
                 setReferencedAuthor(users[0]);

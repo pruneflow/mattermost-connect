@@ -2,9 +2,7 @@
 import React from "react";
 import { Box } from "@mui/material";
 import { MessageContentProps } from "./MessageTypes";
-import Attachment, {
-  AttachmentGroup,
-} from "../../../message/Attachment/AttachmentGroup";
+import { AttachmentGroup } from "../Attachment/AttachmentGroup";
 
 /**
  * Displays the content of a message including text and attachments
