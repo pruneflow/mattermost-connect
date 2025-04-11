@@ -1,7 +1,6 @@
 // src/components/Attachment/Attachment.tsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useMattermost } from "../../context/MattermostProvider";
-import { createFileService } from "../../services/file.service";
 
 // Types
 import { MessageAttachment as AttachmentType } from "../../types";
@@ -11,9 +10,6 @@ import {
   Box,
   Paper,
   Typography,
-  SxProps,
-  Theme,
-  alpha,
   IconButton,
   Menu,
   MenuItem,
@@ -26,106 +22,111 @@ import {
   useTheme,
   CircularProgress,
   Grid,
+  alpha,
+  SxProps,
+  Theme,
 } from "@mui/material";
 
 // Material-UI Icons
 import {
-  InsertDriveFile as FileIcon,
-  Image as ImageIcon,
-  PictureAsPdf as PdfIcon,
-  Code as CodeIcon,
-  Description as TextIcon,
-  VideoFile as VideoIcon,
-  MusicNote as AudioIcon,
   MoreVert as MoreIcon,
   Download as DownloadIcon,
   Link as LinkIcon,
   Close as CloseIcon,
-  BrokenImage as ErrorIcon,
-  FolderZip as ZipIcon,
 } from "@mui/icons-material";
 
+// Attachment type components
+import {
+  ImageAttachment,
+  DocumentAttachment,
+  MediaAttachment,
+  GenericAttachment,
+  isImageType,
+  isDocumentType,
+  isMediaType,
+} from "./attachments";
+
 /**
- * Modes disponibles pour le composant Attachment
+ * Modes available for the Attachment component
  */
 export enum AttachmentMode {
-  /** Affichage standard dans un message */
+  /** Standard display in a message */
   MESSAGE = "message",
-  /** Prévisualisation dans le composeur de message */
+  /** Preview in the message composer */
   PREVIEW = "preview",
 }
 
 /**
- * Props communes à tous les modes
+ * Common props to all modes
  */
 interface CommonAttachmentProps {
-  /** Le fichier à afficher */
+  /** The file to display */
   file: File | AttachmentType;
 
-  /** Mode d'affichage du composant */
+  /** Display mode of the component */
   mode?: AttachmentMode;
 
-  /** Style supplémentaire */
+  /** Additional style */
   sx?: SxProps<Theme>;
 
-  /** Style pour l'icône */
+  /** Style for the icon */
   iconSx?: SxProps<Theme>;
 
-  /** Largeur fixe du composant (par défaut 240px) */
+  /** Fixed width of the component (default 240px) */
   width?: string | number;
 }
 
 /**
- * Props spécifiques au mode MESSAGE
+ * Props specific to MESSAGE mode
  */
 interface MessageAttachmentProps extends CommonAttachmentProps {
   mode?: AttachmentMode.MESSAGE;
 
-  /** Gestionnaire de clic optionnel */
+  /** Optional click handler */
   onClick?: (file: AttachmentType) => void;
 }
 
 /**
- * Props spécifiques au mode PREVIEW
+ * Props specific to PREVIEW mode
  */
 interface PreviewAttachmentProps extends CommonAttachmentProps {
   mode?: AttachmentMode.PREVIEW;
 
-  /** Gestionnaire pour supprimer la pièce jointe */
+  /** Handler to remove the attachment */
   onRemove?: () => void;
 
-  /** Si le fichier est en cours de téléchargement */
+  /** Whether the file is currently uploading */
   isUploading?: boolean;
 
-  /** Si le fichier a été téléchargé sur le serveur */
+  /** Whether the file has been uploaded to the server */
   isUploaded?: boolean;
 }
 
 /**
- * Type pour un groupe de pièces jointes
+ * Type for a group of attachments
  */
 export interface AttachmentGroupProps {
-  /** Liste des fichiers à afficher */
+  /** List of files to display */
   files: (File | AttachmentType)[];
 
-  /** Mode d'affichage des composants */
+  /** Display mode of the components */
   mode?: AttachmentMode;
 
-  /** Gestionnaire pour supprimer une pièce jointe (mode PREVIEW) */
+  /** Handler to remove an attachment (PREVIEW mode) */
   onRemove?: (index: number) => void;
 
-  /** Si les fichiers sont en cours de téléchargement (mode PREVIEW) */
+  /** Whether the files are currently uploading (PREVIEW mode) */
   isUploading?: boolean[];
 
-  /** Si les fichiers ont été téléchargés sur le serveur (mode PREVIEW) */
+  /** Whether the files have been uploaded to the server (PREVIEW mode) */
   isUploaded?: boolean[];
 
-  /** Style supplémentaire */
+  /** Additional style */
   sx?: SxProps<Theme>;
 }
 
 /**
- * Union des types de props possibles
+ * Union of possible props types
  */
 export type AttachmentProps = MessageAttachmentProps | PreviewAttachmentProps;
 
@@ -146,8 +147,8 @@ export interface MattermostFile {
 }
 
 /**
- * Composant unifié pour l'affichage des pièces jointes
- * Fonctionne à la fois en mode message et en mode prévisualisation
+ * Unified component for displaying attachments
+ * Works in both message mode and preview mode
  */
 const Attachment: React.FC<AttachmentProps> = (props) => {
   const {
@@ -158,10 +159,10 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     width = 240,
   } = props;
 
-  // Props spécifiques au mode
+  // Mode-specific props
   const isPreviewMode = mode === AttachmentMode.PREVIEW;
 
-  // Extraire les props spécifiques au mode
+  // Extract mode-specific props
   const onClick = !isPreviewMode
     ? (props as MessageAttachmentProps).onClick
     : undefined;
@@ -178,10 +179,9 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   // Hooks
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { service } = useMattermost();
-  const fileService = createFileService(service);
+  const { fileService } = useMattermost();
 
-  // État
+  // State
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [thumbnailError, setThumbnailError] = useState<boolean>(false);
   const [menuPosition, setMenuPosition] = useState<{
@@ -195,15 +195,16 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     "success" | "error" | "info" | "warning"
   >("success");
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
+  const { service } = useMattermost();
 
-  // États dérivés
+  // Derived states
   const baseUrl = service?.getBaseUrl?.() || "";
 
-  // Déterminer si nous avons un objet File ou un objet AttachmentType
+  // Determine if we have a File object or an AttachmentType object
   const isLocalFile = !isUploaded && file instanceof File;
   const mattermostFile = isLocalFile ? null : (file as AttachmentType);
 
-  // Obtenir les propriétés du fichier selon le type
+  // Get file properties based on type
   const fileName = isLocalFile
     ? (file as File).name
     : (file as AttachmentType).name;
@@ -215,14 +216,14 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     : (file as AttachmentType).size || 0;
   const fileId = isLocalFile ? undefined : (file as AttachmentType).id;
 
-  // Générer l'URL de miniature pour le fichier
+  // Generate thumbnail URL for the file
   useEffect(() => {
     const generateThumbnailUrl = async () => {
       try {
-        // Réinitialiser l'erreur
+        // Reset error
         setThumbnailError(false);
 
-        // Pour les fichiers PDF, utiliser l'icône SVG statique
+        // For PDF files, use a static SVG icon
         if (
           fileType.includes("pdf") ||
           fileName.toLowerCase().endsWith(".pdf")
@@ -231,7 +232,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           return;
         }
 
-        // Pour les fichiers ZIP, utiliser l'icône ZIP
+        // For ZIP files, use the ZIP icon
         if (
           fileType.includes("zip") ||
           fileName.toLowerCase().endsWith(".zip")
@@ -240,20 +241,20 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           return;
         }
 
-        // Pour les images téléchargées sur Mattermost, utiliser l'API de miniature
+        // For images uploaded to Mattermost, use the thumbnail API
         if (fileId) {
           setThumbnailUrl(`${baseUrl}/api/v4/files/${fileId}/thumbnail`);
           return;
         }
 
-        // Pour les fichiers image locaux, créer une URL d'objet locale
+        // For local image files, create a local object URL
         if (isLocalFile && fileType.includes("image")) {
           const localUrl = URL.createObjectURL(file as File);
           setThumbnailUrl(localUrl);
           return;
         }
 
-        // Pour les autres types de fichiers, ne pas définir d'URL de miniature
+        // For other file types, don't set a thumbnail URL
         setThumbnailUrl(null);
       } catch (error) {
         console.error("Error generating thumbnail URL:", error);
@@ -264,7 +265,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 
     void generateThumbnailUrl();
 
-    // Nettoyer l'URL d'objet lors du démontage
+    // Clean up object URL when component unmounts
     return () => {
       if (thumbnailUrl && isLocalFile && fileType.includes("image")) {
         URL.revokeObjectURL(thumbnailUrl);
@@ -272,43 +273,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     };
   }, [file, fileId, isLocalFile, fileType, fileName, baseUrl, isUploaded]);
 
-  // Obtenir l'icône appropriée selon le type de fichier
-  const getFileIcon = () => {
-    // Vérifier le type de fichier ou l'extension
-    if (
-      fileType.includes("image") ||
-      fileName.match(/\.(jpg|jpeg|png|gif|svg|webp)$/i)
-    ) {
-      return <ImageIcon sx={iconSx} />;
-    } else if (
-      fileType.includes("pdf") ||
-      fileName.toLowerCase().endsWith(".pdf")
-    ) {
-      return <PdfIcon sx={iconSx} />;
-    } else if (
-      fileType.includes("video") ||
-      fileName.match(/\.(mp4|mov|avi|webm)$/i)
-    ) {
-      return <VideoIcon sx={iconSx} />;
-    } else if (
-      fileType.includes("audio") ||
-      fileName.match(/\.(mp3|wav|ogg|flac)$/i)
-    ) {
-      return <AudioIcon sx={iconSx} />;
-    } else if (fileName.match(/\.(txt|md|rtf|doc|docx)$/i)) {
-      return <TextIcon sx={iconSx} />;
-    } else if (
-      fileName.match(/\.(js|jsx|ts|tsx|html|css|java|py|c|cpp|php|rb)$/i)
-    ) {
-      return <CodeIcon sx={iconSx} />;
-    } else if (fileName.match(/\.(zip|rar|7z|tar|gz)$/i)) {
-      return <ZipIcon sx={iconSx} />;
-    } else {
-      return <FileIcon sx={iconSx} />;
-    }
-  };
-
-  // Formater la taille du fichier
+  // Format file size
   const formatFileSize = (bytes?: number): string => {
     if (!bytes) return "";
 
@@ -324,7 +289,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     return `${size.toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
   };
 
-  // Gestionnaire de clic sur la pièce jointe
+  // Handler for attachment click
   const handleAttachmentClick = () => {
     if (!isPreviewMode && onClick && mattermostFile) {
       onClick(mattermostFile);
@@ -335,7 +300,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
-    // Calculer la position basée sur l'événement
+    // Calculate position based on the event
     setMenuPosition({
       top: event.clientY,
       left: event.clientX,
@@ -346,7 +311,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     setMenuPosition(null);
   };
 
-  // Créer un lien public
+  // Create a public link
   const handleCreatePublicLink = async () => {
     if (!fileId) {
       setSnackbarMessage("Unable to create public link: File ID is missing");
@@ -359,13 +324,13 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     try {
       setPublicLinkLoading(true);
 
-      // Utiliser le service pour créer un lien public
+      // Use the file service to create a public link
       const publicLink = await fileService.createPublicLink(fileId);
 
-      // Copier le lien dans le presse-papier
+      // Copy the link to clipboard
       await navigator.clipboard.writeText(publicLink);
 
-      // Notification utilisateur
+      // User notification
       setSnackbarMessage("Public link created and copied to clipboard!");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
@@ -382,7 +347,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
   };
 
-  // Télécharger le fichier
+  // Download the file
   const handleDownload = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     if (!fileId) {
@@ -404,9 +369,55 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
   };
 
-  // Fermer la notification snackbar
+  // Close the snackbar notification
   const handleSnackbarClose = () => {
     setSnackbarOpen(false);
+  };
+
+  // Get the appropriate attachment component based on file type
+  const renderAttachmentIcon = () => {
+    if (isImageType(fileType, fileName)) {
+      return (
+        <ImageAttachment
+          file={file}
+          thumbnailUrl={thumbnailUrl}
+          thumbnailError={thumbnailError}
+          setThumbnailError={setThumbnailError}
+          fileName={fileName}
+          onImageClick={handleAttachmentClick}
+        />
+      );
+    } else if (isDocumentType(fileType, fileName)) {
+      return (
+        <DocumentAttachment
+          file={file}
+          fileType={fileType}
+          fileName={fileName}
+          onDocumentClick={handleAttachmentClick}
+          iconSx={iconSx}
+        />
+      );
+    } else if (isMediaType(fileType, fileName)) {
+      return (
+        <MediaAttachment
+          file={file}
+          fileType={fileType}
+          fileName={fileName}
+          onMediaClick={handleAttachmentClick}
+          iconSx={iconSx}
+        />
+      );
+    } else {
+      return (
+        <GenericAttachment
+          file={file}
+          fileType={fileType}
+          fileName={fileName}
+          onAttachmentClick={handleAttachmentClick}
+          iconSx={iconSx}
+        />
+      );
+    }
   };
 
   return (
@@ -436,40 +447,10 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         onMouseEnter={() => !isMobile && setShowControls(true)}
         onMouseLeave={() => !isMobile && setShowControls(false)}
       >
-        {/* Miniature ou icône */}
-        {thumbnailUrl && !thumbnailError ? (
-          <Box
-            component="img"
-            src={thumbnailUrl}
-            alt={fileName}
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 1,
-              objectFit: "cover",
-              mr: 1.5,
-            }}
-            onError={() => setThumbnailError(true)}
-          />
-        ) : (
-          <Box
-            sx={{
-              mr: 1.5,
-              color: thumbnailError ? "error.main" : "primary.main",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 40,
-              height: 40,
-              borderRadius: 1,
-              bgcolor: (theme) => alpha(theme.palette.action.hover, 0.5),
-            }}
-          >
-            {thumbnailError ? <ErrorIcon /> : getFileIcon()}
-          </Box>
-        )}
+        {/* Thumbnail or icon */}
+        {renderAttachmentIcon()}
 
-        {/* Informations sur le fichier */}
+        {/* File information */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="body2"
@@ -499,7 +480,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           </Typography>
         </Box>
 
-        {/* Boutons d'action (visibles au survol ou toujours sur mobile) */}
+        {/* Action buttons (visible on hover or always on mobile) */}
         {((showControls && !isPreviewMode) || isMobile) && (
           <Box sx={{ display: "flex", ml: 1 }}>
             <Tooltip title="Options">
@@ -512,7 +493,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Télécharger">
+            <Tooltip title="Download">
               <IconButton size="small" onClick={handleDownload}>
                 <DownloadIcon fontSize="small" />
               </IconButton>
@@ -520,7 +501,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           </Box>
         )}
 
-        {/* Bouton de suppression pour le mode preview */}
+        {/* Remove button for preview mode */}
         {isPreviewMode && onRemove && !isUploading && (
           <IconButton
             size="small"
@@ -544,7 +525,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           </IconButton>
         )}
 
-        {/* Indicateur de chargement pour le mode preview */}
+        {/* Loading indicator for preview mode */}
         {isPreviewMode && isUploading && (
           <CircularProgress
             size={24}
@@ -560,7 +541,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         )}
       </Paper>
 
-      {/* Menu contextuel - seulement avec l'option de création de lien public */}
+      {/* Context menu - only with public link creation option */}
       <Menu
         id="options-menu"
         open={Boolean(menuPosition)}
@@ -581,11 +562,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
             )}
           </ListItemIcon>
           <ListItemText
-            primary={
-              publicLinkLoading
-                ? "Création en cours..."
-                : "Créer un lien public"
-            }
+            primary={publicLinkLoading ? "Creating..." : "Create public link"}
           />
         </MenuItem>
       </Menu>
@@ -611,7 +588,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
 };
 
 /**
- * Composant pour afficher un groupe de pièces jointes côte à côte (en desktop)
+ * Component to display a group of attachments side by side (on desktop)
  */
 export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
   files,
@@ -624,7 +601,7 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  // Si on est en mode mobile, empiler les pièces jointes
+  // If on mobile, stack the attachments
   if (isMobile) {
     return (
       <Box sx={sx}>
@@ -644,7 +621,7 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
     );
   }
 
-  // En mode desktop et en mode message, afficher les pièces jointes en ligne avec scroll
+  // On desktop and in message mode, display attachments inline with scroll
   if (mode === AttachmentMode.MESSAGE) {
     return (
       <Box
@@ -652,7 +629,7 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
           display: "flex",
           overflowX: "auto",
           gap: 1,
-          pb: 1, // Espace pour le scroll horizontal
+          pb: 1, // Space for horizontal scroll
           ...sx,
         }}
       >
@@ -661,14 +638,14 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
             key={index}
             file={file}
             mode={mode}
-            width={240} // Largeur fixe pour chaque attachment
+            width={240} // Fixed width for each attachment
           />
         ))}
       </Box>
     );
   }
 
-  // En mode desktop pour d'autres modes (preview), afficher en grille
+  // On desktop for other modes (preview), display in grid
   return (
     <Grid container spacing={1} sx={sx}>
       {files.map((file, index) => (

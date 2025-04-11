@@ -23,7 +23,7 @@ import {
 } from "@mui/icons-material";
 
 // Related components
-import Message from "./Message";
+import Message from "./message/Message";
 import ChannelHeader from "./ChannelHeader";
 
 /**

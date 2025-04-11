@@ -9,6 +9,8 @@ import React, {
   ReactNode,
 } from "react";
 import { createMattermostService } from "../services";
+import { createFileService } from "../services/file.service";
+import { createEmojiService } from "../services/emoji.service";
 import type {
   User,
   ProviderConfig,
@@ -19,50 +21,58 @@ import type {
 import { setupWebsocket } from "../services/websocket.service";
 import { DirectService } from "../services/direct.service";
 import { ProxyService } from "../services/proxy.service";
+import { FileService } from "../services/file.service";
+import { EmojiServiceInterface } from "../services/emoji.service";
 
 /**
- * Type du contexte Mattermost qui fournit l'accès à
- * toutes les fonctionnalités et états Mattermost
+ * Type of the Mattermost context that provides access to
+ * all Mattermost features and states
  */
 export interface MattermostContextType {
-  /** Mode de connexion actuel (direct, proxy, custom) */
+  /** Current connection mode (direct, proxy, custom) */
   mode: "direct" | "proxy" | "custom" | null;
 
-  /** Si connecté à Mattermost */
+  /** Whether connected to Mattermost */
   isConnected: boolean;
 
-  /** Erreur si la connexion a échoué */
+  /** Error if connection failed */
   error: Error | null;
 
-  /** Informations sur l'utilisateur actuel */
+  /** Current user information */
   currentUser: User | null;
 
-  /** L'instance du service */
+  /** The service instance */
   service: MattermostService;
 
-  /** Instance de connexion WebSocket */
+  /** WebSocket connection instance */
   websocket: WebSocketConnection | null;
 
-  /** Message en cours de réponse (null si aucun) */
+  /** Message being replied to (null if none) */
   replyTo: Message | null;
 
-  /** Fonction pour définir le message en cours de réponse */
+  /** Function to set the message being replied to */
   setReplyTo: (message: Message | null) => void;
 
-  /** Fonction pour effacer la réponse en cours */
+  /** Function to clear the current reply */
   clearReply: () => void;
 
-  /** Si l'utilisateur est en train de répondre à un message */
+  /** Whether the user is replying to a message */
   isReplying: boolean;
+
+  /** File service for file operations */
+  fileService: FileService;
+
+  /** Emoji service for emoji/GIF operations */
+  emojiService: EmojiServiceInterface;
 }
 
-// Créer le contexte
+// Create the context
 const MattermostContext = createContext<MattermostContextType | null>(null);
 
 /**
- * Hook pour utiliser le contexte Mattermost
- * @returns Le contexte Mattermost
- * @throws Error si utilisé en dehors de MattermostProvider
+ * Hook to use the Mattermost context
+ * @returns The Mattermost context
+ * @throws Error if used outside of MattermostProvider
  */
 export const useMattermost = (): MattermostContextType => {
   const context = useContext(MattermostContext);
@@ -73,48 +83,53 @@ export const useMattermost = (): MattermostContextType => {
 };
 
 /**
- * Props pour le composant MattermostProvider
+ * Props for the MattermostProvider component
  */
 interface MattermostProviderProps extends ProviderConfig {
-  /** Composants enfants */
+  /** Child components */
   children: ReactNode;
 }
 
 /**
- * Composant Provider pour configurer l'accès à Mattermost
- * Prend en charge trois modes : Direct, Proxy et Custom
+ * Provider component to configure Mattermost access
+ * Supports three modes: Direct, Proxy, and Custom
  */
 export const MattermostProvider: React.FC<MattermostProviderProps> = ({
-  // Configuration du mode Direct
+  // Direct mode configuration
   serverUrl,
   token,
 
-  // Configuration du mode Proxy
+  // Proxy mode configuration
   proxyUrl,
   clientId,
   userId,
 
-  // Fournisseur de service personnalisé pour les tests/démos
+  // Custom service provider for testing/demos
   serviceProvider,
 
-  // Options communes
+  // Common options
   enableWebsocket = true,
   refreshInterval = 30000,
 
-  // Composants enfants
+  // Child components
   children,
 }) => {
-  // État du Provider
+  // Provider state
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [websocket, setWebsocket] = useState<WebSocketConnection | null>(null);
   const [service, setService] = useState<MattermostService | null>(null);
 
-  // État pour la fonctionnalité de réponse
+  // Secondary services
+  const [fileService, setFileService] = useState<FileService | null>(null);
+  const [emojiService, setEmojiService] =
+    useState<EmojiServiceInterface | null>(null);
+
+  // State for reply functionality
   const [replyTo, setReplyToState] = useState<Message | null>(null);
 
-  // Déterminer le mode en fonction des props fournies
+  // Determine mode based on provided props
   const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
     if (serviceProvider) return "custom";
     if (serverUrl && token) return "direct";
@@ -122,20 +137,20 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     return null;
   }, [serviceProvider, serverUrl, token, proxyUrl, clientId]);
 
-  // Fonction pour définir le message en cours de réponse
+  // Function to set the message being replied to
   const setReplyTo = useCallback((message: Message | null) => {
     setReplyToState(message);
   }, []);
 
-  // Fonction pour effacer la réponse en cours
+  // Function to clear the current reply
   const clearReply = useCallback(() => {
     setReplyToState(null);
   }, []);
 
-  // Si l'utilisateur est en train de répondre
+  // Whether the user is replying
   const isReplying = replyTo !== null;
 
-  // Initialiser le service approprié en fonction du mode
+  // Initialize the appropriate service based on mode
   useEffect(() => {
     if (!mode) {
       setError(
@@ -148,7 +163,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
     const initService = async () => {
       try {
-        // Créer l'instance de service avec notre factory centralisée
+        // Create service instance with our centralized factory
         const serviceInstance = createMattermostService({
           serverUrl,
           token,
@@ -160,30 +175,37 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
         setService(serviceInstance);
 
-        // Tester la connexion (sauf pour les services personnalisés qui spécifient de sauter le test)
+        // Initialize auxiliary services with the main service
+        const fileServiceInstance = createFileService(serviceInstance);
+        const emojiServiceInstance = createEmojiService(serviceInstance);
+
+        setFileService(fileServiceInstance);
+        setEmojiService(emojiServiceInstance);
+
+        // Test connection (except for custom services that specify to skip the test)
         if (mode !== "custom" || !serviceProvider?.skipConnectionTest) {
           try {
-            // Récupérer l'utilisateur courant - exploite maintenant le cache
+            // Get current user - now uses caching
             const user = await serviceInstance.getCurrentUser();
             setCurrentUser(user);
             setIsConnected(true);
             setError(null);
 
-            // Si le WebSocket est activé, l'initialiser
+            // If WebSocket is enabled, initialize it
             if (enableWebsocket) {
               try {
-                // Obtenir l'URL WebSocket et le token
+                // Get WebSocket URL and token
                 const wsUrl = serviceInstance.getWebsocketUrl();
                 const wsToken = await serviceInstance.getWebsocketToken();
 
-                // Configurer la connexion WebSocket
+                // Set up WebSocket connection
                 const ws = await setupWebsocket({
                   mode: mode as "direct" | "proxy" | "custom",
                   serverUrl: wsUrl,
                   token: wsToken,
                   onMessage: (msg) => {
                     console.log("WebSocket message:", msg);
-                    // Traiter les messages WebSocket selon les besoins
+                    // Process WebSocket messages as needed
                   },
                   onError: (err) => {
                     console.error("WebSocket error:", err);
@@ -197,37 +219,37 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                 setWebsocket(ws);
               } catch (wsError) {
                 console.error("Failed to initialize WebSocket:", wsError);
-                // Considérer cela comme un avertissement, pas une erreur fatale
+                // Consider this a warning, not a fatal error
               }
             }
           } catch (connErr) {
-            console.error("Erreur de connexion :", connErr);
+            console.error("Connection error:", connErr);
             const errorMessage =
               connErr instanceof Error
                 ? connErr.message
-                : "Impossible de se connecter au serveur Mattermost";
+                : "Unable to connect to Mattermost server";
 
             setError(new Error(errorMessage));
             setIsConnected(false);
             setCurrentUser(null);
           }
         } else if (mode === "custom" && serviceProvider?.currentUser) {
-          // Pour les services personnalisés qui fournissent un utilisateur actuel
+          // For custom services that provide a current user
           setCurrentUser(serviceProvider.currentUser);
           setIsConnected(true);
 
-          // Si le service personnalisé fournit un cache d'utilisateur
+          // If the custom service provides a user cache
           if ((serviceInstance as any)._currentUser) {
             setCurrentUser((serviceInstance as any)._currentUser);
           }
         }
 
-        // Configurer un intervalle pour rafraîchir l'utilisateur courant si nécessaire
-        // Cela est utile pour maintenir à jour le statut, les permissions, etc.
+        // Set up an interval to refresh the current user if needed
+        // This is useful for keeping status, permissions, etc. up to date
         if (refreshInterval > 0 && serviceInstance) {
           const intervalId = setInterval(async () => {
             try {
-              // Si le service implémente refreshCurrentUser, l'utiliser
+              // If the service implements refreshCurrentUser, use it
               if (
                 (serviceInstance instanceof DirectService ||
                   serviceInstance instanceof ProxyService) &&
@@ -237,22 +259,19 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                 setCurrentUser(freshUser);
               }
             } catch (refreshError) {
-              console.warn(
-                "Erreur lors du rafraîchissement de l'utilisateur:",
-                refreshError,
-              );
+              console.warn("Error refreshing user:", refreshError);
             }
           }, refreshInterval);
 
-          // Nettoyer l'intervalle lors du démontage
+          // Clean up interval on unmount
           return () => clearInterval(intervalId);
         }
       } catch (err) {
-        console.error("Erreur d'initialisation du service :", err);
+        console.error("Service initialization error:", err);
         const errorMessage =
           err instanceof Error
             ? err.message
-            : "Impossible d'initialiser le service Mattermost";
+            : "Unable to initialize Mattermost service";
 
         setError(new Error(errorMessage));
         setIsConnected(false);
@@ -262,7 +281,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
     void initService();
 
-    // Nettoyage lors du démontage
+    // Cleanup on unmount
     return () => {
       if (websocket) {
         websocket.close();
@@ -280,11 +299,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     refreshInterval,
   ]);
 
-  if (!service) return null;
+  if (!service || !fileService || !emojiService) return null;
 
-  // Valeur du contexte à partager avec les composants enfants
+  // Context value to share with child components
   const contextValue: MattermostContextType = {
-    // État
+    // State
     mode,
     isConnected,
     error,
@@ -292,11 +311,15 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     service,
     websocket,
 
-    // Fonctionnalités de réponse
+    // Reply functionality
     replyTo,
     setReplyTo,
     clearReply,
     isReplying,
+
+    // Additional services
+    fileService,
+    emojiService,
   };
 
   return (
@@ -306,7 +329,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   );
 };
 
-// Exporter le contexte pour permettre l'utilisation directe si nécessaire
+// Export the context for direct use if needed
 export { MattermostContext };
 
 export default MattermostProvider;

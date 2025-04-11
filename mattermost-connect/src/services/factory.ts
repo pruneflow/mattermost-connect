@@ -7,18 +7,20 @@ import {
 } from "../types";
 import { createDirectService, DirectService } from "./direct.service";
 import { createProxyService, ProxyService } from "./proxy.service";
+import { GifData } from "../types";
+import { MOCK_GIFS } from "../components/EmojiPicker/data/gifData";
 
 /**
- * Crée un service personnalisé basé sur le fournisseur de service
+ * Creates a custom service based on the service provider
  */
 function createCustomService(
   provider: CustomServiceProvider,
 ): MattermostService {
-  // Le fournisseur doit implémenter la méthode setupService
+  // The provider must implement the setupService method
   const service = provider.setupService();
 
-  // Si un utilisateur courant est fourni, le définir dans le service
-  // si le service implémente l'interface nécessaire
+  // If a current user is provided, set it in the service
+  // if the service implements the necessary interface
   if (provider.currentUser && "setCurrentUser" in service) {
     (service as any).setCurrentUser(provider.currentUser);
   }
@@ -27,16 +29,16 @@ function createCustomService(
 }
 
 /**
- * Fonction principale pour créer un service Mattermost
- * Détermine automatiquement le mode en fonction de la configuration
+ * Main function to create a Mattermost service
+ * Automatically determines the mode based on the configuration
  *
- * @param config - Configuration du service
- * @returns Une instance du service Mattermost
+ * @param config - Service configuration
+ * @returns A Mattermost service instance
  */
 export function createMattermostService(
   config: ServiceConfig,
 ): MattermostService {
-  // Déterminer le mode selon la configuration
+  // Determine mode based on configuration
   if (config.serviceProvider) {
     return createCustomService(config.serviceProvider);
   } else if (config.serverUrl && config.token) {
@@ -45,14 +47,12 @@ export function createMattermostService(
       token: config.token,
     });
 
-    // Pré-charger l'utilisateur courant en arrière-plan
+    // Preload the current user in the background
     if (service instanceof DirectService) {
       Promise.resolve().then(() => {
         service
           .getCurrentUser()
-          .catch((err) =>
-            console.warn("Échec du préchargement de l'utilisateur:", err),
-          );
+          .catch((err) => console.warn("Failed to preload user:", err));
       });
     }
 
@@ -64,20 +64,18 @@ export function createMattermostService(
       userId: config.userId,
     });
 
-    // Pré-charger l'utilisateur courant en arrière-plan
+    // Preload the current user in the background
     if (service instanceof ProxyService) {
       Promise.resolve().then(() => {
         service
           .getCurrentUser()
-          .catch((err) =>
-            console.warn("Échec du préchargement de l'utilisateur:", err),
-          );
+          .catch((err) => console.warn("Failed to preload user:", err));
       });
     }
 
     return service;
   } else if (config.serverUrl) {
-    // Ajouter cette condition pour permettre la création avec uniquement l'URL
+    // Add this condition to allow creation with just the URL
     return createDirectService({
       serverUrl: config.serverUrl,
     });
@@ -90,10 +88,10 @@ export function createMattermostService(
 }
 
 /**
- * Crée un service mock pour les tests et développement
+ * Creates a mock service for testing and development
  */
 export function createMockService(): MattermostService {
-  // Créer un mock service avec l'utilisateur courant préchargé
+  // Create a mock service with preloaded current user
   const mockUser: User = {
     id: "user1",
     username: "johndoe",
@@ -103,22 +101,22 @@ export function createMockService(): MattermostService {
     roles: "system_user",
   };
 
-  // On utilise une approche basée sur les objets pour simuler le caching
-  // Cela permettra également de tester si les méthodes du service fonctionnent correctement
+  // Use an object-based approach to simulate caching
+  // This will also help test if service methods work correctly
   let _cachedUser: User = mockUser;
 
   return {
     mode: "custom",
 
-    // Cache utilisateur simulé
+    // User cache simulation
     _currentUser: mockUser,
 
     authenticate: async (username: string, password: string) => {
-      // Simulation d'une authentification
+      // Simulate authentication
       if (username === "demo" && password === "password") {
         return { token: "mock-user-token" };
       }
-      throw new Error("Authentification échouée");
+      throw new Error("Authentication failed");
     },
 
     validateToken: async (token) => {
@@ -126,7 +124,7 @@ export function createMockService(): MattermostService {
     },
 
     getCurrentUser: async () => {
-      // Utiliser l'utilisateur en cache
+      // Use the cached user
       return _cachedUser;
     },
 
@@ -206,6 +204,58 @@ export function createMockService(): MattermostService {
       update_at: Date.now(),
     }),
 
+    getPost: async (messageId) => ({
+      id: messageId,
+      user_id: "user1",
+      channel_id: "channel1",
+      message: "This is a referenced message",
+      create_at: Date.now() - 1000 * 60 * 10,
+      update_at: Date.now() - 1000 * 60 * 10,
+    }),
+
+    editMessage: async (messageId, newMessage) => {
+      // Simulate message editing
+      console.log(`Mock: Message ${messageId} edited with text:`, newMessage);
+
+      return {
+        id: messageId,
+        user_id: "user1",
+        channel_id: "channel1",
+        message: newMessage,
+        create_at: Date.now() - 1000 * 60 * 5, // Keep original creation timestamp
+        update_at: Date.now(), // Update modification timestamp
+      };
+    },
+
+    deleteMessage: async (messageId) => {
+      // Simulate message deletion
+      console.log(`Mock: Message ${messageId} deleted`);
+
+      return { success: true };
+    },
+
+    replyToMessage: async (channelId, messageId, responseMessage) => {
+      // Simulate replying to a message
+      console.log(
+        `Mock: Reply to message ${messageId} in channel ${channelId}:`,
+        responseMessage,
+      );
+
+      return {
+        id: `post-reply-${Date.now()}`,
+        user_id: "user1",
+        channel_id: channelId,
+        message: responseMessage,
+        create_at: Date.now(),
+        update_at: Date.now(),
+        // Reply-specific properties
+        root_id: messageId,
+        props: {
+          quoted_message_id: messageId,
+        },
+      };
+    },
+
     getUsers: async () => [
       {
         id: "user1",
@@ -226,7 +276,17 @@ export function createMockService(): MattermostService {
       status: "online",
     }),
 
-    // Méthodes emoji/gifs
+    // WebSocket methods - ADDED MISSING METHODS
+    getWebsocketUrl: () => {
+      // Use consistent format with real API
+      return "ws://mock-websocket-url/api/v4/websocket";
+    },
+
+    getWebsocketToken: async () => {
+      return "mock-token";
+    },
+
+    // Emoji/GIF methods - ADDED MISSING METHODS
     getFrequentEmojis: async () => [
       "👍",
       "❤️",
@@ -237,25 +297,33 @@ export function createMockService(): MattermostService {
       "✅",
       "🙏",
     ],
-    addReaction: async () => ({ success: true }),
+    addReaction: async (messageId, emoji) => ({ success: true }),
     removeReaction: async () => ({ success: true }),
     hasReacted: async () => false,
-    searchGifs: async () => [],
-    getGifs: async () => [],
+    searchGifs: async (query: string): Promise<GifData[]> => {
+      // Find GIFs that match the query or return trending
+      const allGifs = Object.values(MOCK_GIFS).flat();
+      const results = query.trim()
+        ? allGifs.filter((gif) =>
+            gif.title.toLowerCase().includes(query.toLowerCase()),
+          )
+        : MOCK_GIFS["Trending"] || [];
 
-    // Méthodes WebSocket
-    getWebsocketUrl: () => "wss://example.com/websocket",
-    getWebsocketToken: async () => "mock-token",
+      return results;
+    },
+    getGifs: async (category): Promise<GifData[]> => {
+      return MOCK_GIFS[category] || [];
+    },
 
-    // Méthodes fichiers
+    // File methods
     uploadFiles: async () => ({
       file_infos: [{ id: "file1", name: "test.jpg" }],
     }),
 
-    // Méthodes utilitaires
+    // Utility methods
     getBaseUrl: () => "https://example.com",
 
-    // Méthodes similaires à celles du BaseService pour simuler le cache d'utilisateur
+    // Methods like BaseService to simulate user cache
     setCurrentUser: (user: User) => {
       _cachedUser = user;
     },
