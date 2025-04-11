@@ -25,6 +25,7 @@ interface MessageListProps {
   handleDeleteMessage: (message: MessageType) => void;
   /** Propriétés personnalisées pour les messages */
   messageProps?: Partial<React.ComponentProps<typeof Message>>;
+  messagesToHighlight: Set<string>;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -36,6 +37,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleEditMessage,
   handleDeleteMessage,
   messageProps,
+  messagesToHighlight,
 }) => {
   // Référence pour le scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -52,6 +54,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           onReply={handleReply}
           onEdit={handleEditMessage}
           onDelete={handleDeleteMessage}
+          highlight={messagesToHighlight.has(message.id)}
           {...messageProps}
         />
       ))}

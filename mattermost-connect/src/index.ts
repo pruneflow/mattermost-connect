@@ -34,6 +34,22 @@ export { useEmoji } from "./context/EmojiProvider";
 export { default as EmojiPicker } from "./components/message/EmojiPicker/EmojiPicker";
 export { PickerMode } from "./types/emoji.types";
 
+// Exporter les composants de notification
+export {
+  NotificationSnackbar,
+  NotificationCenter,
+  TypingIndicator,
+} from "./components/notification";
+export {
+  notificationService,
+  WebSocketEventType,
+} from "./services/notification.service";
+export type {
+  Notification,
+  WebSocketEvent,
+  UnreadState,
+} from "./services/notification.service";
+
 // Exporter le thème
 export { createDefaultTheme, MattermostThemeProvider } from "./theme";
 

@@ -18,11 +18,6 @@ import {
 // Attachment type components
 import {
   ImageAttachment,
-  DocumentAttachment,
-  MediaAttachment,
-  GenericAttachment,
-  isImageType,
-  isMediaType,
   AttachmentNotification,
   AttachmentInfo,
   AttachmentContextMenu,
@@ -32,8 +27,6 @@ import {
   isArchiveType,
   isPdfType,
 } from "./components";
-import ArchiveAttachment from "./components/ArchiveAttachment";
-import PdfAttachment from "./components/PdfAttachment";
 
 /**
  * Modes available for the Attachment component

@@ -1,19 +1,17 @@
 // src/components/ChannelViewer/message/Message.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import {
   Box,
   Paper,
-  Popover,
   Skeleton,
   Theme,
   Typography,
   alpha,
+  Zoom,
 } from "@mui/material";
 import { MessageProps } from "./MessageTypes";
 import { formatMessageText, formatTimestamp } from "../../../utils";
-import { EmojiPicker, PickerMode } from "../EmojiPicker";
-import { EmojiProvider } from "../../../context/EmojiProvider";
 import MessageHeader from "./MessageHeader";
 import MessageContent from "./MessageContent";
 import MessageActions from "./MessageActions";
@@ -40,6 +38,7 @@ const Message: React.FC<MessageProps> = ({
   contentSx,
   actionsSx,
   avatarSx,
+  highlight = false,
 }) => {
   const { service } = useMattermost();
   const [author, setAuthor] = useState<User | null>(null);
@@ -49,26 +48,14 @@ const Message: React.FC<MessageProps> = ({
   const [referencedMessage, setReferencedMessage] =
     useState<MessageType | null>(null);
   const [referencedAuthor, setReferencedAuthor] = useState<User | null>(null);
-  const [reactionAnchorEl, setReactionAnchorEl] = useState<HTMLElement | null>(
-    null,
-  );
-  const reactionMenuOpen = Boolean(reactionAnchorEl);
+
+  const messageRef = useRef<HTMLDivElement>(null);
 
   // Function to determine if the message is a reply
   const isReplyMessage = (msg: MessageType): boolean => {
     // In Mattermost, replies have a root_id which is the ID of the parent message
     // Sometimes, the information can also be in props.quoted_message_id
     return !!msg.root_id || !!(msg.props && msg.props.quoted_message_id);
-  };
-
-  // Handle closing the reaction menu
-  const handleReactionMenuClose = () => {
-    setReactionAnchorEl(null);
-  };
-
-  // Handle selecting a reaction
-  const handleReactionSelect = async () => {
-    handleReactionMenuClose();
   };
 
   // Check if the message is a reply to another message
@@ -174,6 +161,16 @@ const Message: React.FC<MessageProps> = ({
     setFormattedText(formatMessageText(message.message));
   }, [message]);
 
+  useEffect(() => {
+    if (highlight && messageRef.current) {
+      // Faire défiler jusqu'au message si nécessaire
+      messageRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [highlight]);
+
   // If a custom renderer is provided, use it
   if (renderer) {
     return <>{renderer({ message, author, formattedText })}</>;
@@ -211,134 +208,115 @@ const Message: React.FC<MessageProps> = ({
 
   return (
     <>
-      <Box
-        id={`message-${message.id}`}
-        className={className}
-        style={style}
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: messageAlignment,
-          mb: 2,
-          maxWidth: { xs: "95%", sm: "85%" },
-          alignSelf: messageAlignment,
-          width: "auto",
-          position: "relative",
-          ...sx,
-        }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        {/* Message header with author info and timestamp */}
-        <MessageHeader
-          author={author}
-          timestamp={timestamp}
-          isFromCurrentUser={isFromCurrentUser}
-          sx={authorSx}
-          avatarSx={avatarSx}
-        />
+      <Zoom in={true} style={{ transitionDelay: "100ms" }}>
+        <Box
+          id={`message-${message.id}`}
+          ref={messageRef}
+          className={`${className} ${highlight ? "highlight" : ""}`}
+          style={style}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: messageAlignment,
+            mb: 2,
+            maxWidth: { xs: "95%", sm: "85%" },
+            alignSelf: messageAlignment,
+            width: "auto",
+            position: "relative",
+            ...(highlight && {
+              animation: "highlightMessage 2s ease-in-out",
+            }),
+            ...sx,
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {/* Message header with author info and timestamp */}
+          <MessageHeader
+            author={author}
+            timestamp={timestamp}
+            isFromCurrentUser={isFromCurrentUser}
+            sx={authorSx}
+            avatarSx={avatarSx}
+          />
 
-        {/* Message content */}
-        <Box sx={{ display: "flex", position: "relative" }}>
-          {/* Message bubble */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: 1.5,
-              borderRadius: 2,
-              bgcolor: bubbleColor,
-              border: bubbleBorder,
-              maxWidth: "100%",
-              wordBreak: "break-word",
-              ...bubbleSx,
-            }}
-          >
-            {/* Referenced message (if this is a reply) */}
-            {isReplyMessage(message) && referencedMessage && (
-              <ReferencedMessage
-                message={referencedMessage}
-                author={referencedAuthor}
+          {/* Message content */}
+          <Box sx={{ display: "flex", position: "relative" }}>
+            {/* Message bubble */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 1.5,
+                borderRadius: 2,
+                bgcolor: bubbleColor,
+                border: bubbleBorder,
+                maxWidth: "100%",
+                wordBreak: "break-word",
+                ...bubbleSx,
+              }}
+            >
+              {/* Referenced message (if this is a reply) */}
+              {isReplyMessage(message) && referencedMessage && (
+                <ReferencedMessage
+                  message={referencedMessage}
+                  author={referencedAuthor}
+                />
+              )}
+
+              {/* Fallback for replies where we couldn't retrieve the referenced message */}
+              {isReplyMessage(message) && !referencedMessage && (
+                <Box
+                  sx={{
+                    p: 1.5,
+                    mb: 2,
+                    borderLeft: "4px solid",
+                    borderColor: "divider",
+                    backgroundColor: (theme) =>
+                      alpha(theme.palette.background.default, 0.5),
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ fontStyle: "italic" }}
+                  >
+                    This is a reply to a previous message that is no longer
+                    available
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Message content */}
+              <MessageContent
+                message={message}
+                formattedText={formattedText}
+                sx={contentSx}
+              />
+            </Paper>
+
+            {/* Message actions */}
+            {showActions && (
+              <MessageActions
+                message={message}
+                isHovered={isHovered}
+                isFromCurrentUser={isFromCurrentUser}
+                onReply={onReply}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                sx={actionsSx}
               />
             )}
+          </Box>
 
-            {/* Fallback for replies where we couldn't retrieve the referenced message */}
-            {isReplyMessage(message) && !referencedMessage && (
-              <Box
-                sx={{
-                  p: 1.5,
-                  mb: 2,
-                  borderLeft: "4px solid",
-                  borderColor: "divider",
-                  backgroundColor: (theme) =>
-                    alpha(theme.palette.background.default, 0.5),
-                  borderRadius: 1,
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  component="div"
-                  sx={{ fontStyle: "italic" }}
-                >
-                  This is a reply to a previous message that is no longer
-                  available
-                </Typography>
-              </Box>
-            )}
-
-            {/* Message content */}
-            <MessageContent
-              message={message}
-              formattedText={formattedText}
-              sx={contentSx}
-            />
-          </Paper>
-
-          {/* Message actions */}
-          {showActions && (
-            <MessageActions
-              message={message}
-              isHovered={isHovered}
-              isFromCurrentUser={isFromCurrentUser}
-              onReply={onReply}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              sx={actionsSx}
-            />
-          )}
-        </Box>
-
-        {/* Message reactions */}
-        <MessageReactions
-          message={message}
-          isFromCurrentUser={isFromCurrentUser}
-        />
-      </Box>
-
-      {/* Emoji picker popover */}
-      <Popover
-        open={reactionMenuOpen}
-        anchorEl={reactionAnchorEl}
-        onClose={handleReactionMenuClose}
-        anchorOrigin={{
-          vertical: "top",
-          horizontal: "center",
-        }}
-        transformOrigin={{
-          vertical: "bottom",
-          horizontal: "center",
-        }}
-      >
-        <EmojiProvider>
-          <EmojiPicker
-            onSelect={handleReactionSelect}
-            onClose={handleReactionMenuClose}
-            mode={PickerMode.REACTION}
-            messageId={message.id}
-            channelId={message.channel_id}
+          {/* Message reactions */}
+          <MessageReactions
+            message={message}
+            isFromCurrentUser={isFromCurrentUser}
           />
-        </EmojiProvider>
-      </Popover>
+        </Box>
+      </Zoom>
     </>
   );
 };

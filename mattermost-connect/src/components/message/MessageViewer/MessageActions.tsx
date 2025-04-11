@@ -9,6 +9,7 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
+  Popover,
 } from "@mui/material";
 import {
   MoreVert as MoreIcon,
@@ -19,6 +20,8 @@ import {
   AddReaction as AddReactionIcon,
 } from "@mui/icons-material";
 import { MessageActionsProps } from "./MessageTypes";
+import { EmojiPicker, PickerMode } from "../EmojiPicker";
+import { EmojiProvider, useMattermost } from "../../../index";
 
 /**
  * Displays action buttons and menus for a message
@@ -38,6 +41,29 @@ const MessageActions: React.FC<MessageActionsProps> = ({
     null,
   );
   const reactionMenuOpen = Boolean(reactionAnchorEl);
+  const { service } = useMattermost();
+
+  // Reaction handlers
+  const handleReactionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setReactionAnchorEl(event.currentTarget);
+  };
+
+  const handleReactionMenuClose = () => {
+    setReactionAnchorEl(null);
+  };
+
+  // Handle selecting a reaction
+  const handleReactionSelect = async (result: any) => {
+    handleReactionMenuClose();
+    try {
+      // Add the reaction to the message
+      if (result.emoji && message.id) {
+        await service.addReaction(message.id, result.emoji);
+      }
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+    }
+  };
 
   // Menu handlers
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -75,15 +101,6 @@ const MessageActions: React.FC<MessageActionsProps> = ({
       onDelete(message);
     }
     handleMenuClose();
-  };
-
-  // Reaction handlers
-  const handleReactionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setReactionAnchorEl(event.currentTarget);
-  };
-
-  const handleReactionMenuClose = () => {
-    setReactionAnchorEl(null);
   };
 
   return (
@@ -176,6 +193,31 @@ const MessageActions: React.FC<MessageActionsProps> = ({
           </>
         )}
       </Menu>
+
+      {/* Emoji picker popover */}
+      <Popover
+        open={reactionMenuOpen}
+        anchorEl={reactionAnchorEl}
+        onClose={handleReactionMenuClose}
+        anchorOrigin={{
+          vertical: "top",
+          horizontal: "center",
+        }}
+        transformOrigin={{
+          vertical: "bottom",
+          horizontal: "center",
+        }}
+      >
+        <EmojiProvider>
+          <EmojiPicker
+            onSelect={handleReactionSelect}
+            onClose={handleReactionMenuClose}
+            mode={PickerMode.REACTION}
+            messageId={message.id}
+            channelId={message.channel_id}
+          />
+        </EmojiProvider>
+      </Popover>
     </>
   );
 };

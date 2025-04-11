@@ -60,6 +60,8 @@ export interface MessageProps extends BaseMessageProps {
 
   /** Styling for avatar */
   avatarSx?: SxProps<Theme>;
+  /** Whether to highlight this message (e.g., when it's new or from a notification) */
+  highlight?: boolean;
 }
 
 /**

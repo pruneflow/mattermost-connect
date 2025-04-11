@@ -1,5 +1,5 @@
 // examples/demo/src/examples/ClassicInterface.tsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   useMattermost,
   ChannelList,
@@ -7,6 +7,9 @@ import {
   MessageComposer,
   Team,
   Channel,
+  // Nouveaux composants de notification
+  NotificationCenter,
+  notificationService,
 } from "mattermost-connect";
 
 // Material-UI Components
@@ -28,25 +31,37 @@ import {
   Paper,
   Tabs,
   Tab,
+  Badge,
 } from "@mui/material";
 
 // Material-UI Icons
-import { Menu as MenuIcon } from "@mui/icons-material";
+import {
+  Menu as MenuIcon,
+  Notifications as NotificationsIcon,
+} from "@mui/icons-material";
 import TeamSelector from "../../../../src/components/team/TeamSelector/TeamSelector";
 
 /**
- * Classic Mattermost-style interface with teams and channels always visible on desktop
+ * Interface Mattermost classique avec notifications et mises à jour en temps réel
  */
 const ClassicInterface: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const { isConnected, service, error } = useMattermost();
+  const {
+    isConnected,
+    service,
+    error,
+    navigateToChannel,
+    activeChannel,
+    setActiveChannel,
+    currentUser,
+  } = useMattermost();
 
-  // References for measuring initial heights
+  // Références pour mesurer les hauteurs initiales
   const appBarRef = useRef<HTMLDivElement>(null);
   const teamsTabsRef = useRef<HTMLDivElement>(null);
 
-  // State for layout management
+  // État pour la gestion de la mise en page
   const [appBarHeight, setAppBarHeight] = useState<number>(0);
   const [tabsHeight, setTabsHeight] = useState<number>(0);
 
@@ -56,12 +71,19 @@ const ClassicInterface: React.FC = () => {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [replyTo, setReplyTo] = useState<any | null>(null);
+  const [highlightMessageId, setHighlightMessageId] = useState<
+    string | undefined
+  >(undefined);
 
-  // Height for spacing below the chat to accommodate the fixed MessageComposer on mobile
-  const messageComposerHeight = isMobile ? 64 : 0; // Hauteur estimée du MessageComposer
+  // État des non-lus pour afficher des badges
+  const [unreadState, setUnreadState] = useState<
+    Record<string, { messageCount: number; mentionCount: number }>
+  >({});
 
-  // Load teams when component mounts
+  // Hauteur pour l'espacement sous le chat pour le MessageComposer fixe sur mobile
+  const messageComposerHeight = isMobile ? 64 : 0;
+
+  // Charger les équipes au montage du composant
   useEffect(() => {
     if (isConnected) {
       const fetchTeams = async () => {
@@ -69,7 +91,7 @@ const ClassicInterface: React.FC = () => {
           const teamsData = await service.getTeams();
           setTeams(teamsData);
 
-          // Auto-select first team
+          // Sélectionner automatiquement la première équipe
           if (teamsData.length > 0) {
             setSelectedTeam(teamsData[0]);
           }
@@ -85,7 +107,19 @@ const ClassicInterface: React.FC = () => {
     }
   }, [isConnected, service]);
 
-  // Measure heights of fixed elements after render
+  // S'abonner aux mises à jour de l'état des non-lus
+  useEffect(() => {
+    const unsubscribe = notificationService.addEventListener(
+      "unread_updated",
+      (updatedUnreadState) => {
+        setUnreadState(updatedUnreadState);
+      },
+    );
+
+    return unsubscribe;
+  }, []);
+
+  // Mesurer les hauteurs des éléments fixes après le rendu
   useEffect(() => {
     if (appBarRef.current) {
       setAppBarHeight(appBarRef.current.offsetHeight);
@@ -95,47 +129,102 @@ const ClassicInterface: React.FC = () => {
     }
   }, []);
 
-  const handleChannelSelect = (channel: Channel) => {
-    setSelectedChannel(channel);
-    // On mobile only, close the drawer
-    if (isMobile) {
-      setDrawerOpen(false);
+  // Synchroniser selectedChannel avec activeChannel du contexte
+  useEffect(() => {
+    if (activeChannel) {
+      setSelectedChannel(activeChannel);
     }
-  };
+  }, [activeChannel]);
 
-  const handleTeamSelect = (team: Team) => {
-    setSelectedTeam(team);
-    setSelectedChannel(null);
-  };
+  // Handler pour la sélection d'un canal
+  const handleChannelSelect = useCallback(
+    (channel: Channel) => {
+      setSelectedChannel(channel);
+      setActiveChannel(channel);
+      setHighlightMessageId(undefined);
 
-  const handleTeamChange = (_event: React.SyntheticEvent, newValue: string) => {
-    const team = teams.find((t) => t.id === newValue);
-    if (team) {
+      // Sur mobile uniquement, fermer le tiroir
+      if (isMobile) {
+        setDrawerOpen(false);
+      }
+    },
+    [isMobile, setActiveChannel],
+  );
+
+  // Handler pour la sélection d'une équipe
+  const handleTeamSelect = useCallback(
+    (team: Team) => {
       setSelectedTeam(team);
       setSelectedChannel(null);
-    }
-  };
+      setActiveChannel(null);
+    },
+    [setActiveChannel],
+  );
 
+  // Handler pour le changement d'équipe via les onglets
+  const handleTeamChange = useCallback(
+    (_event: React.SyntheticEvent, newValue: string) => {
+      const team = teams.find((t) => t.id === newValue);
+      if (team) {
+        setSelectedTeam(team);
+        setSelectedChannel(null);
+        setActiveChannel(null);
+      }
+    },
+    [teams, setActiveChannel],
+  );
+
+  // Basculer le tiroir
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
   };
 
-  // Handler for sending messages
+  // Handler pour l'envoi de messages
   const handleSendMessage = async (message: string) => {
     if (!selectedChannel) return;
 
     try {
       // Puisque nous sommes en mode AUTO (par défaut),
       // l'envoi du message a déjà été géré par le composant MessageComposer
-      // Nous pouvons utiliser ce callback pour des actions additionnelles après envoi
       console.log("Message envoyé avec succès:", message);
-
-      // Si nécessaire, vous pouvez effectuer d'autres actions ici,
-      // mais n'essayez pas d'envoyer à nouveau le message
     } catch (error) {
       console.error("Error after message sent:", error);
     }
   };
+
+  // Handler pour la navigation depuis les notifications
+  const handleNavigateToChannel = useCallback(
+    (channelId: string, messageId?: string) => {
+      navigateToChannel(channelId, messageId);
+
+      // Si un messageId est fourni, le définir pour la mise en évidence
+      if (messageId) {
+        setHighlightMessageId(messageId);
+      }
+    },
+    [navigateToChannel],
+  );
+
+  // Obtenir le nombre total de messages et mentions non lus
+  const getTotalUnreads = useCallback(() => {
+    let totalMessages = 0;
+    let totalMentions = 0;
+
+    Object.values(unreadState).forEach((channelUnread) => {
+      totalMessages += channelUnread.messageCount || 0;
+      totalMentions += channelUnread.mentionCount || 0;
+    });
+
+    return { totalMessages, totalMentions };
+  }, [unreadState]);
+
+  // Obtenir les non-lus pour un canal spécifique
+  const getChannelUnreads = useCallback(
+    (channelId: string) => {
+      return unreadState[channelId] || { messageCount: 0, mentionCount: 0 };
+    },
+    [unreadState],
+  );
 
   if (error) {
     return (
@@ -145,12 +234,14 @@ const ClassicInterface: React.FC = () => {
     );
   }
 
-  // Mobile layout with drawer
+  // Mise en page mobile avec tiroir
   if (isMobile) {
+    const { totalMentions } = getTotalUnreads();
+
     return (
       <Box sx={{ height: "100%" }}>
         {/* Mobile App Bar */}
-        <AppBar position="static">
+        <AppBar position="static" ref={appBarRef}>
           <Toolbar>
             <IconButton
               edge="start"
@@ -168,6 +259,9 @@ const ClassicInterface: React.FC = () => {
                   ? selectedTeam.display_name
                   : "MattermostConnect"}
             </Typography>
+
+            {/* Centre de notifications */}
+            <NotificationCenter onNavigateToChannel={handleNavigateToChannel} />
           </Toolbar>
         </AppBar>
 
@@ -233,9 +327,10 @@ const ClassicInterface: React.FC = () => {
               >
                 <ChannelViewer
                   channelId={selectedChannel.id}
-                  showHeader={false} // We already show the header in the app bar
+                  showHeader={false} // Nous montrons déjà l'en-tête dans l'AppBar
                   autoScrollToBottom
                   sx={{ height: "100%" }}
+                  highlightMessageId={highlightMessageId}
                 />
               </Box>
 
@@ -278,12 +373,29 @@ const ClassicInterface: React.FC = () => {
     );
   }
 
-  // Desktop layout with fixed columns
-  // Calculate heights based on other elements
-  const topAppBarHeight = 64; // Standard AppBar height in MUI
+  // Mise en page desktop avec colonnes fixes
+  // Calculer les hauteurs en fonction des autres éléments
+  const topAppBarHeight = 64; // Hauteur standard AppBar dans MUI
+  const { totalMentions } = getTotalUnreads();
 
   return (
     <Box sx={{ height: "100%" }}>
+      {/* AppBar principale */}
+      <AppBar position="static" ref={appBarRef}>
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            {selectedChannel
+              ? selectedChannel.display_name
+              : selectedTeam
+                ? selectedTeam.display_name
+                : "MattermostConnect"}
+          </Typography>
+
+          {/* Centre de notifications */}
+          <NotificationCenter onNavigateToChannel={handleNavigateToChannel} />
+        </Toolbar>
+      </AppBar>
+
       {/* Team tabs if more than one team - positioned directly below AppBar */}
       {teams.length > 1 && (
         <Box
@@ -306,7 +418,22 @@ const ClassicInterface: React.FC = () => {
             scrollButtons="auto"
           >
             {teams.map((team) => (
-              <Tab key={team.id} label={team.display_name} value={team.id} />
+              <Tab
+                key={team.id}
+                label={
+                  <Badge
+                    badgeContent={
+                      getTotalUnreads().totalMentions > 0
+                        ? getTotalUnreads().totalMentions
+                        : null
+                    }
+                    color="error"
+                  >
+                    {team.display_name}
+                  </Badge>
+                }
+                value={team.id}
+              />
             ))}
           </Tabs>
         </Box>
@@ -365,7 +492,18 @@ const ClassicInterface: React.FC = () => {
                     }}
                   >
                     <ListItemText
-                      primary={team.display_name}
+                      primary={
+                        <Badge
+                          badgeContent={
+                            getTotalUnreads().totalMentions > 0
+                              ? getTotalUnreads().totalMentions
+                              : null
+                          }
+                          color="error"
+                        >
+                          {team.display_name}
+                        </Badge>
+                      }
                       primaryTypographyProps={{
                         fontWeight: selectedTeam?.id === team.id ? 600 : 400,
                         noWrap: true,
@@ -438,6 +576,7 @@ const ClassicInterface: React.FC = () => {
                   showHeader
                   autoScrollToBottom
                   sx={{ height: "100%" }}
+                  highlightMessageId={highlightMessageId}
                 />
               </Box>
 
