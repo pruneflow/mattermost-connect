@@ -30,24 +30,12 @@ const MAX_RECONNECT_DELAY = 30000;
 export const setupWebsocket = async (
   options: WebSocketSetupOptions,
 ): Promise<WebSocketConnection> => {
-  const { mode, serverUrl, token, onMessage, onError, onClose } = options;
+  const { serverUrl, token, onMessage, onError, onClose } = options;
 
-  // Normalize and determine WebSocket URL based on mode
-  let wsUrl: string;
-  if (mode === "direct") {
-    // Format specific to direct mode
-    wsUrl = serverUrl.replace(/^http/, "ws");
-    wsUrl = `${wsUrl.endsWith("/") ? wsUrl.slice(0, -1) : wsUrl}/api/v4/websocket`;
-  } else {
-    // Format for proxy or custom modes
-    wsUrl = serverUrl.replace(/^http/, "ws");
-    wsUrl = `${wsUrl.endsWith("/") ? wsUrl.slice(0, -1) : wsUrl}/websocket`;
-  }
-
-  console.debug(`Setting up WebSocket connection to: ${wsUrl}`);
+  console.debug(`Setting up WebSocket connection to: ${serverUrl}`);
 
   // Create WebSocket connection
-  const socket = new WebSocket(wsUrl);
+  const socket = new WebSocket(serverUrl);
   let pingInterval: number | undefined;
   let reconnectAttempt = 0;
   let isReconnecting = false;

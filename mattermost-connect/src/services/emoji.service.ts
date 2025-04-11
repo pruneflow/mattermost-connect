@@ -8,7 +8,7 @@ import { MattermostService } from "../types";
 import {
   getEmojiName,
   getEmojiFromName,
-} from "../components/EmojiPicker/data/emojiData";
+} from "../components/message/EmojiPicker/data/emojiData";
 
 /**
  * Interface pour le service emoji

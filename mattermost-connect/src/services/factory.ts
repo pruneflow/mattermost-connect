@@ -8,7 +8,7 @@ import {
 import { createDirectService, DirectService } from "./direct.service";
 import { createProxyService, ProxyService } from "./proxy.service";
 import { GifData } from "../types";
-import { MOCK_GIFS } from "../components/EmojiPicker/data/gifData";
+import { MOCK_GIFS } from "../components/message/EmojiPicker";
 
 /**
  * Creates a custom service based on the service provider

@@ -32,7 +32,7 @@ import {
 
 // Material-UI Icons
 import { Menu as MenuIcon } from "@mui/icons-material";
-import TeamSelector from "../../../../src/components/TeamSelector/TeamSelector";
+import TeamSelector from "../../../../src/components/team/TeamSelector/TeamSelector";
 
 /**
  * Classic Mattermost-style interface with teams and channels always visible on desktop

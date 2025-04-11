@@ -11,8 +11,8 @@ import React, {
 // Import des types et interfaces
 import { GifData, EmojiContextType } from "../types";
 import { useMattermost } from "./MattermostProvider";
-import { EMOJI_CATEGORIES } from "../components/EmojiPicker/data/emojiData";
-import { GIF_CATEGORIES } from "../components/EmojiPicker/data/gifData";
+import { EMOJI_CATEGORIES } from "../components/message/EmojiPicker";
+import { GIF_CATEGORIES } from "../components/message/EmojiPicker";
 
 // Créer le contexte avec une valeur par défaut
 export const EmojiContext = createContext<EmojiContextType | null>(null);

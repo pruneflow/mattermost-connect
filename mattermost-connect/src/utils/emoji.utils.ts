@@ -5,13 +5,13 @@
  */
 
 import { GifData } from "../types";
-import { getEmojiName } from "../components/EmojiPicker/data/emojiData";
 import {
   MOCK_GIFS,
   GIF_API_CONFIG,
   buildApiUrl,
   parseApiResponse,
-} from "../components/EmojiPicker/data/gifData";
+  getEmojiName,
+} from "../components/message/EmojiPicker";
 
 /**
  * Interface pour les options lors des appels API
