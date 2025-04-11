@@ -1,9 +1,14 @@
 // src/components/Attachment/attachments/index.ts
-export * from "./AttachmentTypes";
 export { default as ImageAttachment } from "./ImageAttachment";
 export { default as DocumentAttachment } from "./DocumentAttachment";
 export { default as MediaAttachment } from "./MediaAttachment";
 export { default as GenericAttachment } from "./GenericAttachment";
+export { default as AttachmentActions } from "./AttachmentActions";
+export { default as AttachmentInfo } from "./AttachmentInfo";
+export { default as AttachmentContextMenu } from "./AttachmentContextMenu";
+export { default as AttachmentNotification } from "./AttachmentNotification";
+export { default as AttachmentPreviewControls } from "./AttachmentPreviewControls";
+export { default as AttachmentUploadIndicator } from "./AttachmentUploadIndicator";
 
 // Utility functions for attachment type checking
 export const isImageType = (type: string, fileName?: string): boolean => {

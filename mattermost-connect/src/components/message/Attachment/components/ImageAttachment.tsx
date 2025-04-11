@@ -1,7 +1,7 @@
 // src/components/Attachment/attachments/ImageAttachment.tsx
 import React from "react";
 import { alpha, Box } from "@mui/material";
-import { ImageAttachmentProps } from "./AttachmentTypes";
+import { ImageAttachmentProps } from "../types/AttachmentTypes";
 import { Error as ErrorIcon, Image as ImageIcon } from "@mui/icons-material";
 
 /**

@@ -7,33 +7,13 @@ import { MessageAttachment as AttachmentType } from "../../../types";
 
 // Material-UI Components
 import {
-  Box,
   Paper,
-  Typography,
-  IconButton,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Tooltip,
-  Snackbar,
-  Alert,
   useMediaQuery,
   useTheme,
-  CircularProgress,
-  Grid,
   alpha,
   SxProps,
   Theme,
 } from "@mui/material";
-
-// Material-UI Icons
-import {
-  MoreVert as MoreIcon,
-  Download as DownloadIcon,
-  Link as LinkIcon,
-  Close as CloseIcon,
-} from "@mui/icons-material";
 
 // Attachment type components
 import {
@@ -44,7 +24,13 @@ import {
   isImageType,
   isDocumentType,
   isMediaType,
-} from "./attachments";
+  AttachmentNotification,
+  AttachmentInfo,
+  AttachmentContextMenu,
+  AttachmentActions,
+  AttachmentPreviewControls,
+  AttachmentUploadIndicator,
+} from "./components";
 
 /**
  * Modes available for the Attachment component
@@ -100,29 +86,6 @@ interface PreviewAttachmentProps extends CommonAttachmentProps {
 
   /** Whether the file has been uploaded to the server */
   isUploaded?: boolean;
-}
-
-/**
- * Type for a group of attachments
- */
-export interface AttachmentGroupProps {
-  /** List of files to display */
-  files: (File | AttachmentType)[];
-
-  /** Display mode of the components */
-  mode?: AttachmentMode;
-
-  /** Handler to remove an attachment (PREVIEW mode) */
-  onRemove?: (index: number) => void;
-
-  /** Whether the files are currently uploading (PREVIEW mode) */
-  isUploading?: boolean[];
-
-  /** Whether the files have been uploaded to the server (PREVIEW mode) */
-  isUploaded?: boolean[];
-
-  /** Additional style */
-  sx?: SxProps<Theme>;
 }
 
 /**
@@ -451,216 +414,50 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         {renderAttachmentIcon()}
 
         {/* File information */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="body2"
-            component={"div"}
-            noWrap
-            title={fileName}
-            fontWeight={500}
-          >
-            {fileName}
-          </Typography>
+        <AttachmentInfo
+          fileName={fileName}
+          formattedSize={formatFileSize(fileSize)}
+          isUploading={isPreviewMode && isUploading}
+        />
 
-          <Typography
-            variant="caption"
-            component={"div"}
-            color="text.secondary"
-          >
-            {formatFileSize(fileSize)}
-            {isPreviewMode && isUploading && (
-              <Box
-                component="span"
-                sx={{ ml: 1, display: "inline-flex", alignItems: "center" }}
-              >
-                <CircularProgress size={10} sx={{ mr: 0.5 }} />
-                Uploading...
-              </Box>
-            )}
-          </Typography>
-        </Box>
+        {/* Action buttons */}
+        <AttachmentActions
+          handleMenuOpen={handleMenuOpen}
+          handleDownload={handleDownload}
+          showControls={(showControls && !isPreviewMode) || isMobile}
+          isPreviewMode={isPreviewMode}
+        />
 
-        {/* Action buttons (visible on hover or always on mobile) */}
-        {((showControls && !isPreviewMode) || isMobile) && (
-          <Box sx={{ display: "flex", ml: 1 }}>
-            <Tooltip title="Options">
-              <IconButton
-                id="options-button"
-                size="small"
-                onClick={handleMenuOpen}
-              >
-                <MoreIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+        {/* Preview mode controls */}
+        <AttachmentPreviewControls
+          isPreviewMode={isPreviewMode}
+          onRemove={onRemove}
+          isUploading={isUploading}
+        />
 
-            <Tooltip title="Download">
-              <IconButton size="small" onClick={handleDownload}>
-                <DownloadIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
-
-        {/* Remove button for preview mode */}
-        {isPreviewMode && onRemove && !isUploading && (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            sx={{
-              position: "absolute",
-              top: -8,
-              right: -8,
-              bgcolor: "background.paper",
-              boxShadow: 1,
-              "&:hover": {
-                bgcolor: "error.light",
-                color: "error.contrastText",
-              },
-            }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        )}
-
-        {/* Loading indicator for preview mode */}
-        {isPreviewMode && isUploading && (
-          <CircularProgress
-            size={24}
-            sx={{
-              position: "absolute",
-              top: -12,
-              right: -12,
-              bgcolor: "background.paper",
-              borderRadius: "50%",
-              p: 0.5,
-            }}
-          />
-        )}
+        {/* Upload indicator */}
+        <AttachmentUploadIndicator
+          isPreviewMode={isPreviewMode}
+          isUploading={isUploading}
+        />
       </Paper>
 
-      {/* Context menu - only with public link creation option */}
-      <Menu
-        id="options-menu"
-        open={Boolean(menuPosition)}
-        onClose={handleMenuClose}
-        anchorReference="anchorPosition"
-        anchorPosition={menuPosition ? menuPosition : undefined}
-      >
-        <MenuItem
-          onClick={handleCreatePublicLink}
-          disabled={publicLinkLoading}
-          dense
-        >
-          <ListItemIcon>
-            {publicLinkLoading ? (
-              <CircularProgress size={20} />
-            ) : (
-              <LinkIcon fontSize="small" />
-            )}
-          </ListItemIcon>
-          <ListItemText
-            primary={publicLinkLoading ? "Creating..." : "Create public link"}
-          />
-        </MenuItem>
-      </Menu>
+      {/* Context menu */}
+      <AttachmentContextMenu
+        menuPosition={menuPosition}
+        handleMenuClose={handleMenuClose}
+        handleCreatePublicLink={handleCreatePublicLink}
+        publicLinkLoading={publicLinkLoading}
+      />
 
       {/* Notification snackbar */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleSnackbarClose}
-          severity={snackbarSeverity}
-          variant="filled"
-          sx={{ width: "100%" }}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
+      <AttachmentNotification
+        snackbarOpen={snackbarOpen}
+        snackbarMessage={snackbarMessage}
+        snackbarSeverity={snackbarSeverity}
+        handleSnackbarClose={handleSnackbarClose}
+      />
     </>
-  );
-};
-
-/**
- * Component to display a group of attachments side by side (on desktop)
- */
-export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
-  files,
-  mode = AttachmentMode.MESSAGE,
-  onRemove,
-  isUploading,
-  isUploaded,
-  sx,
-}) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
-  // If on mobile, stack the attachments
-  if (isMobile) {
-    return (
-      <Box sx={sx}>
-        {files.map((file, index) => (
-          <Box key={index} sx={{ mb: 1, "&:last-child": { mb: 0 } }}>
-            <Attachment
-              file={file}
-              mode={mode}
-              onRemove={onRemove ? () => onRemove(index) : undefined}
-              isUploading={isUploading ? isUploading[index] : undefined}
-              isUploaded={isUploaded ? isUploaded[index] : undefined}
-              width="100%"
-            />
-          </Box>
-        ))}
-      </Box>
-    );
-  }
-
-  // On desktop and in message mode, display attachments inline with scroll
-  if (mode === AttachmentMode.MESSAGE) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          overflowX: "auto",
-          gap: 1,
-          pb: 1, // Space for horizontal scroll
-          ...sx,
-        }}
-      >
-        {files.map((file, index) => (
-          <Attachment
-            key={index}
-            file={file}
-            mode={mode}
-            width={240} // Fixed width for each attachment
-          />
-        ))}
-      </Box>
-    );
-  }
-
-  // On desktop for other modes (preview), display in grid
-  return (
-    <Grid container spacing={1} sx={sx}>
-      {files.map((file, index) => (
-        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
-          <Attachment
-            file={file}
-            mode={mode}
-            onRemove={onRemove ? () => onRemove(index) : undefined}
-            isUploading={isUploading ? isUploading[index] : undefined}
-            isUploaded={isUploaded ? isUploaded[index] : undefined}
-            width="100%"
-          />
-        </Grid>
-      ))}
-    </Grid>
   );
 };
 

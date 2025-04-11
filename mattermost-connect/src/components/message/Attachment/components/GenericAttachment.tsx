@@ -1,7 +1,7 @@
 // src/components/Attachment/attachments/GenericAttachment.tsx
 import React from "react";
 import { alpha, Box } from "@mui/material";
-import { BaseAttachmentProps } from "./AttachmentTypes";
+import { BaseAttachmentProps } from "../types/AttachmentTypes";
 import { InsertDriveFile as FileIcon } from "@mui/icons-material";
 
 /**

@@ -1,7 +1,7 @@
 // src/components/Attachment/attachments/DocumentAttachment.tsx
 import React from "react";
 import { alpha, Box } from "@mui/material";
-import { DocumentAttachmentProps } from "./AttachmentTypes";
+import { DocumentAttachmentProps } from "../types/AttachmentTypes";
 import {
   PictureAsPdf as PdfIcon,
   Description as TextIcon,

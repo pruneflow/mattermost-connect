@@ -4,7 +4,7 @@ import { Box } from "@mui/material";
 import { MessageContentProps } from "./MessageTypes";
 import Attachment, {
   AttachmentGroup,
-} from "../../../message/Attachment/Attachment";
+} from "../../../message/Attachment/AttachmentGroup";
 
 /**
  * Displays the content of a message including text and attachments

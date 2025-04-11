@@ -1,128 +1,48 @@
-// src/components/MessageComposer/MessageComposer.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
-
-// Material-UI Components
-import {
-  Box,
-  CircularProgress,
-  Collapse,
-  Fade,
-  IconButton,
-  InputAdornment,
-  Paper,
-  SxProps,
-  TextField,
-  Theme,
-  Tooltip,
-  Typography,
-  useTheme,
-} from "@mui/material";
-
-// Material-UI Icons
-import {
-  Attachment as AttachmentIcon,
-  Close as CloseIcon,
-  EmojiEmotions as EmojiIcon,
-  Send as SendIcon,
-} from "@mui/icons-material";
-
-// Components
-import Attachment, {
-  AttachmentGroup,
-  AttachmentMode,
-  MattermostFile,
-} from "../Attachment/Attachment";
+import { Box, Collapse, Fade, SxProps, Theme, Typography } from "@mui/material";
+import { ReplyContext } from "./components/ReplyContext";
+import { AttachmentPreview } from "./components/AttachmentPreview";
+import { ComposerInput } from "./components/ComposerInput";
+import { ComposerToolbar } from "./components/ComposerToolbar";
 import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../../context/EmojiProvider";
+import { MattermostFile } from "../Attachment/Attachment";
 
-/**
- * Submission mode for the MessageComposer
- */
 export enum MessageComposerMode {
-  /** Component handles API calls automatically (default) */
   AUTO = "auto",
-  /** Component only collects data and calls onMessageSent with the data */
   MANUAL = "manual",
 }
 
-/**
- * File upload status tracking
- */
-interface FileUploadStatus {
-  // The original File object
+export interface FileUploadStatus {
   file: File;
-  // Mattermost file information after successful upload
   mattermostFile?: MattermostFile;
-  // Upload state
   uploading: boolean;
   uploaded: boolean;
   error?: string;
 }
 
-/**
- * Message data structure returned when using manual mode
- */
 export interface MessageData {
-  /** Message text content */
   message: string;
-  /** Channel ID where the message will be sent */
   channelId: string;
-  /** File attachments to send with the message */
   attachments: File[];
-  /** File IDs of uploaded attachments */
   fileIds?: string[];
-  /** If this is a reply to another message, the ID of that message */
   replyToMessageId?: string;
 }
 
-/**
- * Props for the MessageComposer component
- */
 export interface MessageComposerProps {
-  /** Channel ID where to send the message */
   channelId: string;
-
-  /** Placeholder text for the input */
   placeholder?: string;
-
-  /** Whether to allow file attachments */
   allowAttachments?: boolean;
-
-  /** Whether the composer is disabled */
   disabled?: boolean;
-
-  /** Initial text for the input */
   initialText?: string;
-
-  /**
-   * Mode controlling how the component handles message submission
-   * - AUTO: component handles API calls automatically (default)
-   * - MANUAL: component only collects data and calls onMessageSent with the data
-   */
   mode?: MessageComposerMode;
-
-  /**
-   * Callback when a message is sent
-   * In AUTO mode: Called after successful message submission with the message text
-   * In MANUAL mode: Called with all message data, component expects parent to handle submission
-   */
   onMessageSent?: ((message: string) => void) | ((data: MessageData) => void);
-
-  /** Additional CSS class */
   className?: string;
-
-  /** Additional inline style */
   style?: React.CSSProperties;
-
-  /** Material-UI sx prop for additional styling */
   sx?: SxProps<Theme>;
 }
 
-/**
- * A component that allows users to compose and send messages in a channel
- * with support for file attachments and emoji selection
- */
 const MessageComposer: React.FC<MessageComposerProps> = ({
   channelId,
   placeholder = "Type a message...",
@@ -135,10 +55,9 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   style,
   sx,
 }) => {
-  const theme = useTheme();
   const { service, replyTo, clearReply, isReplying } = useMattermost();
 
-  // State
+  // État
   const [message, setMessage] = useState(initialText);
   const [attachmentStatus, setAttachmentStatus] = useState<FileUploadStatus[]>(
     [],
@@ -151,11 +70,10 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
-  const emojiButtonRef = useRef<HTMLButtonElement>(null);
-  const isSubmittingRef = useRef(false); // Pour éviter les soumissions multiples
+  const isSubmittingRef = useRef(false);
 
-  // Calculated properties
   const files = attachmentStatus.map((status) => status.file);
+  // Propriétés calculées
   const hasUploadsInProgress = attachmentStatus.some(
     (status) => status.uploading,
   );
@@ -163,7 +81,11 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     .filter((status) => status.uploaded && status.mattermostFile?.id)
     .map((status) => status.mattermostFile!.id);
 
-  // Focus on the text field when the component is mounted
+  // Vérifier si le message est vide (pour désactiver le bouton d'envoi)
+  const isEmpty = !message.trim() && attachmentStatus.length === 0;
+
+  // Effets
+  // Focus sur le champ de texte à l'initialisation
   useEffect(() => {
     if (textFieldRef.current) {
       textFieldRef.current.focus();
@@ -171,6 +93,12 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   }, []);
 
   // Reset when the channel changes
+  useEffect(() => {
+    setMessage(initialText);
+    setAttachmentStatus([]);
+    setError(null);
+  }, [channelId, initialText]);
+
   useEffect(() => {
     setMessage(initialText);
     setAttachmentStatus([]);
@@ -269,12 +197,10 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   }, [attachmentStatus, uploadInProgress, service, channelId]);
 
-  // Handle file input change
+  // Gestionnaires d'événements
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       const newFiles = Array.from(event.target.files);
-
-      // Add new files to attachment status
       setAttachmentStatus((prev) => [
         ...prev,
         ...newFiles.map((file) => ({
@@ -286,42 +212,34 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  // Handle attachment button click
   const handleAttachmentClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
 
-  // Handle removal of an attachment
   const handleRemoveAttachment = (fileToRemove: File) => {
     setAttachmentStatus((prev) =>
       prev.filter((status) => status.file !== fileToRemove),
     );
   };
 
-  // Handle emoji selection
   const handleEmojiSelect = (result: EmojiSelectionResult) => {
     setMessage((prev) => prev + result.emoji);
     setShowEmojiPicker(false);
-
-    // Focus back on the text field
     if (textFieldRef.current) {
       textFieldRef.current.focus();
     }
   };
 
-  // Toggle emoji picker
   const toggleEmojiPicker = () => {
     setShowEmojiPicker((prev) => !prev);
   };
 
-  // Close emoji picker
   const closeEmojiPicker = () => {
     setShowEmojiPicker(false);
   };
 
-  // Handle send message
   const handleSendMessage = async () => {
     // Validation de base
     if (!message.trim() && attachmentStatus.length === 0) return;
@@ -377,12 +295,10 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       setSending(true);
       setError(null);
 
-      let response;
-
       if (isReplying && replyTo && replyTo.id) {
         // Envoi d'une réponse à un message
         if (service.replyToMessage) {
-          response = await service.replyToMessage(
+          await service.replyToMessage(
             channelId,
             replyTo.id,
             message,
@@ -393,11 +309,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         }
       } else {
         // Message normal avec les IDs de fichiers uploadés
-        response = await service.postMessage(
-          channelId,
-          message,
-          uploadedFileIds,
-        );
+        await service.postMessage(channelId, message, uploadedFileIds);
       }
 
       // Reset state
@@ -424,7 +336,6 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  // Handle keypress (send on Enter)
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -447,170 +358,47 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         ...sx,
       }}
     >
-      {/* Reply context */}
+      {/* Contexte de réponse */}
       <Collapse in={isReplying}>
-        {replyTo && (
-          <Paper
-            elevation={0}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              p: 1,
-              mb: 1,
-              bgcolor: "action.hover",
-              borderRadius: theme.shape.borderRadius,
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Typography
-                variant="body2"
-                component="div"
-                color="text.secondary"
-              >
-                Replying to:{" "}
-                <strong>
-                  {replyTo.message.length > 50
-                    ? replyTo.message.substring(0, 50) + "..."
-                    : replyTo.message}
-                </strong>
-              </Typography>
-            </Box>
-            <IconButton size="small" onClick={clearReply}>
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Paper>
-        )}
+        {replyTo && <ReplyContext replyTo={replyTo} clearReply={clearReply} />}
       </Collapse>
 
-      {/* Attachment previews */}
-      {attachmentStatus.length > 0 && (
-        <Box
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 1,
-            mb: 1,
-          }}
-        >
-          {attachmentStatus.map((status, index) => (
-            <Attachment
-              key={index}
-              file={
-                status.uploaded && status.mattermostFile
-                  ? status.mattermostFile
-                  : status.file
-              }
-              onRemove={() => handleRemoveAttachment(status.file)}
-              isUploading={status.uploading}
-              isUploaded={status.uploaded}
-              mode={AttachmentMode.PREVIEW}
-            />
-          ))}
-        </Box>
-      )}
+      {/* Prévisualisation des pièces jointes */}
+      <AttachmentPreview
+        attachmentStatus={attachmentStatus}
+        handleRemoveAttachment={handleRemoveAttachment}
+      />
 
-      {/* Message input row */}
+      {/* Zone de saisie du message */}
       <Box sx={{ display: "flex", alignItems: "flex-end" }}>
-        {/* Text input */}
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
+        {/* Champ de texte */}
+        <ComposerInput
           placeholder={placeholder}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          disabled={disabled || sending}
-          inputRef={textFieldRef}
-          variant="outlined"
-          size="small"
-          sx={{
-            flex: 1,
-            "& .MuiOutlinedInput-root": {
-              borderRadius: 4,
-              padding: 1,
-            },
-          }}
-          InputProps={{
-            endAdornment: sending ? (
-              <InputAdornment position="end">
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    color: "text.secondary",
-                    mr: 1,
-                  }}
-                >
-                  <CircularProgress size={16} sx={{ mr: 1 }} />
-                  Sending...
-                </Box>
-              </InputAdornment>
-            ) : null,
-            className: "message-composer-input", // Classe pour faciliter la mise au point
-          }}
+          message={message}
+          setMessage={setMessage}
+          disabled={disabled}
+          sending={sending}
+          textFieldRef={textFieldRef}
+          handleKeyPress={handleKeyPress}
         />
 
-        {/* Action buttons */}
-        <Box sx={{ display: "flex", ml: 1 }}>
-          {/* Emoji picker button */}
-          <Tooltip title="Add emoji">
-            <IconButton
-              color="primary"
-              onClick={toggleEmojiPicker}
-              disabled={disabled || sending}
-              ref={emojiButtonRef}
-            >
-              <EmojiIcon />
-            </IconButton>
-          </Tooltip>
-
-          {/* Attachment button */}
-          {allowAttachments && (
-            <Tooltip title="Add attachment">
-              <IconButton
-                color="primary"
-                onClick={handleAttachmentClick}
-                disabled={disabled || sending || uploadInProgress}
-              >
-                {uploadInProgress ? (
-                  <CircularProgress size={24} />
-                ) : (
-                  <AttachmentIcon />
-                )}
-              </IconButton>
-            </Tooltip>
-          )}
-
-          {/* Send button */}
-          <Tooltip title="Send message">
-            <IconButton
-              color="primary"
-              onClick={handleSendMessage}
-              disabled={
-                disabled ||
-                sending ||
-                hasUploadsInProgress ||
-                (!message.trim() && attachmentStatus.length === 0)
-              }
-            >
-              <SendIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-
-        {/* Hidden file input */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-          multiple
+        {/* Barre d'outils */}
+        <ComposerToolbar
+          allowAttachments={allowAttachments}
+          disabled={disabled}
+          sending={sending}
+          hasUploadsInProgress={hasUploadsInProgress}
+          isEmpty={isEmpty}
+          fileInputRef={fileInputRef}
+          uploadInProgress={uploadInProgress}
+          toggleEmojiPicker={toggleEmojiPicker}
+          handleAttachmentClick={handleAttachmentClick}
+          handleSendMessage={handleSendMessage}
+          handleFileChange={handleFileChange}
         />
       </Box>
 
-      {/* Error message */}
+      {/* Message d'erreur */}
       {error && (
         <Typography
           variant="caption"
@@ -622,7 +410,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         </Typography>
       )}
 
-      {/* Emoji picker popover */}
+      {/* Emoji picker */}
       <Fade in={showEmojiPicker}>
         <Box
           sx={{

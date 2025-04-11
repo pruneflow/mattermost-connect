@@ -1,7 +1,7 @@
 // src/components/Attachment/attachments/MediaAttachment.tsx
 import React from "react";
 import { alpha, Box } from "@mui/material";
-import { BaseAttachmentProps } from "./AttachmentTypes";
+import { BaseAttachmentProps } from "../types/AttachmentTypes";
 import {
   VideoFile as VideoIcon,
   MusicNote as AudioIcon,
