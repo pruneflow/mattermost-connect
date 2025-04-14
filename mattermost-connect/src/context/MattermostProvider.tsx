@@ -1,36 +1,42 @@
 // src/context/MattermostProvider.tsx
 import React, {
   createContext,
+  ReactNode,
+  useCallback,
   useContext,
-  useState,
   useEffect,
   useMemo,
-  useCallback,
-  ReactNode,
   useRef,
+  useState,
 } from "react";
-import { createMattermostService } from "../services";
-import { createFileService } from "../services/file.service";
-import { createEmojiService } from "../services/emoji.service";
+import {
+  createMattermostService,
+  DirectService,
+  ProxyService,
+} from "../services";
+import { createFileService, FileService } from "../services/file.service";
+import {
+  createEmojiService,
+  EmojiServiceInterface,
+} from "../services/emoji.service";
 import type {
-  User,
-  ProviderConfig,
-  MattermostService,
-  WebSocketConnection,
-  Message,
   Channel,
+  MattermostService,
+  Message,
+  ProviderConfig,
+  Team,
+  User,
+  WebSocketConnection,
 } from "../types";
 import { setupWebsocket } from "../services/websocket.service";
-import { DirectService } from "../services/direct.service";
-import { ProxyService } from "../services/proxy.service";
-import { FileService } from "../services/file.service";
-import { EmojiServiceInterface } from "../services/emoji.service";
 import {
+  Notification,
   notificationService,
   WebSocketEvent,
-  Notification,
+  WebSocketEventType,
 } from "../services/notification.service";
 import { NotificationSnackbar } from "../components/notification";
+import { formatUserDisplayName } from "../utils";
 
 /**
  * Type of the Mattermost context that provides access to
@@ -84,6 +90,30 @@ export interface MattermostContextType {
 
   /** Typing status by channel */
   typingUsers: Record<string, string[]>;
+
+  /** Currently selected team */
+  activeTeam: Team | null;
+
+  /** Set the active team */
+  setActiveTeam: (team: Team | null) => void;
+
+  /** All users in the context of the current team */
+  teamUsers: Record<string, User>;
+
+  /** Get a user by their ID */
+  getUser: (userId: string) => User | null;
+
+  /** Get a formatted display name for a user by their ID */
+  getUserDisplayName: (userId: string) => string;
+
+  /** Check if a user is typing in a specific channel */
+  isUserTyping: (channelId: string, userId: string) => boolean;
+
+  /** Get typing users for a specific channel */
+  getTypingUsersForChannel: (channelId: string) => string[];
+
+  /** Get formatted typing indicator text for a channel */
+  getTypingIndicatorText: (channelId: string) => string;
 }
 
 // Create the context
@@ -141,7 +171,15 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   const [websocket, setWebsocket] = useState<WebSocketConnection | null>(null);
   const [service, setService] = useState<MattermostService | null>(null);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+  const [activeTeam, setActiveTeam] = useState<Team | null>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
+
+  // Nouvel état pour stocker tous les utilisateurs de l'équipe
+  const [teamUsers, setTeamUsers] = useState<Record<string, User>>({});
+
+  // État pour suivre quand les utilisateurs ont été mis à jour la dernière fois
+  const lastUsersFetchRef = useRef<number>(0);
+  const usersFetchIntervalRef = useRef<number | null>(null);
 
   // Secondary services
   const [fileService, setFileService] = useState<FileService | null>(null);
@@ -176,6 +214,123 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   // Whether the user is replying
   const isReplying = replyTo !== null;
+
+  /**
+   * Charge tous les utilisateurs de l'équipe active
+   */
+  const loadTeamUsers = useCallback(
+    async (teamId: string) => {
+      if (!service || !isConnected) return;
+
+      try {
+        // Marquer le début du chargement
+        const fetchStart = Date.now();
+        lastUsersFetchRef.current = fetchStart;
+
+        // Récupérer tous les utilisateurs de l'équipe (en augmentant la limite)
+        const users = await service.getUsers({
+          inTeam: teamId,
+          perPage: 200, // Une limite plus grande pour récupérer plus d'utilisateurs
+        });
+
+        // Vérifier si c'est toujours la dernière requête (éviter les conditions de course)
+        if (fetchStart !== lastUsersFetchRef.current) return;
+
+        // Construire le dictionnaire des utilisateurs
+        const usersMap: Record<string, User> = {};
+        users.forEach((user) => {
+          usersMap[user.id] = user;
+        });
+
+        // Ajouter l'utilisateur actuel s'il n'est pas déjà présent
+        if (currentUser && !usersMap[currentUser.id]) {
+          usersMap[currentUser.id] = currentUser;
+        }
+
+        setTeamUsers(usersMap);
+      } catch (error) {
+        console.error(
+          "Erreur lors du chargement des utilisateurs de l'équipe:",
+          error,
+        );
+      }
+    },
+    [service, isConnected, currentUser],
+  );
+
+  /**
+   * Obtenir un utilisateur par son ID
+   */
+  const getUser = useCallback(
+    (userId: string): User | null => {
+      if (!userId) return null;
+      return teamUsers[userId] || null;
+    },
+    [teamUsers],
+  );
+
+  /**
+   * Obtenir le nom formaté d'un utilisateur par son ID
+   */
+  const getUserDisplayName = useCallback(
+    (userId: string): string => {
+      const user = getUser(userId);
+      return formatUserDisplayName(user);
+    },
+    [getUser],
+  );
+
+  /**
+   * Vérifier si un utilisateur est en train de taper dans un canal spécifique
+   */
+  const isUserTyping = useCallback(
+    (channelId: string, userId: string): boolean => {
+      if (!channelId || !userId || !typingUsers[channelId]) return false;
+      return typingUsers[channelId].includes(userId);
+    },
+    [typingUsers],
+  );
+
+  /**
+   * Obtenir la liste des utilisateurs qui tapent dans un canal spécifique
+   */
+  const getTypingUsersForChannel = useCallback(
+    (channelId: string): string[] => {
+      if (!channelId || !typingUsers[channelId]) return [];
+      return [...typingUsers[channelId]];
+    },
+    [typingUsers],
+  );
+
+  /**
+   * Obtenir le texte formaté pour l'indicateur de frappe
+   */
+  const getTypingIndicatorText = useCallback(
+    (channelId: string): string => {
+      const typingUserIds = getTypingUsersForChannel(channelId);
+      if (typingUserIds.length === 0) return "";
+
+      // Formater les noms des utilisateurs
+      const typingUserNames = typingUserIds
+        .map((userId) => getUserDisplayName(userId))
+        .filter(Boolean);
+
+      if (typingUserNames.length === 0) return "";
+
+      if (typingUserNames.length === 1) {
+        return `${typingUserNames[0]} est en train d'écrire...`;
+      }
+
+      if (typingUserNames.length === 2) {
+        return `${typingUserNames[0]} et ${typingUserNames[1]} sont en train d'écrire...`;
+      }
+
+      // Plus de 2 utilisateurs
+      const remaining = typingUserNames.length - 2;
+      return `${typingUserNames[0]}, ${typingUserNames[1]} et ${remaining} autre${remaining > 1 ? "s" : ""} sont en train d'écrire...`;
+    },
+    [getTypingUsersForChannel, getUserDisplayName],
+  );
 
   // Initialize the appropriate service based on mode
   useEffect(() => {
@@ -329,6 +484,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       if (websocket) {
         websocket.close();
       }
+
+      // Nettoyer l'intervalle de rafraîchissement des utilisateurs
+      if (usersFetchIntervalRef.current) {
+        window.clearInterval(usersFetchIntervalRef.current);
+        usersFetchIntervalRef.current = null;
+      }
     };
   }, [
     mode,
@@ -342,10 +503,10 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     refreshInterval,
   ]);
 
-  // Écoutez les nouvelles notifications pour afficher une Snackbar
+  // Écouter les nouvelles notifications pour afficher une Snackbar
   useEffect(() => {
     // Écouter les nouvelles notifications
-    const unsubscribe = notificationService.addEventListener(
+    return notificationService.addEventListener(
       "notification_added",
       (notification: Notification) => {
         // Ne pas afficher de notification si nous sommes déjà dans le canal concerné
@@ -361,8 +522,6 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         setNotifications((prev) => [notification, ...prev]);
       },
     );
-
-    return unsubscribe;
   }, [activeChannel]);
 
   // Gérer l'affichage des notifications une par une
@@ -384,24 +543,77 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     }
   }, [activeChannel]);
 
-  // Écouter les mises à jour de frappe
+  // Écouter les événements de frappe avec un nettoyage amélioré
   useEffect(() => {
-    const unsubscribe = notificationService.addEventListener(
-      "typing_updated",
-      (data) => {
-        setTypingUsers((prev) => ({
-          ...prev,
-          [data.channelId]: data.typingUsers,
-        }));
-      },
-    );
+    return notificationService.addEventListener("typing_updated", (data) => {
+      if (!data.channelId) return;
 
-    return unsubscribe;
+      setTypingUsers((prev) => ({
+        ...prev,
+        [data.channelId]: data.typingUsers || [],
+      }));
+    });
+  }, []);
+
+  // Configurer l'intervalle pour actualiser les utilisateurs de l'équipe
+  useEffect(() => {
+    // Nettoyer l'intervalle existant
+    if (usersFetchIntervalRef.current) {
+      window.clearInterval(usersFetchIntervalRef.current);
+      usersFetchIntervalRef.current = null;
+    }
+
+    if (isConnected && service && activeTeam) {
+      // Charger les utilisateurs immédiatement
+      void loadTeamUsers(activeTeam.id);
+
+      // Configurer un intervalle pour actualiser les utilisateurs (toutes les 5 minutes)
+      usersFetchIntervalRef.current = window.setInterval(
+        () => {
+          void loadTeamUsers(activeTeam.id);
+        },
+        5 * 60 * 1000,
+      ); // 5 minutes
+    }
+
+    return () => {
+      if (usersFetchIntervalRef.current) {
+        window.clearInterval(usersFetchIntervalRef.current);
+        usersFetchIntervalRef.current = null;
+      }
+    };
+  }, [isConnected, service, activeTeam, loadTeamUsers]);
+
+  // Écouter les mises à jour d'utilisateurs via WebSocket
+  useEffect(() => {
+    const handleUserUpdated = (data: any) => {
+      try {
+        const user = data.user;
+        if (!user || !user.id) return;
+
+        // Mettre à jour l'utilisateur dans notre cache
+        setTeamUsers((prev) => ({
+          ...prev,
+          [user.id]: {
+            ...prev[user.id],
+            ...user,
+          },
+        }));
+      } catch (error) {
+        console.error("Erreur lors de la mise à jour de l'utilisateur:", error);
+      }
+    };
+
+    // S'abonner à l'événement de mise à jour d'utilisateur
+    return notificationService.addEventListener(
+      WebSocketEventType.USER_UPDATED,
+      handleUserUpdated,
+    );
   }, []);
 
   // Fonction pour naviguer vers un canal spécifique
   const navigateToChannel = useCallback(
-    async (channelId: string, messageId?: string) => {
+    async (channelId: string, _messageId?: string) => {
       if (!service) return;
 
       try {
@@ -473,8 +685,20 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     activeChannel,
     setActiveChannel,
 
+    // Team management
+    activeTeam,
+    setActiveTeam,
+
+    // Users management
+    teamUsers,
+    getUser,
+    getUserDisplayName,
+
     // Typing status
     typingUsers,
+    isUserTyping,
+    getTypingUsersForChannel,
+    getTypingIndicatorText,
   };
 
   return (
