@@ -1,5 +1,7 @@
 // src/utils/formatting.ts
 
+import { User } from "../types";
+
 /**
  * Formatting utilities for text and dates
  */
@@ -270,6 +272,23 @@ export const formatTeamName = (name: string, maxLength = 0): string => {
   return truncateText(name, maxLength);
 };
 
+/**
+ * Formate le nom d'affichage d'un utilisateur
+ * @param user Objet utilisateur
+ * @returns Nom formaté
+ */
+export const formatUserDisplayName = (
+  user: User | null | undefined,
+): string => {
+  if (!user) return "Utilisateur inconnu";
+
+  if (user.first_name && user.last_name) {
+    return `${user.first_name} ${user.last_name}`;
+  } else {
+    return user.nickname || user.username || "Utilisateur";
+  }
+};
+
 export default {
   formatMessageText,
   formatTimestamp,
@@ -278,4 +297,5 @@ export default {
   generateColorFromString,
   getTeamInitials,
   formatTeamName,
+  formatUserDisplayName,
 };

@@ -180,7 +180,8 @@ export class NotificationService {
         break;
 
       case WebSocketEventType.TYPING:
-        this.handleTyping(event.data);
+        console.debug("event", event);
+        this.handleTyping(event);
         break;
 
       case WebSocketEventType.REACTION_ADDED:
@@ -294,12 +295,17 @@ export class NotificationService {
   /**
    * Gérer les événements de saisie
    */
-  private handleTyping(data: any) {
+  private handleTyping(event: any) {
+    const { data, broadcast } = event;
     try {
-      const { channel_id, user_id } = data;
-
+      const { user_id } = data;
+      const { channel_id, omit_users } = broadcast;
       // Ignorer les événements de frappe de l'utilisateur actuel
       if (user_id === this.currentUserId) {
+        return;
+      }
+
+      if (omit_users && this.currentUserId && omit_users[this.currentUserId]) {
         return;
       }
 
@@ -309,24 +315,30 @@ export class NotificationService {
       }
 
       // Enregistrer l'horodatage de la dernière activité de frappe
-      this.typingUsers[channel_id][user_id] = Date.now();
+      const timestamp = Date.now();
+      this.typingUsers[channel_id][user_id] = timestamp;
 
       // Notifier les écouteurs que les états de frappe ont changé
       this.notifyListeners("typing_updated", {
         channelId: channel_id,
         typingUsers: this.getTypingUsers(channel_id),
+        timestamp,
       });
 
       // Nettoyer automatiquement après un délai (généralement 5 secondes)
       setTimeout(() => {
         // Vérifier si l'utilisateur a déjà été supprimé (pour éviter les fausses suppressions)
-        if (this.typingUsers[channel_id]?.[user_id] === Date.now()) {
+        if (this.typingUsers[channel_id]?.[user_id] === timestamp) {
           delete this.typingUsers[channel_id][user_id];
-
+          // Si aucun utilisateur ne tape plus dans ce canal, nettoyez l'objet
+          if (Object.keys(this.typingUsers[channel_id]).length === 0) {
+            delete this.typingUsers[channel_id];
+          }
           // Notifier à nouveau les écouteurs
           this.notifyListeners("typing_updated", {
             channelId: channel_id,
             typingUsers: this.getTypingUsers(channel_id),
+            timestamp: timestamp,
           });
         }
       }, 5000);
