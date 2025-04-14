@@ -306,9 +306,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
    * Obtenir le texte formaté pour l'indicateur de frappe
    */
   const getTypingIndicatorText = useCallback(
-    (channelId: string): string => {
+    (channelId: string): string | null => {
       const typingUserIds = getTypingUsersForChannel(channelId);
-      if (typingUserIds.length === 0) return "";
+      if (typingUserIds.length === 0) return null;
 
       // Formater les noms des utilisateurs
       const typingUserNames = typingUserIds
@@ -545,14 +545,31 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   // Écouter les événements de frappe avec un nettoyage amélioré
   useEffect(() => {
-    return notificationService.addEventListener("typing_updated", (data) => {
+    const handleTypingUpdated = (data: any) => {
       if (!data.channelId) return;
 
-      setTypingUsers((prev) => ({
-        ...prev,
-        [data.channelId]: data.typingUsers || [],
-      }));
-    });
+      // Mettez à jour le state des utilisateurs en train de taper
+      setTypingUsers((prev) => {
+        // Créez une copie pour ne pas modifier directement l'état
+        const newTypingUsers = { ...prev };
+
+        // Si nous avons une liste d'utilisateurs pour ce canal, mettez-la à jour
+        if (data.typingUsers) {
+          newTypingUsers[data.channelId] = data.typingUsers;
+        } else {
+          // Si aucun utilisateur ne tape, supprimez l'entrée pour ce canal
+          delete newTypingUsers[data.channelId];
+        }
+
+        return newTypingUsers;
+      });
+    };
+
+    // S'abonner à l'événement et retourner la fonction de nettoyage
+    return notificationService.addEventListener(
+      "typing_updated",
+      handleTypingUpdated,
+    );
   }, []);
 
   // Configurer l'intervalle pour actualiser les utilisateurs de l'équipe

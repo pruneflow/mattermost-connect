@@ -1,6 +1,7 @@
 // src/components/ChannelList/ChannelItem.tsx
 import React from "react";
 import { Channel } from "../../../types";
+import { useMattermost } from "../../../context/MattermostProvider";
 
 // Material-UI Components
 import {
@@ -22,10 +23,11 @@ import {
   Group as GroupIcon,
   Bookmark as FavoriteIcon,
   FiberManualRecord as StatusIcon,
+  Edit as TypingIcon,
 } from "@mui/icons-material";
 
 /**
- * Props for the ChannelItem component
+ * Props pour le composant ChannelItem
  */
 export interface ChannelItemProps {
   /** Channel data object */
@@ -62,6 +64,13 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
   selectedSx,
   iconSx,
 }) => {
+  // Utiliser le contexte pour accéder à l'état des utilisateurs qui tapent
+  const { getTypingUsersForChannel } = useMattermost();
+
+  // Vérifier si des utilisateurs sont en train de taper dans ce canal
+  const typingUsers = getTypingUsersForChannel(channel.id);
+  const isTyping = typingUsers.length > 0;
+
   // Determine which icon to use based on channel type
   const getChannelIcon = () => {
     const isFavorite = channel.is_favorite;
@@ -146,11 +155,45 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
                 }}
               />
             )}
+
+            {/* Typing indicator */}
+            {isTyping && (
+              <TypingIcon
+                sx={{
+                  ml: 0.5,
+                  width: 16,
+                  height: 16,
+                  color: "info.main",
+                  animation: "typing-pulse 1.5s infinite",
+                  "@keyframes typing-pulse": {
+                    "0%, 100%": {
+                      opacity: 0.5,
+                      transform: "scale(0.9)",
+                    },
+                    "50%": {
+                      opacity: 1,
+                      transform: "scale(1.1)",
+                    },
+                  },
+                }}
+              />
+            )}
           </Box>
         }
         secondary={
-          // Ajouter cette partie pour afficher des informations supplémentaires pour les messages directs
-          isDirectMessage && channel.purpose ? (
+          isTyping ? (
+            <Typography
+              component="span"
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{ fontStyle: "italic" }}
+            >
+              {typingUsers.length === 1
+                ? "Quelqu'un écrit..."
+                : `${typingUsers.length} personnes écrivent...`}
+            </Typography>
+          ) : isDirectMessage && channel.purpose ? (
             <Typography
               component="span"
               variant="caption"

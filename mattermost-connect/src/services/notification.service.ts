@@ -85,6 +85,8 @@ export class NotificationService {
   private notifications: Notification[] = [];
   private unreadState: UnreadState = {};
   private typingUsers: Record<string, { [userId: string]: number }> = {}; // Utilisateurs en train de taper par canal
+  private typingTimeouts: Record<string, { [userId: string]: NodeJS.Timeout }> =
+    {}; // Timeouts pour effacer l'état de frappe
   private currentChannelId: string | null = null;
   private currentUserId: string | null = null;
 
@@ -95,6 +97,7 @@ export class NotificationService {
     });
 
     this.listeners["notification_added"] = [];
+    this.listeners["notifications_updated"] = [];
     this.listeners["unread_updated"] = [];
     this.listeners["typing_updated"] = [];
   }
@@ -180,7 +183,6 @@ export class NotificationService {
         break;
 
       case WebSocketEventType.TYPING:
-        console.debug("event", event);
         this.handleTyping(event);
         break;
 
@@ -300,6 +302,7 @@ export class NotificationService {
     try {
       const { user_id } = data;
       const { channel_id, omit_users } = broadcast;
+
       // Ignorer les événements de frappe de l'utilisateur actuel
       if (user_id === this.currentUserId) {
         return;
@@ -314,9 +317,24 @@ export class NotificationService {
         this.typingUsers[channel_id] = {};
       }
 
+      // Initialiser l'objet des timeouts pour ce canal si nécessaire
+      if (!this.typingTimeouts[channel_id]) {
+        this.typingTimeouts[channel_id] = {};
+      }
+
+      // Effacer le timeout existant si présent
+      if (this.typingTimeouts[channel_id][user_id]) {
+        clearTimeout(this.typingTimeouts[channel_id][user_id]);
+      }
+
       // Enregistrer l'horodatage de la dernière activité de frappe
       const timestamp = Date.now();
       this.typingUsers[channel_id][user_id] = timestamp;
+
+      // Définir un nouveau timeout pour supprimer l'utilisateur après 5 secondes
+      this.typingTimeouts[channel_id][user_id] = setTimeout(() => {
+        this.removeTypingUser(channel_id, user_id, timestamp);
+      }, 5000);
 
       // Notifier les écouteurs que les états de frappe ont changé
       this.notifyListeners("typing_updated", {
@@ -324,26 +342,37 @@ export class NotificationService {
         typingUsers: this.getTypingUsers(channel_id),
         timestamp,
       });
-
-      // Nettoyer automatiquement après un délai (généralement 5 secondes)
-      setTimeout(() => {
-        // Vérifier si l'utilisateur a déjà été supprimé (pour éviter les fausses suppressions)
-        if (this.typingUsers[channel_id]?.[user_id] === timestamp) {
-          delete this.typingUsers[channel_id][user_id];
-          // Si aucun utilisateur ne tape plus dans ce canal, nettoyez l'objet
-          if (Object.keys(this.typingUsers[channel_id]).length === 0) {
-            delete this.typingUsers[channel_id];
-          }
-          // Notifier à nouveau les écouteurs
-          this.notifyListeners("typing_updated", {
-            channelId: channel_id,
-            typingUsers: this.getTypingUsers(channel_id),
-            timestamp: timestamp,
-          });
-        }
-      }, 5000);
     } catch (error) {
       console.error("Error handling typing event:", error);
+    }
+  }
+
+  /**
+   * Supprimer un utilisateur de la liste des utilisateurs en train de taper
+   */
+  private removeTypingUser(
+    channelId: string,
+    userId: string,
+    timestamp: number,
+  ) {
+    // Vérifier si l'utilisateur existe encore dans la liste et si la timestamp correspond
+    if (this.typingUsers[channelId]?.[userId] === timestamp) {
+      // Supprimer l'utilisateur
+      delete this.typingUsers[channelId][userId];
+      delete this.typingTimeouts[channelId][userId];
+
+      // Si aucun utilisateur ne tape plus dans ce canal, nettoyer l'objet
+      if (Object.keys(this.typingUsers[channelId]).length === 0) {
+        delete this.typingUsers[channelId];
+        delete this.typingTimeouts[channelId];
+      }
+
+      // Notifier à nouveau les écouteurs
+      this.notifyListeners("typing_updated", {
+        channelId,
+        typingUsers: this.getTypingUsers(channelId),
+        timestamp,
+      });
     }
   }
 
@@ -365,7 +394,7 @@ export class NotificationService {
           typingUserIds.push(userId);
         } else {
           // Nettoyer automatiquement les entrées expirées
-          delete this.typingUsers[channelId][userId];
+          this.removeTypingUser(channelId, userId, timestamp);
         }
       },
     );
