@@ -31,6 +31,7 @@ import {
 
 // Channel Item Component
 import ChannelItem from "./ChannelItem";
+import { formatUserDisplayName } from "../../../utils";
 
 /**
  * Props for the ChannelList component
@@ -132,13 +133,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
       if (otherUserId && directMessageUsers[otherUserId]) {
         const otherUser = directMessageUsers[otherUserId];
         // Construire un nom d'affichage basé sur les informations de l'utilisateur
-        if (otherUser.first_name && otherUser.last_name) {
-          return `${otherUser.first_name} ${otherUser.last_name}`;
-        } else {
-          return (
-            otherUser.nickname || otherUser.username || channel.display_name
-          );
-        }
+        return formatUserDisplayName(otherUser);
       }
     }
 
