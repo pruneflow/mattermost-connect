@@ -97,11 +97,11 @@ export interface MattermostContextType {
   /** Set the active team */
   setActiveTeam: (team: Team | null) => void;
 
-  /** All users in the context of the current team */
-  teamUsers: Record<string, User>;
+  /** All known users (from all teams and direct messages) */
+  knownUsers: Record<string, User>;
 
-  /** Get a user by their ID */
-  getUser: (userId: string) => User | null;
+  /** Get a user by their ID - loads from API if not in cache */
+  getUser: (userId: string) => Promise<User | null>;
 
   /** Get a formatted display name for a user by their ID */
   getUserDisplayName: (userId: string) => string;
@@ -114,6 +114,9 @@ export interface MattermostContextType {
 
   /** Get formatted typing indicator text for a channel */
   getTypingIndicatorText: (channelId: string) => string;
+
+  /** Load user by id if not in cache */
+  loadUserById: (userId: string) => Promise<User | null>;
 }
 
 // Create the context
@@ -174,8 +177,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   const [activeTeam, setActiveTeam] = useState<Team | null>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
 
-  // Nouvel état pour stocker tous les utilisateurs de l'équipe
-  const [teamUsers, setTeamUsers] = useState<Record<string, User>>({});
+  // État pour stocker tous les utilisateurs connus (pas seulement ceux de l'équipe)
+  const [knownUsers, setKnownUsers] = useState<Record<string, User>>({});
+
+  // Cache pour les requêtes utilisateur en cours pour éviter les appels multiples
+  const pendingUserRequests = useRef<Record<string, Promise<User | null>>>({});
 
   // État pour suivre quand les utilisateurs ont été mis à jour la dernière fois
   const lastUsersFetchRef = useRef<number>(0);
@@ -216,7 +222,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   const isReplying = replyTo !== null;
 
   /**
-   * Charge tous les utilisateurs de l'équipe active
+   * Charge les utilisateurs de l'équipe active et les ajoute au cache global
    */
   const loadTeamUsers = useCallback(
     async (teamId: string) => {
@@ -236,18 +242,28 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         // Vérifier si c'est toujours la dernière requête (éviter les conditions de course)
         if (fetchStart !== lastUsersFetchRef.current) return;
 
-        // Construire le dictionnaire des utilisateurs
-        const usersMap: Record<string, User> = {};
-        users.forEach((user) => {
-          usersMap[user.id] = user;
+        // Construire le dictionnaire des utilisateurs, mais sans écraser les utilisateurs existants
+        setKnownUsers((prevUsers) => {
+          const newUsers = { ...prevUsers };
+          users.forEach((user) => {
+            // N'ajouter l'utilisateur que s'il n'existe pas déjà ou si ses données sont plus récentes
+            if (
+              !newUsers[user.id] ||
+              (user.update_at &&
+                newUsers[user.id].update_at &&
+                user.update_at > newUsers[user.id].update_at)
+            ) {
+              newUsers[user.id] = user;
+            }
+          });
+
+          // Ajouter l'utilisateur actuel s'il n'est pas déjà présent
+          if (currentUser && !newUsers[currentUser.id]) {
+            newUsers[currentUser.id] = currentUser;
+          }
+
+          return newUsers;
         });
-
-        // Ajouter l'utilisateur actuel s'il n'est pas déjà présent
-        if (currentUser && !usersMap[currentUser.id]) {
-          usersMap[currentUser.id] = currentUser;
-        }
-
-        setTeamUsers(usersMap);
       } catch (error) {
         console.error(
           "Erreur lors du chargement des utilisateurs de l'équipe:",
@@ -259,14 +275,131 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   );
 
   /**
-   * Obtenir un utilisateur par son ID
+   * Charge tous les utilisateurs impliqués dans des canaux de messages directs
+   */
+  const loadDirectMessageUsers = useCallback(
+    async (channels: Channel[]) => {
+      if (!service || !isConnected || !currentUser) return;
+
+      try {
+        // Filtrer les canaux de type direct (D) ou groupe (G)
+        const directChannels = channels.filter(
+          (c) => c.type === "D" || c.type === "G",
+        );
+
+        if (directChannels.length === 0) return;
+
+        // Collecter tous les IDs utilisateurs depuis les noms des canaux
+        const userIds: Set<string> = new Set();
+
+        directChannels.forEach((channel) => {
+          // Dans Mattermost, les canaux directs ont généralement un nom au format "user1__user2"
+          if (channel.name && channel.name.includes("__")) {
+            const parts = channel.name.split("__");
+            parts.forEach((part) => {
+              if (part !== currentUser.id) {
+                userIds.add(part);
+              }
+            });
+          }
+        });
+
+        // Convertir Set en tableau et filtrer les utilisateurs déjà connus
+        const usersToFetch = Array.from(userIds).filter(
+          (id) => !knownUsers[id],
+        );
+
+        if (usersToFetch.length === 0) return;
+
+        // Charger les informations des utilisateurs
+        const users = await service.getUsers({ ids: usersToFetch });
+
+        // Ajouter les nouveaux utilisateurs au cache
+        setKnownUsers((prevUsers) => {
+          const newUsers = { ...prevUsers };
+          users.forEach((user) => {
+            newUsers[user.id] = user;
+          });
+          return newUsers;
+        });
+      } catch (error) {
+        console.error(
+          "Erreur lors du chargement des utilisateurs pour les DMs:",
+          error,
+        );
+      }
+    },
+    [service, isConnected, currentUser, knownUsers],
+  );
+
+  /**
+   * Charge un utilisateur spécifique par son ID s'il n'est pas déjà dans le cache
+   */
+  const loadUserById = useCallback(
+    async (userId: string): Promise<User | null> => {
+      if (!userId || !service || !isConnected) return null;
+
+      // Si l'utilisateur est déjà dans le cache, le retourner immédiatement
+      if (knownUsers[userId]) {
+        return knownUsers[userId];
+      }
+
+      // Si une requête est déjà en cours pour cet utilisateur, retourner sa promesse
+      if (pendingUserRequests.current[userId]) {
+        return pendingUserRequests.current[userId];
+      }
+
+      // Créer une nouvelle promesse pour cette requête
+      const request = (async () => {
+        try {
+          const users = await service.getUsers({ ids: [userId] });
+          if (users && users.length > 0) {
+            const user = users[0];
+
+            // Mettre à jour le cache
+            setKnownUsers((prev) => ({
+              ...prev,
+              [userId]: user,
+            }));
+
+            return user;
+          }
+        } catch (error) {
+          console.error(
+            `Erreur lors du chargement de l'utilisateur ${userId}:`,
+            error,
+          );
+        } finally {
+          // Supprimer cette requête des requêtes en cours
+          delete pendingUserRequests.current[userId];
+        }
+        return null;
+      })();
+
+      // Stocker la promesse dans les requêtes en cours
+      pendingUserRequests.current[userId] = request;
+
+      return request;
+    },
+    [service, isConnected, knownUsers],
+  );
+
+  /**
+   * Obtenir un utilisateur par son ID - charge l'utilisateur si nécessaire
    */
   const getUser = useCallback(
-    (userId: string): User | null => {
+    async (userId: string): Promise<User | null> => {
       if (!userId) return null;
-      return teamUsers[userId] || null;
+
+      // Si l'utilisateur est déjà dans le cache, le retourner
+      if (knownUsers[userId]) {
+        return knownUsers[userId];
+      }
+
+      // Sinon, essayer de le charger
+      return loadUserById(userId);
     },
-    [teamUsers],
+    [knownUsers, loadUserById],
   );
 
   /**
@@ -274,10 +407,17 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
    */
   const getUserDisplayName = useCallback(
     (userId: string): string => {
-      const user = getUser(userId);
+      const user = knownUsers[userId];
+
+      // Si l'utilisateur n'est pas dans le cache, essayer de le charger en arrière-plan
+      if (!user && service && isConnected) {
+        void loadUserById(userId);
+        return "Chargement..."; // Afficher un état de chargement en attendant
+      }
+
       return formatUserDisplayName(user);
     },
-    [getUser],
+    [knownUsers, service, isConnected, loadUserById],
   );
 
   /**
@@ -306,9 +446,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
    * Obtenir le texte formaté pour l'indicateur de frappe
    */
   const getTypingIndicatorText = useCallback(
-    (channelId: string): string | null => {
+    (channelId: string): string => {
       const typingUserIds = getTypingUsersForChannel(channelId);
-      if (typingUserIds.length === 0) return null;
+      if (typingUserIds.length === 0) return "";
 
       // Formater les noms des utilisateurs
       const typingUserNames = typingUserIds
@@ -376,6 +516,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             // Initialiser le service de notification avec l'ID utilisateur
             notificationService.setCurrentUserId(user.id);
 
+            // Ajouter l'utilisateur courant aux utilisateurs connus
+            setKnownUsers((prev) => ({
+              ...prev,
+              [user.id]: user,
+            }));
+
             // If WebSocket is enabled, initialize it
             if (enableWebsocket) {
               try {
@@ -434,6 +580,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             notificationService.setCurrentUserId(
               serviceProvider.currentUser.id,
             );
+
+            // Ajouter l'utilisateur courant aux utilisateurs connus
+            setKnownUsers((prev) => ({
+              ...prev,
+              [serviceProvider.currentUser.id]: serviceProvider.currentUser,
+            }));
           }
 
           // If the custom service provides a user cache
@@ -455,6 +607,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
               ) {
                 const freshUser = await serviceInstance.refreshCurrentUser();
                 setCurrentUser(freshUser);
+
+                // Mettre à jour l'utilisateur dans la liste des utilisateurs connus
+                setKnownUsers((prev) => ({
+                  ...prev,
+                  [freshUser.id]: freshUser,
+                }));
               }
             } catch (refreshError) {
               console.warn("Error refreshing user:", refreshError);
@@ -609,7 +767,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         if (!user || !user.id) return;
 
         // Mettre à jour l'utilisateur dans notre cache
-        setTeamUsers((prev) => ({
+        setKnownUsers((prev) => ({
           ...prev,
           [user.id]: {
             ...prev[user.id],
@@ -628,6 +786,22 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     );
   }, []);
 
+  // Charger les utilisateurs des messages directs quand les canaux changent
+  useEffect(() => {
+    if (isConnected && service && activeChannel) {
+      // Lorsqu'un canal devient actif, récupérer tous les canaux
+      service
+        .getChannels(activeChannel.team_id)
+        .then((channels) => {
+          // Charger les utilisateurs impliqués dans les messages directs
+          void loadDirectMessageUsers(channels);
+        })
+        .catch((error) => {
+          console.error("Erreur lors de la récupération des canaux:", error);
+        });
+    }
+  }, [isConnected, service, activeChannel, loadDirectMessageUsers]);
+
   // Fonction pour naviguer vers un canal spécifique
   const navigateToChannel = useCallback(
     async (channelId: string, _messageId?: string) => {
@@ -643,6 +817,20 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         // Signaler que nous visualisons maintenant ce canal
         notificationService.setCurrentChannelId(channelId);
 
+        // Si c'est un canal direct, charger les informations des utilisateurs impliqués
+        if (channel.type === "D" || channel.type === "G") {
+          // Extraire les IDs utilisateurs du nom du canal
+          if (channel.name && channel.name.includes("__")) {
+            const userIds = channel.name
+              .split("__")
+              .filter((id) => id !== currentUser?.id);
+            // Charger les utilisateurs si nécessaire
+            for (const userId of userIds) {
+              void loadUserById(userId);
+            }
+          }
+        }
+
         // Si un ID de message est fourni, nous voudrons peut-être le mettre en évidence
         // Cette fonctionnalité sera implémentée dans le composant ChannelViewer
       } catch (error) {
@@ -652,7 +840,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         );
       }
     },
-    [service],
+    [service, currentUser, loadUserById],
   );
 
   // Fermeture de la notification actuelle
@@ -707,9 +895,10 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     setActiveTeam,
 
     // Users management
-    teamUsers,
+    knownUsers,
     getUser,
     getUserDisplayName,
+    loadUserById,
 
     // Typing status
     typingUsers,
