@@ -194,6 +194,7 @@ export class DirectService extends BaseService implements MattermostService {
   }
 
   async getChannels(teamId: string) {
+    if (!teamId || teamId === "") return [];
     return this.apiCall(`users/me/teams/${teamId}/channels`);
   }
 

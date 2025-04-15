@@ -582,10 +582,13 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             );
 
             // Ajouter l'utilisateur courant aux utilisateurs connus
-            setKnownUsers((prev) => ({
-              ...prev,
-              [serviceProvider.currentUser.id]: serviceProvider.currentUser,
-            }));
+            if (serviceProvider.currentUser) {
+              setKnownUsers((prev) => ({
+                ...prev,
+                [serviceProvider.currentUser!.id]:
+                  serviceProvider.currentUser as User,
+              }));
+            }
           }
 
           // If the custom service provides a user cache
@@ -704,6 +707,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // Écouter les événements de frappe avec un nettoyage amélioré
   useEffect(() => {
     const handleTypingUpdated = (data: any) => {
+      console.debug("handleTypingUpdated");
       if (!data.channelId) return;
 
       // Mettez à jour le state des utilisateurs en train de taper

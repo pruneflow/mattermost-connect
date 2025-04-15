@@ -19,15 +19,20 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({
   channelId,
   maxUsersToShow = 3,
 }) => {
-  const { getTypingIndicatorText } = useMattermost();
+  // Utiliser les nouvelles méthodes du MattermostProvider
+  const { getTypingIndicatorText, getTypingUsersForChannel } = useMattermost();
 
   // Obtenir le texte formaté pour l'indicateur
   const typingText = getTypingIndicatorText(channelId);
 
-  if (!typingText) return null;
+  // Obtenir les utilisateurs qui tapent pour vérifier s'il y en a
+  const typingUsers = getTypingUsersForChannel(channelId);
+  const isTyping = typingUsers.length > 0;
+
+  if (!isTyping) return null;
 
   return (
-    <Fade in={typingText !== ""}>
+    <Fade in={isTyping}>
       <Box
         sx={{
           display: "flex",

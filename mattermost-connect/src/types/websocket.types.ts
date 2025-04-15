@@ -10,6 +10,9 @@ export interface WebSocketConnection {
 
   /** Get the current connection state */
   getState: () => number;
+
+  /** Force reconnection of the WebSocket */
+  reconnect: () => Promise<WebSocket>;
 }
 
 /**

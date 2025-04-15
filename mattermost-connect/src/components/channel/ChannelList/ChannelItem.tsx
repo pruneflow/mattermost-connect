@@ -1,4 +1,4 @@
-// src/components/ChannelList/ChannelItem.tsx
+// src/components/channel/ChannelList/ChannelItem.tsx
 import React from "react";
 import { Channel } from "../../../types";
 import { useMattermost } from "../../../context/MattermostProvider";
@@ -64,12 +64,13 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
   selectedSx,
   iconSx,
 }) => {
-  // Utiliser le contexte pour accéder à l'état des utilisateurs qui tapent
-  const { getTypingUsersForChannel } = useMattermost();
+  // Utiliser les nouvelles méthodes du MattermostProvider
+  const { getTypingUsersForChannel, getTypingIndicatorText } = useMattermost();
 
   // Vérifier si des utilisateurs sont en train de taper dans ce canal
   const typingUsers = getTypingUsersForChannel(channel.id);
   const isTyping = typingUsers.length > 0;
+  const typingText = isTyping ? getTypingIndicatorText(channel.id) : "";
 
   // Determine which icon to use based on channel type
   const getChannelIcon = () => {
@@ -93,7 +94,6 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
 
   // Used to display user status in direct messages
   const isDirectMessage = channel.type === "D";
-
   // Unread mentions if available
   const hasUnread = Boolean(channel.mention_count);
 
@@ -189,9 +189,7 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
               noWrap
               sx={{ fontStyle: "italic" }}
             >
-              {typingUsers.length === 1
-                ? "Quelqu'un écrit..."
-                : `${typingUsers.length} personnes écrivent...`}
+              {typingText}
             </Typography>
           ) : isDirectMessage && channel.purpose ? (
             <Typography

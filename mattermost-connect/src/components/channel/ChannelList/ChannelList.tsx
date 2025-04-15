@@ -97,7 +97,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
   channelsContainerSx,
 }) => {
   const theme = useTheme();
-  const { service, isConnected, currentUser } = useMattermost();
+  const { service, isConnected, currentUser, getUserDisplayName, getUser } =
+    useMattermost();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,10 +131,9 @@ const ChannelList: React.FC<ChannelListProps> = ({
       // Trouver l'ID qui n'est pas celui de l'utilisateur actuel
       const otherUserId = parts.find((id) => id !== currentUser.id);
 
-      if (otherUserId && directMessageUsers[otherUserId]) {
-        const otherUser = directMessageUsers[otherUserId];
-        // Construire un nom d'affichage basé sur les informations de l'utilisateur
-        return formatUserDisplayName(otherUser);
+      if (otherUserId) {
+        // Utiliser directement getUserDisplayName plutôt que de manipuler les directMessageUsers
+        return getUserDisplayName(otherUserId);
       }
     }
 
@@ -143,7 +143,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
 
   // Load channels when teamId changes
   useEffect(() => {
-    if (!isConnected || !teamId) return;
+    if (!isConnected || !teamId || teamId === "") return;
 
     const fetchChannels = async () => {
       setLoading(true);
@@ -218,7 +218,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
             const parts = channel.name.split("__");
             // Ajouter les deux parties (qui sont généralement des IDs utilisateurs)
             parts.forEach((part) => {
-              if (!userIds.includes(part)) {
+              if (
+                !userIds.includes(part) &&
+                currentUser &&
+                part !== currentUser.id
+              ) {
                 userIds.push(part);
               }
             });
@@ -227,23 +231,17 @@ const ChannelList: React.FC<ChannelListProps> = ({
 
         if (userIds.length === 0) return;
 
-        // Charger les informations des utilisateurs
-        const users = await service.getUsers({ ids: userIds });
-
-        // Construire un dictionnaire des utilisateurs
-        const usersMap: Record<string, User> = {};
-        users.forEach((user) => {
-          usersMap[user.id] = user;
-        });
-
-        setDirectMessageUsers(usersMap);
+        // Charger les informations des utilisateurs avec getUser
+        for (const userId of userIds) {
+          void getUser(userId);
+        }
       } catch (err) {
         console.error("Error loading direct message users:", err);
       }
     };
 
     void loadDirectMessageUsers();
-  }, [isConnected, filteredChannels, service]);
+  }, [isConnected, filteredChannels, service, currentUser, getUser]);
 
   // Group channels by type if requested
   const groupedChannels = useMemo(() => {

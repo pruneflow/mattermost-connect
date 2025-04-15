@@ -163,6 +163,10 @@ export class NotificationService {
    * Traiter un événement WebSocket reçu du serveur Mattermost
    */
   processWebSocketEvent(event: WebSocketEvent) {
+    if (!event.event) {
+      console.warn("Received WebSocket message without event type:", event);
+      return;
+    }
     console.log(`WebSocket event received: ${event.event}`, event);
 
     // Notifier les écouteurs spécifiques à ce type d'événement

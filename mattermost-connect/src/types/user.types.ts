@@ -13,6 +13,7 @@ export interface User {
   roles?: string;
   props?: Record<string, unknown>;
   last_picture_update?: number;
+  update_at: any;
 }
 
 export interface UserStatus {

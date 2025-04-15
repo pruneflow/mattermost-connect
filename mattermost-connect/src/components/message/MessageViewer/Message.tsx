@@ -40,7 +40,7 @@ const Message: React.FC<MessageProps> = ({
   avatarSx,
   highlight = false,
 }) => {
-  const { service } = useMattermost();
+  const { service, getUser, getUserDisplayName } = useMattermost();
   const [author, setAuthor] = useState<User | null>(null);
   const [formattedText, setFormattedText] = useState("");
   const [isHovered, setIsHovered] = useState(false);
@@ -60,7 +60,7 @@ const Message: React.FC<MessageProps> = ({
 
   // Check if the message is a reply to another message
   useEffect(() => {
-    // Identify the parent message ID
+    // Identifier le parent message ID
     const parentMessageId =
       message?.root_id || (message?.props && message?.props.quoted_message_id);
 
@@ -71,7 +71,6 @@ const Message: React.FC<MessageProps> = ({
           // This approach depends on the available API
           try {
             // Some API implementations allow retrieving a specific message
-            // Note: To adapt based on the actual service implementation
             if (typeof service.getPost === "function") {
               const parentPost = await service.getPost(
                 parentMessageId as string,
@@ -79,11 +78,10 @@ const Message: React.FC<MessageProps> = ({
               setReferencedMessage(parentPost);
 
               if (parentPost.user_id) {
-                const users = await service.getUsers({
-                  ids: [parentPost.user_id],
-                });
-                if (users && users.length > 0) {
-                  setReferencedAuthor(users[0]);
+                // Utiliser getUser plutôt que service.getUsers
+                const author = await getUser(parentPost.user_id);
+                if (author) {
+                  setReferencedAuthor(author);
                 }
               }
               return;
@@ -107,11 +105,12 @@ const Message: React.FC<MessageProps> = ({
             setReferencedMessage(response.posts[parentMessageId as string]);
 
             if (response.posts[parentMessageId as string].user_id) {
-              const users = await service.getUsers({
-                ids: [response.posts[parentMessageId as string].user_id],
-              });
-              if (users && users.length > 0) {
-                setReferencedAuthor(users[0]);
+              // Utiliser getUser plutôt que service.getUsers
+              const author = await getUser(
+                response.posts[parentMessageId as string].user_id,
+              );
+              if (author) {
+                setReferencedAuthor(author);
               }
             }
           } else {
@@ -126,7 +125,7 @@ const Message: React.FC<MessageProps> = ({
 
       void fetchReferencedMessage();
     }
-  }, [message, service]);
+  }, [message, service, getUser]);
 
   // Load author information
   useEffect(() => {
@@ -137,10 +136,8 @@ const Message: React.FC<MessageProps> = ({
 
     const fetchAuthor = async () => {
       try {
-        const users = await service?.getUsers({ ids: [message.user_id] });
-        if (users && users.length > 0) {
-          setAuthor(users[0]);
-        }
+        const user = await getUser(message.user_id);
+        setAuthor(user);
         setLoading(false);
       } catch (err) {
         console.error("Error loading author info:", err);
@@ -149,7 +146,7 @@ const Message: React.FC<MessageProps> = ({
     };
 
     void fetchAuthor();
-  }, [message, service]);
+  }, [message, getUser]);
 
   // Format message text
   useEffect(() => {
