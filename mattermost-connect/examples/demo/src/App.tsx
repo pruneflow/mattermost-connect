@@ -30,6 +30,7 @@ import {
   createMattermostService,
   createMockService,
   useMattermost,
+  AuthenticationSystem,
 } from "mattermost-connect";
 
 // Configuration pour différents modes de connexion
@@ -363,7 +364,9 @@ const App: React.FC = () => {
           enableWebsocket={true}
         >
           {/* Votre interface principale après connexion */}
-          <ExamplesContainer onLogout={handleLogout} />
+          <AuthenticationSystem onLogout={handleLogout}>
+            <ExamplesContainer onLogout={handleLogout} />
+          </AuthenticationSystem>
         </MattermostProvider>
       )}
     </MattermostThemeProvider>

@@ -1,4 +1,4 @@
-// src/components/Attachment/Attachment.tsx
+// src/components/message/Attachment/Attachment.tsx
 import React, { useState, useEffect } from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 
@@ -13,6 +13,13 @@ import {
   alpha,
   SxProps,
   Theme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  CircularProgress,
+  Box,
 } from "@mui/material";
 
 // Attachment type components
@@ -24,8 +31,6 @@ import {
   AttachmentActions,
   AttachmentPreviewControls,
   AttachmentUploadIndicator,
-  isArchiveType,
-  isPdfType,
 } from "./components";
 
 /**
@@ -141,7 +146,6 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   const { fileService } = useMattermost();
 
   // State
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [thumbnailError, setThumbnailError] = useState<boolean>(false);
   const [menuPosition, setMenuPosition] = useState<{
     top: number;
@@ -155,6 +159,16 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   >("success");
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
   const { service } = useMattermost();
+
+  // État pour la gestion des erreurs d'authentification
+  const [authError, setAuthError] = useState<boolean>(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState<boolean>(false);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
+
+  // Gestion du chargement direct de l'image pour l'aperçu en plein écran
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState<boolean>(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState<boolean>(false);
 
   // Derived states
   const baseUrl = service?.getBaseUrl?.() || "";
@@ -175,55 +189,14 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     : (file as AttachmentType).size || 0;
   const fileId = isLocalFile ? undefined : (file as AttachmentType).id;
 
-  // Generate thumbnail URL for the file
+  // Nettoyage des URLs blob à la destruction du composant
   useEffect(() => {
-    const generateThumbnailUrl = async () => {
-      try {
-        // Reset error
-        setThumbnailError(false);
-        // For PDF files, use a static SVG icon
-        if (isPdfType(fileType, fileName)) {
-          setThumbnailUrl(`${baseUrl}/static/files/00301d72e07c55d59df5.svg`);
-          return;
-        }
-
-        // For ZIP files, use the ZIP icon
-        if (isArchiveType(fileType, fileName)) {
-          setThumbnailUrl(`${baseUrl}/static/files/48c8ed225ff4a2f7a4c1.svg`);
-          return;
-        }
-
-        // For images uploaded to Mattermost, use the thumbnail API
-        if (fileId) {
-          setThumbnailUrl(`${baseUrl}/api/v4/files/${fileId}/thumbnail`);
-          return;
-        }
-
-        // For local image files, create a local object URL
-        if (isLocalFile && fileType.includes("image")) {
-          const localUrl = URL.createObjectURL(file as File);
-          setThumbnailUrl(localUrl);
-          return;
-        }
-
-        // For other file types, don't set a thumbnail URL
-        setThumbnailUrl(null);
-      } catch (error) {
-        console.error("Error generating thumbnail URL:", error);
-        setThumbnailError(true);
-        setThumbnailUrl(null);
-      }
-    };
-
-    void generateThumbnailUrl();
-
-    // Clean up object URL when component unmounts
     return () => {
-      if (thumbnailUrl && isLocalFile && fileType.includes("image")) {
-        URL.revokeObjectURL(thumbnailUrl);
+      if (previewUrl && previewUrl.startsWith("blob:") && fileService) {
+        fileService.revokeObjectURL(previewUrl);
       }
     };
-  }, [file, fileId, isLocalFile, fileType, fileName, baseUrl, isUploaded]);
+  }, [previewUrl, fileService]);
 
   // Format file size
   const formatFileSize = (bytes?: number): string => {
@@ -242,11 +215,70 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   };
 
   // Handler for attachment click
-  const handleAttachmentClick = () => {
+  const handleAttachmentClick = async () => {
     if (!isPreviewMode && onClick && mattermostFile) {
       onClick(mattermostFile);
     } else if (mattermostFile?.url || mattermostFile?.link) {
       window.open(mattermostFile.url || mattermostFile.link, "_blank");
+    } else if (fileId && isImageType(fileType, fileName)) {
+      // Si c'est une image et qu'on a l'ID du fichier, on peut charger l'image en plein écran
+      await handleOpenImagePreview(fileId);
+    }
+  };
+
+  // Vérifie si le fichier est une image
+  const isImageType = (type: string, name?: string): boolean => {
+    return (
+      type.includes("image") ||
+      (name ? /\.(jpg|jpeg|png|gif|svg|webp)$/i.test(name) : false)
+    );
+  };
+
+  // Ouvre l'aperçu d'image en plein écran
+  const handleOpenImagePreview = async (id: string) => {
+    if (!fileService) return;
+
+    setLoadingPreview(true);
+
+    try {
+      const imageUrl = await fileService.fetchFile(id);
+      setPreviewUrl(imageUrl);
+      setPreviewDialogOpen(true);
+    } catch (error) {
+      console.error("Erreur lors du chargement de l'image:", error);
+
+      // Montrer une notification d'erreur
+      setSnackbarMessage(
+        "Erreur lors du chargement de l'image. Veuillez réessayer.",
+      );
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+
+      // Vérifier si c'est une erreur d'authentification
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (
+        errorMessage.includes("401") ||
+        errorMessage.includes("unauthorized") ||
+        errorMessage.includes("session invalide")
+      ) {
+        setAuthDialogOpen(true);
+      }
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  // Ferme la boîte de dialogue d'aperçu
+  const handleClosePreview = () => {
+    setPreviewDialogOpen(false);
+
+    // Nettoyer l'URL du preview après fermeture
+    if (previewUrl && previewUrl.startsWith("blob:") && fileService) {
+      setTimeout(() => {
+        fileService.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }, 300);
     }
   };
 
@@ -288,11 +320,26 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
       setSnackbarOpen(true);
     } catch (error) {
       console.error("Error creating public link:", error);
-      setSnackbarMessage(
-        error instanceof Error ? error.message : "Failed to create public link",
-      );
-      setSnackbarSeverity("error");
-      setSnackbarOpen(true);
+
+      // Vérifier si c'est une erreur d'authentification
+      if (
+        error instanceof Error &&
+        (error.message.includes("401") ||
+          error.message.includes("unauthorized") ||
+          error.message.includes("session invalide") ||
+          error.message.includes("invalid session"))
+      ) {
+        setAuthError(true);
+        setAuthDialogOpen(true);
+      } else {
+        setSnackbarMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to create public link",
+        );
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
+      }
     } finally {
       setPublicLinkLoading(false);
       handleMenuClose();
@@ -300,7 +347,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   };
 
   // Download the file
-  const handleDownload = (event: React.MouseEvent<HTMLElement>) => {
+  const handleDownload = async (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     if (!fileId) {
       setSnackbarMessage("Unable to download: File ID is missing");
@@ -310,14 +357,72 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
 
     try {
-      fileService.downloadFile(fileId);
+      await fileService.downloadFile(fileId);
     } catch (error) {
       console.error("Error downloading file:", error);
-      setSnackbarMessage(
-        error instanceof Error ? error.message : "Failed to download file",
+
+      // Vérifier si c'est une erreur d'authentification
+      if (
+        error instanceof Error &&
+        (error.message.includes("401") ||
+          error.message.includes("unauthorized") ||
+          error.message.includes("session invalide") ||
+          error.message.includes("invalid session"))
+      ) {
+        setAuthError(true);
+        setAuthDialogOpen(true);
+      } else {
+        setSnackbarMessage(
+          error instanceof Error ? error.message : "Failed to download file",
+        );
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
+      }
+    }
+  };
+
+  // Fonction pour gérer les tentatives de réauthentification
+  const handleRetryAuth = async () => {
+    setIsRetrying(true);
+
+    try {
+      // Utiliser la méthode handleAuthError du service de fichiers amélioré
+      if (fileService && "handleAuthError" in fileService) {
+        const success = await fileService.handleAuthError();
+
+        if (success) {
+          // Fermer la boîte de dialogue et réessayer
+          setAuthDialogOpen(false);
+          setAuthError(false);
+
+          // Réinitialiser l'erreur de miniature
+          setThumbnailError(false);
+        } else {
+          // Informer l'utilisateur de l'échec
+          setSnackbarMessage(
+            "Échec de la réauthentification. Veuillez vous reconnecter manuellement.",
+          );
+          setSnackbarSeverity("error");
+          setSnackbarOpen(true);
+        }
+      } else {
+        // Informer que la réauthentification n'est pas prise en charge
+        setSnackbarMessage(
+          "La réauthentification automatique n'est pas prise en charge. Veuillez actualiser la page.",
+        );
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
+      }
+    } catch (error) {
+      console.error(
+        "Erreur lors de la tentative de réauthentification:",
+        error,
       );
+      setSnackbarMessage("Erreur lors de la tentative de réauthentification");
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
+    } finally {
+      setIsRetrying(false);
     }
   };
 
@@ -326,16 +431,22 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     setSnackbarOpen(false);
   };
 
+  // Fermer la boîte de dialogue d'authentification
+  const handleAuthDialogClose = () => {
+    setAuthDialogOpen(false);
+  };
+
   // Get the appropriate attachment component based on file type
   const renderAttachmentIcon = () => {
     return (
       <ImageAttachment
-        file={file}
-        thumbnailUrl={thumbnailUrl}
+        fileId={fileId}
+        fileType={fileType}
         thumbnailError={thumbnailError}
         setThumbnailError={setThumbnailError}
         fileName={fileName}
         onImageClick={handleAttachmentClick}
+        sx={iconSx}
       />
     );
   };
@@ -353,7 +464,10 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           border: "1px solid",
           borderColor: "divider",
           cursor:
-            !isPreviewMode && (mattermostFile?.url || mattermostFile?.link)
+            !isPreviewMode &&
+            (mattermostFile?.url ||
+              mattermostFile?.link ||
+              (fileId && isImageType(fileType, fileName)))
               ? "pointer"
               : "default",
           width,
@@ -363,7 +477,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           ...sx,
           position: "relative",
         }}
-        onClick={!isPreviewMode ? handleAttachmentClick : undefined}
+        onClick={handleAttachmentClick}
         onMouseEnter={() => !isMobile && setShowControls(true)}
         onMouseLeave={() => !isMobile && setShowControls(false)}
       >
@@ -414,6 +528,81 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         snackbarSeverity={snackbarSeverity}
         handleSnackbarClose={handleSnackbarClose}
       />
+
+      {/* Boîte de dialogue d'erreur d'authentification */}
+      <Dialog
+        open={authDialogOpen}
+        onClose={handleAuthDialogClose}
+        aria-labelledby="auth-error-dialog-title"
+      >
+        <DialogTitle id="auth-error-dialog-title">
+          Problème d'authentification
+        </DialogTitle>
+        <DialogContent>
+          <DialogContent>
+            Votre session semble avoir expiré ou n'être plus valide. Voulez-vous
+            essayer de vous reconnecter automatiquement ?
+          </DialogContent>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleAuthDialogClose} color="inherit">
+            Annuler
+          </Button>
+          <Button
+            onClick={handleRetryAuth}
+            color="primary"
+            disabled={isRetrying}
+            startIcon={isRetrying ? <CircularProgress size={16} /> : null}
+          >
+            {isRetrying ? "Reconnexion en cours..." : "Se reconnecter"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Boîte de dialogue d'aperçu d'image */}
+      <Dialog
+        open={previewDialogOpen}
+        onClose={handleClosePreview}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogContent>
+          {loadingPreview ? (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : previewUrl ? (
+            <Box sx={{ textAlign: "center" }}>
+              <img
+                src={previewUrl}
+                alt={fileName}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "70vh",
+                  objectFit: "contain",
+                }}
+              />
+            </Box>
+          ) : (
+            <Box sx={{ textAlign: "center", p: 2 }}>Image non disponible</Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePreview}>Fermer</Button>
+          {previewUrl && (
+            <Button
+              onClick={() => {
+                if (fileId) {
+                  void fileService.downloadFile(fileId);
+                }
+              }}
+              color="primary"
+            >
+              Télécharger
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

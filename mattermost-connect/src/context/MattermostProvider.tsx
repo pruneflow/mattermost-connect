@@ -707,7 +707,6 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // Écouter les événements de frappe avec un nettoyage amélioré
   useEffect(() => {
     const handleTypingUpdated = (data: any) => {
-      console.debug("handleTypingUpdated");
       if (!data.channelId) return;
 
       // Mettez à jour le state des utilisateurs en train de taper

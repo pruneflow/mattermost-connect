@@ -70,5 +70,7 @@ export {
 // Exporter les types
 export * from "./types";
 
+export { default as AuthenticationSystem } from "./components/auth/AuthenticationSystem";
+
 // Export par défaut est le provider pour plus de commodité
 export { MattermostProvider as default } from "./context/MattermostProvider";

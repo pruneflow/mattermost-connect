@@ -1,4 +1,4 @@
-// src/components/Attachment/attachments/AttachmentTypes.ts
+// src/components/message/Attachment/types/AttachmentTypes.ts
 import { SxProps, Theme } from "@mui/material";
 import { AttachmentMode } from "../Attachment";
 import { MessageAttachment } from "../../../../types";
@@ -7,9 +7,6 @@ import { MessageAttachment } from "../../../../types";
  * Base props for all attachment types
  */
 export interface BaseAttachmentProps {
-  /** The file to display */
-  file: File | MessageAttachment;
-
   /** Mode of the attachment component */
   mode?: AttachmentMode;
 
@@ -81,14 +78,19 @@ export interface PdfAttachmentProps extends BaseAttachmentProps {
  * Props for image type attachments
  */
 export interface ImageAttachmentProps extends BaseAttachmentProps {
-  /** Thumbnail URL */
-  thumbnailUrl: string | null;
+  /** Identifiant du fichier pour le chargement sécurisé */
+  fileId?: string;
 
+  /** Type MIME du fichier ou extension */
+  fileType?: string;
+
+  /** Nom du fichier */
   fileName?: string;
 
   /** Whether there was an error loading the thumbnail */
   thumbnailError: boolean;
 
+  /** Function to set thumbnail error state */
   setThumbnailError: (error: boolean) => void;
 
   /** Custom handling for image click */
