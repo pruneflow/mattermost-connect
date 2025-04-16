@@ -65,12 +65,20 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
   iconSx,
 }) => {
   // Utiliser les nouvelles méthodes du MattermostProvider
-  const { getTypingUsersForChannel, getTypingIndicatorText } = useMattermost();
+  const {
+    getTypingUsersForChannel,
+    getTypingIndicatorText,
+    getChannelUnreadState,
+  } = useMattermost();
 
   // Vérifier si des utilisateurs sont en train de taper dans ce canal
   const typingUsers = getTypingUsersForChannel(channel.id);
   const isTyping = typingUsers.length > 0;
   const typingText = isTyping ? getTypingIndicatorText(channel.id) : "";
+
+  const unreadState = getChannelUnreadState(channel.id);
+  const hasUnread = unreadState.messageCount > 0;
+  const unreadCount = unreadState.messageCount;
 
   // Determine which icon to use based on channel type
   const getChannelIcon = () => {
@@ -94,8 +102,6 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
 
   // Used to display user status in direct messages
   const isDirectMessage = channel.type === "D";
-  // Unread mentions if available
-  const hasUnread = Boolean(channel.mention_count);
 
   return (
     <ListItemButton
@@ -205,11 +211,17 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
       />
 
       {/* Mention badge */}
-      {hasUnread && (
+      {unreadCount > 0 && (
         <Badge
-          badgeContent={channel.mention_count}
-          color="primary"
-          sx={{ ml: 1 }}
+          badgeContent={unreadCount > 0 ? unreadCount : null}
+          color={unreadCount > 0 ? "primary" : "default"}
+          variant={unreadCount > 0 ? "standard" : "dot"}
+          sx={{
+            ml: 1,
+            "& .MuiBadge-badge": {
+              bgcolor: unreadCount > 0 ? "primary.main" : "text.secondary",
+            },
+          }}
         />
       )}
     </ListItemButton>

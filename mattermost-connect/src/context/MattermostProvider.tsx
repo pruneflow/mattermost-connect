@@ -28,7 +28,10 @@ import type {
   User,
   WebSocketConnection,
 } from "../types";
-import { setupWebsocket } from "../services/websocket.service";
+import {
+  setupWebsocket,
+  releaseWebsocket,
+} from "../services/websocket.service";
 import {
   Notification,
   notificationService,
@@ -117,6 +120,24 @@ export interface MattermostContextType {
 
   /** Load user by id if not in cache */
   loadUserById: (userId: string) => Promise<User | null>;
+
+  /** Récupère l'état non lu pour un canal spécifique */
+  getChannelUnreadState: (channelId: string) => {
+    messageCount: number;
+    mentionCount: number;
+  };
+
+  /** Initialise les états non lus pour tous les canaux d'une équipe */
+  initializeTeamUnreadStates: (
+    teamId: string,
+    channels: Channel[],
+  ) => Promise<void>;
+
+  /**
+   * Marque un canal comme lu, à la fois sur le serveur et localement
+   * @param channelId ID du canal à marquer comme lu
+   */
+  markChannelAsRead: (channelId: string) => Promise<void>;
 }
 
 // Create the context
@@ -186,6 +207,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // État pour suivre quand les utilisateurs ont été mis à jour la dernière fois
   const lastUsersFetchRef = useRef<number>(0);
   const usersFetchIntervalRef = useRef<number | null>(null);
+
+  const serviceInitializedRef = useRef<boolean>(false);
+  const socketInitializedRef = useRef<boolean>(false);
+  const currentServiceRef = useRef<MattermostService | null>(null);
+  const currentSocketRef = useRef<WebSocketConnection | null>(null);
 
   // Secondary services
   const [fileService, setFileService] = useState<FileService | null>(null);
@@ -485,30 +511,56 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
     const initService = async () => {
       try {
-        // Create service instance with our centralized factory
-        const serviceInstance = createMattermostService({
-          serverUrl,
-          token,
-          proxyUrl,
-          clientId,
-          userId,
-          serviceProvider,
-        });
+        console.debug("Initializing Mattermost service...");
 
-        setService(serviceInstance);
+        // Si un service existe déjà et que les paramètres ont changé, on nettoie l'ancien service
+        if (currentServiceRef.current) {
+          console.debug("Cleaning up existing service before initialization");
+          // Fermer la connexion WebSocket si elle existe
+          if (currentSocketRef.current) {
+            console.debug("Closing existing WebSocket connection");
+            currentSocketRef.current.close();
+            currentSocketRef.current = null;
+            socketInitializedRef.current = false;
+            setWebsocket(null);
+          }
+        }
 
-        // Initialize auxiliary services with the main service
-        const fileServiceInstance = createFileService(serviceInstance);
-        const emojiServiceInstance = createEmojiService(serviceInstance);
+        // Créer l'instance du service seulement si elle n'existe pas déjà
+        // ou si les paramètres de configuration ont changé
+        if (!serviceInitializedRef.current || !currentServiceRef.current) {
+          console.debug("Creating new service instance");
+          // Create service instance with our centralized factory
+          const serviceInstance = createMattermostService({
+            serverUrl,
+            token,
+            proxyUrl,
+            clientId,
+            userId,
+            serviceProvider,
+          });
 
-        setFileService(fileServiceInstance);
-        setEmojiService(emojiServiceInstance);
+          // Stocker la référence au service
+          currentServiceRef.current = serviceInstance;
+          serviceInitializedRef.current = true;
+
+          setService(serviceInstance);
+
+          // Initialize auxiliary services with the main service
+          const fileServiceInstance = createFileService(serviceInstance);
+          const emojiServiceInstance = createEmojiService(serviceInstance);
+
+          setFileService(fileServiceInstance);
+          setEmojiService(emojiServiceInstance);
+        } else {
+          console.debug("Using existing service instance");
+        }
 
         // Test connection (except for custom services that specify to skip the test)
         if (mode !== "custom" || !serviceProvider?.skipConnectionTest) {
           try {
             // Get current user - now uses caching
-            const user = await serviceInstance.getCurrentUser();
+            const user = await currentServiceRef.current.getCurrentUser();
             setCurrentUser(user);
             setIsConnected(true);
             setError(null);
@@ -522,12 +574,14 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
               [user.id]: user,
             }));
 
-            // If WebSocket is enabled, initialize it
-            if (enableWebsocket) {
+            // If WebSocket is enabled, initialize it only if it doesn't exist
+            if (enableWebsocket && !socketInitializedRef.current) {
               try {
+                console.debug("Initializing WebSocket connection...");
                 // Get WebSocket URL and token
-                const wsUrl = serviceInstance.getWebsocketUrl();
-                const wsToken = await serviceInstance.getWebsocketToken();
+                const wsUrl = currentServiceRef.current.getWebsocketUrl();
+                const wsToken =
+                  await currentServiceRef.current.getWebsocketToken();
 
                 // Set up WebSocket connection
                 const ws = await setupWebsocket({
@@ -535,7 +589,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                   serverUrl: wsUrl,
                   token: wsToken,
                   onMessage: (msg) => {
-                    console.log("WebSocket message:", msg);
+                    console.debug("WebSocket message received:", msg);
 
                     // Process the WebSocket message through our notification service
                     notificationService.processWebSocketEvent(
@@ -549,14 +603,21 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                   onClose: (closeEvent) => {
                     console.log("WebSocket closed:", closeEvent);
                     setWebsocket(null);
+                    socketInitializedRef.current = false;
+                    currentSocketRef.current = null;
                     // Consider reconnecting or showing a connection lost message
                   },
                 });
 
+                currentSocketRef.current = ws;
+                socketInitializedRef.current = true;
                 setWebsocket(ws);
+                console.debug("WebSocket connection established successfully");
               } catch (wsError) {
                 console.error("Failed to initialize WebSocket:", wsError);
                 // Consider this a warning, not a fatal error
+                socketInitializedRef.current = false;
+                currentSocketRef.current = null;
               }
             }
           } catch (connErr) {
@@ -592,23 +653,24 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           }
 
           // If the custom service provides a user cache
-          if ((serviceInstance as any)._currentUser) {
-            setCurrentUser((serviceInstance as any)._currentUser);
+          if ((currentServiceRef.current as any)._currentUser) {
+            setCurrentUser((currentServiceRef.current as any)._currentUser);
           }
         }
 
         // Set up an interval to refresh the current user if needed
         // This is useful for keeping status, permissions, etc. up to date
-        if (refreshInterval > 0 && serviceInstance) {
+        if (refreshInterval > 0 && currentServiceRef.current) {
           const intervalId = setInterval(async () => {
             try {
               // If the service implements refreshCurrentUser, use it
               if (
-                (serviceInstance instanceof DirectService ||
-                  serviceInstance instanceof ProxyService) &&
+                (currentServiceRef.current instanceof DirectService ||
+                  currentServiceRef.current instanceof ProxyService) &&
                 isConnected
               ) {
-                const freshUser = await serviceInstance.refreshCurrentUser();
+                const freshUser =
+                  await currentServiceRef.current.refreshCurrentUser();
                 setCurrentUser(freshUser);
 
                 // Mettre à jour l'utilisateur dans la liste des utilisateurs connus
@@ -642,8 +704,25 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
     // Cleanup on unmount
     return () => {
-      if (websocket) {
-        websocket.close();
+      console.debug("MattermostProvider cleanup");
+      if (currentSocketRef.current) {
+        console.debug("Releasing WebSocket connection");
+
+        // Récupérer les informations nécessaires pour libérer la connexion
+        if (service) {
+          const wsUrl = service.getWebsocketUrl();
+
+          // Pour le token, nous utilisons celui en cache ou celui fourni dans les props
+          const wsToken = token || "";
+
+          // Libérer la connexion du singleton
+          releaseWebsocket(wsUrl, wsToken);
+        }
+
+        // Réinitialiser les variables locales
+        currentSocketRef.current = null;
+        socketInitializedRef.current = false;
+        setWebsocket(null);
       }
 
       // Nettoyer l'intervalle de rafraîchissement des utilisateurs
@@ -662,6 +741,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     enableWebsocket,
     serviceProvider,
     refreshInterval,
+    service,
   ]);
 
   // Écouter les nouvelles notifications pour afficher une Snackbar
@@ -866,6 +946,84 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     setCurrentNotification(null);
   }, [currentNotification, navigateToChannel]);
 
+  // Helper pour récupérer l'état non lu d'un canal
+  const getChannelUnreadState = useCallback((channelId: string) => {
+    return notificationService.getChannelUnreadState(channelId);
+  }, []);
+
+  // Méthode pour initialiser les états non lus d'une équipe
+  const initializeTeamUnreadStates = useCallback(
+    async (teamId: string, channels: Channel[]) => {
+      if (
+        !isConnected ||
+        !service ||
+        !teamId ||
+        !channels ||
+        channels.length === 0
+      )
+        return;
+
+      try {
+        // Pour chaque canal, récupérer l'état non lu individuellement
+        for (const channel of channels) {
+          if (channel.id) {
+            try {
+              // Vérifier si la méthode est disponible
+              if (
+                typeof (service as any).getChannelUnreadCount === "function"
+              ) {
+                const unreadState = await (
+                  service as any
+                ).getChannelUnreadCount(channel.id);
+
+                // Mettre à jour l'état non lu dans le service de notification
+                notificationService.setChannelUnreadState(channel.id, {
+                  messageCount: unreadState.msg_count || 0,
+                  mentionCount: unreadState.mention_count || 0,
+                  lastViewedAt: Date.now(),
+                });
+              }
+            } catch (channelError) {
+              // Continuer avec le canal suivant en cas d'erreur
+              console.warn(
+                `Impossible de récupérer l'état non lu pour le canal ${channel.id}:`,
+                channelError,
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.error(
+          "Erreur lors de l'initialisation des états non lus:",
+          error,
+        );
+      }
+    },
+    [isConnected, service],
+  );
+
+  const markChannelAsRead = useCallback(
+    async (channelId: string) => {
+      if (!isConnected || !service || !channelId) return;
+
+      try {
+        // Appeler le serveur via la méthode viewChannel
+        if (typeof (service as any).viewChannel === "function") {
+          await (service as any).viewChannel(channelId);
+        }
+
+        // Réinitialiser l'état local des non-lus
+        notificationService.resetChannelUnreadState(channelId);
+      } catch (error) {
+        console.error(
+          `Erreur lors du marquage du canal ${channelId} comme lu:`,
+          error,
+        );
+      }
+    },
+    [isConnected, service],
+  );
+
   if (!service || !fileService || !emojiService) return null;
 
   // Context value to share with child components
@@ -908,6 +1066,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     isUserTyping,
     getTypingUsersForChannel,
     getTypingIndicatorText,
+
+    // Unread status
+    getChannelUnreadState,
+    initializeTeamUnreadStates,
+    markChannelAsRead,
   };
 
   return (

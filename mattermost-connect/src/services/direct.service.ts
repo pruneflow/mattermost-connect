@@ -193,6 +193,61 @@ export class DirectService extends BaseService implements MattermostService {
     return this.apiCall(`teams/${teamId}`);
   }
 
+  /**
+   * Récupère l'état non lu pour un canal spécifique
+   * @param channelId ID du canal
+   * @returns Informations sur les messages non lus
+   */
+  async getChannelUnreadCount(channelId: string): Promise<{
+    message_count: number;
+    mention_count: number;
+  }> {
+    if (!this._currentUser) {
+      await this.getCurrentUser();
+    }
+
+    try {
+      return this.apiCall(
+        `users/${this._currentUser!.id}/channels/${channelId}/unread`,
+      );
+    } catch (error) {
+      console.error(
+        `Erreur lors de la récupération des non-lus pour le canal ${channelId}:`,
+        error,
+      );
+      return { message_count: 0, mention_count: 0 };
+    }
+  }
+
+  /**
+   * Informe le serveur Mattermost que l'utilisateur a consulté un canal
+   * Réinitialise les compteurs de messages non lus sur le serveur
+   *
+   * @param channelId ID du canal consulté
+   * @returns Statut de la requête
+   */
+  async viewChannel(channelId: string): Promise<{ status: "OK" }> {
+    if (!channelId) {
+      throw new Error("channelId est requis pour marquer un canal comme lu");
+    }
+
+    try {
+      // L'API attend un objet avec channel_id
+      return this.apiCall("channels/members/me/view", {
+        method: "POST",
+        body: JSON.stringify({
+          channel_id: channelId,
+        }),
+      });
+    } catch (error) {
+      console.error(
+        `Erreur lors du marquage du canal ${channelId} comme lu:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async getChannels(teamId: string) {
     if (!teamId || teamId === "") return [];
     return this.apiCall(`users/me/teams/${teamId}/channels`);

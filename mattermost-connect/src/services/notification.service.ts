@@ -89,6 +89,16 @@ export class NotificationService {
     {}; // Timeouts pour effacer l'état de frappe
   private currentChannelId: string | null = null;
   private currentUserId: string | null = null;
+  /**
+   * Cache pour les derniers messages traités, pour éviter les doublons
+   * Clé: ID du message, Valeur: timestamp de traitement
+   */
+  private processedEvents: Map<string, number> = new Map();
+
+  /**
+   * Durée (en ms) pendant laquelle un événement est conservé dans le cache des doublons
+   */
+  private static readonly EVENT_CACHE_DURATION = 10000; // 10 secondes
 
   constructor() {
     // Initialiser les catégories d'événements
@@ -100,6 +110,21 @@ export class NotificationService {
     this.listeners["notifications_updated"] = [];
     this.listeners["unread_updated"] = [];
     this.listeners["typing_updated"] = [];
+  }
+
+  /**
+   * Nettoie le cache des événements traités (pour éviter une croissance infinie)
+   */
+  private cleanEventCache() {
+    const now = Date.now();
+    const expireTime = now - NotificationService.EVENT_CACHE_DURATION;
+
+    // Supprimer les entrées plus anciennes que EVENT_CACHE_DURATION
+    this.processedEvents.forEach((timestamp, eventId) => {
+      if (timestamp < expireTime) {
+        this.processedEvents.delete(eventId);
+      }
+    });
   }
 
   /**
@@ -151,6 +176,7 @@ export class NotificationService {
     if (this.listeners[event]) {
       this.listeners[event].forEach((callback) => {
         try {
+          console.debug("callback for event", event);
           callback(data);
         } catch (error) {
           console.error(`Error in ${event} listener:`, error);
@@ -167,7 +193,42 @@ export class NotificationService {
       console.warn("Received WebSocket message without event type:", event);
       return;
     }
-    console.log(`WebSocket event received: ${event.event}`, event);
+
+    // Générer un identifiant unique pour cet événement
+    // Pour les messages, utiliser l'ID du message
+    // Pour les autres événements, combiner le type et le timestamp
+    let eventId: string;
+
+    if (event.event === WebSocketEventType.POSTED && event.data?.post) {
+      try {
+        // Pour les messages, utiliser l'ID du message
+        const post = JSON.parse(event.data.post);
+        eventId = `${event.event}_${post.id}`;
+      } catch (err) {
+        // En cas d'erreur, utiliser une combinaison du type et du timestamp
+        eventId = `${event.event}_${Date.now()}`;
+      }
+    } else {
+      // Pour les autres événements, utiliser une combinaison du type et du sequence (s'il existe)
+      eventId = `${event.event}_${event.seq || Date.now()}`;
+    }
+
+    // Vérifier si cet événement a déjà été traité récemment
+    if (this.processedEvents.has(eventId)) {
+      console.debug(`Ignoring duplicate event: ${eventId}`);
+      return;
+    }
+
+    // Marquer cet événement comme traité
+    this.processedEvents.set(eventId, Date.now());
+
+    // Nettoyer périodiquement le cache des événements
+    // Ne nettoyer que si le cache devient trop grand ou périodiquement
+    if (this.processedEvents.size > 100 || Math.random() < 0.1) {
+      this.cleanEventCache();
+    }
+
+    console.debug(`WebSocket event processed: ${event.event}`, event);
 
     // Notifier les écouteurs spécifiques à ce type d'événement
     this.notifyListeners(event.event, event.data);
@@ -212,13 +273,14 @@ export class NotificationService {
   private handleNewPost(data: any) {
     try {
       const post = JSON.parse(data.post);
+      console.debug("new post", post);
       const isFromCurrentUser = post.user_id === this.currentUserId;
-
+      console.debug("isFromCurrentUser", isFromCurrentUser);
       // Vérifier si le message est dans le canal actif
       const isInCurrentChannel = post.channel_id === this.currentChannelId;
-
+      console.debug("isInCurrentChannel", isInCurrentChannel);
       // Ne pas notifier pour les messages de l'utilisateur actuel
-      if (isFromCurrentUser) {
+      if (isFromCurrentUser || isInCurrentChannel) {
         return;
       }
 
@@ -479,6 +541,42 @@ export class NotificationService {
    */
   getChannelUnreadState(channelId: string) {
     return this.unreadState[channelId] || { messageCount: 0, mentionCount: 0 };
+  }
+
+  /**
+   * Définit manuellement l'état non lu d'un canal
+   * @param channelId ID du canal
+   * @param state Nouvel état non lu
+   */
+  setChannelUnreadState(
+    channelId: string,
+    state: {
+      messageCount: number;
+      mentionCount: number;
+      lastViewedAt?: number;
+      lastMessageId?: string;
+    },
+  ): void {
+    if (!channelId) return;
+
+    this.unreadState[channelId] = state;
+    this.notifyListeners("unread_updated", this.unreadState);
+  }
+
+  /**
+   * Réinitialise l'état non lu d'un canal
+   * @param channelId ID du canal
+   */
+  resetChannelUnreadState(channelId: string): void {
+    if (channelId && this.unreadState[channelId]) {
+      this.unreadState[channelId] = {
+        messageCount: 0,
+        mentionCount: 0,
+        lastViewedAt: Date.now(),
+      };
+
+      this.notifyListeners("unread_updated", this.unreadState);
+    }
   }
 
   /**

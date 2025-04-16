@@ -97,15 +97,18 @@ const ChannelList: React.FC<ChannelListProps> = ({
   channelsContainerSx,
 }) => {
   const theme = useTheme();
-  const { service, isConnected, currentUser, getUserDisplayName, getUser } =
-    useMattermost();
+  const {
+    service,
+    isConnected,
+    currentUser,
+    getUserDisplayName,
+    getUser,
+    initializeTeamUnreadStates,
+  } = useMattermost();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [directMessageUsers, setDirectMessageUsers] = useState<
-    Record<string, User>
-  >({});
 
   // State for collapsible sections
   const [openSections, setOpenSections] = useState<{
@@ -150,9 +153,15 @@ const ChannelList: React.FC<ChannelListProps> = ({
       try {
         const channelsData = await service?.getChannels(teamId);
         setChannels(channelsData || []);
-        if (channelsData && channelsData.length > 0 && onSelectChannel) {
-          onSelectChannel(channelsData[0]);
+
+        if (channelsData && channelsData.length > 0) {
+          await initializeTeamUnreadStates(teamId, channelsData);
+
+          if (onSelectChannel) {
+            onSelectChannel(channelsData[0]);
+          }
         }
+
         setError(null);
       } catch (err) {
         console.error("Error loading channels:", err);
@@ -165,7 +174,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
     };
 
     void fetchChannels();
-  }, [isConnected, teamId, service]);
+  }, [isConnected, teamId, service, initializeTeamUnreadStates]);
 
   // Toggle a section's expanded state
   const toggleSection = (section: "public" | "private" | "direct") => {

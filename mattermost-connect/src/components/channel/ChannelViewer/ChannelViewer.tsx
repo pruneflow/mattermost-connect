@@ -99,6 +99,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     setReplyTo,
     typingUsers,
     setActiveChannel,
+    markChannelAsRead,
   } = useMattermost();
 
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -231,17 +232,16 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         // Vérifier si le message appartient à ce canal
         if (post.channel_id !== channelId) return;
 
-        // Vérifier si on a déjà ce message (éviter les doublons)
-        if (messages.some((msg) => msg.id === post.id)) return;
-
         // Ajouter le nouveau message à la liste
         setMessages((prevMessages) => {
+          // Vérifier si le message existe déjà dans l'état actuel
+          if (prevMessages.some((msg) => msg.id === post.id)) {
+            return prevMessages; // Ne pas modifier l'état si le message existe déjà
+          }
           // Assurer le tri par date
-          const updatedMessages = [...prevMessages, post].sort(
+          return [...prevMessages, post].sort(
             (a, b) => a.create_at - b.create_at,
           );
-
-          return updatedMessages;
         });
 
         // Si l'utilisateur n'est pas en bas, afficher le compteur de nouveaux messages
@@ -446,6 +446,30 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       }, 3000);
     }
   }, [highlightMessageId, loading, messages.length]);
+
+  useEffect(() => {
+    if (!isConnected || !channelId) return;
+
+    const markAsViewed = async () => {
+      try {
+        await markChannelAsRead(channelId);
+      } catch (error) {
+        console.error("Erreur lors du marquage du canal comme lu:", error);
+      }
+    };
+
+    // Marquer comme lu immédiatement au chargement
+    void markAsViewed();
+
+    // Également marquer comme lu à des intervalles réguliers si l'utilisateur reste sur le canal
+    const interval = setInterval(() => {
+      void markAsViewed();
+    }, 30000); // 30 secondes
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isConnected, channelId, markChannelAsRead]);
 
   // Load more messages (when scrolling up)
   const loadMoreMessages = async () => {
