@@ -52,6 +52,12 @@ export interface TeamTabsProps {
 
   /** Custom styling for selected team */
   selectedTeamSx?: SxProps<Theme>;
+
+  /** Unread counts for teams */
+  teamUnreadCounts?: Record<
+    string,
+    { msg_count: number; mention_count: number }
+  >;
 }
 
 /**
@@ -66,6 +72,7 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
   maxNameLength = 0,
   teamItemSx,
   selectedTeamSx,
+  teamUnreadCounts = {},
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -84,10 +91,14 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
   return (
     <Box
       sx={{
-        width: "100%",
+        width: "100vw",
         bgcolor: "background.paper",
         borderBottom: 1,
         borderColor: "divider",
+        display: "block", // Utiliser display: block pour occuper tout l'espace horizontal
+        position: "relative", // Position relative pour maintenir le flux normal du document
+        zIndex: 1, // Assurer que les tabs sont au-dessus des éléments suivants
+        mb: 1, // Marge en bas pour séparer des éléments suivants
       }}
     >
       <Tabs
@@ -99,6 +110,7 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
         aria-label="Team selector tabs"
         sx={{
           minHeight: 48,
+          width: "100%", // Assurer que les tabs prennent toute la largeur
           "& .MuiTabs-flexContainer": {
             height: "100%",
           },
@@ -109,6 +121,12 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
       >
         {teams.map((team) => {
           const isSelected = team.id === currentTeamId;
+          const unreadState = teamUnreadCounts[team.id] || {
+            msg_count: 0,
+            mention_count: 0,
+          };
+          const hasUnreadMentions = unreadState.mention_count > 0;
+          const hasUnreadMessages = unreadState.msg_count > 0;
 
           // Create label with optional icon and member count
           const teamLabel = (
@@ -135,14 +153,28 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
 
               {formatTeamName(team.display_name, maxNameLength)}
 
-              {showMemberCount && team.member_count && !isMobile && (
+              {/* Show badge if there are unread mentions */}
+              {hasUnreadMentions && (
                 <Badge
-                  badgeContent={team.member_count}
-                  color="primary"
-                  max={999}
-                  sx={{ ml: 1.5 }}
+                  badgeContent={unreadState.mention_count}
+                  color="error"
+                  max={99}
+                  sx={{ ml: 1 }}
                 />
               )}
+
+              {/* Optionally show member count */}
+              {showMemberCount &&
+                team.member_count &&
+                !isMobile &&
+                !hasUnreadMentions && (
+                  <Badge
+                    badgeContent={team.member_count}
+                    color="primary"
+                    max={999}
+                    sx={{ ml: 1.5 }}
+                  />
+                )}
             </Box>
           );
 
@@ -155,7 +187,9 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
                 minHeight: 48,
                 py: 1,
                 px: 2,
-                fontWeight: isSelected ? 600 : 400,
+                fontWeight: isSelected ? 600 : hasUnreadMessages ? 600 : 400,
+                color:
+                  hasUnreadMessages && !isSelected ? "text.primary" : undefined,
                 "&.Mui-selected": {
                   color: "primary.main",
                   ...(selectedTeamSx as any),

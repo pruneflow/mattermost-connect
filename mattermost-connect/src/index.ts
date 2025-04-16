@@ -65,6 +65,7 @@ export {
   generateColorFromString,
   getTeamInitials,
   formatTeamName,
+  formatUserDisplayName,
 } from "./utils/formatting";
 
 // Exporter les types

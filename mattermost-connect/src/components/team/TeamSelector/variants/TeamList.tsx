@@ -7,13 +7,14 @@ import {
   List,
   ListItemButton,
   ListItemIcon,
-  ListItemText,
   Avatar,
   Badge,
   Tooltip,
   Divider,
   SxProps,
   Theme,
+  Box,
+  Typography,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -56,6 +57,12 @@ export interface TeamListProps {
 
   /** Custom styling for selected team */
   selectedTeamSx?: SxProps<Theme>;
+
+  /** Unread counts for teams */
+  teamUnreadCounts?: Record<
+    string,
+    { msg_count: number; mention_count: number }
+  >;
 }
 
 /**
@@ -71,6 +78,7 @@ const TeamList: React.FC<TeamListProps> = ({
   maxNameLength = 0,
   teamItemSx,
   selectedTeamSx,
+  teamUnreadCounts = {},
 }) => {
   return (
     <List
@@ -82,6 +90,12 @@ const TeamList: React.FC<TeamListProps> = ({
     >
       {teams.map((team) => {
         const isSelected = team.id === selectedTeamId;
+        const unreadState = teamUnreadCounts[team.id] || {
+          msg_count: 0,
+          mention_count: 0,
+        };
+        const hasUnreadMentions = unreadState.mention_count > 0;
+        const hasUnreadMessages = unreadState.msg_count > 0;
 
         return (
           <React.Fragment key={team.id}>
@@ -103,13 +117,14 @@ const TeamList: React.FC<TeamListProps> = ({
               }}
             >
               {showIcons && (
-                <ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 40 }}>
                   <Avatar
                     sx={{
                       width: 32,
                       height: 32,
                       bgcolor: generateColorFromString(team.name),
                       fontSize: "0.875rem",
+                      boxShadow: "none",
                     }}
                   >
                     {getTeamInitials(team.display_name)}
@@ -117,37 +132,72 @@ const TeamList: React.FC<TeamListProps> = ({
                 </ListItemIcon>
               )}
 
-              <ListItemText
-                primary={formatTeamName(team.display_name, maxNameLength)}
-                secondary={
-                  showDescriptions && team.description ? team.description : null
-                }
-                slotProps={{
-                  primary: {
-                    component: "div",
-                    fontWeight: isSelected ? 600 : 400,
-                    variant: "body1",
-                  },
-                  secondary: {
-                    noWrap: true,
-                    variant: "body2",
-                    component: "div",
-                  },
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  flexGrow: 1,
+                  overflow: "hidden",
+                  mr: 1,
                 }}
-              />
+              >
+                <Typography
+                  variant="body1"
+                  component="div"
+                  noWrap
+                  fontWeight={isSelected ? 600 : hasUnreadMessages ? 600 : 400}
+                >
+                  {formatTeamName(team.display_name, maxNameLength)}
+                </Typography>
 
-              {showMemberCount && team.member_count && (
-                <Tooltip title="Members">
-                  <Badge
-                    badgeContent={team.member_count}
-                    color="primary"
-                    max={999}
-                    sx={{ ml: 1 }}
+                {showDescriptions && team.description && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    component="div"
+                    noWrap
+                    sx={{
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
                   >
-                    <MembersIcon fontSize="small" />
-                  </Badge>
-                </Tooltip>
+                    {team.description}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Afficher le badge des mentions si présent */}
+              {hasUnreadMentions && (
+                <Badge
+                  badgeContent={unreadState.mention_count}
+                  color="error"
+                  max={99}
+                  sx={{ ml: 0.5 }}
+                />
               )}
+
+              {/* Afficher le badge des messages non lus si présent et pas de mentions */}
+              {!hasUnreadMentions && hasUnreadMessages && (
+                <Badge variant="dot" color="primary" sx={{ ml: 0.5 }} />
+              )}
+
+              {/* Afficher le nombre de membres si demandé et pas de badges non lus */}
+              {showMemberCount &&
+                team.member_count &&
+                !hasUnreadMentions &&
+                !hasUnreadMessages && (
+                  <Tooltip title="Members">
+                    <Badge
+                      badgeContent={team.member_count}
+                      color="primary"
+                      max={999}
+                      sx={{ ml: 0.5 }}
+                    >
+                      <MembersIcon fontSize="small" />
+                    </Badge>
+                  </Tooltip>
+                )}
             </ListItemButton>
 
             {/* Add divider between teams if descriptions are shown */}

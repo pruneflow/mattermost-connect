@@ -656,7 +656,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           startIcon={<ScrollDownIcon />}
           sx={{
             position: "absolute",
-            bottom: 70,
+            bottom: 100,
             right: 20,
             zIndex: 10,
             borderRadius: "20px",

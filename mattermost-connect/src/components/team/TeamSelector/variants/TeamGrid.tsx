@@ -15,6 +15,7 @@ import {
   Grid,
   SxProps,
   Theme,
+  Badge,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -60,6 +61,12 @@ export interface TeamGridProps {
 
   /** Custom styling for selected team */
   selectedTeamSx?: SxProps<Theme>;
+
+  /** Unread counts for teams */
+  teamUnreadCounts?: Record<
+    string,
+    { msg_count: number; mention_count: number }
+  >;
 }
 
 /**
@@ -75,22 +82,35 @@ const TeamGrid: React.FC<TeamGridProps> = ({
   maxNameLength = 0,
   teamItemSx,
   selectedTeamSx,
+  teamUnreadCounts = {},
 }) => {
   return (
     <Box sx={{ p: 2 }}>
       <Grid container spacing={2}>
         {teams.map((team) => {
           const isSelected = team.id === selectedTeamId;
+          const unreadState = teamUnreadCounts[team.id] || {
+            msg_count: 0,
+            mention_count: 0,
+          };
+          const hasUnreadMentions = unreadState.mention_count > 0;
+          const hasUnreadMessages = unreadState.msg_count > 0;
 
           return (
             <Grid size={{ xs: 12, sm: 4, md: 3 }} key={team.id}>
               <Card
-                elevation={isSelected ? 3 : 1}
+                elevation={isSelected ? 3 : hasUnreadMentions ? 2 : 1}
                 sx={{
                   borderRadius: 2,
                   position: "relative",
-                  border: isSelected ? 2 : 0,
-                  borderColor: "primary.main",
+                  border: isSelected ? 2 : hasUnreadMessages ? 1 : 0,
+                  borderColor: isSelected
+                    ? "primary.main"
+                    : hasUnreadMentions
+                      ? "error.main"
+                      : hasUnreadMessages
+                        ? "primary.light"
+                        : "transparent",
                   transition: "all 0.2s ease-in-out",
                   "&:hover": {
                     transform: "translateY(-4px)",
@@ -106,18 +126,34 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                 >
                   <CardContent sx={{ textAlign: "center", pt: 3, pb: 2 }}>
                     {showIcons && (
-                      <Avatar
-                        sx={{
-                          width: 64,
-                          height: 64,
-                          bgcolor: generateColorFromString(team.name),
-                          fontSize: "1.5rem",
-                          mb: 2,
-                          mx: "auto",
-                        }}
-                      >
-                        {getTeamInitials(team.display_name)}
-                      </Avatar>
+                      <Box sx={{ position: "relative" }}>
+                        <Avatar
+                          sx={{
+                            width: 64,
+                            height: 64,
+                            bgcolor: generateColorFromString(team.name),
+                            fontSize: "1.5rem",
+                            mb: 2,
+                            mx: "auto",
+                          }}
+                        >
+                          {getTeamInitials(team.display_name)}
+                        </Avatar>
+
+                        {/* Badge pour les mentions non lues */}
+                        {hasUnreadMentions && (
+                          <Badge
+                            badgeContent={unreadState.mention_count}
+                            color="error"
+                            max={99}
+                            sx={{
+                              position: "absolute",
+                              top: -4,
+                              right: "30%",
+                            }}
+                          />
+                        )}
+                      </Box>
                     )}
 
                     <Typography
@@ -125,7 +161,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                       variant="h6"
                       gutterBottom
                       sx={{
-                        fontWeight: 600,
+                        fontWeight: isSelected || hasUnreadMessages ? 600 : 400,
                         minHeight: showDescriptions ? 32 : "auto",
                       }}
                     >
@@ -150,16 +186,18 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                       </Typography>
                     )}
 
-                    {showMemberCount && team.member_count && (
-                      <Tooltip title="Members">
-                        <Chip
-                          icon={<MembersIcon />}
-                          label={team.member_count}
-                          size="small"
-                          sx={{ mt: 1 }}
-                        />
-                      </Tooltip>
-                    )}
+                    {showMemberCount &&
+                      team.member_count &&
+                      !hasUnreadMentions && (
+                        <Tooltip title="Members">
+                          <Chip
+                            icon={<MembersIcon />}
+                            label={team.member_count}
+                            size="small"
+                            sx={{ mt: 1 }}
+                          />
+                        </Tooltip>
+                      )}
                   </CardContent>
                 </CardActionArea>
 
@@ -175,6 +213,22 @@ const TeamGrid: React.FC<TeamGridProps> = ({
                   >
                     <CheckIcon color="primary" fontSize="small" />
                   </Box>
+                )}
+
+                {/* Unread messages indicator (dot) */}
+                {!isSelected && hasUnreadMessages && !hasUnreadMentions && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      bgcolor: "primary.main",
+                      zIndex: 1,
+                    }}
+                  />
                 )}
               </Card>
             </Grid>

@@ -31,6 +31,7 @@ import {
   createMockService,
   useMattermost,
   AuthenticationSystem,
+  formatUserDisplayName,
 } from "mattermost-connect";
 
 // Configuration pour différents modes de connexion
@@ -255,37 +256,12 @@ const ExamplesContainer: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
   const { currentUser, mode } = useMattermost();
-
+  console.debug("currentUser", formatUserDisplayName(currentUser));
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-      {/* App bar */}
-      <AppBar position="static">
-        <Toolbar>
-          {currentUser && (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Typography variant="body2" component="div">
-                {currentUser.first_name} {currentUser.last_name}
-              </Typography>
-              <Button
-                color="inherit"
-                onClick={onLogout}
-                startIcon={<LogoutIcon />}
-                sx={{ float: "right" }}
-              ></Button>
-            </Box>
-          )}
-        </Toolbar>
-      </AppBar>
-
       {/* Example content */}
       <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
-        <ClassicInterface />
+        <ClassicInterface onLogout={onLogout} />
       </Box>
 
       {/* Status footer */}

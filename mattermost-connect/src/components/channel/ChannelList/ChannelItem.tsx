@@ -77,8 +77,8 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
   const typingText = isTyping ? getTypingIndicatorText(channel.id) : "";
 
   const unreadState = getChannelUnreadState(channel.id);
-  const hasUnread = unreadState.messageCount > 0;
-  const unreadCount = unreadState.messageCount;
+  const hasUnread = unreadState.msg_count > 0;
+  const unreadCount = unreadState.msg_count;
 
   // Determine which icon to use based on channel type
   const getChannelIcon = () => {

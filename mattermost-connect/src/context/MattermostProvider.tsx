@@ -123,8 +123,8 @@ export interface MattermostContextType {
 
   /** Récupère l'état non lu pour un canal spécifique */
   getChannelUnreadState: (channelId: string) => {
-    messageCount: number;
-    mentionCount: number;
+    msg_count: number;
+    mention_count: number;
   };
 
   /** Initialise les états non lus pour tous les canaux d'une équipe */
@@ -978,8 +978,8 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
                 // Mettre à jour l'état non lu dans le service de notification
                 notificationService.setChannelUnreadState(channel.id, {
-                  messageCount: unreadState.msg_count || 0,
-                  mentionCount: unreadState.mention_count || 0,
+                  msg_count: unreadState.msg_count || 0,
+                  mention_count: unreadState.mention_count || 0,
                   lastViewedAt: Date.now(),
                 });
               }

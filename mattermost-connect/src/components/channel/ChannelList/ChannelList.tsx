@@ -1,7 +1,7 @@
 // src/components/ChannelList/ChannelList.tsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
-import { Channel, User } from "../../../types";
+import { Channel } from "../../../types";
 
 // Material-UI Components
 import {
@@ -31,7 +31,6 @@ import {
 
 // Channel Item Component
 import ChannelItem from "./ChannelItem";
-import { formatUserDisplayName } from "../../../utils";
 
 /**
  * Props for the ChannelList component
@@ -39,9 +38,6 @@ import { formatUserDisplayName } from "../../../utils";
 export interface ChannelListProps {
   /** The team ID to fetch channels for */
   teamId?: string;
-
-  /** Currently selected channel ID */
-  selectedChannelId?: string;
 
   /** Callback when a channel is selected */
   onSelectChannel?: (channel: Channel) => void;
@@ -83,7 +79,6 @@ export interface ChannelListProps {
  */
 const ChannelList: React.FC<ChannelListProps> = ({
   teamId,
-  selectedChannelId,
   onSelectChannel,
   showPrivateChannels = true,
   showDirectMessages = true,
@@ -104,6 +99,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
     getUserDisplayName,
     getUser,
     initializeTeamUnreadStates,
+    setActiveChannel,
+    activeChannel,
   } = useMattermost();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -152,9 +149,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
       setLoading(true);
       try {
         const channelsData = await service?.getChannels(teamId);
-        setChannels(channelsData || []);
 
         if (channelsData && channelsData.length > 0) {
+          setChannels(channelsData);
+          setActiveChannel(channelsData[0]);
           await initializeTeamUnreadStates(teamId, channelsData);
 
           if (onSelectChannel) {
@@ -283,80 +281,89 @@ const ChannelList: React.FC<ChannelListProps> = ({
   );
 
   // Render a section of channels
-  const renderChannelSection = (
-    title: string | null,
-    channelsList: Channel[],
-    sectionKey: "public" | "private" | "direct" | "all",
-  ) => {
-    if (!channelsList || channelsList.length === 0) return null;
+  const renderChannelSection = useCallback(
+    (
+      title: string | null,
+      channelsList: Channel[],
+      sectionKey: "public" | "private" | "direct" | "all",
+    ) => {
+      if (!channelsList || channelsList.length === 0) return null;
 
-    const isExpandable = sectionKey !== "all";
-    const isExpanded = isExpandable
-      ? openSections[sectionKey as keyof typeof openSections]
-      : true;
+      const isExpandable = sectionKey !== "all";
+      const isExpanded = isExpandable
+        ? openSections[sectionKey as keyof typeof openSections]
+        : true;
 
-    return (
-      <>
-        {title && (
-          <ListItemButton
-            onClick={() =>
-              isExpandable &&
-              toggleSection(sectionKey as "public" | "private" | "direct")
-            }
-            sx={{
-              px: 2,
-              py: 1,
-              "&:hover": {
-                backgroundColor: isExpandable
-                  ? theme.palette.action.hover
-                  : "transparent",
-              },
-              ...sectionHeaderSx,
-            }}
-          >
-            <ListItemText
-              primary={
-                <Typography
-                  component={"div"}
-                  variant="body2"
-                  sx={{
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    fontSize: "0.75rem",
-                    color: "text.secondary",
-                  }}
-                >
-                  {title} ({channelsList.length})
-                </Typography>
+      return (
+        <>
+          {title && (
+            <ListItemButton
+              onClick={() =>
+                isExpandable &&
+                toggleSection(sectionKey as "public" | "private" | "direct")
               }
-            />
-            {isExpandable &&
-              (isExpanded ? (
-                <ExpandLessIcon fontSize="small" />
-              ) : (
-                <ExpandMoreIcon fontSize="small" />
-              ))}
-          </ListItemButton>
-        )}
-
-        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-          <List disablePadding>
-            {channelsList.map((channel) => (
-              <ChannelItem
-                key={channel.id}
-                channel={{
-                  ...channel,
-                  display_name: getChannelDisplayName(channel),
-                }}
-                isSelected={channel.id === selectedChannelId}
-                onClick={() => onSelectChannel && onSelectChannel(channel)}
+              sx={{
+                px: 2,
+                py: 1,
+                "&:hover": {
+                  backgroundColor: isExpandable
+                    ? theme.palette.action.hover
+                    : "transparent",
+                },
+                ...sectionHeaderSx,
+              }}
+            >
+              <ListItemText
+                primary={
+                  <Typography
+                    component={"div"}
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      fontSize: "0.75rem",
+                      color: "text.secondary",
+                    }}
+                  >
+                    {title} ({channelsList.length})
+                  </Typography>
+                }
               />
-            ))}
-          </List>
-        </Collapse>
-      </>
-    );
-  };
+              {isExpandable &&
+                (isExpanded ? (
+                  <ExpandLessIcon fontSize="small" />
+                ) : (
+                  <ExpandMoreIcon fontSize="small" />
+                ))}
+            </ListItemButton>
+          )}
+
+          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+            <List disablePadding>
+              {channelsList.map((channel) => {
+                const handleSelectChannel = () => {
+                  onSelectChannel && onSelectChannel(channel);
+                  setActiveChannel(channel);
+                };
+                return (
+                  <ChannelItem
+                    key={channel.id}
+                    channel={{
+                      ...channel,
+                      display_name: getChannelDisplayName(channel),
+                    }}
+                    isSelected={channel.id === activeChannel?.id}
+                    onClick={handleSelectChannel}
+                  />
+                );
+              })}
+            </List>
+          </Collapse>
+        </>
+      );
+    },
+    [activeChannel],
+  );
 
   return (
     <Box

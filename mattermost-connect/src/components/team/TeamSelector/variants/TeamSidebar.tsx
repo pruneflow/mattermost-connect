@@ -47,6 +47,12 @@ export interface TeamSidebarProps {
 
   /** Custom styling for selected team */
   selectedTeamSx?: SxProps<Theme>;
+
+  /** Unread counts for teams */
+  teamUnreadCounts?: Record<
+    string,
+    { msg_count: number; mention_count: number }
+  >;
 }
 
 /**
@@ -60,6 +66,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
   showMemberCount = false,
   teamItemSx,
   selectedTeamSx,
+  teamUnreadCounts = {},
 }) => {
   // Select first team if none is selected
   const currentTeamId = selectedTeamId || (teams.length > 0 ? teams[0].id : "");
@@ -75,7 +82,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
       {/* Team icons sidebar */}
       <Box
         sx={{
-          width: "100%",
+          width: "100px",
           bgcolor: (theme) =>
             theme.palette.mode === "dark"
               ? theme.palette.grey[900]
@@ -93,6 +100,12 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
         <Stack spacing={2} sx={{ width: "100%", alignItems: "center" }}>
           {teams.map((team) => {
             const isSelected = team.id === currentTeamId;
+            const unreadState = teamUnreadCounts[team.id] || {
+              msg_count: 0,
+              mention_count: 0,
+            };
+            const hasUnreadMentions = unreadState.mention_count > 0;
+            const hasUnreadMessages = unreadState.msg_count > 0;
 
             return (
               <Box
@@ -121,11 +134,33 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                   />
                 )}
 
+                {/* Unread messages indicator */}
+                {!isSelected && hasUnreadMessages && !hasUnreadMentions && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      left: 0,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      width: 4,
+                      height: 20,
+                      bgcolor: "primary.light",
+                      borderTopRightRadius: 4,
+                      borderBottomRightRadius: 4,
+                    }}
+                  />
+                )}
+
                 <Tooltip
                   title={
                     <Box>
                       <Typography component={"div"} variant="body2">
                         {team.display_name}
+                        {hasUnreadMentions && (
+                          <span style={{ color: "#ff4444", marginLeft: "8px" }}>
+                            ({unreadState.mention_count} mentions)
+                          </span>
+                        )}
                       </Typography>
                       {showDescriptions && team.description && (
                         <>
@@ -170,8 +205,12 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                     sx={{
                       p: 0.5,
                       borderRadius: 2,
-                      border: isSelected ? 2 : 0,
-                      borderColor: "primary.main",
+                      border: isSelected ? 2 : hasUnreadMentions ? 2 : 0,
+                      borderColor: isSelected
+                        ? "primary.main"
+                        : hasUnreadMentions
+                          ? "error.main"
+                          : undefined,
                       transform: isSelected ? "scale(1.1)" : "scale(1)",
                       transition: "all 0.2s ease-in-out",
                       ...(isSelected ? (selectedTeamSx as any) : {}),
@@ -181,11 +220,9 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
                     <Badge
                       overlap="circular"
                       badgeContent={
-                        showMemberCount && team.member_count
-                          ? team.member_count
-                          : null
+                        hasUnreadMentions ? unreadState.mention_count : null
                       }
-                      color="primary"
+                      color="error"
                       max={99}
                       anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                     >

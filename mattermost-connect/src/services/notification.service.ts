@@ -69,8 +69,8 @@ export interface Notification {
  */
 export interface UnreadState {
   [channelId: string]: {
-    messageCount: number;
-    mentionCount: number;
+    msg_count: number;
+    mention_count: number;
     lastMessageId?: string;
     lastViewedAt?: number;
   };
@@ -137,8 +137,8 @@ export class NotificationService {
     if (channelId && this.unreadState[channelId]) {
       this.unreadState[channelId] = {
         ...this.unreadState[channelId],
-        messageCount: 0,
-        mentionCount: 0,
+        msg_count: 0,
+        mention_count: 0,
         lastViewedAt: Date.now(),
       };
 
@@ -289,13 +289,13 @@ export class NotificationService {
         // Initialiser si c'est le premier message non lu dans ce canal
         if (!this.unreadState[post.channel_id]) {
           this.unreadState[post.channel_id] = {
-            messageCount: 0,
-            mentionCount: 0,
+            msg_count: 0,
+            mention_count: 0,
           };
         }
 
         // Mettre à jour les compteurs
-        this.unreadState[post.channel_id].messageCount++;
+        this.unreadState[post.channel_id].msg_count++;
         this.unreadState[post.channel_id].lastMessageId = post.id;
 
         // Vérifier si le message mentionne l'utilisateur actuel
@@ -305,7 +305,7 @@ export class NotificationService {
           post.props.mentions.includes(this.currentUserId);
 
         if (hasMention) {
-          this.unreadState[post.channel_id].mentionCount++;
+          this.unreadState[post.channel_id].mention_count++;
         }
 
         // Notifier les écouteurs que les non-lus ont changé
@@ -490,8 +490,8 @@ export class NotificationService {
     if (this.unreadState[channel_id]) {
       this.unreadState[channel_id] = {
         ...this.unreadState[channel_id],
-        messageCount: 0,
-        mentionCount: 0,
+        msg_count: 0,
+        mention_count: 0,
         lastViewedAt: Date.now(),
       };
 
@@ -540,7 +540,7 @@ export class NotificationService {
    * Obtenir l'état des non-lus pour un canal spécifique
    */
   getChannelUnreadState(channelId: string) {
-    return this.unreadState[channelId] || { messageCount: 0, mentionCount: 0 };
+    return this.unreadState[channelId] || { msg_count: 0, mention_count: 0 };
   }
 
   /**
@@ -551,8 +551,8 @@ export class NotificationService {
   setChannelUnreadState(
     channelId: string,
     state: {
-      messageCount: number;
-      mentionCount: number;
+      msg_count: number;
+      mention_count: number;
       lastViewedAt?: number;
       lastMessageId?: string;
     },
@@ -570,8 +570,8 @@ export class NotificationService {
   resetChannelUnreadState(channelId: string): void {
     if (channelId && this.unreadState[channelId]) {
       this.unreadState[channelId] = {
-        messageCount: 0,
-        mentionCount: 0,
+        msg_count: 0,
+        mention_count: 0,
         lastViewedAt: Date.now(),
       };
 

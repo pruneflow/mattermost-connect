@@ -199,7 +199,7 @@ export class DirectService extends BaseService implements MattermostService {
    * @returns Informations sur les messages non lus
    */
   async getChannelUnreadCount(channelId: string): Promise<{
-    message_count: number;
+    msg_count: number;
     mention_count: number;
   }> {
     if (!this._currentUser) {
@@ -215,7 +215,33 @@ export class DirectService extends BaseService implements MattermostService {
         `Erreur lors de la récupération des non-lus pour le canal ${channelId}:`,
         error,
       );
-      return { message_count: 0, mention_count: 0 };
+      return { msg_count: 0, mention_count: 0 };
+    }
+  }
+
+  /**
+   * Récupère l'état non lu pour une équipe spécifique
+   * @param teamId ID de l'équipe
+   * @returns Informations sur les messages non lus pour l'équipe
+   */
+  async getTeamUnreadCount(teamId: string): Promise<{
+    msg_count: number;
+    mention_count: number;
+  }> {
+    if (!this._currentUser) {
+      await this.getCurrentUser();
+    }
+
+    try {
+      return this.apiCall(
+        `users/${this._currentUser!.id}/teams/${teamId}/unread`,
+      );
+    } catch (error) {
+      console.error(
+        `Erreur lors de la récupération des non-lus pour l'équipe ${teamId}:`,
+        error,
+      );
+      return { msg_count: 0, mention_count: 0 };
     }
   }
 
