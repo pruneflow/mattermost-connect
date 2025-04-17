@@ -41,7 +41,7 @@ export {
   TypingIndicator,
 } from "./components/notification";
 export {
-  notificationService,
+  NotificationService,
   WebSocketEventType,
 } from "./services/notification.service";
 export type {

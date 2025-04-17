@@ -25,10 +25,7 @@ import {
   Person as PersonIcon,
   Error as ErrorIcon,
 } from "@mui/icons-material";
-import {
-  notificationService,
-  Notification,
-} from "../../services/notification.service";
+import { Notification } from "../../services/notification.service";
 import { useMattermost } from "../../context/MattermostProvider";
 import {
   formatTimestamp,
@@ -40,7 +37,7 @@ import {
  * Props pour le composant NotificationCenter
  */
 interface NotificationCenterProps {
-  onNavigateToChannel?: (channelId: string, messageId?: string) => void;
+  onNavigateToChannel?: (notification: Notification) => void;
 }
 
 /**
@@ -52,7 +49,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { service } = useMattermost();
+  const { notificationService } = useMattermost();
 
   // Charger les notifications initiales
   useEffect(() => {
@@ -115,7 +112,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   // Naviguer vers un canal et/ou message
   const handleNavigateToNotification = (notification: Notification) => {
     if (notification.channelId && onNavigateToChannel) {
-      onNavigateToChannel(notification.channelId, notification.messageId);
+      onNavigateToChannel(notification);
       handleMarkAsRead(notification.id);
       setOpen(false);
     }
@@ -153,8 +150,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         anchor="right"
         open={open}
         onClose={toggleDrawer}
-        PaperProps={{
-          sx: { width: { xs: "100%", sm: 350 }, maxWidth: "100%" },
+        slotProps={{
+          paper: { sx: { width: { xs: "100%", sm: 350 }, maxWidth: "100%" } },
         }}
       >
         <Box

@@ -17,10 +17,7 @@ import { ChannelLoadMoreButton } from "./components/ChannelLoadMoreButton";
 import { MessageList } from "../../message/MessageViewer/MessageList";
 
 import { TypingIndicator } from "../../notification";
-import {
-  notificationService,
-  WebSocketEventType,
-} from "../../../services/notification.service";
+import { WebSocketEventType } from "../../../services/notification.service";
 
 /**
  * Props for the ChannelViewer component
@@ -68,9 +65,6 @@ export interface ChannelViewerProps {
 
   /** Current user ID (used to determine message ownership) */
   currentUserId?: string;
-
-  /** Highlight a specific message (used for navigation from notifications) */
-  highlightMessageId?: string;
 }
 
 /**
@@ -90,7 +84,6 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   messagesContainerSx,
   messageProps,
   currentUserId,
-  highlightMessageId,
 }) => {
   const {
     isConnected,
@@ -100,6 +93,8 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     typingUsers,
     setActiveChannel,
     markChannelAsRead,
+    notificationService,
+    highlightMessageId,
   } = useMattermost();
 
   const [channel, setChannel] = useState<Channel | null>(null);

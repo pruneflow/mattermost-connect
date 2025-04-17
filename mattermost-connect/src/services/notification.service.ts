@@ -1,5 +1,6 @@
 // src/services/notification.service.ts
-import { User } from "../types";
+import { MattermostService, User } from "../types";
+import { formatUserDisplayName } from "../utils";
 
 /**
  * Types d'événements WebSocket de Mattermost
@@ -100,7 +101,9 @@ export class NotificationService {
    */
   private static readonly EVENT_CACHE_DURATION = 10000; // 10 secondes
 
-  constructor() {
+  private mattermostService: MattermostService | null = null;
+
+  constructor(mattermostService?: MattermostService) {
     // Initialiser les catégories d'événements
     Object.values(WebSocketEventType).forEach((eventType) => {
       this.listeners[eventType] = [];
@@ -110,6 +113,14 @@ export class NotificationService {
     this.listeners["notifications_updated"] = [];
     this.listeners["unread_updated"] = [];
     this.listeners["typing_updated"] = [];
+
+    if (mattermostService) {
+      this.mattermostService = mattermostService;
+    }
+  }
+
+  setMattermostService(service: MattermostService) {
+    this.mattermostService = service;
   }
 
   /**
@@ -472,7 +483,11 @@ export class NotificationService {
   /**
    * Gérer les changements de réactions (ajout/suppression)
    */
-  private handleReactionChange(data: any, broadcast: any, isAdded: boolean) {
+  private async handleReactionChange(
+    data: any,
+    broadcast: any,
+    isAdded: boolean,
+  ) {
     // Notifier pour mise à jour de l'UI
     const eventType = isAdded
       ? WebSocketEventType.REACTION_ADDED
@@ -481,13 +496,12 @@ export class NotificationService {
     if (isAdded) {
       try {
         const reaction = JSON.parse(data.reaction);
-        console.debug("new reaction", reaction);
         const isFromCurrentUser = reaction.user_id === this.currentUserId;
-        console.debug("isFromCurrentUser", isFromCurrentUser);
+
         // Vérifier si le message est dans le canal actif
         const isInCurrentChannel =
           broadcast.channel_id === this.currentChannelId;
-        console.debug("isInCurrentChannel", isInCurrentChannel);
+
         // Ne pas notifier pour les messages de l'utilisateur actuel
         if (isFromCurrentUser || isInCurrentChannel) {
           return;
@@ -495,15 +509,59 @@ export class NotificationService {
 
         // Incrémenter les compteurs non lus pour le canal
         if (!isInCurrentChannel) {
-          // Créer une notification pour l'utilisateur
+          // Créer une notification enrichie en utilisant le service Mattermost
+          let notificationTitle = "New reaction";
+          let notificationContent = reaction.emoji_name;
+
+          // Utiliser le service Mattermost si disponible pour enrichir la notification
+          if (this.mattermostService) {
+            try {
+              // Tenter de récupérer des informations sur l'utilisateur qui a réagi
+              if (this.mattermostService.getUsers) {
+                const users = await this.mattermostService.getUsers({
+                  ids: [reaction.user_id],
+                });
+
+                if (users && users.length > 0) {
+                  const reactingUser = users[0];
+                  const displayName = formatUserDisplayName(reactingUser);
+
+                  notificationTitle = `${displayName} reacted with ${reaction.emoji_name}`;
+                }
+              }
+
+              // Tenter de récupérer des informations sur le message concerné
+              if (this.mattermostService.getPost) {
+                const post = await this.mattermostService.getPost(
+                  reaction.post_id,
+                );
+                if (post) {
+                  // Limiter la longueur du message pour la notification
+                  const messagePreview =
+                    post.message.length > 50
+                      ? post.message.substring(0, 50) + "..."
+                      : post.message;
+
+                  notificationContent = `${reaction.emoji_name} on: "${messagePreview}"`;
+                }
+              }
+            } catch (enrichError) {
+              // Si l'enrichissement échoue, utiliser les valeurs par défaut
+              console.warn(
+                "Failed to enrich reaction notification:",
+                enrichError,
+              );
+            }
+          }
+
           const notification: Notification = {
             id: `reaction_added_${reaction.emoji_name}_${reaction.post_id}`,
             type: "reaction",
-            title: "New reaction",
-            content: reaction.emoji_name,
+            title: notificationTitle,
+            content: notificationContent,
             channelId: broadcast.channel_id,
             messageId: reaction.post_id,
-            timestamp: reaction.create_at,
+            timestamp: reaction.create_at || Date.now(),
             read: false,
             priority: "medium",
           };
@@ -512,7 +570,7 @@ export class NotificationService {
           this.notifyListeners("notification_added", notification);
         }
       } catch (error) {
-        console.error("Error handling new post:", error);
+        console.error("Error handling reaction:", error);
       }
     }
     this.notifyListeners(eventType, data);
@@ -625,8 +683,3 @@ export class NotificationService {
     this.notifyListeners("notifications_updated", this.notifications);
   }
 }
-
-// Créer une instance singleton du service
-export const notificationService = new NotificationService();
-
-export default notificationService;

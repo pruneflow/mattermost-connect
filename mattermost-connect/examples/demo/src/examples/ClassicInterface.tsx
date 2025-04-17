@@ -8,6 +8,7 @@ import {
   NotificationCenter,
   TeamSelector,
   formatUserDisplayName,
+  Notification,
 } from "mattermost-connect";
 
 // Material-UI Components
@@ -35,8 +36,15 @@ import { Logout as LogoutIcon, Menu as MenuIcon } from "@mui/icons-material";
 const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const { error, navigateToChannel, activeChannel, currentUser, activeTeam } =
-    useMattermost();
+  const {
+    error,
+    navigateToMessage,
+    activeChannel,
+    currentUser,
+    activeTeam,
+    highlightMessageId,
+    setHighlightMessageId,
+  } = useMattermost();
 
   // Références pour mesurer les hauteurs initiales
   const appBarRef = useRef<HTMLDivElement>(null);
@@ -48,9 +56,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
 
   // État
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [highlightMessageId, setHighlightMessageId] = useState<
-    string | undefined
-  >(undefined);
 
   // Hauteur pour l'espacement sous le chat pour le MessageComposer fixe sur mobile
   const messageComposerHeight = isMobile ? 64 : 0;
@@ -95,15 +100,10 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
 
   // Handler pour la navigation depuis les notifications
   const handleNavigateToChannel = useCallback(
-    (channelId: string, messageId?: string) => {
-      navigateToChannel(channelId, messageId);
-
-      // Si un messageId est fourni, le définir pour la mise en évidence
-      if (messageId) {
-        setHighlightMessageId(messageId);
-      }
+    (notification: Notification) => {
+      navigateToMessage(notification);
     },
-    [navigateToChannel],
+    [navigateToMessage],
   );
 
   if (error) {
@@ -204,7 +204,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
                   showHeader={false} // Nous montrons déjà l'en-tête dans l'AppBar
                   autoScrollToBottom
                   sx={{ height: "100%" }}
-                  highlightMessageId={highlightMessageId}
                 />
               </Box>
 
@@ -391,7 +390,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
                   showHeader
                   autoScrollToBottom
                   sx={{ height: "100%" }}
-                  highlightMessageId={highlightMessageId}
                 />
               </Box>
 

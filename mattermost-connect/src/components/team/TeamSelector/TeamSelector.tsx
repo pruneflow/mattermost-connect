@@ -2,7 +2,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { Team } from "../../../types";
-import { notificationService } from "../../../services/notification.service";
 
 // Material-UI Components
 import {
@@ -83,8 +82,14 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   teamItemSx,
   selectedTeamSx,
 }) => {
-  const { isConnected, service, currentUser, setActiveTeam, activeTeam } =
-    useMattermost();
+  const {
+    isConnected,
+    service,
+    currentUser,
+    setActiveTeam,
+    activeTeam,
+    notificationService,
+  } = useMattermost();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);

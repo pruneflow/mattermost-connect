@@ -119,7 +119,7 @@ const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
       autoHideDuration={autoHideDuration}
       onClose={handleClose}
       anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      TransitionComponent={SlideTransition}
+      slots={{ transition: SlideTransition }}
     >
       <Alert
         onClose={handleClose}

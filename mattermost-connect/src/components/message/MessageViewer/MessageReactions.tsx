@@ -10,10 +10,7 @@ import {
 import { MessageReactionsProps } from "./MessageTypes";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { getEmojiFromName } from "../EmojiPicker";
-import {
-  notificationService,
-  WebSocketEventType,
-} from "../../../services/notification.service";
+import { WebSocketEventType } from "../../../services/notification.service";
 
 /**
  * Type interne pour la gestion des réactions
@@ -34,7 +31,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   isFromCurrentUser = false,
   sx,
 }) => {
-  const { service, currentUser } = useMattermost();
+  const { service, currentUser, notificationService } = useMattermost();
   const [reactions, setReactions] = useState<ReactionInfo[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
