@@ -1,6 +1,12 @@
 // src/components/message/MessageViewer/MessageReactions.tsx
 import React, { useState, useEffect, useCallback } from "react";
-import { Box, Typography, CircularProgress, alpha } from "@mui/material";
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  alpha,
+  Tooltip,
+} from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { getEmojiFromName } from "../EmojiPicker";
@@ -8,6 +14,17 @@ import {
   notificationService,
   WebSocketEventType,
 } from "../../../services/notification.service";
+
+/**
+ * Type interne pour la gestion des réactions
+ * Structure plus organisée pour faciliter le suivi des réactions
+ */
+interface ReactionInfo {
+  emojiName: string; // Nom de l'emoji (pour l'API)
+  emoji: string; // Caractère de l'emoji
+  count: number; // Nombre total de réactions
+  userIds: Set<string>; // Ensemble des IDs utilisateurs ayant réagi (pour éviter les doublons)
+}
 
 /**
  * Displays reactions to a message with ability to add/remove reactions
@@ -18,99 +35,185 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   sx,
 }) => {
   const { service, currentUser } = useMattermost();
-  const [userReactions, setUserReactions] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>(
-    {},
-  );
+  const [reactions, setReactions] = useState<ReactionInfo[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
-  // Initialize reactions from message
-  useEffect(() => {
+  // Fonction utilitaire pour organiser les réactions depuis le message
+  const processReactions = useCallback(() => {
     if (!message.metadata?.reactions || !message.metadata.reactions.length) {
-      setReactionCounts({});
-      return;
+      return [];
     }
 
-    // Group reactions by emoji name and count them
-    const counts: Record<string, number> = {};
-    const userReacted: Record<string, boolean> = {};
+    // Map pour éviter les doublons et simplifier le traitement
+    const reactionsMap = new Map<string, ReactionInfo>();
 
     message.metadata.reactions.forEach((reaction) => {
-      console.debug("Use effect reaction", reaction);
       const { emoji_name, user_id } = reaction;
 
-      // Count total reactions for this emoji
-      counts[emoji_name] = (counts[emoji_name] || 0) + 1;
+      // Si cette réaction n'existe pas encore, l'initialiser
+      if (!reactionsMap.has(emoji_name)) {
+        reactionsMap.set(emoji_name, {
+          emojiName: emoji_name,
+          emoji: getEmojiFromName(emoji_name) || emoji_name,
+          count: 0,
+          userIds: new Set<string>(),
+        });
+      }
 
-      // Check if current user has reacted with this emoji
-      if (currentUser && user_id === currentUser.id) {
-        userReacted[emoji_name] = true;
+      const reactionInfo = reactionsMap.get(emoji_name)!;
+
+      // N'ajouter l'utilisateur que s'il n'est pas déjà présent
+      if (!reactionInfo.userIds.has(user_id)) {
+        reactionInfo.userIds.add(user_id);
+        reactionInfo.count++;
       }
     });
 
-    setReactionCounts(counts);
-    setUserReactions(userReacted);
-  }, [message.metadata?.reactions, currentUser]);
+    // Convertir la Map en tableau pour l'affichage
+    return Array.from(reactionsMap.values());
+  }, [message.metadata?.reactions]);
 
-  // Listen for reaction added/removed events
+  // Initialiser les réactions à partir du message
+  useEffect(() => {
+    setReactions(processReactions());
+  }, [processReactions]);
+
+  // Écouter les événements de réaction via WebSocket
   useEffect(() => {
     const handleReactionAdded = (data: any) => {
       if (!data) return;
-      const { reaction } = data;
-      const react = JSON.parse(reaction);
-      console.debug("reaction", react);
-      if (!react || react.post_id !== message.id) return;
-      const { emoji_name, user_id } = react;
 
-      // Update reaction counts
-      setReactionCounts((prev) => {
-        const newCounts = { ...prev };
-        newCounts[emoji_name] = (newCounts[emoji_name] || 0) + 1;
-        return newCounts;
-      });
+      try {
+        // WebSocket events from Mattermost have different structures
+        // The reaction data can be nested in different ways
+        let reactionData;
 
-      // If current user added this reaction, update userReactions
-      if (currentUser && user_id === currentUser.id) {
-        setUserReactions((prev) => ({
-          ...prev,
-          [emoji_name]: true,
-        }));
+        if (data.reaction) {
+          // Case 1: data has a reaction property
+          reactionData =
+            typeof data.reaction === "string"
+              ? JSON.parse(data.reaction)
+              : data.reaction;
+        } else if (data.post_id) {
+          // Case 2: data itself is the reaction
+          reactionData = data;
+        } else {
+          return; // Unknown format
+        }
+
+        if (!reactionData || reactionData.post_id !== message.id) return;
+
+        const { emoji_name, user_id } = reactionData;
+
+        // Mettre à jour l'état local des réactions
+        setReactions((prevReactions) => {
+          // Créer une copie pour ne pas modifier l'état directement
+          const updatedReactions = [...prevReactions];
+
+          // Chercher la réaction existante
+          const existingIndex = updatedReactions.findIndex(
+            (r) => r.emojiName === emoji_name,
+          );
+
+          if (existingIndex >= 0) {
+            // La réaction existe déjà
+            const reaction = updatedReactions[existingIndex];
+
+            // Vérifier si l'utilisateur a déjà réagi
+            if (!reaction.userIds.has(user_id)) {
+              // Créer une nouvelle instance pour préserver l'immutabilité
+              const updatedUserIds = new Set(reaction.userIds);
+              updatedUserIds.add(user_id);
+
+              // Mettre à jour la réaction
+              updatedReactions[existingIndex] = {
+                ...reaction,
+                count: reaction.count + 1,
+                userIds: updatedUserIds,
+              };
+            }
+          } else {
+            // Nouvelle réaction
+            updatedReactions.push({
+              emojiName: emoji_name,
+              emoji: getEmojiFromName(emoji_name) || emoji_name,
+              count: 1,
+              userIds: new Set([user_id]),
+            });
+          }
+
+          return updatedReactions;
+        });
+      } catch (error) {
+        console.error("Error processing reaction_added event:", error);
       }
     };
 
     const handleReactionRemoved = (data: any) => {
       if (!data) return;
-      const { reaction } = data;
-      const react = JSON.parse(reaction);
-      console.debug("reaction removed", react);
-      if (!react || react.post_id !== message.id) return;
 
-      const { emoji_name, user_id } = react;
+      try {
+        // Même logique que pour l'ajout de réaction
+        let reactionData;
 
-      // Update reaction counts
-      setReactionCounts((prev) => {
-        const newCounts = { ...prev };
-        if (newCounts[emoji_name] > 1) {
-          newCounts[emoji_name]--;
+        if (data.reaction) {
+          // Case 1: data has a reaction property
+          reactionData =
+            typeof data.reaction === "string"
+              ? JSON.parse(data.reaction)
+              : data.reaction;
+        } else if (data.post_id) {
+          // Case 2: data itself is the reaction
+          reactionData = data;
         } else {
-          delete newCounts[emoji_name];
+          return; // Unknown format
         }
-        return newCounts;
-      });
 
-      // If current user removed this reaction, update userReactions
-      if (currentUser && user_id === currentUser.id) {
-        setUserReactions((prev) => {
-          const newUserReactions = { ...prev };
-          delete newUserReactions[emoji_name];
-          return newUserReactions;
+        if (!reactionData || reactionData.post_id !== message.id) return;
+
+        const { emoji_name, user_id } = reactionData;
+
+        // Mettre à jour l'état local des réactions
+        setReactions((prevReactions) => {
+          // Créer une copie pour ne pas modifier l'état directement
+          const updatedReactions = [...prevReactions];
+
+          // Chercher la réaction existante
+          const reactionIndex = updatedReactions.findIndex(
+            (r) => r.emojiName === emoji_name,
+          );
+
+          if (reactionIndex >= 0) {
+            const reaction = updatedReactions[reactionIndex];
+
+            // Vérifier si l'utilisateur a réellement réagi
+            if (reaction.userIds.has(user_id)) {
+              // Créer une nouvelle instance pour préserver l'immutabilité
+              const updatedUserIds = new Set(reaction.userIds);
+              updatedUserIds.delete(user_id);
+
+              if (updatedUserIds.size === 0) {
+                // Plus personne n'a réagi, supprimer la réaction
+                updatedReactions.splice(reactionIndex, 1);
+              } else {
+                // Mettre à jour la réaction
+                updatedReactions[reactionIndex] = {
+                  ...reaction,
+                  count: reaction.count - 1,
+                  userIds: updatedUserIds,
+                };
+              }
+            }
+          }
+
+          return updatedReactions;
         });
+      } catch (error) {
+        console.error("Error processing reaction_removed event:", error);
       }
     };
 
-    // Subscribe to reaction events
+    // S'abonner aux événements
     const unsubscribeAdded = notificationService.addEventListener(
       WebSocketEventType.REACTION_ADDED,
       handleReactionAdded,
@@ -125,64 +228,106 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
       unsubscribeAdded();
       unsubscribeRemoved();
     };
-  }, [message.id, currentUser]);
+  }, [message.id]);
 
-  // Toggle reaction when user clicks
+  // Fonction pour vérifier si l'utilisateur a déjà réagi
+  const hasUserReacted = useCallback(
+    (emojiName: string): boolean => {
+      if (!currentUser) return false;
+
+      const reaction = reactions.find((r) => r.emojiName === emojiName);
+      return reaction ? reaction.userIds.has(currentUser.id) : false;
+    },
+    [reactions, currentUser],
+  );
+
+  // Gérer le clic sur une réaction
   const handleReactionClick = useCallback(
     async (emojiName: string) => {
       if (!currentUser || !service) return;
 
-      // Set loading state for this emoji
+      // Définir l'état de chargement pour cet emoji
       setLoading((prev) => ({ ...prev, [emojiName]: true }));
 
       try {
-        if (userReactions[emojiName]) {
-          // User already reacted with this emoji, so remove the reaction
+        const alreadyReacted = hasUserReacted(emojiName);
+
+        if (alreadyReacted) {
+          // L'utilisateur a déjà réagi, supprimer la réaction
           await service.removeReaction(
             message.channel_id,
             message.id,
             emojiName,
           );
-        } else {
-          // User hasn't reacted with this emoji yet, so add the reaction
-          await service.addReaction(message.id, emojiName);
-        }
 
-        // Local state updates will be handled by WebSocket events
-        // But we can also update optimistically for better UX
-        if (userReactions[emojiName]) {
-          // Optimistically remove reaction
-          setReactionCounts((prev) => {
-            const newCounts = { ...prev };
-            if (newCounts[emojiName] > 1) {
-              newCounts[emojiName]--;
-            } else {
-              delete newCounts[emojiName];
+          /*// Mise à jour optimiste (l'événement WebSocket confirmera)
+          setReactions((prevReactions) => {
+            const updatedReactions = [...prevReactions];
+            const reactionIndex = updatedReactions.findIndex(
+              (r) => r.emojiName === emojiName,
+            );
+
+            if (reactionIndex >= 0) {
+              const reaction = updatedReactions[reactionIndex];
+              const updatedUserIds = new Set(reaction.userIds);
+              updatedUserIds.delete(currentUser.id);
+
+              if (updatedUserIds.size === 0) {
+                // Plus personne n'a réagi, supprimer la réaction
+                updatedReactions.splice(reactionIndex, 1);
+              } else {
+                // Mettre à jour la réaction
+                updatedReactions[reactionIndex] = {
+                  ...reaction,
+                  count: reaction.count - 1,
+                  userIds: updatedUserIds,
+                };
+              }
             }
-            return newCounts;
-          });
 
-          setUserReactions((prev) => {
-            const newUserReactions = { ...prev };
-            delete newUserReactions[emojiName];
-            return newUserReactions;
-          });
+            return updatedReactions;
+          });*/
         } else {
-          // Optimistically add reaction
-          setReactionCounts((prev) => ({
-            ...prev,
-            [emojiName]: (prev[emojiName] || 0) + 1,
-          }));
+          // L'utilisateur n'a pas encore réagi, ajouter la réaction
+          await service.addReaction(message.id, emojiName);
 
-          setUserReactions((prev) => ({
-            ...prev,
-            [emojiName]: true,
-          }));
+          /*     // Mise à jour optimiste (l'événement WebSocket confirmera)
+          setReactions((prevReactions) => {
+            const updatedReactions = [...prevReactions];
+            const existingIndex = updatedReactions.findIndex(
+              (r) => r.emojiName === emojiName,
+            );
+
+            if (existingIndex >= 0) {
+              // La réaction existe déjà
+              const reaction = updatedReactions[existingIndex];
+              const updatedUserIds = new Set(reaction.userIds);
+
+              if (!updatedUserIds.has(currentUser.id)) {
+                updatedUserIds.add(currentUser.id);
+                updatedReactions[existingIndex] = {
+                  ...reaction,
+                  count: reaction.count + 1,
+                  userIds: updatedUserIds,
+                };
+              }
+            } else {
+              // Nouvelle réaction
+              updatedReactions.push({
+                emojiName,
+                emoji: getEmojiFromName(emojiName) || emojiName,
+                count: 1,
+                userIds: new Set([currentUser.id]),
+              });
+            }
+
+            return updatedReactions;
+          });*/
         }
       } catch (error) {
         console.error("Error toggling reaction:", error);
       } finally {
-        // Clear loading state
+        // Effacer l'état de chargement
         setLoading((prev) => {
           const newLoading = { ...prev };
           delete newLoading[emojiName];
@@ -190,11 +335,11 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
         });
       }
     },
-    [message, userReactions, service, currentUser],
+    [message, hasUserReacted, service, currentUser],
   );
 
-  // If no reactions, don't render anything
-  if (Object.keys(reactionCounts).length === 0) {
+  // Si aucune réaction, ne rien afficher
+  if (reactions.length === 0) {
     return null;
   }
 
@@ -211,40 +356,55 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
         ...sx,
       }}
     >
-      {Object.entries(reactionCounts).map(([emojiName, count]) => {
-        const isLoading = loading[emojiName] || false;
-        const emoji = getEmojiFromName(emojiName) || emojiName;
+      {reactions.map((reaction) => {
+        const isLoading = loading[reaction.emojiName] || false;
+        const userHasReacted = currentUser
+          ? reaction.userIds.has(currentUser.id)
+          : false;
 
         return (
-          <Box
-            key={`${emojiName}-${count}`}
-            onClick={() => !isLoading && handleReactionClick(emojiName)}
-            sx={{
-              borderRadius: "12px",
-              border: "1px solid",
-              borderColor: "divider",
-              px: 1,
-              py: 0.5,
-              fontSize: "0.875rem",
-              display: "flex",
-              alignItems: "center",
-              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
-              cursor: "pointer",
-              "&:hover": {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
-              },
-              position: "relative",
-            }}
+          <Tooltip
+            key={reaction.emojiName}
+            title={
+              userHasReacted
+                ? "Cliquez pour retirer votre réaction"
+                : "Cliquez pour réagir"
+            }
           >
-            {emoji}{" "}
-            <Typography component={"div"} variant="caption" sx={{ ml: 0.5 }}>
-              {isLoading ? (
-                <CircularProgress size={10} thickness={2} sx={{ ml: 0.5 }} />
-              ) : (
-                count
-              )}
-            </Typography>
-          </Box>
+            <Box
+              onClick={() =>
+                !isLoading && handleReactionClick(reaction.emojiName)
+              }
+              sx={{
+                borderRadius: "12px",
+                border: "1px solid",
+                borderColor: "divider",
+                px: 1,
+                py: 0.5,
+                fontSize: "0.875rem",
+                display: "flex",
+                alignItems: "center",
+                bgcolor: (theme) =>
+                  userHasReacted
+                    ? alpha(theme.palette.primary.main, 0.2)
+                    : alpha(theme.palette.primary.main, 0.1),
+                cursor: "pointer",
+                "&:hover": {
+                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+                },
+                position: "relative",
+              }}
+            >
+              {reaction.emoji}{" "}
+              <Typography component={"div"} variant="caption" sx={{ ml: 0.5 }}>
+                {isLoading ? (
+                  <CircularProgress size={10} thickness={2} sx={{ ml: 0.5 }} />
+                ) : (
+                  reaction.count
+                )}
+              </Typography>
+            </Box>
+          </Tooltip>
         );
       })}
     </Box>

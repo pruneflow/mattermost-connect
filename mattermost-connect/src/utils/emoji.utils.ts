@@ -88,7 +88,7 @@ export const addReaction = async (
     };
   }
 
-  const requestHeaders = {
+  const requestHeaders: any = {
     "Content-Type": "application/json",
     ...headers,
   };
