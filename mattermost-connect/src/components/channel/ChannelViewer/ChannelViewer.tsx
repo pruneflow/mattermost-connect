@@ -91,10 +91,12 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     currentUser,
     setReplyTo,
     typingUsers,
+    activeChannel,
     setActiveChannel,
     markChannelAsRead,
     notificationService,
     highlightMessageId,
+    setHighlightMessageId,
   } = useMattermost();
 
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -116,7 +118,6 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
-  const autoScrollRef = useRef<boolean>(autoScrollToBottom);
   const highlightTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
   // User ID to use (from props or from context)
@@ -136,10 +137,15 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     if (!isConnected || !channelId) return;
 
     const fetchChannel = async () => {
+      console.debug("fetch channel");
       try {
-        const channelData = await service.getChannel(channelId);
-        setChannel(channelData);
-        setActiveChannel(channelData);
+        if (activeChannel && activeChannel.id !== channelId) {
+          const channelData = await service.getChannel(channelId);
+          setChannel(channelData);
+          setActiveChannel(channelData);
+        } else if (!channel) {
+          setChannel(activeChannel);
+        }
         setError(null);
       } catch (err) {
         console.error("Error loading channel:", err);
@@ -147,14 +153,17 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       }
     };
 
-    void fetchChannel();
-  }, [isConnected, channelId, service, setActiveChannel]);
+    if (!channel || channelId !== channel.id) {
+      void fetchChannel();
+    }
+  }, [isConnected, channelId, service, setActiveChannel, activeChannel]);
 
   // Load messages
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
     const fetchMessages = async () => {
+      console.debug("fetchMessage");
       setLoading(true);
       try {
         const response = await service.getChannelMessages(channelId, {
@@ -325,7 +334,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         console.error("Error processing deleted message:", error);
       }
     };
-
+    console.debug("ADD EVENT LISTENER");
     // S'abonner aux événements
     const unsubscribePosted = notificationService.addEventListener(
       WebSocketEventType.POSTED,
@@ -438,6 +447,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         });
 
         delete highlightTimeouts.current[highlightMessageId];
+        setHighlightMessageId(undefined);
       }, 3000);
     }
   }, [highlightMessageId, loading, messages.length]);

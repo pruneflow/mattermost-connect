@@ -151,12 +151,26 @@ const ChannelList: React.FC<ChannelListProps> = ({
         const channelsData = await service?.getChannels(teamId);
 
         if (channelsData && channelsData.length > 0) {
+          let currentChannel = null;
+          if (activeChannel) {
+            const activeChannelIsInTeam = channelsData.find(
+              (c) => c.id === activeChannel.id,
+            );
+            if (!activeChannelIsInTeam) {
+              currentChannel = channelsData[0];
+              setActiveChannel(channelsData[0]);
+            } else {
+              currentChannel = activeChannel;
+            }
+          } else {
+            currentChannel = channelsData[0];
+            setActiveChannel(channelsData[0]);
+          }
           setChannels(channelsData);
-          setActiveChannel(channelsData[0]);
           await initializeTeamUnreadStates(teamId, channelsData);
 
           if (onSelectChannel) {
-            onSelectChannel(channelsData[0]);
+            onSelectChannel(currentChannel);
           }
         }
 
