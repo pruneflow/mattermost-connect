@@ -1,5 +1,5 @@
 // src/services/notification.service.ts
-import { Message, Channel, User } from "../types";
+import { User } from "../types";
 
 /**
  * Types d'événements WebSocket de Mattermost
@@ -255,6 +255,7 @@ export class NotificationService {
       case WebSocketEventType.REACTION_REMOVED:
         this.handleReactionChange(
           event.data,
+          event.broadcast,
           event.event === WebSocketEventType.REACTION_ADDED,
         );
         break;
@@ -471,12 +472,49 @@ export class NotificationService {
   /**
    * Gérer les changements de réactions (ajout/suppression)
    */
-  private handleReactionChange(data: any, isAdded: boolean) {
+  private handleReactionChange(data: any, broadcast: any, isAdded: boolean) {
     // Notifier pour mise à jour de l'UI
     const eventType = isAdded
       ? WebSocketEventType.REACTION_ADDED
       : WebSocketEventType.REACTION_REMOVED;
 
+    if (isAdded) {
+      try {
+        const reaction = JSON.parse(data.reaction);
+        console.debug("new reaction", reaction);
+        const isFromCurrentUser = reaction.user_id === this.currentUserId;
+        console.debug("isFromCurrentUser", isFromCurrentUser);
+        // Vérifier si le message est dans le canal actif
+        const isInCurrentChannel =
+          broadcast.channel_id === this.currentChannelId;
+        console.debug("isInCurrentChannel", isInCurrentChannel);
+        // Ne pas notifier pour les messages de l'utilisateur actuel
+        if (isFromCurrentUser || isInCurrentChannel) {
+          return;
+        }
+
+        // Incrémenter les compteurs non lus pour le canal
+        if (!isInCurrentChannel) {
+          // Créer une notification pour l'utilisateur
+          const notification: Notification = {
+            id: `reaction_added_${reaction.emoji_name}_${reaction.post_id}`,
+            type: "reaction",
+            title: "New reaction",
+            content: reaction.emoji_name,
+            channelId: broadcast.channel_id,
+            messageId: reaction.post_id,
+            timestamp: reaction.create_at,
+            read: false,
+            priority: "medium",
+          };
+
+          this.notifications.push(notification);
+          this.notifyListeners("notification_added", notification);
+        }
+      } catch (error) {
+        console.error("Error handling new post:", error);
+      }
+    }
     this.notifyListeners(eventType, data);
   }
 
