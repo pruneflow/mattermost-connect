@@ -108,7 +108,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   // État
   const [channel, setChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -135,6 +135,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
 
   // Mettre à jour la référence stable quand channelId change
   useEffect(() => {
+    isMounted.current = true;
     stableChannelId.current = channelId;
   }, [channelId]);
 
@@ -163,42 +164,73 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
+    // Référence pour éviter des appels inutiles
+    const currentChannelId = stableChannelId.current;
+
     const fetchChannel = async () => {
       try {
-        if (activeChannel) {
+        // Vérifier que le composant est encore monté et que le canal n'a pas changé
+        if (
+          !isMounted.current ||
+          currentChannelId !== stableChannelId.current
+        ) {
+          console.debug(
+            "!isMounted.current || currentChannelId !== stableChannelId.current",
+          );
+          return;
+        }
+
+        // Si le canal actif correspond déjà à ce que nous voulons, l'utiliser directement
+        if (activeChannel && activeChannel.id === channelId) {
+          console.debug("activeChannel is set and same id ");
           if (!channel || channel.id !== activeChannel.id) {
+            console.debug("set channel from activeChannel");
             setChannel(activeChannel);
           }
-        } else {
-          if (!channel || channel.id !== channelId) {
-            const channelData = await service.getChannel(channelId);
-            setChannel(channelData);
-            setActiveChannel(channelData);
-          }
+          console.debug(
+            "return from this activeChannel && activeChannel.id === channelId",
+          );
+          return; // Important: sortir tôt pour éviter des appels supplémentaires
         }
-        if (isMounted.current) {
-          setError(null);
+
+        // Éviter de recharger le même canal
+        if (channel && channel.id === channelId) {
+          console.debug("channel is already set");
+          return;
         }
+        console.debug("set from fetching channelData");
+        setLoading(true);
+        const channelData = await service.getChannel(channelId);
+        setChannel(channelData);
+        setActiveChannel(channelData);
+        setError(null);
       } catch (err) {
-        if (!isMounted.current) return;
+        if (!isMounted.current || currentChannelId !== stableChannelId.current)
+          return;
         console.error("Error loading channel:", err);
         setError(err instanceof Error ? err.message : "Failed to load channel");
+      } finally {
+        setLoading(false);
       }
     };
 
     void fetchChannel();
-  }, [
-    isConnected,
-    channelId,
-    service,
-    setActiveChannel,
-    activeChannel,
-    channel,
-  ]);
+
+    // Retirer channel de la liste des dépendances pour briser la boucle
+  }, [isConnected, channelId, service, setActiveChannel, activeChannel]);
 
   // Charger les messages de façon optimisée
   useEffect(() => {
     if (!isConnected || !channelId) return;
+
+    const currentChannelId = stableChannelId.current;
+    console.debug("loading", loading);
+    if (loading && currentChannelId === channelId) {
+      console.debug(
+        "return from this loading && currentChannelId === channelId",
+      );
+      return;
+    }
 
     const fetchMessages = async () => {
       console.debug("Fetching messages for channel:", channelId);
@@ -209,13 +241,22 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           perPage: loadMessageCount,
         });
 
-        if (!isMounted.current) return;
+        if (!isMounted.current || currentChannelId !== stableChannelId.current)
+          return;
 
         // Conversion et tri des messages
         const postsArray = Object.values(response.posts || {});
         const sortedPosts = postsArray.sort(
           (a, b) => a.create_at - b.create_at,
         );
+
+        if (
+          JSON.stringify(sortedPosts.map((p) => p.id)) ===
+          JSON.stringify(messages.map((m) => m.id))
+        ) {
+          setLoading(false);
+          return;
+        }
 
         // Mise à jour de la map de référence
         sortedPosts.forEach((post) => {
@@ -231,13 +272,14 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         setHasMoreMessages(sortedPosts.length >= loadMessageCount);
         setError(null);
       } catch (err) {
-        if (!isMounted.current) return;
+        if (!isMounted.current || currentChannelId !== stableChannelId.current)
+          return;
         console.error("Error loading messages:", err);
         setError(
           err instanceof Error ? err.message : "Failed to load messages",
         );
       } finally {
-        if (isMounted.current) {
+        if (isMounted.current && currentChannelId === stableChannelId.current) {
           setLoading(false);
         }
       }
@@ -254,7 +296,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     } else {
       setMessagesToHighlight(new Set());
     }
-  }, [isConnected, channelId, service, loadMessageCount, highlightMessageId]);
+  }, [isConnected, channel, service, loadMessageCount, highlightMessageId]);
 
   // Fonctions pour gérer les événements WebSocket, mémorisées avec useCallback
   const handleNewMessage = useCallback(

@@ -72,7 +72,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
 
   // Handler pour la sélection d'un canal
   const handleChannelSelect = useCallback(() => {
-    // Sur mobile uniquement, fermer le tiroir
     if (isMobile) {
       setDrawerOpen(false);
     }

@@ -438,9 +438,8 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       if (knownUsers[userId]) {
         return knownUsers[userId];
       }
-
       // Sinon, essayer de le charger
-      return loadUserById(userId);
+      return await loadUserById(userId);
     },
     [knownUsers, loadUserById],
   );
