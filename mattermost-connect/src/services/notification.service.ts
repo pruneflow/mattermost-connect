@@ -82,14 +82,15 @@ export interface UnreadState {
  * Cette classe centralise la logique de notification et mise à jour de l'UI
  */
 export class NotificationService {
-  private listeners: Record<string, ((data: any) => void)[]> = {};
+  // Utiliser un Set pour les listeners pour éviter les doublons naturellement
+  private listeners: Record<string, Set<(data: any) => void>> = {};
   private notifications: Notification[] = [];
   private unreadState: UnreadState = {};
-  private typingUsers: Record<string, { [userId: string]: number }> = {}; // Utilisateurs en train de taper par canal
-  private typingTimeouts: Record<string, { [userId: string]: NodeJS.Timeout }> =
-    {}; // Timeouts pour effacer l'état de frappe
+  private typingUsers: Record<string, Record<string, number>> = {}; // Utilisateurs en train de taper par canal
+  private typingTimeouts: Record<string, Record<string, NodeJS.Timeout>> = {}; // Timeouts pour effacer l'état de frappe
   private currentChannelId: string | null = null;
   private currentUserId: string | null = null;
+
   /**
    * Cache pour les derniers messages traités, pour éviter les doublons
    * Clé: ID du message, Valeur: timestamp de traitement
@@ -103,16 +104,25 @@ export class NotificationService {
 
   private mattermostService: MattermostService | null = null;
 
+  // Liste des événements internes personnalisés
+  private static readonly CUSTOM_EVENTS = [
+    "notification_added",
+    "notifications_updated",
+    "unread_updated",
+    "typing_updated",
+  ];
+
   constructor(mattermostService?: MattermostService) {
-    // Initialiser les catégories d'événements
+    // Initialiser les catégories d'événements avec des Sets
+    // pour empêcher automatiquement les écouteurs dupliqués
     Object.values(WebSocketEventType).forEach((eventType) => {
-      this.listeners[eventType] = [];
+      this.listeners[eventType] = new Set();
     });
 
-    this.listeners["notification_added"] = [];
-    this.listeners["notifications_updated"] = [];
-    this.listeners["unread_updated"] = [];
-    this.listeners["typing_updated"] = [];
+    // Initialiser nos événements internes personnalisés
+    NotificationService.CUSTOM_EVENTS.forEach((eventType) => {
+      this.listeners[eventType] = new Set();
+    });
 
     if (mattermostService) {
       this.mattermostService = mattermostService;
@@ -166,17 +176,25 @@ export class NotificationService {
 
   /**
    * Ajouter un écouteur pour un type d'événement spécifique
+   * Utilise un Set pour éviter les écouteurs en double naturellement
+   *
+   * @param event Type d'événement à écouter
+   * @param callback Fonction à appeler quand l'événement se produit
+   * @returns Fonction pour supprimer l'écouteur
    */
   addEventListener(event: string, callback: (data: any) => void) {
     if (!this.listeners[event]) {
-      this.listeners[event] = [];
+      this.listeners[event] = new Set();
     }
 
-    this.listeners[event].push(callback);
+    // Le Set garantit l'unicité des callbacks - pas de doublons
+    this.listeners[event].add(callback);
+
+    // Retourner une fonction de nettoyage
     return () => {
-      this.listeners[event] = this.listeners[event].filter(
-        (cb) => cb !== callback,
-      );
+      if (this.listeners[event]) {
+        this.listeners[event].delete(callback);
+      }
     };
   }
 
@@ -187,7 +205,6 @@ export class NotificationService {
     if (this.listeners[event]) {
       this.listeners[event].forEach((callback) => {
         try {
-          console.debug("callback for event", event);
           callback(data);
         } catch (error) {
           console.error(`Error in ${event} listener:`, error);
@@ -226,7 +243,6 @@ export class NotificationService {
 
     // Vérifier si cet événement a déjà été traité récemment
     if (this.processedEvents.has(eventId)) {
-      console.debug(`Ignoring duplicate event: ${eventId}`);
       return;
     }
 
@@ -238,8 +254,6 @@ export class NotificationService {
     if (this.processedEvents.size > 100 || Math.random() < 0.1) {
       this.cleanEventCache();
     }
-
-    console.debug(`WebSocket event processed: ${event.event}`, event);
 
     // Notifier les écouteurs spécifiques à ce type d'événement
     this.notifyListeners(event.event, event.data);
@@ -285,13 +299,12 @@ export class NotificationService {
   private handleNewPost(data: any) {
     try {
       const post = JSON.parse(data.post);
-      console.debug("new post", post);
       const isFromCurrentUser = post.user_id === this.currentUserId;
-      console.debug("isFromCurrentUser", isFromCurrentUser);
+
       // Vérifier si le message est dans le canal actif
       const isInCurrentChannel = post.channel_id === this.currentChannelId;
-      console.debug("isInCurrentChannel", isInCurrentChannel);
-      // Ne pas notifier pour les messages de l'utilisateur actuel
+
+      // Ne pas notifier pour les messages de l'utilisateur actuel ou dans le canal actif
       if (isFromCurrentUser || isInCurrentChannel) {
         return;
       }
@@ -681,5 +694,28 @@ export class NotificationService {
   clearNotifications() {
     this.notifications = [];
     this.notifyListeners("notifications_updated", this.notifications);
+  }
+
+  /**
+   * Méthode pour nettoyer toutes les ressources du service
+   * Appelée lorsque le service n'est plus nécessaire
+   */
+  dispose() {
+    // Nettoyer tous les timeouts
+    Object.values(this.typingTimeouts).forEach((channelTimeouts) => {
+      Object.values(channelTimeouts).forEach((timeout) => {
+        clearTimeout(timeout);
+      });
+    });
+
+    // Vider les collections
+    this.typingUsers = {};
+    this.typingTimeouts = {};
+    this.processedEvents.clear();
+
+    // Vider les listeners
+    Object.keys(this.listeners).forEach((eventType) => {
+      this.listeners[eventType].clear();
+    });
   }
 }

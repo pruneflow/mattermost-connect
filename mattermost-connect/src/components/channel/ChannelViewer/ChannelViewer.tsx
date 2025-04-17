@@ -1,5 +1,11 @@
-// src/components/ChannelViewer/ChannelViewer.tsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
+// src/components/channel/ChannelViewer/ChannelViewer.tsx
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { Channel, Message as MessageType, User } from "../../../types";
 
@@ -99,14 +105,13 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     setHighlightMessageId,
   } = useMattermost();
 
+  // État
   const [channel, setChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
-
-  /** Real Time */
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
@@ -115,66 +120,107 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     new Set(),
   );
 
+  // Refs pour optimisation
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  const stableChannelId = useRef<string | undefined>(channelId);
+  const messageMap = useRef<Record<string, MessageType>>({});
   const highlightTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  const eventHandlersInitialized = useRef<boolean>(false);
+  const isMounted = useRef<boolean>(true);
 
-  // User ID to use (from props or from context)
+  // ID utilisateur à utiliser (des props ou du contexte)
   const userIdToUse = currentUserId || currentUser?.id;
 
+  // Mettre à jour la référence stable quand channelId change
+  useEffect(() => {
+    stableChannelId.current = channelId;
+  }, [channelId]);
+
+  // Nettoyer lors du démontage
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+
+      // Nettoyer tous les timeouts
+      Object.values(highlightTimeouts.current).forEach(clearTimeout);
+      highlightTimeouts.current = {};
+    };
+  }, []);
+
+  // Vérification optimisée si l'utilisateur est au bas du scrolling
   const isScrolledToBottom = useCallback(() => {
     if (!messagesContainerRef.current) return true;
 
     const { scrollTop, scrollHeight, clientHeight } =
       messagesContainerRef.current;
-    // We consider that we are at the bottom if there is only 50px left to scroll
+    // Considérer qu'on est au bas s'il reste moins de 50px à scroller
     return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
 
-  // Load channel information
+  // Charger les informations du canal
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
     const fetchChannel = async () => {
-      console.debug("fetch channel");
       try {
-        if (activeChannel && activeChannel.id !== channelId) {
-          const channelData = await service.getChannel(channelId);
-          setChannel(channelData);
-          setActiveChannel(channelData);
-        } else if (!channel) {
-          setChannel(activeChannel);
+        if (activeChannel) {
+          if (!channel || channel.id !== activeChannel.id) {
+            setChannel(activeChannel);
+          }
+        } else {
+          if (!channel || channel.id !== channelId) {
+            const channelData = await service.getChannel(channelId);
+            setChannel(channelData);
+            setActiveChannel(channelData);
+          }
         }
-        setError(null);
+        if (isMounted.current) {
+          setError(null);
+        }
       } catch (err) {
+        if (!isMounted.current) return;
         console.error("Error loading channel:", err);
         setError(err instanceof Error ? err.message : "Failed to load channel");
       }
     };
 
-    if (!channel || channelId !== channel.id) {
-      void fetchChannel();
-    }
-  }, [isConnected, channelId, service, setActiveChannel, activeChannel]);
+    void fetchChannel();
+  }, [
+    isConnected,
+    channelId,
+    service,
+    setActiveChannel,
+    activeChannel,
+    channel,
+  ]);
 
-  // Load messages
+  // Charger les messages de façon optimisée
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
     const fetchMessages = async () => {
-      console.debug("fetchMessage");
+      console.debug("Fetching messages for channel:", channelId);
       setLoading(true);
+
       try {
         const response = await service.getChannelMessages(channelId, {
           perPage: loadMessageCount,
         });
 
-        // Convert posts object to array and sort by creation time
+        if (!isMounted.current) return;
+
+        // Conversion et tri des messages
         const postsArray = Object.values(response.posts || {});
         const sortedPosts = postsArray.sort(
           (a, b) => a.create_at - b.create_at,
         );
+
+        // Mise à jour de la map de référence
+        sortedPosts.forEach((post) => {
+          messageMap.current[post.id] = post;
+        });
 
         setMessages(sortedPosts);
 
@@ -185,17 +231,21 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         setHasMoreMessages(sortedPosts.length >= loadMessageCount);
         setError(null);
       } catch (err) {
+        if (!isMounted.current) return;
         console.error("Error loading messages:", err);
         setError(
           err instanceof Error ? err.message : "Failed to load messages",
         );
       } finally {
-        setLoading(false);
+        if (isMounted.current) {
+          setLoading(false);
+        }
       }
     };
 
     void fetchMessages();
 
+    // Réinitialiser les compteurs et les états
     setNewMessagesCount(0);
     setShowNewMessagesBanner(false);
 
@@ -206,63 +256,51 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     }
   }, [isConnected, channelId, service, loadMessageCount, highlightMessageId]);
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    if (autoScrollToBottom && messagesEndRef.current && messages.length > 0) {
-      // Utilisation d'un court délai pour s'assurer que le rendu est terminé
-      const timer = setTimeout(() => {
-        if (messagesContainerRef.current) {
-          // Défilement complet vers le bas en utilisant scrollHeight
-          messagesContainerRef.current.scrollTop =
-            messagesContainerRef.current.scrollHeight;
-        } else if (messagesEndRef.current) {
-          // Fallback au cas où la référence du conteneur n'est pas disponible
-          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-        }
-      }, 1000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [messages, autoScrollToBottom]);
-
-  useEffect(() => {
-    if (!channelId) return;
-
-    // Fonction pour traiter un nouveau message
-    const handleNewMessage = (data: any) => {
+  // Fonctions pour gérer les événements WebSocket, mémorisées avec useCallback
+  const handleNewMessage = useCallback(
+    (data: any) => {
       try {
         const post = JSON.parse(data.post);
 
         // Vérifier si le message appartient à ce canal
-        if (post.channel_id !== channelId) return;
+        if (post.channel_id !== stableChannelId.current) return;
 
-        // Ajouter le nouveau message à la liste
+        // Ajouter à la map de référence
+        messageMap.current[post.id] = post;
+
+        // Ajouter le message à l'état seulement s'il n'existe pas déjà
         setMessages((prevMessages) => {
-          // Vérifier si le message existe déjà dans l'état actuel
+          // Si le message existe déjà, ne pas modifier l'état
           if (prevMessages.some((msg) => msg.id === post.id)) {
-            return prevMessages; // Ne pas modifier l'état si le message existe déjà
+            return prevMessages;
           }
-          // Assurer le tri par date
+
+          // Ajouter et trier
           return [...prevMessages, post].sort(
             (a, b) => a.create_at - b.create_at,
           );
         });
 
-        // Si l'utilisateur n'est pas en bas, afficher le compteur de nouveaux messages
-        if (!isAtBottom && post.user_id !== userIdToUse) {
+        // Si l'utilisateur n'est pas en bas, afficher le compteur
+        const isBottom = isScrolledToBottom();
+        if (!isBottom && post.user_id !== userIdToUse) {
           setNewMessagesCount((prev) => prev + 1);
           setShowNewMessagesBanner(true);
         }
 
-        // Si c'est un message de l'utilisateur actuel, toujours scroller vers le bas
+        // Si c'est un message de l'utilisateur actuel, scroller vers le bas
         if (post.user_id === userIdToUse) {
           scrollToBottom();
         }
 
         // Mettre en évidence les nouveaux messages
-        setMessagesToHighlight((prev) => new Set(prev).add(post.id));
+        setMessagesToHighlight((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(post.id);
+          return newSet;
+        });
 
-        // Définir un timeout pour supprimer la mise en évidence après 3 secondes
+        // Supprimer la mise en évidence après un délai
         if (highlightTimeouts.current[post.id]) {
           clearTimeout(highlightTimeouts.current[post.id]);
         }
@@ -273,69 +311,88 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
             updated.delete(post.id);
             return updated;
           });
-
           delete highlightTimeouts.current[post.id];
         }, 3000);
       } catch (error) {
         console.error("Error processing new message:", error);
       }
-    };
+    },
+    [userIdToUse, isScrolledToBottom],
+  );
 
-    // Fonction pour traiter un message édité
-    const handleEditedMessage = (data: any) => {
-      try {
-        const post = JSON.parse(data.post);
+  const handleEditedMessage = useCallback((data: any) => {
+    try {
+      const post = JSON.parse(data.post);
 
-        // Vérifier si le message appartient à ce canal
-        if (post.channel_id !== channelId) return;
+      // Vérifier si le message appartient à ce canal
+      if (post.channel_id !== stableChannelId.current) return;
 
-        // Mettre à jour le message
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === post.id ? { ...msg, ...post } : msg,
-          ),
-        );
+      // Mettre à jour la map de référence
+      messageMap.current[post.id] = post;
 
-        // Mettre en évidence le message édité
-        setMessagesToHighlight((prev) => new Set(prev).add(post.id));
+      // Mettre à jour le message
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === post.id ? { ...msg, ...post } : msg,
+        ),
+      );
 
-        // Définir un timeout pour supprimer la mise en évidence
-        if (highlightTimeouts.current[post.id]) {
-          clearTimeout(highlightTimeouts.current[post.id]);
-        }
+      // Mettre en évidence le message édité
+      setMessagesToHighlight((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(post.id);
+        return newSet;
+      });
 
-        highlightTimeouts.current[post.id] = setTimeout(() => {
-          setMessagesToHighlight((prev) => {
-            const updated = new Set(prev);
-            updated.delete(post.id);
-            return updated;
-          });
-
-          delete highlightTimeouts.current[post.id];
-        }, 3000);
-      } catch (error) {
-        console.error("Error processing edited message:", error);
+      // Supprimer la mise en évidence après un délai
+      if (highlightTimeouts.current[post.id]) {
+        clearTimeout(highlightTimeouts.current[post.id]);
       }
-    };
 
-    // Fonction pour traiter un message supprimé
-    const handleDeletedMessage = (data: any) => {
-      try {
-        const post = JSON.parse(data.post);
+      highlightTimeouts.current[post.id] = setTimeout(() => {
+        setMessagesToHighlight((prev) => {
+          const updated = new Set(prev);
+          updated.delete(post.id);
+          return updated;
+        });
+        delete highlightTimeouts.current[post.id];
+      }, 3000);
+    } catch (error) {
+      console.error("Error processing edited message:", error);
+    }
+  }, []);
 
-        // Vérifier si le message appartient à ce canal
-        if (post.channel_id !== channelId) return;
+  const handleDeletedMessage = useCallback((data: any) => {
+    try {
+      const post = JSON.parse(data.post);
 
-        // Supprimer le message de la liste
-        setMessages((prevMessages) =>
-          prevMessages.filter((msg) => msg.id !== post.id),
-        );
-      } catch (error) {
-        console.error("Error processing deleted message:", error);
-      }
-    };
-    console.debug("ADD EVENT LISTENER");
-    // S'abonner aux événements
+      // Vérifier si le message appartient à ce canal
+      if (post.channel_id !== stableChannelId.current) return;
+
+      // Supprimer de la map de référence
+      delete messageMap.current[post.id];
+
+      // Supprimer le message de la liste
+      setMessages((prevMessages) =>
+        prevMessages.filter((msg) => msg.id !== post.id),
+      );
+    } catch (error) {
+      console.error("Error processing deleted message:", error);
+    }
+  }, []);
+
+  // Écouteurs d'événements WebSocket optimisés
+  useEffect(() => {
+    if (!channelId || !notificationService || eventHandlersInitialized.current)
+      return;
+
+    console.debug(
+      "Setting up WebSocket event listeners for channel:",
+      channelId,
+    );
+    eventHandlersInitialized.current = true;
+
+    // S'abonner aux événements en utilisant des fonctions mémorisées
     const unsubscribePosted = notificationService.addEventListener(
       WebSocketEventType.POSTED,
       handleNewMessage,
@@ -351,50 +408,60 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       handleDeletedMessage,
     );
 
-    // Nettoyer les abonnements lors du démontage
+    // Nettoyer les écouteurs au démontage ou au changement de canal
     return () => {
+      console.debug("Cleaning up WebSocket event listeners");
       unsubscribePosted();
       unsubscribeEdited();
       unsubscribeDeleted();
+      eventHandlersInitialized.current = false;
 
       // Nettoyer tous les timeouts
-      Object.values(highlightTimeouts.current).forEach((timeout) => {
-        clearTimeout(timeout);
-      });
+      Object.values(highlightTimeouts.current).forEach(clearTimeout);
       highlightTimeouts.current = {};
     };
-  }, [channelId, messages, isAtBottom, userIdToUse]);
+  }, [
+    channelId,
+    notificationService,
+    handleNewMessage,
+    handleEditedMessage,
+    handleDeletedMessage,
+  ]);
 
+  // Auto-scroll quand les messages changent
   useEffect(() => {
-    if (autoScrollToBottom && messagesEndRef.current && messages.length > 0) {
-      // Utilisation d'un court délai pour s'assurer que le rendu est terminé
+    if (
+      autoScrollToBottom &&
+      messagesEndRef.current &&
+      messages.length > 0 &&
+      !loading
+    ) {
+      // Utiliser un court délai pour s'assurer que le rendu est terminé
       const timer = setTimeout(() => {
         if (messagesContainerRef.current) {
-          // Défilement complet vers le bas en utilisant scrollHeight
+          // Défilement vers le bas en utilisant scrollHeight
           messagesContainerRef.current.scrollTop =
             messagesContainerRef.current.scrollHeight;
         } else if (messagesEndRef.current) {
-          // Fallback au cas où la référence du conteneur n'est pas disponible
+          // Fallback
           messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
         }
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [messages, autoScrollToBottom]);
+  }, [messages, autoScrollToBottom, loading]);
 
+  // Gérer le défilement
   useEffect(() => {
     const handleScroll = () => {
       if (!messagesContainerRef.current) return;
 
       const isBottom = isScrolledToBottom();
       setIsAtBottom(isBottom);
-
-      // Afficher/masquer le bouton de retour en bas
       setShowScrollToBottom(!isBottom);
 
-      // Si l'utilisateur défile vers le bas et atteint le bas, réinitialiser
-      // le compteur de nouveaux messages et masquer la bannière
+      // Si l'utilisateur atteint le bas, réinitialiser le compteur
       if (isBottom && newMessagesCount > 0) {
         setNewMessagesCount(0);
         setShowNewMessagesBanner(false);
@@ -404,25 +471,13 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     const container = messagesContainerRef.current;
     if (container) {
       container.addEventListener("scroll", handleScroll);
-
       return () => {
         container.removeEventListener("scroll", handleScroll);
       };
     }
   }, [isScrolledToBottom, newMessagesCount]);
 
-  useEffect(() => {
-    if (
-      !loading &&
-      autoScrollToBottom &&
-      messages.length > 0 &&
-      messagesContainerRef.current
-    ) {
-      messagesContainerRef.current.scrollTop =
-        messagesContainerRef.current.scrollHeight;
-    }
-  }, [loading, autoScrollToBottom, messages.length]);
-
+  // Mise en évidence des messages
   useEffect(() => {
     if (highlightMessageId && !loading && messages.length > 0) {
       setMessagesToHighlight(new Set([highlightMessageId]));
@@ -435,10 +490,12 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
       }
 
+      // Nettoyer le timeout existant s'il y en a un
       if (highlightTimeouts.current[highlightMessageId]) {
         clearTimeout(highlightTimeouts.current[highlightMessageId]);
       }
 
+      // Définir un nouveau timeout
       highlightTimeouts.current[highlightMessageId] = setTimeout(() => {
         setMessagesToHighlight((prev) => {
           const updated = new Set(prev);
@@ -450,8 +507,9 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         setHighlightMessageId(undefined);
       }, 3000);
     }
-  }, [highlightMessageId, loading, messages.length]);
+  }, [highlightMessageId, loading, messages.length, setHighlightMessageId]);
 
+  // Marquer le canal comme lu
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
@@ -463,10 +521,10 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       }
     };
 
-    // Marquer comme lu immédiatement au chargement
+    // Marquer comme lu immédiatement
     void markAsViewed();
 
-    // Également marquer comme lu à des intervalles réguliers si l'utilisateur reste sur le canal
+    // Également marquer comme lu périodiquement
     const interval = setInterval(() => {
       void markAsViewed();
     }, 30000); // 30 secondes
@@ -476,14 +534,14 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     };
   }, [isConnected, channelId, markChannelAsRead]);
 
-  // Load more messages (when scrolling up)
-  const loadMoreMessages = async () => {
+  // Charger plus de messages (optimisé avec useCallback)
+  const loadMoreMessages = useCallback(async () => {
     if (loadingMore || !isConnected || !channelId || messages.length === 0)
       return;
 
     setLoadingMore(true);
     try {
-      // Get messages before the first displayed message
+      // Récupérer les messages avant le premier message affiché
       const firstMessage = messages[0];
 
       const response = await service.getChannelMessages(channelId, {
@@ -491,90 +549,145 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         before: firstMessage.id,
       });
 
-      // Convert and sort the new messages
+      if (!isMounted.current) return;
+
+      // Conversion et tri des nouveaux messages
       const newPostsArray = Object.values(response.posts || {});
       const sortedNewPosts = newPostsArray.sort(
         (a, b) => a.create_at - b.create_at,
       );
 
-      // Update state with new messages
-      setMessages([...sortedNewPosts, ...messages]);
+      // Mettre à jour la map de référence
+      sortedNewPosts.forEach((post) => {
+        messageMap.current[post.id] = post;
+      });
+
+      // Mettre à jour l'état avec les nouveaux messages
+      setMessages((prevMessages) => [...sortedNewPosts, ...prevMessages]);
       setHasMoreMessages(sortedNewPosts.length >= loadMessageCount);
     } catch (err) {
+      if (!isMounted.current) return;
       console.error("Error loading more messages:", err);
       setError(
         err instanceof Error ? err.message : "Failed to load more messages",
       );
     } finally {
-      setLoadingMore(false);
+      if (isMounted.current) {
+        setLoadingMore(false);
+      }
     }
-  };
+  }, [
+    loadingMore,
+    isConnected,
+    channelId,
+    messages,
+    service,
+    loadMessageCount,
+  ]);
 
-  const scrollToBottom = () => {
+  // Fonction pour scroller vers le bas (mémorisée)
+  const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop =
         messagesContainerRef.current.scrollHeight;
       setNewMessagesCount(0);
       setShowNewMessagesBanner(false);
     }
-  };
+  }, []);
 
-  // Gestionnaire pour les réponses aux messages
-  const handleReply = (messageToReply: MessageType) => {
-    // Utiliser le contexte central pour définir le message de réponse
-    setReplyTo(messageToReply);
+  // Gestionnaire pour les réponses aux messages (mémorisé)
+  const handleReply = useCallback(
+    (messageToReply: MessageType) => {
+      // Utiliser le contexte central pour définir le message de réponse
+      setReplyTo(messageToReply);
 
-    // Mise au point sur le MessageComposer si nécessaire
-    setTimeout(() => {
-      const composerInput = document.querySelector(".message-composer-input");
-      if (composerInput) {
-        (composerInput as HTMLElement).focus();
+      // Mise au point sur le MessageComposer
+      setTimeout(() => {
+        const composerInput = document.querySelector(".message-composer-input");
+        if (composerInput) {
+          (composerInput as HTMLElement).focus();
+        }
+      }, 100);
+    },
+    [setReplyTo],
+  );
+
+  // Gestionnaire pour l'édition d'un message (mémorisé)
+  const handleEditMessage = useCallback(
+    async (messageToEdit: MessageType) => {
+      if (!service.editMessage) {
+        console.error("Edit message functionality not available");
+        return;
       }
-    }, 100);
-  };
 
-  // Gestionnaire pour l'édition d'un message
-  const handleEditMessage = async (messageToEdit: MessageType) => {
-    if (!service.editMessage) {
-      console.error("Edit message functionality not available");
-      return;
-    }
+      try {
+        console.log("Editing message:", messageToEdit);
+        // Dans une implémentation complète, vous pourriez:
+        // 1. Ouvrir une boîte de dialogue avec le texte actuel
+        // 2. Permettre à l'utilisateur de modifier le texte
+        // 3. Envoyer la mise à jour via l'API
+        // const updatedMessage = await service.editMessage(messageToEdit.id, newText);
+        // 4. Mettre à jour l'état local des messages
+      } catch (error) {
+        console.error("Error editing message:", error);
+      }
+    },
+    [service.editMessage],
+  );
 
-    try {
-      // Pour l'instant, cette fonction pourrait ouvrir une boîte de dialogue d'édition
-      // Ou implémenter l'édition en ligne
-      console.log("Editing message:", messageToEdit);
+  // Gestionnaire pour la suppression d'un message (mémorisé)
+  const handleDeleteMessage = useCallback(
+    async (messageToDelete: MessageType) => {
+      if (!service.deleteMessage) {
+        console.error("Delete message functionality not available");
+        return;
+      }
 
-      // Dans une implémentation complète, vous pourriez:
-      // 1. Ouvrir une boîte de dialogue avec le texte actuel
-      // 2. Permettre à l'utilisateur de modifier le texte
-      // 3. Envoyer la mise à jour via l'API
-      // const updatedMessage = await service.editMessage(messageToEdit.id, newText);
+      try {
+        await service.deleteMessage(messageToDelete.id);
 
-      // 4. Mettre à jour l'état local des messages
-      // setMessages(messages.map(msg => msg.id === updatedMessage.id ? updatedMessage : msg));
-    } catch (error) {
-      console.error("Error editing message:", error);
-    }
-  };
+        // Supprimer de la map de référence
+        delete messageMap.current[messageToDelete.id];
 
-  // Gestionnaire pour la suppression d'un message
-  const handleDeleteMessage = async (messageToDelete: MessageType) => {
-    if (!service.deleteMessage) {
-      console.error("Delete message functionality not available");
-      return;
-    }
+        // Mettre à jour la liste des messages
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg.id !== messageToDelete.id),
+        );
+      } catch (error) {
+        console.error("Error deleting message:", error);
+        setError("Failed to delete message. Please try again.");
+      }
+    },
+    [service.deleteMessage],
+  );
 
-    try {
-      await service.deleteMessage(messageToDelete.id);
-
-      // Mettre à jour la liste des messages en retirant le message supprimé
-      setMessages(messages.filter((msg) => msg.id !== messageToDelete.id));
-    } catch (error) {
-      console.error("Error deleting message:", error);
-      setError("Failed to delete message. Please try again.");
-    }
-  };
+  // Mémorisation de la liste de messages pour éviter des re-renders inutiles
+  const messageListMemo = useMemo(
+    () => (
+      <MessageList
+        messages={messages}
+        readOnly={readOnly}
+        currentUserId={userIdToUse}
+        messageRenderer={messageRenderer}
+        handleReply={handleReply}
+        handleEditMessage={handleEditMessage}
+        handleDeleteMessage={handleDeleteMessage}
+        messagesToHighlight={messagesToHighlight}
+        messageProps={messageProps}
+      />
+    ),
+    [
+      messages,
+      readOnly,
+      userIdToUse,
+      messageRenderer,
+      handleReply,
+      handleEditMessage,
+      handleDeleteMessage,
+      messagesToHighlight,
+      messageProps,
+    ],
+  );
 
   return (
     <Box
@@ -626,17 +739,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
 
             <Box sx={{ flexGrow: 1 }}>
               {/* Message list */}
-              <MessageList
-                messages={messages}
-                readOnly={readOnly}
-                currentUserId={userIdToUse}
-                messageRenderer={messageRenderer}
-                handleReply={handleReply}
-                handleEditMessage={handleEditMessage}
-                handleDeleteMessage={handleDeleteMessage}
-                messagesToHighlight={messagesToHighlight}
-                messageProps={messageProps}
-              />
+              {messageListMemo}
               <div ref={messagesEndRef} />
             </Box>
           </>

@@ -1,5 +1,11 @@
 // src/components/team/TeamSelector/TeamSelector.tsx
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { Team } from "../../../types";
 
@@ -63,6 +69,9 @@ export interface TeamSelectorProps {
 
   /** Custom styling for selected team */
   selectedTeamSx?: SxProps<Theme>;
+
+  /** Currently selected team ID */
+  selectedTeamId?: string;
 }
 
 /**
@@ -81,6 +90,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   sx,
   teamItemSx,
   selectedTeamSx,
+  selectedTeamId,
 }) => {
   const {
     isConnected,
@@ -96,14 +106,46 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   const [teamUnreadCounts, setTeamUnreadCounts] = useState<
     Record<string, { msg_count: number; mention_count: number }>
   >({});
-  // Load teams when component mounts
+
+  // Référence pour les appels fetchTeams
+  const fetchingRef = useRef<boolean>(false);
+  const teamsLoadedRef = useRef<boolean>(false);
+
+  // 1. Mémoriser la fonction de sélection d'équipe avec useCallback
+  const handleTeamSelect = useCallback(
+    (team: Team) => {
+      setActiveTeam(team);
+      if (onSelectTeam) {
+        onSelectTeam(team);
+      }
+    },
+    [onSelectTeam, setActiveTeam],
+  );
+
+  // 2. Optimiser le chargement des équipes pour éviter les appels redondants
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected || fetchingRef.current) return;
+
+    // Référence pour savoir si le composant est toujours monté
+    let isMounted = true;
 
     const fetchTeams = async () => {
-      setLoading(true);
+      // Éviter les appels en parallèle
+      if (fetchingRef.current) return;
+      fetchingRef.current = true;
+
+      // Afficher le chargement seulement si nous n'avons pas déjà des équipes
+      if (!teamsLoadedRef.current) {
+        setLoading(true);
+      }
+
       try {
+        console.debug("Fetching teams data");
         const teamsData = await service.getTeams();
+
+        // Vérifier si le composant est toujours monté
+        if (!isMounted) return;
+
         if (teamsData && teamsData.length > 0) {
           // Sort teams if needed
           let sortedTeams = [...teamsData];
@@ -114,25 +156,60 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
           }
 
           setTeams(sortedTeams);
-          setActiveTeam(sortedTeams[0]);
+          teamsLoadedRef.current = true;
+
+          // Seulement définir une équipe active s'il n'y en a pas déjà une
+          if (!activeTeam && !selectedTeamId) {
+            setActiveTeam(sortedTeams[0]);
+          } else if (selectedTeamId) {
+            // Si selectedTeamId est fourni, l'utiliser pour sélectionner l'équipe
+            const selectedTeam = sortedTeams.find(
+              (t) => t.id === selectedTeamId,
+            );
+            if (selectedTeam) {
+              setActiveTeam(selectedTeam);
+            }
+          }
+
           setError(null);
         }
       } catch (err) {
+        if (!isMounted) return;
         console.error("Error loading teams:", err);
         setError(err instanceof Error ? err.message : "Failed to load teams");
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
       }
     };
 
     void fetchTeams();
-  }, [isConnected, useServerOrder, service]);
 
-  // Fonction pour récupérer les non-lus pour toutes les équipes
+    // Nettoyage pour éviter les mises à jour sur un composant démonté
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    isConnected,
+    useServerOrder,
+    service,
+    activeTeam,
+    setActiveTeam,
+    selectedTeamId,
+  ]);
+
+  // 3. Fonction optimisée pour récupérer les non-lus pour toutes les équipes
   const fetchTeamUnreadCounts = useCallback(async () => {
     if (!isConnected || !service || teams.length === 0 || !currentUser) return;
-    console.debug("fetch team unreadCount");
+
+    // Éviter les appels redondants si déjà en cours
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
     try {
+      console.debug("Fetching team unread counts");
       const unreadCounts: Record<
         string,
         { msg_count: number; mention_count: number }
@@ -157,41 +234,50 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
         "Erreur lors de la récupération des non-lus par équipe:",
         error,
       );
+    } finally {
+      fetchingRef.current = false;
     }
   }, [isConnected, service, teams, currentUser]);
 
-  // Récupération initiale des non-lus
+  // 4. Récupération initiale des non-lus - avec vérification de montage
   useEffect(() => {
-    if (teams.length > 0) {
-      void fetchTeamUnreadCounts();
-    }
-  }, [teams, fetchTeamUnreadCounts]);
+    if (teams.length === 0 || !isConnected) return;
 
-  // S'abonner aux mises à jour de l'état des non-lus
+    let isMounted = true;
+
+    const loadUnreadCounts = async () => {
+      await fetchTeamUnreadCounts();
+      if (!isMounted) return;
+    };
+
+    void loadUnreadCounts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [teams.length, isConnected, fetchTeamUnreadCounts]);
+
+  // 5. S'abonner aux mises à jour de l'état des non-lus - optimisé pour une seule inscription
   useEffect(() => {
-    // Fonction de gestionnaire d'événements
+    if (!notificationService) return;
+
+    // Fonction de gestionnaire d'événements - définie une seule fois
     const handleUnreadUpdated = () => {
-      // Quand les non-lus sont mis à jour, récupérer les informations à jour
       void fetchTeamUnreadCounts();
     };
 
-    // S'abonner aux mises à jour
-    return notificationService.addEventListener(
+    // S'abonner aux mises à jour une seule fois
+    const unsubscribe = notificationService.addEventListener(
       "unread_updated",
       handleUnreadUpdated,
     );
-  }, [fetchTeamUnreadCounts]);
 
-  // Handle team selection
-  const handleTeamSelect = (team: Team) => {
-    setActiveTeam(team);
-    if (onSelectTeam) {
-      onSelectTeam(team);
-    }
-  };
+    // Nettoyer l'abonnement à la désactivation du composant
+    return unsubscribe;
+  }, [notificationService, fetchTeamUnreadCounts]);
 
-  // Render loading skeletons
-  const renderSkeletons = () => {
+  // 6. Fonction mémorisée pour le rendu des skeletons
+  const renderSkeletons = useCallback(() => {
     // Return different skeleton layouts based on variant
     switch (variant) {
       case "grid":
@@ -264,13 +350,13 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
           </Box>
         );
     }
-  };
+  }, [variant]);
 
-  // Render the appropriate variant
-  const renderVariant = useCallback(() => {
+  // 7. Mémoriser le rendu des variantes avec useMemo pour éviter les re-renders inutiles
+  const renderedVariant = useMemo(() => {
     const sharedProps = {
       teams,
-      selectedTeamId: activeTeam?.id,
+      selectedTeamId: selectedTeamId || activeTeam?.id,
       onSelectTeam: handleTeamSelect,
       showIcons,
       showDescriptions,
@@ -278,7 +364,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
       maxNameLength,
       teamItemSx,
       selectedTeamSx,
-      teamUnreadCounts, // Ajouter les compteurs de non-lus aux props partagées
+      teamUnreadCounts,
     };
 
     switch (variant) {
@@ -292,7 +378,47 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
       default:
         return <TeamList {...sharedProps} />;
     }
-  }, [activeTeam]);
+  }, [
+    teams,
+    activeTeam?.id,
+    selectedTeamId,
+    handleTeamSelect,
+    showIcons,
+    showDescriptions,
+    showMemberCount,
+    maxNameLength,
+    teamItemSx,
+    selectedTeamSx,
+    teamUnreadCounts,
+    variant,
+  ]);
+
+  // Rendu principal avec mémoisations
+  const renderContent = useMemo(() => {
+    if (loading) {
+      return renderSkeletons();
+    }
+
+    if (error) {
+      return (
+        <Alert severity="error" sx={{ m: 1 }}>
+          {error}
+        </Alert>
+      );
+    }
+
+    if (teams.length === 0) {
+      return (
+        <Box sx={{ p: 2, textAlign: "center" }}>
+          <Typography component={"div"} variant="body2" color="text.secondary">
+            No teams available
+          </Typography>
+        </Box>
+      );
+    }
+
+    return renderedVariant;
+  }, [loading, error, teams.length, renderSkeletons, renderedVariant]);
 
   return (
     <Box
@@ -307,23 +433,9 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
         ...sx,
       }}
     >
-      {loading ? (
-        renderSkeletons()
-      ) : error ? (
-        <Alert severity="error" sx={{ m: 1 }}>
-          {error}
-        </Alert>
-      ) : teams.length === 0 ? (
-        <Box sx={{ p: 2, textAlign: "center" }}>
-          <Typography component={"div"} variant="body2" color="text.secondary">
-            No teams available
-          </Typography>
-        </Box>
-      ) : (
-        renderVariant()
-      )}
+      {renderContent}
     </Box>
   );
 };
 
-export default TeamSelector;
+export default React.memo(TeamSelector);

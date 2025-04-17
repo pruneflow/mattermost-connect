@@ -23,12 +23,17 @@ const CONFIG = {
 };
 
 /**
- * Classe Singleton pour gérer une seule instance de connexion WebSocket
+ * Classe Singleton pour gérer une seule instance de connexion WebSocket par URL/token
  */
 class WebSocketSingleton {
   private static instance: WebSocketSingleton | null = null;
   private connections: Map<string, WebSocketConnection> = new Map();
-  private clientCount: Map<string, number> = new Map();
+
+  // Nouveau compteur de références pour les connexions
+  private connectionRefs: Map<string, number> = new Map();
+
+  // Nouvel état pour les tentatives de reconnexion en cours
+  private reconnecting: Set<string> = new Set();
 
   /**
    * Obtient l'instance unique du singleton
@@ -56,6 +61,7 @@ class WebSocketSingleton {
 
   /**
    * Obtient ou crée une connexion WebSocket
+   * Utilise un système de comptage de références pour gérer la durée de vie des connexions
    */
   public async getConnection(
     options: WebSocketSetupOptions,
@@ -63,10 +69,12 @@ class WebSocketSingleton {
     const { serverUrl, token } = options;
     const connectionKey = this.getConnectionKey(serverUrl, token);
 
-    // Incrémenter le compteur de clients pour cette connexion
-    this.clientCount.set(
-      connectionKey,
-      (this.clientCount.get(connectionKey) || 0) + 1,
+    // Incrémenter le compteur de références pour cette connexion
+    const currentRefCount = this.connectionRefs.get(connectionKey) || 0;
+    this.connectionRefs.set(connectionKey, currentRefCount + 1);
+
+    console.debug(
+      `Connection ref count for ${connectionKey}: ${this.connectionRefs.get(connectionKey)}`,
     );
 
     // Si une connexion existe déjà, la réutiliser
@@ -77,8 +85,11 @@ class WebSocketSingleton {
 
       const existingConnection = this.connections.get(connectionKey)!;
 
-      // Si la connexion est fermée, la recréer
-      if (existingConnection.getState() === WebSocket.CLOSED) {
+      // Si la connexion est fermée et qu'aucune reconnexion n'est en cours, la recréer
+      if (
+        existingConnection.getState() === WebSocket.CLOSED &&
+        !this.reconnecting.has(connectionKey)
+      ) {
         console.debug(
           `Existing connection is closed, recreating for ${connectionKey}`,
         );
@@ -113,14 +124,15 @@ class WebSocketSingleton {
 
   /**
    * Libère une connexion WebSocket
+   * Ne ferme la connexion que lorsque plus aucun client ne l'utilise
    */
   public releaseConnection(serverUrl: string, token: string): void {
     const connectionKey = this.getConnectionKey(serverUrl, token);
 
-    // Décrémenter le compteur de clients
-    const count = (this.clientCount.get(connectionKey) || 1) - 1;
+    // Décrémenter le compteur de références
+    const refCount = (this.connectionRefs.get(connectionKey) || 1) - 1;
 
-    if (count <= 0) {
+    if (refCount <= 0) {
       // Si plus aucun client n'utilise cette connexion, la fermer
       console.debug(
         `Closing WebSocket connection for ${connectionKey} - no more clients`,
@@ -132,11 +144,14 @@ class WebSocketSingleton {
         this.connections.delete(connectionKey);
       }
 
-      this.clientCount.delete(connectionKey);
+      this.connectionRefs.delete(connectionKey);
+      this.reconnecting.delete(connectionKey);
     } else {
       // Sinon, mettre à jour le compteur
-      this.clientCount.set(connectionKey, count);
-      console.debug(`${count} clients still using connection ${connectionKey}`);
+      this.connectionRefs.set(connectionKey, refCount);
+      console.debug(
+        `${refCount} clients still using connection ${connectionKey}`,
+      );
     }
   }
 
@@ -264,13 +279,18 @@ class WebSocketSingleton {
 
     /**
      * Reconnects with exponential backoff
+     * Maintenant avec suivi des reconnexions en cours
      */
     const reconnectWithBackoff = async () => {
+      // Marquer cette connexion comme en cours de reconnexion
+      this.reconnecting.add(connectionId);
+
       if (
         isReconnecting ||
         isClosedIntentionally ||
         reconnectAttempt >= CONFIG.MAX_RECONNECT_ATTEMPTS
       ) {
+        this.reconnecting.delete(connectionId);
         return;
       }
 
@@ -290,6 +310,16 @@ class WebSocketSingleton {
       try {
         // Wait for backoff delay
         await new Promise((resolve) => setTimeout(resolve, delay));
+
+        // Only attempt reconnection if we still have active references
+        const refCount = this.connectionRefs.get(connectionId) || 0;
+        if (refCount <= 0) {
+          console.debug(
+            `[WebSocket ${connectionId}] No more active references, skipping reconnection`,
+          );
+          this.reconnecting.delete(connectionId);
+          return;
+        }
 
         // Create and setup a new socket
         await setupSocketConnection();
@@ -311,6 +341,7 @@ class WebSocketSingleton {
           console.error(
             `[WebSocket ${connectionId}] Maximum reconnection attempts (${CONFIG.MAX_RECONNECT_ATTEMPTS}) reached`,
           );
+          this.reconnecting.delete(connectionId);
         }
       } finally {
         isReconnecting = false;
@@ -352,6 +383,9 @@ class WebSocketSingleton {
               console.debug(
                 `[WebSocket ${connectionId}] Authentication successful`,
               );
+
+              // On succès d'authentification, on n'est plus en cours de reconnexion
+              this.reconnecting.delete(connectionId);
             }
             // Pass messages to callback
             else if (onMessage) {
@@ -442,8 +476,8 @@ class WebSocketSingleton {
           socket.close(1000, "Connection closed by client");
         }
 
-        // Supprimer cette connexion du singleton
-        this.connections.delete(connectionId);
+        // Supprimer les états de reconnexion
+        this.reconnecting.delete(connectionId);
       },
 
       // Send a custom message

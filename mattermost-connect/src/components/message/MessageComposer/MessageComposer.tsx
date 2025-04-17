@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { Box, Collapse, Fade, SxProps, Theme, Typography } from "@mui/material";
 import { ReplyContext } from "./components/ReplyContext";
@@ -43,6 +49,27 @@ export interface MessageComposerProps {
   sx?: SxProps<Theme>;
 }
 
+/**
+ * Fonction utilitaire de debounce pour limiter les appels de fonctions
+ */
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number,
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+
+  return function (...args: Parameters<T>) {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+
+    timeout = setTimeout(() => {
+      func(...args);
+      timeout = null;
+    }, wait);
+  };
+}
+
 const MessageComposer: React.FC<MessageComposerProps> = ({
   channelId,
   placeholder = "Type a message...",
@@ -57,8 +84,9 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 }) => {
   const { service, replyTo, clearReply, isReplying } = useMattermost();
 
-  // État
+  // État avec référence pour optimiser les performances de saisie
   const [message, setMessage] = useState(initialText);
+  const messageRef = useRef<string>(initialText);
   const [attachmentStatus, setAttachmentStatus] = useState<FileUploadStatus[]>(
     [],
   );
@@ -72,6 +100,18 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
   const isSubmittingRef = useRef(false);
 
+  // Mise à jour de la référence (immédiate) et de l'état (debounced)
+  const updateMessage = (value: string) => {
+    messageRef.current = value;
+  };
+
+  // Création d'une fonction debounced qui sera réutilisée
+  const debouncedSetMessage = useRef(
+    debounce((value: string) => {
+      setMessage(value);
+    }, 100), // Délai de 100ms
+  ).current;
+
   const files = attachmentStatus.map((status) => status.file);
   // Propriétés calculées
   const hasUploadsInProgress = attachmentStatus.some(
@@ -82,9 +122,8 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     .map((status) => status.mattermostFile!.id);
 
   // Vérifier si le message est vide (pour désactiver le bouton d'envoi)
-  const isEmpty = !message.trim() && attachmentStatus.length === 0;
+  const isEmpty = !messageRef.current.trim() && attachmentStatus.length === 0;
 
-  // Effets
   // Focus sur le champ de texte à l'initialisation
   useEffect(() => {
     if (textFieldRef.current) {
@@ -95,12 +134,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   // Reset when the channel changes
   useEffect(() => {
     setMessage(initialText);
-    setAttachmentStatus([]);
-    setError(null);
-  }, [channelId, initialText]);
-
-  useEffect(() => {
-    setMessage(initialText);
+    messageRef.current = initialText;
     setAttachmentStatus([]);
     setError(null);
   }, [channelId, initialText]);
@@ -197,52 +231,60 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   }, [attachmentStatus, uploadInProgress, service, channelId]);
 
-  // Gestionnaires d'événements
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const newFiles = Array.from(event.target.files);
-      setAttachmentStatus((prev) => [
-        ...prev,
-        ...newFiles.map((file) => ({
-          file,
-          uploading: false,
-          uploaded: false,
-        })),
-      ]);
-    }
-  };
+  // Gestionnaires d'événements optimisés avec useCallback
+  const handleFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files) {
+        const newFiles = Array.from(event.target.files);
+        setAttachmentStatus((prev) => [
+          ...prev,
+          ...newFiles.map((file) => ({
+            file,
+            uploading: false,
+            uploaded: false,
+          })),
+        ]);
+      }
+    },
+    [],
+  );
 
-  const handleAttachmentClick = () => {
+  const handleAttachmentClick = useCallback(() => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
-  };
+  }, []);
 
-  const handleRemoveAttachment = (fileToRemove: File) => {
+  const handleRemoveAttachment = useCallback((fileToRemove: File) => {
     setAttachmentStatus((prev) =>
       prev.filter((status) => status.file !== fileToRemove),
     );
-  };
+  }, []);
 
-  const handleEmojiSelect = (result: EmojiSelectionResult) => {
-    setMessage((prev) => prev + result.emoji);
+  const handleEmojiSelect = useCallback((result: EmojiSelectionResult) => {
+    const newMessage = messageRef.current + result.emoji;
+    updateMessage(newMessage);
+    setMessage(newMessage);
     setShowEmojiPicker(false);
     if (textFieldRef.current) {
       textFieldRef.current.focus();
     }
-  };
+  }, []);
 
-  const toggleEmojiPicker = () => {
+  const toggleEmojiPicker = useCallback(() => {
     setShowEmojiPicker((prev) => !prev);
-  };
+  }, []);
 
-  const closeEmojiPicker = () => {
+  const closeEmojiPicker = useCallback(() => {
     setShowEmojiPicker(false);
-  };
+  }, []);
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async () => {
+    // Utiliser messageRef pour avoir la valeur la plus récente
+    const currentMessage = messageRef.current;
+
     // Validation de base
-    if (!message.trim() && attachmentStatus.length === 0) return;
+    if (!currentMessage.trim() && attachmentStatus.length === 0) return;
 
     // Protection contre les soumissions multiples
     if (isSubmittingRef.current || sending) return;
@@ -259,7 +301,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     if (mode === MessageComposerMode.MANUAL) {
       try {
         const messageData: MessageData = {
-          message: message.trim(),
+          message: currentMessage.trim(),
           channelId,
           attachments: files,
           fileIds: uploadedFileIds,
@@ -273,6 +315,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
         // Réinitialiser l'état
         setMessage("");
+        updateMessage("");
         setAttachmentStatus([]);
 
         // Effacer l'état de réponse
@@ -301,7 +344,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           await service.replyToMessage(
             channelId,
             replyTo.id,
-            message,
+            currentMessage,
             uploadedFileIds,
           );
         } else {
@@ -309,16 +352,17 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         }
       } else {
         // Message normal avec les IDs de fichiers uploadés
-        await service.postMessage(channelId, message, uploadedFileIds);
+        await service.postMessage(channelId, currentMessage, uploadedFileIds);
       }
 
       // Reset state
       setMessage("");
+      updateMessage("");
       setAttachmentStatus([]);
 
       // Call the callback if provided (in auto mode, just the message text)
       if (onMessageSent) {
-        (onMessageSent as (message: string) => void)(message);
+        (onMessageSent as (message: string) => void)(currentMessage);
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -334,14 +378,95 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       // Réinitialiser le verrou de soumission
       isSubmittingRef.current = false;
     }
-  };
+  }, [
+    attachmentStatus.length,
+    sending,
+    hasUploadsInProgress,
+    mode,
+    channelId,
+    files,
+    uploadedFileIds,
+    isReplying,
+    replyTo,
+    onMessageSent,
+    clearReply,
+    service,
+  ]);
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void handleSendMessage();
-    }
-  };
+  const handleKeyPress = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        void handleSendMessage();
+      }
+    },
+    [handleSendMessage],
+  );
+
+  // Composants mémorisés pour éviter les re-renders inutiles
+  const memoizedAttachmentPreview = useMemo(
+    () => (
+      <AttachmentPreview
+        attachmentStatus={attachmentStatus}
+        handleRemoveAttachment={handleRemoveAttachment}
+      />
+    ),
+    [attachmentStatus, handleRemoveAttachment],
+  );
+
+  const memoizedComposerInput = useMemo(
+    () => (
+      <ComposerInput
+        placeholder={placeholder}
+        message={message}
+        setMessage={(value) => {
+          updateMessage(value);
+          debouncedSetMessage(value);
+        }}
+        disabled={disabled}
+        sending={sending}
+        textFieldRef={textFieldRef}
+        handleKeyPress={handleKeyPress}
+      />
+    ),
+    [
+      placeholder,
+      message, // L'état s'actualise moins fréquemment grâce au debounce
+      disabled,
+      sending,
+      handleKeyPress,
+    ],
+  );
+
+  const memoizedComposerToolbar = useMemo(
+    () => (
+      <ComposerToolbar
+        allowAttachments={allowAttachments}
+        disabled={disabled}
+        sending={sending}
+        hasUploadsInProgress={hasUploadsInProgress}
+        isEmpty={isEmpty}
+        fileInputRef={fileInputRef}
+        uploadInProgress={uploadInProgress}
+        toggleEmojiPicker={toggleEmojiPicker}
+        handleAttachmentClick={handleAttachmentClick}
+        handleSendMessage={handleSendMessage}
+        handleFileChange={handleFileChange}
+      />
+    ),
+    [
+      allowAttachments,
+      disabled,
+      sending,
+      hasUploadsInProgress,
+      isEmpty,
+      uploadInProgress,
+      toggleEmojiPicker,
+      handleAttachmentClick,
+      handleSendMessage,
+      handleFileChange,
+    ],
+  );
 
   return (
     <Box
@@ -364,38 +489,15 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       </Collapse>
 
       {/* Prévisualisation des pièces jointes */}
-      <AttachmentPreview
-        attachmentStatus={attachmentStatus}
-        handleRemoveAttachment={handleRemoveAttachment}
-      />
+      {memoizedAttachmentPreview}
 
       {/* Zone de saisie du message */}
       <Box sx={{ display: "flex", alignItems: "flex-end" }}>
         {/* Champ de texte */}
-        <ComposerInput
-          placeholder={placeholder}
-          message={message}
-          setMessage={setMessage}
-          disabled={disabled}
-          sending={sending}
-          textFieldRef={textFieldRef}
-          handleKeyPress={handleKeyPress}
-        />
+        {memoizedComposerInput}
 
         {/* Barre d'outils */}
-        <ComposerToolbar
-          allowAttachments={allowAttachments}
-          disabled={disabled}
-          sending={sending}
-          hasUploadsInProgress={hasUploadsInProgress}
-          isEmpty={isEmpty}
-          fileInputRef={fileInputRef}
-          uploadInProgress={uploadInProgress}
-          toggleEmojiPicker={toggleEmojiPicker}
-          handleAttachmentClick={handleAttachmentClick}
-          handleSendMessage={handleSendMessage}
-          handleFileChange={handleFileChange}
-        />
+        {memoizedComposerToolbar}
       </Box>
 
       {/* Message d'erreur */}
@@ -433,4 +535,4 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   );
 };
 
-export default MessageComposer;
+export default React.memo(MessageComposer);

@@ -222,6 +222,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
     if (!isConnected || !filteredChannels || !service?.getUsers) return;
 
     const loadDirectMessageUsers = async () => {
+      console.debug("loadDirectMessageUsers");
       // Identifier les canaux directs
       const directChannels = filteredChannels.filter(
         (c) => c.type === "D" || c.type === "G",

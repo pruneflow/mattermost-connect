@@ -29,8 +29,8 @@ import type {
   WebSocketConnection,
 } from "../types";
 import {
-  setupWebsocket,
   releaseWebsocket,
+  setupWebsocket,
 } from "../services/websocket.service";
 import {
   Notification,
@@ -262,11 +262,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Charge les utilisateurs de l'équipe active et les ajoute au cache global
+   * Optimisé avec useCallback pour éviter les recréations inutiles
    */
   const loadTeamUsers = useCallback(
     async (teamId: string) => {
       if (!service || !isConnected) return;
-
+      console.debug("loadTeamUsers");
       try {
         // Marquer le début du chargement
         const fetchStart = Date.now();
@@ -315,11 +316,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Charge tous les utilisateurs impliqués dans des canaux de messages directs
+   * Optimisé avec useCallback
    */
   const loadDirectMessageUsers = useCallback(
     async (channels: Channel[]) => {
       if (!service || !isConnected || !currentUser) return;
-
+      console.debug("loadDirectMessageUsers");
       try {
         // Filtrer les canaux de type direct (D) ou groupe (G)
         const directChannels = channels.filter(
@@ -373,11 +375,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Charge un utilisateur spécifique par son ID s'il n'est pas déjà dans le cache
+   * Optimisé avec useCallback et système de cache de requêtes
    */
   const loadUserById = useCallback(
     async (userId: string): Promise<User | null> => {
       if (!userId || !service || !isConnected) return null;
-
+      console.debug("loadUserById");
       // Si l'utilisateur est déjà dans le cache, le retourner immédiatement
       if (knownUsers[userId]) {
         return knownUsers[userId];
@@ -425,6 +428,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Obtenir un utilisateur par son ID - charge l'utilisateur si nécessaire
+   * Optimisé avec useCallback
    */
   const getUser = useCallback(
     async (userId: string): Promise<User | null> => {
@@ -443,6 +447,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Obtenir le nom formaté d'un utilisateur par son ID
+   * Optimisé avec useCallback
    */
   const getUserDisplayName = useCallback(
     (userId: string): string => {
@@ -461,6 +466,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Vérifier si un utilisateur est en train de taper dans un canal spécifique
+   * Optimisé avec useCallback
    */
   const isUserTyping = useCallback(
     (channelId: string, userId: string): boolean => {
@@ -472,6 +478,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Obtenir la liste des utilisateurs qui tapent dans un canal spécifique
+   * Optimisé avec useCallback
    */
   const getTypingUsersForChannel = useCallback(
     (channelId: string): string[] => {
@@ -483,6 +490,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   /**
    * Obtenir le texte formaté pour l'indicateur de frappe
+   * Optimisé avec useCallback
    */
   const getTypingIndicatorText = useCallback(
     (channelId: string): string => {
@@ -511,7 +519,6 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     [getTypingUsersForChannel, getUserDisplayName],
   );
 
-  // Initialize the appropriate service based on mode
   useEffect(() => {
     if (!mode) {
       setError(
@@ -522,10 +529,14 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       return;
     }
 
+    // Référence pour suivre si le composant est toujours monté
+    let isMounted = true;
+
     const initService = async () => {
       try {
         console.debug("Initializing Mattermost service...");
         let localNotificationService = null;
+
         // Si un service existe déjà et que les paramètres ont changé, on nettoie l'ancien service
         if (currentServiceRef.current) {
           console.debug("Cleaning up existing service before initialization");
@@ -535,7 +546,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             currentSocketRef.current.close();
             currentSocketRef.current = null;
             socketInitializedRef.current = false;
-            setWebsocket(null);
+            if (isMounted) {
+              setWebsocket(null);
+            }
           }
         }
 
@@ -543,6 +556,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         // ou si les paramètres de configuration ont changé
         if (!serviceInitializedRef.current || !currentServiceRef.current) {
           console.debug("Creating new service instance");
+
           // Create service instance with our centralized factory
           const serviceInstance = createMattermostService({
             serverUrl,
@@ -557,16 +571,20 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           currentServiceRef.current = serviceInstance;
           serviceInitializedRef.current = true;
 
-          setService(serviceInstance);
+          if (isMounted) {
+            setService(serviceInstance);
+          }
 
           // Initialize auxiliary services with the main service
           const fileServiceInstance = createFileService(serviceInstance);
           const emojiServiceInstance = createEmojiService(serviceInstance);
           localNotificationService = new NotificationService(serviceInstance);
 
-          setNotificationService(localNotificationService);
-          setFileService(fileServiceInstance);
-          setEmojiService(emojiServiceInstance);
+          if (isMounted) {
+            setNotificationService(localNotificationService);
+            setFileService(fileServiceInstance);
+            setEmojiService(emojiServiceInstance);
+          }
         } else {
           console.debug("Using existing service instance");
           if (notificationService) {
@@ -575,7 +593,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             localNotificationService = new NotificationService(
               currentServiceRef.current,
             );
-            setNotificationService(localNotificationService);
+            if (isMounted) {
+              setNotificationService(localNotificationService);
+            }
           }
         }
 
@@ -584,22 +604,26 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           try {
             // Get current user - now uses caching
             const user = await currentServiceRef.current.getCurrentUser();
-            setCurrentUser(user);
-            setIsConnected(true);
-            setError(null);
+            if (isMounted) {
+              setCurrentUser(user);
+              setIsConnected(true);
+              setError(null);
+            }
 
             // Initialiser le service de notification avec l'ID utilisateur
-            if (notificationService)
+            if (notificationService) {
               notificationService.setCurrentUserId(user.id);
-            else if (localNotificationService) {
-              localNotificationService.setCurrentChannelId(user.id);
+            } else if (localNotificationService) {
+              localNotificationService.setCurrentUserId(user.id);
             }
 
             // Ajouter l'utilisateur courant aux utilisateurs connus
-            setKnownUsers((prev) => ({
-              ...prev,
-              [user.id]: user,
-            }));
+            if (isMounted) {
+              setKnownUsers((prev) => ({
+                ...prev,
+                [user.id]: user,
+              }));
+            }
 
             // If WebSocket is enabled, initialize it only if it doesn't exist
             if (enableWebsocket && !socketInitializedRef.current) {
@@ -618,12 +642,12 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                   onMessage: (msg) => {
                     console.debug("WebSocket message received:", msg);
 
-                    if (notificationService)
-                      notificationService!.processWebSocketEvent(
+                    if (notificationService) {
+                      notificationService.processWebSocketEvent(
                         msg as WebSocketEvent,
                       );
-                    else if (localNotificationService) {
-                      localNotificationService!.processWebSocketEvent(
+                    } else if (localNotificationService) {
+                      localNotificationService.processWebSocketEvent(
                         msg as WebSocketEvent,
                       );
                     }
@@ -634,7 +658,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                   },
                   onClose: (closeEvent) => {
                     console.log("WebSocket closed:", closeEvent);
-                    setWebsocket(null);
+                    if (isMounted) {
+                      setWebsocket(null);
+                    }
                     socketInitializedRef.current = false;
                     currentSocketRef.current = null;
                     // Consider reconnecting or showing a connection lost message
@@ -643,7 +669,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
                 currentSocketRef.current = ws;
                 socketInitializedRef.current = true;
-                setWebsocket(ws);
+                if (isMounted) {
+                  setWebsocket(ws);
+                }
                 console.debug("WebSocket connection established successfully");
               } catch (wsError) {
                 console.error("Failed to initialize WebSocket:", wsError);
@@ -659,30 +687,33 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
                 ? connErr.message
                 : "Unable to connect to Mattermost server";
 
-            setError(new Error(errorMessage));
-            setIsConnected(false);
-            setCurrentUser(null);
+            if (isMounted) {
+              setError(new Error(errorMessage));
+              setIsConnected(false);
+              setCurrentUser(null);
+            }
           }
         } else if (mode === "custom" && serviceProvider?.currentUser) {
           // For custom services that provide a current user
-          setCurrentUser(serviceProvider.currentUser);
-          setIsConnected(true);
+          if (isMounted) {
+            setCurrentUser(serviceProvider.currentUser);
+            setIsConnected(true);
+          }
 
           // Initialiser le service de notification avec l'ID utilisateur
-
           if (serviceProvider.currentUser.id) {
-            if (notificationService)
-              notificationService!.setCurrentUserId(
+            if (notificationService) {
+              notificationService.setCurrentUserId(
                 serviceProvider.currentUser.id,
               );
-            else if (localNotificationService) {
-              localNotificationService!.setCurrentUserId(
+            } else if (localNotificationService) {
+              localNotificationService.setCurrentUserId(
                 serviceProvider.currentUser.id,
               );
             }
 
             // Ajouter l'utilisateur courant aux utilisateurs connus
-            if (serviceProvider.currentUser) {
+            if (serviceProvider.currentUser && isMounted) {
               setKnownUsers((prev) => ({
                 ...prev,
                 [serviceProvider.currentUser!.id]:
@@ -692,7 +723,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           }
 
           // If the custom service provides a user cache
-          if ((currentServiceRef.current as any)._currentUser) {
+          if ((currentServiceRef.current as any)._currentUser && isMounted) {
             setCurrentUser((currentServiceRef.current as any)._currentUser);
           }
         }
@@ -701,6 +732,8 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         // This is useful for keeping status, permissions, etc. up to date
         if (refreshInterval > 0 && currentServiceRef.current) {
           const intervalId = setInterval(async () => {
+            if (!isMounted) return;
+
             try {
               // If the service implements refreshCurrentUser, use it
               if (
@@ -710,13 +743,15 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
               ) {
                 const freshUser =
                   await currentServiceRef.current.refreshCurrentUser();
-                setCurrentUser(freshUser);
+                if (isMounted) {
+                  setCurrentUser(freshUser);
 
-                // Mettre à jour l'utilisateur dans la liste des utilisateurs connus
-                setKnownUsers((prev) => ({
-                  ...prev,
-                  [freshUser.id]: freshUser,
-                }));
+                  // Mettre à jour l'utilisateur dans la liste des utilisateurs connus
+                  setKnownUsers((prev) => ({
+                    ...prev,
+                    [freshUser.id]: freshUser,
+                  }));
+                }
               }
             } catch (refreshError) {
               console.warn("Error refreshing user:", refreshError);
@@ -733,17 +768,21 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             ? err.message
             : "Unable to initialize Mattermost service";
 
-        setError(new Error(errorMessage));
-        setIsConnected(false);
-        setCurrentUser(null);
+        if (isMounted) {
+          setError(new Error(errorMessage));
+          setIsConnected(false);
+          setCurrentUser(null);
+        }
       }
     };
-
+    console.debug("initService");
     void initService();
 
     // Cleanup on unmount
     return () => {
+      isMounted = false;
       console.debug("MattermostProvider cleanup");
+
       if (currentSocketRef.current) {
         console.debug("Releasing WebSocket connection");
 
@@ -777,35 +816,36 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     proxyUrl,
     clientId,
     userId,
-    enableWebsocket,
     serviceProvider,
-    refreshInterval,
-    service,
+    enableWebsocket,
   ]);
 
   // Écouter les nouvelles notifications pour afficher une Snackbar
   useEffect(() => {
     if (!notificationService) return;
-    // Écouter les nouvelles notifications
+
+    // Fonction de gestion des notifications pour éviter les rendus inutiles
+    const handleNotificationAdded = (notification: Notification) => {
+      // Ne pas afficher de notification si nous sommes déjà dans le canal concerné
+      if (
+        notification.channelId &&
+        activeChannel &&
+        notification.channelId === activeChannel.id
+      ) {
+        return;
+      }
+
+      // Ajouter cette notification à notre file d'attente
+      setNotifications((prev) => [notification, ...prev]);
+    };
+
     return notificationService.addEventListener(
       "notification_added",
-      (notification: Notification) => {
-        // Ne pas afficher de notification si nous sommes déjà dans le canal concerné
-        if (
-          notification.channelId &&
-          activeChannel &&
-          notification.channelId === activeChannel.id
-        ) {
-          return;
-        }
-
-        // Ajouter cette notification à notre file d'attente
-        setNotifications((prev) => [notification, ...prev]);
-      },
+      handleNotificationAdded,
     );
   }, [activeChannel, notificationService]);
 
-  // Gérer l'affichage des notifications une par une
+  // Gérer l'affichage des notifications une par une - Optimisé
   useEffect(() => {
     // Si nous n'avons pas de notification en cours d'affichage et qu'il y en a dans la file d'attente
     if (!currentNotification && notifications.length > 0) {
@@ -828,6 +868,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // Écouter les événements de frappe avec un nettoyage amélioré
   useEffect(() => {
     if (!notificationService) return;
+
     const handleTypingUpdated = (data: any) => {
       if (!data.channelId) return;
 
@@ -872,8 +913,8 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         () => {
           void loadTeamUsers(activeTeam.id);
         },
-        5 * 60 * 1000,
-      ); // 5 minutes
+        5 * 60 * 1000, // 5 minutes
+      );
     }
 
     return () => {
@@ -887,6 +928,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // Écouter les mises à jour d'utilisateurs via WebSocket
   useEffect(() => {
     if (!notificationService) return;
+
     const handleUserUpdated = (data: any) => {
       try {
         const user = data.user;
@@ -928,7 +970,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     }
   }, [isConnected, service, activeChannel, loadDirectMessageUsers]);
 
-  // Fonction pour naviguer vers un canal spécifique
+  // Fonction pour naviguer vers un canal spécifique - Optimisée avec useCallback
   const navigateToMessage = useCallback(
     async (notification: Notification) => {
       const { channelId, messageId } = notification;
@@ -989,7 +1031,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     setCurrentNotification(null);
   }, [currentNotification, navigateToMessage, notificationService]);
 
-  // Helper pour récupérer l'état non lu d'un canal
+  // Helper pour récupérer l'état non lu d'un canal - Optimisé avec useCallback
   const getChannelUnreadState = useCallback(
     (channelId: string) => {
       return (
@@ -1002,7 +1044,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     [notificationService],
   );
 
-  // Méthode pour initialiser les états non lus d'une équipe
+  // Méthode pour initialiser les états non lus d'une équipe - Optimisée avec useCallback
   const initializeTeamUnreadStates = useCallback(
     async (teamId: string, channels: Channel[]) => {
       if (
@@ -1054,6 +1096,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     [isConnected, service, notificationService],
   );
 
+  // Marquer un canal comme lu - Optimisé avec useCallback
   const markChannelAsRead = useCallback(
     async (channelId: string) => {
       if (!isConnected || !service || !channelId || !notificationService)
@@ -1077,60 +1120,93 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     [isConnected, service, notificationService],
   );
 
+  // Mémoriser la valeur du contexte pour éviter les re-renders inutiles
+  const contextValue = useMemo<MattermostContextType>(
+    () => ({
+      // State
+      mode,
+      isConnected,
+      error,
+      currentUser,
+      service: service!,
+      websocket,
+
+      // Reply functionality
+      replyTo,
+      setReplyTo,
+      clearReply,
+      isReplying,
+
+      // Additional services
+      fileService: fileService!,
+      emojiService: emojiService!,
+
+      // Navigation
+      navigateToMessage,
+      activeChannel,
+      setActiveChannel,
+
+      // Team management
+      activeTeam,
+      setActiveTeam,
+
+      // Users management
+      knownUsers,
+      getUser,
+      getUserDisplayName,
+      loadUserById,
+
+      // Typing status
+      typingUsers,
+      isUserTyping,
+      getTypingUsersForChannel,
+      getTypingIndicatorText,
+
+      // Unread status
+      getChannelUnreadState,
+      initializeTeamUnreadStates,
+      markChannelAsRead,
+
+      notificationService: notificationService!,
+
+      highlightMessageId,
+      setHighlightMessageId,
+    }),
+    [
+      // Dépendances explicites pour éviter les rendus inutiles
+      mode,
+      isConnected,
+      error,
+      currentUser,
+      service,
+      websocket,
+      replyTo,
+      setReplyTo,
+      clearReply,
+      isReplying,
+      fileService,
+      emojiService,
+      navigateToMessage,
+      activeChannel,
+      activeTeam,
+      knownUsers,
+      getUser,
+      getUserDisplayName,
+      loadUserById,
+      typingUsers,
+      isUserTyping,
+      getTypingUsersForChannel,
+      getTypingIndicatorText,
+      getChannelUnreadState,
+      initializeTeamUnreadStates,
+      markChannelAsRead,
+      notificationService,
+      highlightMessageId,
+    ],
+  );
+
   if (!service || !fileService || !emojiService || !notificationService)
     return null;
-
-  // Context value to share with child components
-  const contextValue: MattermostContextType = {
-    // State
-    mode,
-    isConnected,
-    error,
-    currentUser,
-    service,
-    websocket,
-
-    // Reply functionality
-    replyTo,
-    setReplyTo,
-    clearReply,
-    isReplying,
-
-    // Additional services
-    fileService,
-    emojiService,
-
-    // Navigation
-    navigateToMessage,
-    activeChannel,
-    setActiveChannel,
-
-    // Team management
-    activeTeam,
-    setActiveTeam,
-
-    // Users management
-    knownUsers,
-    getUser,
-    getUserDisplayName,
-    loadUserById,
-
-    // Typing status
-    typingUsers,
-    isUserTyping,
-    getTypingUsersForChannel,
-    getTypingIndicatorText,
-
-    // Unread status
-    getChannelUnreadState,
-    initializeTeamUnreadStates,
-    markChannelAsRead,
-
-    notificationService: notificationService!,
-
-    highlightMessageId,
-    setHighlightMessageId,
-  };
 
   return (
     <MattermostContext.Provider value={contextValue}>
