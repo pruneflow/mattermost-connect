@@ -1,5 +1,11 @@
-// src/components/ChannelList/ChannelList.tsx
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+// Implémentation modifiée du ChannelList.tsx
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import { Channel } from "../../../types";
 
@@ -96,16 +102,20 @@ const ChannelList: React.FC<ChannelListProps> = ({
     service,
     isConnected,
     currentUser,
-    getUserDisplayName,
-    getUser,
-    initializeTeamUnreadStates,
+    userService,
     setActiveChannel,
     activeChannel,
   } = useMattermost();
+
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Pour éviter les appels répétés
+  const channelsLoadedRef = useRef<boolean>(false);
+  const loadingRef = useRef<boolean>(false);
+  const directUsersLoadedRef = useRef<boolean>(false);
 
   // State for collapsible sections
   const [openSections, setOpenSections] = useState<{
@@ -118,34 +128,44 @@ const ChannelList: React.FC<ChannelListProps> = ({
     direct: true,
   });
 
-  const getChannelDisplayName = (channel: Channel): string => {
-    // Pour les canaux normaux, utiliser le nom d'affichage standard
-    if (channel.type !== "D" && channel.type !== "G") {
-      return channel.display_name;
-    }
-
-    // Pour les canaux directs, essayer de déterminer avec qui l'utilisateur discute
-    if (channel.name && channel.name.includes("__") && currentUser) {
-      const parts = channel.name.split("__");
-
-      // Trouver l'ID qui n'est pas celui de l'utilisateur actuel
-      const otherUserId = parts.find((id) => id !== currentUser.id);
-
-      if (otherUserId) {
-        // Utiliser directement getUserDisplayName plutôt que de manipuler les directMessageUsers
-        return getUserDisplayName(otherUserId);
+  // Fonction pour obtenir le nom d'affichage d'un canal
+  const getChannelDisplayName = useCallback(
+    (channel: Channel): string => {
+      // Pour les canaux normaux, utiliser le nom d'affichage standard
+      if (channel.type !== "D" && channel.type !== "G") {
+        return channel.display_name;
       }
-    }
 
-    // Fallback sur le nom d'affichage par défaut
-    return channel.display_name;
-  };
+      // Pour les canaux directs, utiliser le service utilisateur
+      if (
+        channel.name &&
+        channel.name.includes("__") &&
+        currentUser &&
+        userService
+      ) {
+        const parts = channel.name.split("__");
+        // Trouver l'ID qui n'est pas celui de l'utilisateur actuel
+        const otherUserId = parts.find((id) => id !== currentUser.id);
+        if (otherUserId) {
+          return userService.getUserDisplayName(otherUserId);
+        }
+      }
 
-  // Load channels when teamId changes
+      // Fallback sur le nom d'affichage par défaut
+      return channel.display_name;
+    },
+    [currentUser, userService],
+  );
+
+  // Load channels when teamId changes - optimized to prevent multiple calls
   useEffect(() => {
-    if (!isConnected || !teamId || teamId === "") return;
+    if (!isConnected || !teamId || teamId === "" || loadingRef.current) return;
 
     const fetchChannels = async () => {
+      // Prévenir les appels multiples
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+
       setLoading(true);
       try {
         const channelsData = await service?.getChannels(teamId);
@@ -167,7 +187,38 @@ const ChannelList: React.FC<ChannelListProps> = ({
             setActiveChannel(channelsData[0]);
           }
           setChannels(channelsData);
-          await initializeTeamUnreadStates(teamId, channelsData);
+          channelsLoadedRef.current = true;
+
+          if (userService && !directUsersLoadedRef.current) {
+            const directChannels = channelsData.filter(
+              (c) => c.type === "D" || c.type === "G",
+            );
+
+            if (directChannels.length > 0) {
+              // Extraire les IDs utilisateurs de tous les canaux directs
+              const userIds = new Set<string>();
+              directChannels.forEach((channel) => {
+                if (
+                  channel.name &&
+                  channel.name.includes("__") &&
+                  currentUser
+                ) {
+                  const parts = channel.name.split("__");
+                  parts.forEach((part) => {
+                    if (part !== currentUser.id) {
+                      userIds.add(part);
+                    }
+                  });
+                }
+              });
+
+              // Utiliser getUsers pour charger tous les utilisateurs en une seule fois
+              if (userIds.size > 0) {
+                await userService.getUsers(Array.from(userIds));
+                directUsersLoadedRef.current = true;
+              }
+            }
+          }
 
           if (onSelectChannel) {
             onSelectChannel(currentChannel);
@@ -182,21 +233,38 @@ const ChannelList: React.FC<ChannelListProps> = ({
         );
       } finally {
         setLoading(false);
+        loadingRef.current = false;
       }
     };
 
     void fetchChannels();
-  }, [isConnected, teamId, service, initializeTeamUnreadStates]);
+
+    // Réinitialiser le flag de chargement des utilisateurs à chaque changement d'équipe
+    return () => {
+      directUsersLoadedRef.current = false;
+    };
+  }, [
+    isConnected,
+    teamId,
+    service,
+    setActiveChannel,
+    activeChannel,
+    onSelectChannel,
+    userService,
+  ]);
 
   // Toggle a section's expanded state
-  const toggleSection = (section: "public" | "private" | "direct") => {
-    setOpenSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
-  };
+  const toggleSection = useCallback(
+    (section: "public" | "private" | "direct") => {
+      setOpenSections((prev) => ({
+        ...prev,
+        [section]: !prev[section],
+      }));
+    },
+    [],
+  );
 
-  // Filter channels based on search and visibility settings
+  // Filter channels based on search and visibility settings - memoized
   const filteredChannels = useMemo(() => {
     return channels.filter((channel) => {
       // Filter by channel type
@@ -218,53 +286,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
     });
   }, [channels, showPrivateChannels, showDirectMessages, searchQuery]);
 
-  useEffect(() => {
-    if (!isConnected || !filteredChannels || !service?.getUsers) return;
-
-    const loadDirectMessageUsers = async () => {
-      console.debug("loadDirectMessageUsers");
-      // Identifier les canaux directs
-      const directChannels = filteredChannels.filter(
-        (c) => c.type === "D" || c.type === "G",
-      );
-
-      if (directChannels.length === 0) return;
-
-      try {
-        // Collecter tous les IDs utilisateurs depuis les noms des canaux
-        const userIds: string[] = [];
-
-        directChannels.forEach((channel) => {
-          // Dans Mattermost, les canaux directs ont généralement un nom au format "user1__user2"
-          if (channel.name && channel.name.includes("__")) {
-            const parts = channel.name.split("__");
-            // Ajouter les deux parties (qui sont généralement des IDs utilisateurs)
-            parts.forEach((part) => {
-              if (
-                !userIds.includes(part) &&
-                currentUser &&
-                part !== currentUser.id
-              ) {
-                userIds.push(part);
-              }
-            });
-          }
-        });
-
-        if (userIds.length === 0) return;
-
-        // Charger les informations des utilisateurs avec getUser
-        for (const userId of userIds) {
-          void getUser(userId);
-        }
-      } catch (err) {
-        console.error("Error loading direct message users:", err);
-      }
-    };
-
-    void loadDirectMessageUsers();
-  }, [isConnected, filteredChannels, service, currentUser, getUser]);
-
   // Group channels by type if requested
   const groupedChannels = useMemo(() => {
     if (groupByType) {
@@ -280,19 +301,30 @@ const ChannelList: React.FC<ChannelListProps> = ({
   }, [filteredChannels, groupByType]);
 
   // Render loading skeletons
-  const renderSkeletons = () => (
-    <Box sx={{ px: 2, py: 1 }}>
-      {Array.from({ length: 5 }).map((_, index) => (
-        <Box key={index} sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-          <Skeleton variant="circular" width={24} height={24} sx={{ mr: 2 }} />
-          <Skeleton
-            variant="text"
-            width={`${Math.random() * 40 + 50}%`}
-            height={32}
-          />
-        </Box>
-      ))}
-    </Box>
+  const renderSkeletons = useCallback(
+    () => (
+      <Box sx={{ px: 2, py: 1 }}>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Box
+            key={index}
+            sx={{ display: "flex", alignItems: "center", mb: 1 }}
+          >
+            <Skeleton
+              variant="circular"
+              width={24}
+              height={24}
+              sx={{ mr: 2 }}
+            />
+            <Skeleton
+              variant="text"
+              width={`${Math.random() * 40 + 50}%`}
+              height={32}
+            />
+          </Box>
+        ))}
+      </Box>
+    ),
+    [],
   );
 
   // Render a section of channels
@@ -377,7 +409,16 @@ const ChannelList: React.FC<ChannelListProps> = ({
         </>
       );
     },
-    [activeChannel],
+    [
+      activeChannel,
+      getChannelDisplayName,
+      onSelectChannel,
+      openSections,
+      sectionHeaderSx,
+      setActiveChannel,
+      theme.palette.action.hover,
+      toggleSection,
+    ],
   );
 
   return (
