@@ -115,9 +115,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Pour éviter les appels répétés
-  const channelsLoadedRef = useRef<boolean>(false);
-  const loadingRef = useRef<boolean>(false);
   const directUsersLoadedRef = useRef<boolean>(false);
+
+  const isMountedRef = useRef(true);
+  const loadingAttemptRef = useRef(0);
 
   // State for collapsible sections
   const [openSections, setOpenSections] = useState<{
@@ -159,71 +160,86 @@ const ChannelList: React.FC<ChannelListProps> = ({
 
   // Load channels when teamId changes - optimized to prevent multiple calls
   useEffect(() => {
-    if (!isConnected || !teamId || teamId === "" || loadingRef.current) return;
+    isMountedRef.current = true;
 
+    const attemptId = ++loadingAttemptRef.current;
     const fetchChannels = async () => {
       // Prévenir les appels multiples
-      if (loadingRef.current) return;
-      loadingRef.current = true;
+      if (!teamId) {
+        console.log(`[ChannelList] No teamId provided, skipping load`);
+        return;
+      }
+
+      console.log(
+        `[ChannelList] Loading channels for team ${teamId}, attempt #${attemptId}`,
+      );
 
       setLoading(true);
       try {
         const channelsData =
           await services?.mattermostService.getChannels(teamId);
 
-        if (channelsData && channelsData.length > 0) {
-          let currentChannel;
-          if (activeChannel) {
-            const activeChannelIsInTeam = channelsData.find(
-              (c) => c.id === activeChannel.id,
+        if (isMountedRef.current) {
+          if (channelsData && channelsData.length > 0) {
+            console.log(
+              `[ChannelList] Setting channels state with ${channelsData.length} channels`,
             );
-            if (!activeChannelIsInTeam) {
+            let currentChannel;
+            if (activeChannel) {
+              const activeChannelIsInTeam = channelsData.find(
+                (c) => c.id === activeChannel.id,
+              );
+              if (!activeChannelIsInTeam) {
+                currentChannel = channelsData[0];
+                setActiveChannel(channelsData[0]);
+              } else {
+                currentChannel = activeChannel;
+              }
+            } else {
               currentChannel = channelsData[0];
               setActiveChannel(channelsData[0]);
-            } else {
-              currentChannel = activeChannel;
             }
-          } else {
-            currentChannel = channelsData[0];
-            setActiveChannel(channelsData[0]);
-          }
-          setChannels(channelsData);
-          channelsLoadedRef.current = true;
+            setChannels(channelsData);
 
-          if (userService && !directUsersLoadedRef.current) {
-            const directChannels = channelsData.filter(
-              (c) => c.type === "D" || c.type === "G",
-            );
+            if (userService && !directUsersLoadedRef.current) {
+              const directChannels = channelsData.filter(
+                (c) => c.type === "D" || c.type === "G",
+              );
 
-            if (directChannels.length > 0) {
-              // Extraire les IDs utilisateurs de tous les canaux directs
-              const userIds = new Set<string>();
-              directChannels.forEach((channel) => {
-                if (
-                  channel.name &&
-                  channel.name.includes("__") &&
-                  currentUser
-                ) {
-                  const parts = channel.name.split("__");
-                  parts.forEach((part) => {
-                    if (part !== currentUser.id) {
-                      userIds.add(part);
-                    }
-                  });
+              if (directChannels.length > 0) {
+                // Extraire les IDs utilisateurs de tous les canaux directs
+                const userIds = new Set<string>();
+                directChannels.forEach((channel) => {
+                  if (
+                    channel.name &&
+                    channel.name.includes("__") &&
+                    currentUser
+                  ) {
+                    const parts = channel.name.split("__");
+                    parts.forEach((part) => {
+                      if (part !== currentUser.id) {
+                        userIds.add(part);
+                      }
+                    });
+                  }
+                });
+
+                // Utiliser getUsers pour charger tous les utilisateurs en une seule fois
+                if (userIds.size > 0) {
+                  await userService.getUsers(Array.from(userIds));
+                  directUsersLoadedRef.current = true;
                 }
-              });
-
-              // Utiliser getUsers pour charger tous les utilisateurs en une seule fois
-              if (userIds.size > 0) {
-                await userService.getUsers(Array.from(userIds));
-                directUsersLoadedRef.current = true;
               }
             }
-          }
 
-          if (onSelectChannel) {
-            onSelectChannel(currentChannel);
+            if (onSelectChannel) {
+              onSelectChannel(currentChannel);
+            }
           }
+        } else {
+          console.log(
+            `[ChannelList] Component unmounted, discarding channel data`,
+          );
         }
 
         setError(null);
@@ -234,7 +250,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
         );
       } finally {
         setLoading(false);
-        loadingRef.current = false;
       }
     };
 
@@ -242,7 +257,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
 
     // Réinitialiser le flag de chargement des utilisateurs à chaque changement d'équipe
     return () => {
-      directUsersLoadedRef.current = false;
+      console.log(`[ChannelList] Unmounting, attempt #${attemptId}`);
+      isMountedRef.current = false;
     };
   }, [
     isConnected,
@@ -265,6 +281,9 @@ const ChannelList: React.FC<ChannelListProps> = ({
     [],
   );
 
+  console.debug("channels", channels);
+  console.debug("activeChannel", activeChannel);
+
   // Filter channels based on search and visibility settings - memoized
   const filteredChannels = useMemo(() => {
     return channels.filter((channel) => {
@@ -286,7 +305,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
       return true;
     });
   }, [channels, showPrivateChannels, showDirectMessages, searchQuery]);
-
+  console.debug("filteredChannels", filteredChannels);
   // Group channels by type if requested
   const groupedChannels = useMemo(() => {
     if (groupByType) {
@@ -300,6 +319,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
     }
     return { all: filteredChannels };
   }, [filteredChannels, groupByType]);
+
+  console.debug("groupedChannels", groupedChannels);
 
   // Render loading skeletons
   const renderSkeletons = useCallback(
@@ -422,7 +443,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
       toggleSection,
     ],
   );
+  console.debug("loading", loading);
+  console.debug("error", error);
 
+  console.debug("groupByType", groupByType);
   return (
     <Box
       className={className}

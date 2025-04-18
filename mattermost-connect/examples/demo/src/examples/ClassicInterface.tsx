@@ -1,5 +1,5 @@
 // examples/demo/src/examples/ClassicInterface.tsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   useMattermost,
   ChannelList,
@@ -24,6 +24,7 @@ import {
   useMediaQuery,
   Button,
   Divider,
+  Paper,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -31,6 +32,10 @@ import { Logout as LogoutIcon, Menu as MenuIcon } from "@mui/icons-material";
 
 /**
  * Interface Mattermost classique avec notifications et mises à jour en temps réel
+ *
+ * Structure responsive:
+ * - Desktop: Layout en grille avec équipes en haut, canaux à gauche et messages à droite
+ * - Mobile: App bar + tiroir latéral pour navigation + zone de contenu pour messages
  */
 const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const theme = useTheme();
@@ -38,28 +43,8 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const { error, navigateToMessage, activeChannel, currentUser, activeTeam } =
     useMattermost();
 
-  // Références pour mesurer les hauteurs initiales
-  const appBarRef = useRef<HTMLDivElement>(null);
-  const teamsTabsRef = useRef<HTMLDivElement>(null);
-
-  // État pour la gestion de la mise en page
-  const [appBarHeight, setAppBarHeight] = useState<number>(64); // valeur par défaut
-  const [tabsHeight, setTabsHeight] = useState<number>(48); // valeur par défaut
-
   // État
   const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // Hauteur pour l'espacement sous le chat pour le MessageComposer fixe sur mobile
-  const messageComposerHeight = isMobile ? 64 : 0;
-
-  useEffect(() => {
-    if (appBarRef.current) {
-      setAppBarHeight(appBarRef.current.offsetHeight);
-    }
-    if (teamsTabsRef.current) {
-      setTabsHeight(teamsTabsRef.current.offsetHeight);
-    }
-  }, []);
 
   // Handler pour la sélection d'un canal
   const handleChannelSelect = useCallback(() => {
@@ -94,6 +79,7 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
     [navigateToMessage],
   );
 
+  // Afficher les erreurs si présentes
   if (error) {
     return (
       <Alert severity="error" sx={{ m: 2 }}>
@@ -105,9 +91,9 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   // Mise en page mobile avec tiroir
   if (isMobile) {
     return (
-      <Box sx={{ height: "100%" }}>
+      <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
         {/* Mobile App Bar */}
-        <AppBar position="static" ref={appBarRef}>
+        <AppBar position="static">
           <Toolbar>
             <IconButton
               edge="start"
@@ -118,17 +104,15 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
             >
               <MenuIcon />
             </IconButton>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              {activeChannel
-                ? activeChannel.display_name
-                : activeTeam
-                  ? activeTeam.display_name
-                  : "MattermostConnect"}
+
+            {/* Nom d'utilisateur à gauche */}
+            <Typography variant="body2" component="div" sx={{ flexGrow: 1 }}>
+              {currentUser ? formatUserDisplayName(currentUser) : ""}
             </Typography>
 
-            {/* Centre de notifications */}
+            {/* Centre de notifications et déconnexion à droite */}
             <NotificationCenter onNavigateToChannel={handleNavigateToChannel} />
-            <IconButton color="inherit" onClick={onLogout}>
+            <IconButton color="inherit" onClick={onLogout} edge="end">
               <LogoutIcon />
             </IconButton>
           </Toolbar>
@@ -152,7 +136,7 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
               Équipes
             </Typography>
           </Box>
-          <TeamSelector showIcons showDescriptions={false} />
+          <TeamSelector showIcons variant="list" />
 
           <Divider sx={{ my: 1 }} />
 
@@ -174,7 +158,7 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
         {/* Content Area */}
         <Box
           sx={{
-            height: `calc(100vh - 64px)`, // Hauteur totale moins la hauteur de l'AppBar
+            flexGrow: 1,
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -186,13 +170,11 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
                 sx={{
                   flexGrow: 1,
                   overflow: "auto",
-                  // Ajouter de l'espace en bas pour éviter que le contenu soit masqué par le MessageComposer
-                  pb: `${messageComposerHeight}px`,
                 }}
               >
                 <ChannelViewer
                   channelId={activeChannel.id}
-                  showHeader={false} // Nous montrons déjà l'en-tête dans l'AppBar
+                  showHeader={true}
                   autoScrollToBottom
                   sx={{ height: "100%" }}
                 />
@@ -237,155 +219,130 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
     );
   }
 
-  // Mise en page desktop avec colonnes fixes
+  // Mise en page desktop avec deux colonnes
   return (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* AppBar principale */}
-      <AppBar position="static" ref={appBarRef}>
+      <AppBar position="static">
         <Toolbar>
-          <Box
-            sx={{
-              width: "100%",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            {currentUser && (
-              <Typography variant="body2" component="div">
-                {formatUserDisplayName(currentUser)}
-              </Typography>
-            )}
+          {/* Nom d'utilisateur à gauche */}
+          <Typography variant="body2" component="div" sx={{ flexGrow: 1 }}>
+            {currentUser ? formatUserDisplayName(currentUser) : ""}
+          </Typography>
 
-            {/* Centre de notifications */}
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <NotificationCenter
-                onNavigateToChannel={handleNavigateToChannel}
-              />
-              <Button
-                color="inherit"
-                onClick={onLogout}
-                startIcon={<LogoutIcon />}
-              >
-                Déconnexion
-              </Button>
-            </div>
+          {/* Centre de notifications et déconnexion à droite */}
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <NotificationCenter onNavigateToChannel={handleNavigateToChannel} />
+            <Button
+              color="inherit"
+              onClick={onLogout}
+              startIcon={<LogoutIcon />}
+              size="small"
+            >
+              Déconnexion
+            </Button>
           </Box>
         </Toolbar>
       </AppBar>
 
-      {/* Contenu principal */}
-      <Box sx={{ display: "flex", flexGrow: 1, overflow: "hidden" }}>
-        {/* Barre latérale des équipes */}
+      {/* Sélecteur d'équipes en onglets sur toute la largeur */}
+      <Paper
+        elevation={0}
+        sx={{
+          borderBottom: 1,
+          borderColor: "divider",
+          width: "100%",
+        }}
+      >
+        <TeamSelector
+          variant="tabs"
+          showIcons
+          showMemberCount={false}
+          sx={{ width: "100%" }}
+        />
+      </Paper>
+
+      {/* Contenu principal en deux colonnes */}
+      <Box
+        sx={{
+          display: "flex",
+          flexGrow: 1,
+          overflow: "hidden",
+        }}
+      >
+        {/* Liste des canaux (colonne gauche) */}
         <Box
           sx={{
-            width: "70px",
+            width: 280,
             borderRight: 1,
             borderColor: "divider",
-            bgcolor: "background.paper",
-            display: "flex",
-            flexDirection: "column",
+            overflow: "auto",
           }}
-          ref={teamsTabsRef}
         >
-          <TeamSelector
-            showDescriptions
-            showIcons
-            showMemberCount
-            variant={"tabs"}
-          />
+          {activeTeam ? (
+            <ChannelList
+              teamId={activeTeam.id}
+              onSelectChannel={handleChannelSelect}
+              showSearch
+              showPrivateChannels
+              showDirectMessages
+              groupByType
+            />
+          ) : (
+            <Box sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Sélectionnez une équipe pour voir les canaux
+              </Typography>
+            </Box>
+          )}
         </Box>
 
-        {/* Barre latérale des canaux */}
+        {/* Zone des messages (colonne droite) */}
         <Box
           sx={{
-            position: "absolute",
-            top: `${appBarHeight + tabsHeight + 48}px`,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            flexGrow: 1,
             display: "flex",
+            flexDirection: "column",
             overflow: "hidden",
           }}
         >
-          <Box
-            sx={{
-              width: 280,
-              height: "100%",
-              borderRight: 1,
-              borderColor: "divider",
-              bgcolor: "background.paper",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            {activeTeam ? (
-              <ChannelList
-                teamId={activeTeam.id}
-                onSelectChannel={handleChannelSelect}
-                showSearch
-                showPrivateChannels
-                showDirectMessages
-                groupByType
-              />
-            ) : (
-              <Box sx={{ p: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Sélectionnez une équipe pour voir les canaux
-                </Typography>
+          {activeChannel ? (
+            <>
+              <Box sx={{ flexGrow: 1, overflow: "auto" }}>
+                <ChannelViewer
+                  channelId={activeChannel.id}
+                  showHeader
+                  autoScrollToBottom
+                  sx={{ height: "100%" }}
+                />
               </Box>
-            )}
-          </Box>
-
-          {/* Zone de contenu */}
-          <Box
-            sx={{
-              flexGrow: 1,
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            {activeChannel ? (
-              <>
-                <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
-                  <ChannelViewer
-                    channelId={activeChannel.id}
-                    showHeader
-                    autoScrollToBottom
-                    sx={{ height: "100%" }}
-                  />
-                </Box>
-                <Box>
-                  <MessageComposer
-                    channelId={activeChannel.id}
-                    placeholder={`Message ${activeChannel.display_name}`}
-                    allowAttachments
-                    onMessageSent={handleSendMessage}
-                  />
-                </Box>
-              </>
-            ) : (
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  height: "100%",
-                  p: 3,
-                }}
-              >
-                <Typography variant="h5" component="div" gutterBottom>
-                  {activeTeam
-                    ? "Sélectionnez un canal pour commencer à échanger"
-                    : "Sélectionnez une équipe pour voir les canaux"}
-                </Typography>
+              <Box>
+                <MessageComposer
+                  channelId={activeChannel.id}
+                  placeholder={`Message ${activeChannel.display_name}`}
+                  allowAttachments
+                  onMessageSent={handleSendMessage}
+                />
               </Box>
-            )}
-          </Box>
+            </>
+          ) : (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "center",
+                height: "100%",
+                p: 3,
+              }}
+            >
+              <Typography variant="h5" component="div" gutterBottom>
+                {activeTeam
+                  ? "Sélectionnez un canal pour commencer à échanger"
+                  : "Sélectionnez une équipe pour voir les canaux"}
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>
