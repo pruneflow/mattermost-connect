@@ -1,5 +1,6 @@
 // src/services/user/user.service.ts
-import { User, Channel, MattermostService } from "../../types";
+import { User, Channel } from "../../types";
+import { MattermostService } from "../base";
 import { formatUserDisplayName } from "../../utils";
 
 /**

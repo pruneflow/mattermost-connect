@@ -114,13 +114,6 @@ export type {
   ProxyModeConfig,
   CustomModeConfig,
   ProviderOptions,
-
-  // Types service
-  MattermostService,
-  GetMessagesOptions,
-  GetUsersOptions,
-  MessagesResponse,
-
   // Types emoji/GIF
   GifData,
 

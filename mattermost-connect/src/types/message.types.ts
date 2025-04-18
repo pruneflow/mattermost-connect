@@ -43,3 +43,13 @@ export interface Message {
   // Additional properties
   props?: Record<string, unknown>;
 }
+
+/**
+ * Réponse de l'API pour les messages
+ */
+export interface MessagesResponse {
+  posts: Record<string, Message>;
+  order: string[];
+  next_post_id?: string;
+  prev_post_id?: string;
+}

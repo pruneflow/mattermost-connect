@@ -3,7 +3,7 @@ import {
   MattermostService,
   ServiceConfig,
   CustomServiceProvider,
-} from "../types";
+} from "./base";
 import { createDirectService } from "./direct";
 import { createProxyService } from "./proxy";
 import { createFileService, FileServiceInterface } from "./file";

@@ -1,15 +1,12 @@
 // src/services/direct/direct.service.ts
-import { BaseService } from "../base/service.base";
-import { MattermostService } from "../base/service.interfaces";
+import { BaseService } from "../base";
 import {
-  User,
+  MattermostService,
   GetMessagesOptions,
   GetUsersOptions,
   MessagesResponse,
-  Message,
-  Channel,
-  Team,
-} from "../../types";
+} from "../base";
+import { User, Message, Channel, Team } from "../../types";
 
 /**
  * Configuration pour le service direct

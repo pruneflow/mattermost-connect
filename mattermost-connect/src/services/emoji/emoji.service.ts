@@ -1,5 +1,6 @@
 // src/services/emoji/emoji.service.ts
-import { MattermostService, GifData } from "../../types";
+import { MattermostService } from "../base";
+import { GifData } from "../../types";
 
 /**
  * Interface pour le service emoji

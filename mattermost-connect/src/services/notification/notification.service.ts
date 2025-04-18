@@ -1,5 +1,6 @@
 // src/services/notification/notification.service.ts
-import { MattermostService, User } from "../../types";
+import { User } from "../../types";
+import { MattermostService } from "../base";
 import { formatUserDisplayName } from "../../utils";
 
 /**

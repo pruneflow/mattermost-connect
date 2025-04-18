@@ -1,14 +1,56 @@
 // src/services/base/service.interfaces.ts
-import {
-  Channel,
-  Team,
-  User,
-  Message,
-  UserStatus,
-  GetMessagesOptions,
-  GetUsersOptions,
-  MessagesResponse,
-} from "../../types";
+import { Channel, Team, User, Message, UserStatus } from "../../types";
+
+export interface GetMessagesOptions {
+  page?: number;
+  perPage?: number;
+  since?: number;
+  before?: string;
+  after?: string;
+}
+
+// Déplacer GetUsersOptions
+export interface GetUsersOptions {
+  ids?: string[];
+  inChannel?: string;
+  inTeam?: string;
+  page?: number;
+  perPage?: number;
+}
+
+// Déplacer MessagesResponse
+export interface MessagesResponse {
+  posts: Record<string, Message>;
+  order: string[];
+  next_post_id?: string;
+  prev_post_id?: string;
+}
+
+export interface CustomServiceProvider {
+  setupService: () => MattermostService;
+  isConnected?: boolean;
+  skipConnectionTest?: boolean;
+  currentUser?: User;
+  enableWebsocket?: boolean;
+}
+
+export interface ServiceConfig {
+  // Mode direct
+  serverUrl?: string;
+  token?: string;
+
+  // Mode proxy
+  proxyUrl?: string;
+  clientId?: string;
+  userId?: string;
+
+  // Mode personnalisé
+  serviceProvider?: CustomServiceProvider;
+
+  // Options communes
+  enableWebsocket?: boolean;
+  refreshInterval?: number;
+}
 
 /**
  * Interface pour le service d'authentification

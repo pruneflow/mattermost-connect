@@ -1,5 +1,6 @@
 // src/types/provider.types.ts
-import { MattermostService, User } from "./index";
+import { User } from "./index";
+import { MattermostService } from "../services";
 
 /**
  * Types for MattermostProvider configuration

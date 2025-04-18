@@ -10,6 +10,7 @@ import React, {
   useState,
 } from "react";
 import { createServiceContainer, ServiceContainer } from "../services";
+
 import {
   Channel,
   Message,
@@ -18,11 +19,8 @@ import {
   User,
   WebSocketConnection,
 } from "../types";
-import { Notification } from "../services/notification/notification.service";
-import {
-  releaseWebsocket,
-  setupWebsocket,
-} from "../services/websocket/websocket.service";
+import { Notification } from "../services";
+import { releaseWebsocket, setupWebsocket } from "../services";
 import { formatUserDisplayName } from "../utils";
 
 /**

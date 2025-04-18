@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Channel, Message, MessagesResponse } from "../types";
 import { useMattermost } from "../context";
-import { assertServiceInitialized } from "../services/factory";
+import { assertServiceInitialized } from "../services";
 
 /**
  * Options pour le hook useChannel
