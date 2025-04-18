@@ -28,6 +28,7 @@ const mockData = {
     last_name: "Doe",
     email: "john@example.com",
     roles: "system_user",
+    update_at: Date.now(),
   } as User,
 
   teams: [
@@ -254,6 +255,7 @@ const mockData = {
       last_name: "Doe",
       email: "john@example.com",
       roles: "system_user",
+      update_at: Date.now(),
     },
     {
       id: "user2",
@@ -262,6 +264,7 @@ const mockData = {
       last_name: "Doe",
       email: "jane@example.com",
       roles: "system_user",
+      update_at: Date.now(),
     },
     {
       id: "user3",
@@ -270,6 +273,7 @@ const mockData = {
       last_name: "Smith",
       email: "bob@example.com",
       roles: "system_user",
+      update_at: Date.now(),
     },
     {
       id: "user4",
@@ -278,6 +282,7 @@ const mockData = {
       last_name: "Parker",
       email: "sarah@example.com",
       roles: "system_user",
+      update_at: Date.now(),
     },
     {
       id: "user5",
@@ -286,6 +291,7 @@ const mockData = {
       last_name: "Jones",
       email: "mike@example.com",
       roles: "system_user",
+      update_at: Date.now(),
     },
   ] as User[],
 
@@ -466,17 +472,52 @@ const createMockService = (): MattermostService => {
   let users = [...mockData.users];
   let messages = JSON.parse(JSON.stringify(mockData.messages));
   let nextPostId = mockData.nextPostId;
+  // Cache pour l'utilisateur courant
+  let _currentUser: User | null = { ...mockData.currentUser };
+
+  // Pour le mode "custom", on définit explicitement ce mode
+  const mode: "direct" | "proxy" | "custom" = "custom";
 
   return {
+    // Mode de service (important pour le traitement interne)
+    mode,
+
     // User information
     getCurrentUser: async (): Promise<User> => {
       await delay(SIMULATED_DELAY);
-      return { ...mockData.currentUser };
+      return { ..._currentUser! };
+    },
+
+    // Cette méthode est importante pour l'exemple de caching
+    refreshCurrentUser: async (): Promise<User> => {
+      await delay(SIMULATED_DELAY);
+      // Simuler un rafraîchissement en mettant à jour le timestamp
+      _currentUser = {
+        ..._currentUser!,
+        update_at: Date.now(),
+      };
+      return { ..._currentUser };
+    },
+
+    // Pour le support du caching
+    getBaseUrl: (): string => {
+      return "https://mock.mattermost.com";
     },
 
     // Teams management
     getTeams: async (): Promise<Team[]> => {
+      console.log("Mock getTeams appelé - retournant", teams.length, "équipes");
       await delay(SIMULATED_DELAY);
+
+      // S'assurer que teams est bien défini et non vide
+      if (!teams || teams.length === 0) {
+        // Si teams est vide pour une raison quelconque, retournons des données par défaut
+        console.warn(
+          "Données d'équipes vides, utilisation des données par défaut",
+        );
+        return [...mockData.teams];
+      }
+
       return [...teams];
     },
 
@@ -514,6 +555,34 @@ const createMockService = (): MattermostService => {
       return { ...foundChannel };
     },
 
+    // Support de la fonctionnalité de comptage des non-lus
+    getChannelUnreadCount: async (
+      channelId: string,
+    ): Promise<{ msg_count: number; mention_count: number }> => {
+      await delay(SIMULATED_DELAY);
+      return {
+        msg_count: Math.floor(Math.random() * 10),
+        mention_count: Math.floor(Math.random() * 3),
+      };
+    },
+
+    // Support de marquer comme vu
+    viewChannel: async (channelId: string): Promise<{ status: "OK" }> => {
+      await delay(SIMULATED_DELAY);
+      return { status: "OK" };
+    },
+
+    // Support des non-lus par équipe
+    getTeamUnreadCount: async (
+      teamId: string,
+    ): Promise<{ msg_count: number; mention_count: number }> => {
+      await delay(SIMULATED_DELAY);
+      return {
+        msg_count: Math.floor(Math.random() * 15),
+        mention_count: Math.floor(Math.random() * 5),
+      };
+    },
+
     editMessage: async (messageId: string, newMessage: string) => {
       // Simuler la modification d'un message
       console.log(
@@ -521,47 +590,93 @@ const createMockService = (): MattermostService => {
         newMessage,
       );
 
+      await delay(SIMULATED_DELAY);
+
+      // Trouver le message dans les données
+      let foundMessage: Message | null = null;
+      let foundChannelId: string | null = null;
+
+      // Rechercher dans tous les canaux
+      Object.entries(messages).forEach(([channelId, msgs]) => {
+        const msg = msgs.find((m) => m.id === messageId);
+        if (msg) {
+          foundMessage = msg;
+          foundChannelId = channelId;
+        }
+      });
+
+      if (!foundMessage || !foundChannelId) {
+        throw new Error(`Message ${messageId} not found`);
+      }
+
+      // Mettre à jour le message
+      foundMessage.message = newMessage;
+      foundMessage.update_at = Date.now();
+
       return {
-        id: messageId,
-        user_id: "user1",
-        channel_id: "channel1",
-        message: newMessage,
-        create_at: Date.now() - 1000 * 60 * 5, // Conserver l'horodatage de création
-        update_at: Date.now(), // Mettre à jour l'horodatage de modification
+        ...foundMessage,
       };
     },
 
     deleteMessage: async (messageId: string) => {
+      await delay(SIMULATED_DELAY);
+
       // Simuler la suppression d'un message
       console.log(`Mock: Message ${messageId} supprimé`);
 
-      return { success: true };
+      // Parcourir tous les canaux pour trouver et "supprimer" le message
+      let deleted = false;
+      Object.keys(messages).forEach((channelId) => {
+        const index = messages[channelId].findIndex(
+          (msg) => msg.id === messageId,
+        );
+        if (index !== -1) {
+          // Dans un système réel, on marquerait simplement delete_at
+          // Ici, on le supprime complètement pour simuler
+          messages[channelId].splice(index, 1);
+          deleted = true;
+        }
+      });
+
+      return { success: deleted };
     },
 
     replyToMessage: async (
       channelId: string,
       messageId: string,
       responseMessage: string,
+      fileIds?: string[],
     ) => {
-      // Simuler la réponse à un message
-      console.log(
-        `Mock: Réponse au message ${messageId} dans le canal ${channelId}:`,
-        responseMessage,
-      );
+      await delay(SIMULATED_DELAY);
 
-      return {
-        id: `post-reply-${Date.now()}`,
-        user_id: "user1",
+      // Vérifier si le canal existe
+      if (!messages[channelId]) {
+        messages[channelId] = [];
+      }
+
+      // Générer un nouvel ID pour la réponse
+      const newId = `post-reply-${nextPostId++}`;
+
+      // Créer le message de réponse
+      const replyMessage: Message = {
+        id: newId,
+        user_id: _currentUser!.id,
         channel_id: channelId,
         message: responseMessage,
         create_at: Date.now(),
         update_at: Date.now(),
-        // Propriétés spécifiques à la réponse
+        delete_at: 0,
         root_id: messageId,
         props: {
           quoted_message_id: messageId,
         },
+        file_ids: fileIds || [],
       };
+
+      // Ajouter la réponse aux messages du canal
+      messages[channelId].push(replyMessage);
+
+      return replyMessage;
     },
 
     // Messages management
@@ -626,6 +741,7 @@ const createMockService = (): MattermostService => {
     postMessage: async (
       channelId: string,
       message: string,
+      fileIds?: string[],
     ): Promise<Message> => {
       await delay(SIMULATED_DELAY);
 
@@ -635,12 +751,13 @@ const createMockService = (): MattermostService => {
       // Create the message
       const newMessage: Message = {
         id: postId,
-        user_id: mockData.currentUser.id,
+        user_id: _currentUser!.id,
         channel_id: channelId,
         message,
         create_at: Date.now(),
         update_at: Date.now(),
         delete_at: 0,
+        file_ids: fileIds || [],
       };
 
       // Add to the list of messages for this channel
@@ -701,6 +818,108 @@ const createMockService = (): MattermostService => {
           type: file.type,
         })),
       };
+    },
+
+    // Emoji et réactions
+    getFrequentEmojis: async (): Promise<string[]> => {
+      await delay(SIMULATED_DELAY);
+      return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
+    },
+
+    addReaction: async (messageId: string, emoji: string): Promise<any> => {
+      await delay(SIMULATED_DELAY);
+      console.log(`Mock: Réaction ${emoji} ajoutée au message ${messageId}`);
+      return { success: true };
+    },
+
+    removeReaction: async (
+      channelId: string,
+      messageId: string,
+      emoji: string,
+    ): Promise<any> => {
+      await delay(SIMULATED_DELAY);
+      console.log(`Mock: Réaction ${emoji} supprimée du message ${messageId}`);
+      return { success: true };
+    },
+
+    hasReacted: async (
+      channelId: string,
+      messageId: string,
+      emoji: string,
+    ): Promise<boolean> => {
+      await delay(SIMULATED_DELAY);
+      // Retourne aléatoirement vrai ou faux pour simuler
+      return Math.random() > 0.5;
+    },
+
+    // GIFs
+    searchGifs: async (query: string): Promise<any[]> => {
+      await delay(SIMULATED_DELAY);
+      return Array(5)
+        .fill(null)
+        .map((_, i) => ({
+          id: `gif-${query}-${i}`,
+          preview: `https://via.placeholder.com/150?text=GIF+${query}+${i}`,
+          title: `GIF ${query} ${i}`,
+          url: `https://via.placeholder.com/300?text=GIF+${query}+${i}`,
+        }));
+    },
+
+    getGifs: async (category: string): Promise<any[]> => {
+      await delay(SIMULATED_DELAY);
+      return Array(5)
+        .fill(null)
+        .map((_, i) => ({
+          id: `gif-${category}-${i}`,
+          preview: `https://via.placeholder.com/150?text=GIF+${category}+${i}`,
+          title: `GIF ${category} ${i}`,
+          url: `https://via.placeholder.com/300?text=GIF+${category}+${i}`,
+        }));
+    },
+
+    // Méthode pour la récupération de posts spécifiques
+    getPost: async (messageId: string): Promise<Message> => {
+      await delay(SIMULATED_DELAY);
+
+      let foundMessage: Message | null = null;
+
+      // Rechercher dans tous les canaux
+      Object.values(messages).forEach((channelMessages) => {
+        const message = channelMessages.find((m) => m.id === messageId);
+        if (message) {
+          foundMessage = { ...message };
+        }
+      });
+
+      if (!foundMessage) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+
+      return foundMessage;
+    },
+
+    // Support pour l'authentification (mode direct)
+    authenticate: async (
+      username: string,
+      password: string,
+    ): Promise<{ token: string; serverUrl?: string }> => {
+      await delay(SIMULATED_DELAY);
+
+      // Simuler une connexion réussie si le nom d'utilisateur commence par "user" ou est "admin"
+      if (username.startsWith("user") || username === "admin") {
+        return {
+          token: `mock-token-${Date.now()}`,
+          serverUrl: "https://mock.mattermost.com",
+        };
+      }
+
+      throw new Error("Invalid username or password");
+    },
+
+    validateToken: async (token: string): Promise<boolean> => {
+      await delay(SIMULATED_DELAY);
+      // Simuler une validation de token réussie si le token commence par "mock-token"
+      return token.startsWith("mock-token");
     },
   };
 };

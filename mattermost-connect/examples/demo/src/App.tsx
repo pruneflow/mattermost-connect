@@ -23,7 +23,6 @@ import {
   MattermostProvider,
   MattermostThemeProvider,
   useMattermost,
-  AuthenticationSystem,
   createServiceContainer,
 } from "mattermost-connect";
 import createMockService from "./mockService";
@@ -51,7 +50,7 @@ interface LoginCredentials {
 const LoginForm: React.FC<{
   onLogin: (credentials: LoginCredentials) => void;
 }> = ({ onLogin }) => {
-  const [mode, setMode] = useState(MODES.DIRECT);
+  const [mode, setMode] = useState(MODES.MOCK); // Définir MOCK comme mode par défaut
   const [serverUrl, setServerUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -76,24 +75,18 @@ const LoginForm: React.FC<{
               serverUrl,
               token,
             });
-          } else if (username && password) {
-            const serviceInstance = createServiceContainer({ serverUrl });
-
-            if (serviceInstance?.mattermostService?.authenticate) {
-              const loginResult =
-                await serviceInstance.mattermostService.authenticate(
-                  username,
-                  password,
-                );
-
-              onLogin({
-                mode: MODES.DIRECT,
-                serverUrl: loginResult.serverUrl,
-                token: loginResult.token,
-              });
-            } else {
-              throw new Error("Méthode d'authentification non supportée");
+          } else if (username && password && serverUrl) {
+            // Validation des champs
+            if (!serverUrl) {
+              throw new Error("L'URL du serveur est requise");
             }
+
+            onLogin({
+              mode: MODES.DIRECT,
+              serverUrl,
+              username,
+              password,
+            });
           } else {
             throw new Error(
               "Veuillez fournir un token ou des identifiants de connexion",
@@ -101,7 +94,21 @@ const LoginForm: React.FC<{
           }
           break;
 
+        case MODES.PROXY:
+          if (!proxyUrl || !clientId) {
+            throw new Error("L'URL du proxy et l'ID client sont requis");
+          }
+
+          onLogin({
+            mode: MODES.PROXY,
+            proxyUrl,
+            clientId,
+            userId,
+          });
+          break;
+
         case MODES.MOCK:
+          // Aucune validation requise pour le mode mock
           onLogin({ mode: MODES.MOCK });
           break;
       }
@@ -139,7 +146,7 @@ const LoginForm: React.FC<{
               margin="normal"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              required
+              required={!token}
             />
             <TextField
               fullWidth
@@ -149,7 +156,20 @@ const LoginForm: React.FC<{
               margin="normal"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
+              required={!token}
+            />
+            <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+              OU
+            </Typography>
+            <TextField
+              fullWidth
+              label="Token d'accès personnel"
+              variant="outlined"
+              margin="normal"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              required={!username || !password}
+              helperText="Si un token est fourni, il sera utilisé à la place des identifiants"
             />
           </>
         );
@@ -185,6 +205,14 @@ const LoginForm: React.FC<{
               onChange={(e) => setUserId(e.target.value)}
             />
           </>
+        );
+
+      case MODES.MOCK:
+        return (
+          <Alert severity="info" sx={{ width: "100%", mt: 2 }}>
+            Le mode Démo utilise des données simulées pour tester l'interface
+            sans connexion à un serveur réel.
+          </Alert>
         );
 
       default:
@@ -286,8 +314,42 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authConfig, setAuthConfig] = useState<LoginCredentials | null>(null);
 
-  const handleLogin = (credentials: LoginCredentials) => {
+  const handleLogin = async (credentials: LoginCredentials) => {
     setAuthConfig(credentials);
+
+    if (
+      credentials.mode === MODES.DIRECT &&
+      credentials.username &&
+      credentials.password &&
+      credentials.serverUrl
+    ) {
+      // Pour le mode direct avec username/password, nous devons authentifier avant de définir isAuthenticated
+      try {
+        // Créer un service temporaire pour l'authentification
+        const tempService = createServiceContainer({
+          serverUrl: credentials.serverUrl,
+        });
+
+        if (tempService?.mattermostService?.authenticate) {
+          const result = await tempService.mattermostService.authenticate(
+            credentials.username,
+            credentials.password,
+          );
+
+          // Mettre à jour les credentials avec le token obtenu
+          setAuthConfig({
+            ...credentials,
+            token: result.token,
+          });
+        }
+      } catch (error) {
+        console.error("Erreur d'authentification:", error);
+        // Ne pas définir isAuthenticated en cas d'erreur
+        return;
+      }
+    }
+
+    // Tout s'est bien passé, on est authentifié
     setIsAuthenticated(true);
   };
 
@@ -327,6 +389,15 @@ const App: React.FC = () => {
                   setupService: createMockService,
                   isConnected: true,
                   skipConnectionTest: true,
+                  currentUser: {
+                    id: "user1",
+                    username: "johndoe",
+                    first_name: "John",
+                    last_name: "Doe",
+                    email: "john@example.com",
+                    roles: "system_user",
+                    update_at: Date.now(),
+                  },
                 }
               : undefined
           }

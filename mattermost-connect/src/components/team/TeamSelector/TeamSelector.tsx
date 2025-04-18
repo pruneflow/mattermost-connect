@@ -182,8 +182,9 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
 
       try {
         const teamsData = await mattermostService.getTeams();
-
+        console.debug("teamsData", teamsData);
         // Vérifier si le composant est toujours monté
+        console.debug("isMounted", isMounted);
         if (!isMounted) return;
 
         if (teamsData && teamsData.length > 0) {
@@ -194,10 +195,11 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
               a.display_name.localeCompare(b.display_name),
             );
           }
-
+          console.debug("sortedTeams", sortedTeams);
           setTeams(sortedTeams);
           teamsLoadedRef.current = true;
-
+          console.debug("activeTeam", activeTeam);
+          console.debug("selectedTeamId", selectedTeamId);
           // Seulement définir une équipe active s'il n'y en a pas déjà une
           if (!activeTeam && !selectedTeamId) {
             setActiveTeam(sortedTeams[0]);
@@ -214,8 +216,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
           setError(null);
         }
       } catch (err) {
-        if (!isMounted) return;
         console.error("Error loading teams:", err);
+        if (!isMounted) return;
         setError(err instanceof Error ? err.message : "Failed to load teams");
       } finally {
         if (isMounted) {
