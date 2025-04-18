@@ -1,12 +1,12 @@
 // src/components/team/TeamSelector/TeamSelector.tsx
 import React, {
-  useState,
+  useCallback,
   useEffect,
   useMemo,
-  useCallback,
   useRef,
+  useState,
 } from "react";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 import { Team } from "../../../types";
 
 // Material-UI Components
@@ -24,6 +24,8 @@ import TeamList from "./variants/TeamList";
 import TeamGrid from "./variants/TeamGrid";
 import TeamTabs from "./variants/TeamTabs";
 import TeamSidebar from "./variants/TeamSidebar";
+
+import { assertServiceInitialized } from "../../../services";
 
 /**
  * Type for the display variant of the TeamSelector
@@ -76,6 +78,38 @@ export interface TeamSelectorProps {
 
 /**
  * A component that displays a list of teams and allows selection
+ *
+ * Ce composant est une pièce centrale de l'application Mattermost, permettant aux utilisateurs de choisir leur équipe active.
+ * Il s'interface avec plusieurs services et contextes pour offrir une expérience utilisateur fluide et réactive.
+ *
+ * Voici une vue d'ensemble de son fonctionnement :
+ *
+ * 1. Il utilise le contexte MattermostProvider pour accéder aux services et états globaux nécessaires, comme le service Mattermost,
+ *    le service de notification, l'équipe active, etc.
+ *
+ * 2. Il gère son propre état local pour les équipes, le chargement, les erreurs, et les compteurs de messages non lus par équipe.
+ *    Cela permet de réagir rapidement aux interactions utilisateur sans attendre les mises à jour du contexte global.
+ *
+ * 3. Il optimise le chargement des équipes et des compteurs non lus pour éviter les appels redondants au serveur. Il utilise des
+ *    références (useRef) pour suivre l'état de ces requêtes asynchrones.
+ *
+ * 4. Il s'abonne aux mises à jour des compteurs non lus via le service de notification, afin de toujours afficher des informations
+ *    à jour à l'utilisateur. Il optimise cette souscription pour éviter les re-renders inutiles.
+ *
+ * 5. Il propose différentes variantes d'affichage (liste, grille, onglets, barre latérale) pour s'adapter aux préférences de
+ *    l'application parente. Ces variantes sont rendues de manière optimisée grâce à useMemo.
+ *
+ * 6. Pendant le chargement, il affiche des squelettes de chargement adaptés à chaque variante pour une meilleure expérience
+ *    utilisateur. Le rendu de ces squelettes est également optimisé.
+ *
+ * 7. Il gère les erreurs et les cas particuliers (pas d'équipes, équipe déjà sélectionnée, etc.) de manière élégante, toujours
+ *    en informant l'utilisateur de ce qui se passe.
+ *
+ * 8. Enfin, il expose une API de props puissante et flexible pour permettre une intégration facile dans différents contextes.
+ *
+ * En résumé, ce composant est un excellent exemple d'une pièce d'interface utilisateur complexe, qui tire parti des hooks React
+ * et des patterns de performance pour offrir une expérience utilisateur de haute qualité. Sa structure modulaire et ses
+ * commentaires détaillés en font également un composant maintenable et évolutif.
  */
 const TeamSelector: React.FC<TeamSelectorProps> = ({
   onSelectTeam,
@@ -92,14 +126,21 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   selectedTeamSx,
   selectedTeamId,
 }) => {
-  const {
-    isConnected,
-    service,
-    currentUser,
-    setActiveTeam,
-    activeTeam,
-    notificationService,
-  } = useMattermost();
+  const { services, setActiveTeam, activeTeam } = useMattermost();
+  console.debug("activeTeam", activeTeam);
+  assertServiceInitialized(services, "TeamSelector requires services");
+  assertServiceInitialized(
+    services.mattermostService,
+    "TeamSelector requires MattermostService",
+  );
+  assertServiceInitialized(
+    services.notificationService,
+    "TeamSelector requires NotificationService",
+  );
+
+  const mattermostService = services.mattermostService;
+  const notificationService = services.notificationService;
+
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +165,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
 
   // 2. Optimiser le chargement des équipes pour éviter les appels redondants
   useEffect(() => {
-    if (!isConnected || fetchingRef.current) return;
+    if (fetchingRef.current) return;
 
     // Référence pour savoir si le composant est toujours monté
     let isMounted = true;
@@ -140,7 +181,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
       }
 
       try {
-        const teamsData = await service.getTeams();
+        const teamsData = await mattermostService.getTeams();
 
         // Vérifier si le composant est toujours monté
         if (!isMounted) return;
@@ -191,9 +232,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
       isMounted = false;
     };
   }, [
-    isConnected,
     useServerOrder,
-    service,
+    mattermostService,
     activeTeam,
     setActiveTeam,
     selectedTeamId,
@@ -201,7 +241,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
 
   // 3. Fonction optimisée pour récupérer les non-lus pour toutes les équipes
   const fetchTeamUnreadCounts = useCallback(async () => {
-    if (!isConnected || !service || teams.length === 0 || !currentUser) return;
+    if (teams.length === 0) return;
 
     // Éviter les appels redondants si déjà en cours
     if (fetchingRef.current) return;
@@ -216,8 +256,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
       // Pour chaque équipe, récupérer l'état des non-lus
       for (const team of teams) {
         // Vérifie si la méthode getTeamUnreadCount existe dans le service
-        if (typeof (service as any).getTeamUnreadCount === "function") {
-          const unreadData = await (service as any).getTeamUnreadCount(team.id);
+        if (
+          typeof (mattermostService as any).getTeamUnreadCount === "function"
+        ) {
+          const unreadData = await (
+            mattermostService as any
+          ).getTeamUnreadCount(team.id);
 
           unreadCounts[team.id] = {
             msg_count: unreadData.msg_count || 0,
@@ -235,11 +279,11 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     } finally {
       fetchingRef.current = false;
     }
-  }, [isConnected, service, teams, currentUser]);
+  }, [mattermostService, teams]);
 
   // 4. Récupération initiale des non-lus - avec vérification de montage
   useEffect(() => {
-    if (teams.length === 0 || !isConnected) return;
+    if (teams.length === 0) return;
 
     let isMounted = true;
 
@@ -253,7 +297,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [teams.length, isConnected, fetchTeamUnreadCounts]);
+  }, [teams.length, fetchTeamUnreadCounts]);
 
   // 5. S'abonner aux mises à jour de l'état des non-lus - optimisé pour une seule inscription
   useEffect(() => {
@@ -265,13 +309,11 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     };
 
     // S'abonner aux mises à jour une seule fois
-    const unsubscribe = notificationService.addEventListener(
+    // Nettoyer l'abonnement à la désactivation du composant
+    return notificationService.addEventListener(
       "unread_updated",
       handleUnreadUpdated,
     );
-
-    // Nettoyer l'abonnement à la désactivation du composant
-    return unsubscribe;
   }, [notificationService, fetchTeamUnreadCounts]);
 
   // 6. Fonction mémorisée pour le rendu des skeletons

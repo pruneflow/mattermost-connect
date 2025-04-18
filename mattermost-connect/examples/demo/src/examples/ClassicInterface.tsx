@@ -24,7 +24,6 @@ import {
   useMediaQuery,
   Button,
   Divider,
-  Paper,
 } from "@mui/material";
 
 // Material-UI Icons
@@ -36,15 +35,8 @@ import { Logout as LogoutIcon, Menu as MenuIcon } from "@mui/icons-material";
 const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const {
-    error,
-    navigateToMessage,
-    activeChannel,
-    currentUser,
-    activeTeam,
-    highlightMessageId,
-    setHighlightMessageId,
-  } = useMattermost();
+  const { error, navigateToMessage, activeChannel, currentUser, activeTeam } =
+    useMattermost();
 
   // Références pour mesurer les hauteurs initiales
   const appBarRef = useRef<HTMLDivElement>(null);

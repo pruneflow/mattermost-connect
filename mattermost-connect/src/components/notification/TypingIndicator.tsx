@@ -1,7 +1,7 @@
 // src/components/notification/TypingIndicator.tsx
 import React from "react";
 import { Box, Typography, Fade } from "@mui/material";
-import { useMattermost } from "../../context/MattermostProvider";
+import { useMattermost } from "../../context";
 
 /**
  * Props pour le composant TypingIndicator

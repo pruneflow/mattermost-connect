@@ -10,9 +10,10 @@ import {
   Slide,
   SlideProps,
 } from "@mui/material";
-import { Notification } from "../../services/notification.service";
+import { Notification } from "../../services/notification/notification.service";
 import { useMattermost } from "../../context/MattermostProvider";
-import { getInitials, generateColorFromString } from "../../utils";
+import { getInitials, generateColorFromString } from "../../utils/formatting";
+import { assertServiceInitialized } from "../../services/factory";
 
 /**
  * Props pour le composant NotificationSnackbar
@@ -33,6 +34,23 @@ function SlideTransition(props: SlideProps) {
 
 /**
  * Affiche une notification sous forme de Snackbar
+ *
+ * Ce composant gère l'affichage d'une notification à l'écran sous forme d'une Snackbar Material-UI.
+ * Il charge les informations de l'expéditeur si disponibles, et permet de naviguer vers le message en cliquant.
+ *
+ * Voici comment il fonctionne en détail:
+ * 1. Il reçoit une notification via les props, ainsi que des callbacks pour gérer la fermeture et le clic.
+ * 2. Il utilise le hook useMattermost pour accéder aux services Mattermost nécessaires.
+ * 3. Dans un useEffect, il charge les informations de l'expéditeur si un ID est fourni dans la notification.
+ *    - Il utilise le mattermostService pour récupérer les données utilisateur.
+ *    - Il met à jour le nom et les initiales de l'avatar avec ces informations.
+ * 4. Il gère la fermeture de la notification lorsque l'utilisateur clique en dehors ou sur le bouton de fermeture.
+ * 5. Si la notification a un channelId et qu'un onClick est fourni, il permet de naviguer vers le message en cliquant sur la Snackbar.
+ * 6. Il détermine la sévérité de l'alerte (couleur) en fonction du type de notification.
+ * 7. Il affiche le contenu de la notification avec un avatar de l'expéditeur et un bouton pour voir le message si applicable.
+ *
+ * En résumé, ce composant fournit une interface visuelle pratique pour afficher des notifications Mattermost à l'utilisateur,
+ * avec des interactions pour fermer la notification ou naviguer vers le contenu lié.
  */
 const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
   notification,
@@ -41,9 +59,17 @@ const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
   autoHideDuration = 5000,
 }) => {
   const [open, setOpen] = useState(true);
-  const { service } = useMattermost();
+  const { services } = useMattermost();
   const [senderName, setSenderName] = useState<string>(notification.title);
   const [avatarInitials, setAvatarInitials] = useState<string>("");
+
+  assertServiceInitialized(services, "NotificationSnackbar requires services");
+  assertServiceInitialized(
+    services.mattermostService,
+    "NotificationSnackbar requires MattermostService",
+  );
+
+  const mattermostService = services.mattermostService;
 
   // Charger les informations de l'expéditeur si disponibles
   useEffect(() => {
@@ -51,21 +77,20 @@ const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
       // Si nous avons un ID d'expéditeur dans la notification
       if (notification.sender?.id) {
         try {
-          const users = await service.getUsers({
+          const users = await mattermostService.getUsers({
             ids: [notification.sender.id],
           });
+
           if (users && users.length > 0) {
             const sender = users[0];
-            setSenderName(
-              `${sender.first_name || ""} ${sender.last_name || ""}`.trim() ||
-                sender.username,
-            );
-            setAvatarInitials(
-              getInitials(
-                `${sender.first_name || ""} ${sender.last_name || ""}`.trim() ||
-                  sender.username,
-              ),
-            );
+            const displayName = `${sender.first_name || ""} ${
+              sender.last_name || ""
+            }`.trim();
+
+            setSenderName(displayName || sender.username);
+
+            // Générer les initiales de l'avatar à partir du nom complet ou du nom d'utilisateur
+            setAvatarInitials(getInitials(displayName || sender.username));
           }
         } catch (error) {
           console.error(
@@ -77,7 +102,7 @@ const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
     };
 
     void loadSenderInfo();
-  }, [notification, service]);
+  }, [notification, mattermostService]);
 
   // Gérer la fermeture de la notification
   const handleClose = (
@@ -119,7 +144,7 @@ const NotificationSnackbar: React.FC<NotificationSnackbarProps> = ({
       autoHideDuration={autoHideDuration}
       onClose={handleClose}
       anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      slots={{ transition: SlideTransition }}
+      TransitionComponent={SlideTransition}
     >
       <Alert
         onClose={handleClose}

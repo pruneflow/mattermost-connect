@@ -21,7 +21,7 @@ import {
 } from "@mui/icons-material";
 import { MessageActionsProps } from "./MessageTypes";
 import { EmojiPicker, PickerMode } from "../EmojiPicker";
-import { EmojiProvider, useMattermost } from "../../../index";
+import EmojiProvider, { useMattermost } from "../../../index";
 
 /**
  * Displays action buttons and menus for a message
@@ -41,7 +41,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
     null,
   );
   const reactionMenuOpen = Boolean(reactionAnchorEl);
-  const { service } = useMattermost();
+  const { services } = useMattermost();
 
   // Reaction handlers
   const handleReactionMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -58,7 +58,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
     try {
       // Add the reaction to the message
       if (result.emoji && message.id) {
-        await service.addReaction(message.id, result.emoji);
+        await services?.emojiService?.addReaction(message.id, result.emoji);
       }
     } catch (error) {
       console.error("Error adding reaction:", error);

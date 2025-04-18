@@ -8,9 +8,9 @@ import {
   Tooltip,
 } from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 import { getEmojiFromName } from "../EmojiPicker";
-import { WebSocketEventType } from "../../../services/notification.service";
+import { WebSocketEventType } from "../../../services/";
 
 /**
  * Type interne pour la gestion des réactions
@@ -31,7 +31,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   isFromCurrentUser = false,
   sx,
 }) => {
-  const { service, currentUser, notificationService } = useMattermost();
+  const { services, currentUser } = useMattermost();
   const [reactions, setReactions] = useState<ReactionInfo[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
@@ -211,21 +211,21 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
     };
 
     // S'abonner aux événements
-    const unsubscribeAdded = notificationService.addEventListener(
+    const unsubscribeAdded = services?.notificationService.addEventListener(
       WebSocketEventType.REACTION_ADDED,
       handleReactionAdded,
     );
 
-    const unsubscribeRemoved = notificationService.addEventListener(
+    const unsubscribeRemoved = services?.notificationService.addEventListener(
       WebSocketEventType.REACTION_REMOVED,
       handleReactionRemoved,
     );
 
     return () => {
-      unsubscribeAdded();
-      unsubscribeRemoved();
+      if (unsubscribeAdded) unsubscribeAdded();
+      if (unsubscribeRemoved) unsubscribeRemoved();
     };
-  }, [message.id]);
+  }, [message.id, services?.notificationService]);
 
   // Fonction pour vérifier si l'utilisateur a déjà réagi
   const hasUserReacted = useCallback(
@@ -241,7 +241,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   // Gérer le clic sur une réaction
   const handleReactionClick = useCallback(
     async (emojiName: string) => {
-      if (!currentUser || !service) return;
+      if (!currentUser || !services?.emojiService) return;
 
       // Définir l'état de chargement pour cet emoji
       setLoading((prev) => ({ ...prev, [emojiName]: true }));
@@ -251,75 +251,14 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
 
         if (alreadyReacted) {
           // L'utilisateur a déjà réagi, supprimer la réaction
-          await service.removeReaction(
+          await services?.emojiService?.removeReaction(
             message.channel_id,
             message.id,
             emojiName,
           );
-
-          /*// Mise à jour optimiste (l'événement WebSocket confirmera)
-          setReactions((prevReactions) => {
-            const updatedReactions = [...prevReactions];
-            const reactionIndex = updatedReactions.findIndex(
-              (r) => r.emojiName === emojiName,
-            );
-
-            if (reactionIndex >= 0) {
-              const reaction = updatedReactions[reactionIndex];
-              const updatedUserIds = new Set(reaction.userIds);
-              updatedUserIds.delete(currentUser.id);
-
-              if (updatedUserIds.size === 0) {
-                // Plus personne n'a réagi, supprimer la réaction
-                updatedReactions.splice(reactionIndex, 1);
-              } else {
-                // Mettre à jour la réaction
-                updatedReactions[reactionIndex] = {
-                  ...reaction,
-                  count: reaction.count - 1,
-                  userIds: updatedUserIds,
-                };
-              }
-            }
-
-            return updatedReactions;
-          });*/
         } else {
           // L'utilisateur n'a pas encore réagi, ajouter la réaction
-          await service.addReaction(message.id, emojiName);
-
-          /*     // Mise à jour optimiste (l'événement WebSocket confirmera)
-          setReactions((prevReactions) => {
-            const updatedReactions = [...prevReactions];
-            const existingIndex = updatedReactions.findIndex(
-              (r) => r.emojiName === emojiName,
-            );
-
-            if (existingIndex >= 0) {
-              // La réaction existe déjà
-              const reaction = updatedReactions[existingIndex];
-              const updatedUserIds = new Set(reaction.userIds);
-
-              if (!updatedUserIds.has(currentUser.id)) {
-                updatedUserIds.add(currentUser.id);
-                updatedReactions[existingIndex] = {
-                  ...reaction,
-                  count: reaction.count + 1,
-                  userIds: updatedUserIds,
-                };
-              }
-            } else {
-              // Nouvelle réaction
-              updatedReactions.push({
-                emojiName,
-                emoji: getEmojiFromName(emojiName) || emojiName,
-                count: 1,
-                userIds: new Set([currentUser.id]),
-              });
-            }
-
-            return updatedReactions;
-          });*/
+          await services?.emojiService.addReaction(message.id, emojiName);
         }
       } catch (error) {
         console.error("Error toggling reaction:", error);
@@ -332,7 +271,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
         });
       }
     },
-    [message, hasUserReacted, service, currentUser],
+    [message, hasUserReacted, services?.emojiService, currentUser],
   );
 
   // Si aucune réaction, ne rien afficher

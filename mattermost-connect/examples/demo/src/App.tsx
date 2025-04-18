@@ -3,8 +3,6 @@ import React, { useState } from "react";
 import {
   Box,
   Container,
-  AppBar,
-  Toolbar,
   Typography,
   Button,
   TextField,
@@ -17,9 +15,6 @@ import {
   InputLabel,
 } from "@mui/material";
 
-// Material-UI Icons
-import { Logout as LogoutIcon } from "@mui/icons-material";
-
 // Import examples
 import ClassicInterface from "./examples/ClassicInterface";
 
@@ -27,12 +22,11 @@ import ClassicInterface from "./examples/ClassicInterface";
 import {
   MattermostProvider,
   MattermostThemeProvider,
-  createMattermostService,
-  createMockService,
   useMattermost,
   AuthenticationSystem,
-  formatUserDisplayName,
+  createServiceContainer,
 } from "mattermost-connect";
+import createMockService from "./mockService";
 
 // Configuration pour différents modes de connexion
 const MODES = {
@@ -83,13 +77,14 @@ const LoginForm: React.FC<{
               token,
             });
           } else if (username && password) {
-            const serviceInstance = createMattermostService({ serverUrl });
+            const serviceInstance = createServiceContainer({ serverUrl });
 
-            if (serviceInstance.authenticate) {
-              const loginResult = await serviceInstance.authenticate(
-                username,
-                password,
-              );
+            if (serviceInstance?.mattermostService?.authenticate) {
+              const loginResult =
+                await serviceInstance.mattermostService.authenticate(
+                  username,
+                  password,
+                );
 
               onLogin({
                 mode: MODES.DIRECT,
@@ -339,9 +334,7 @@ const App: React.FC = () => {
           enableWebsocket={true}
         >
           {/* Votre interface principale après connexion */}
-          <AuthenticationSystem onLogout={handleLogout}>
-            <ExamplesContainer onLogout={handleLogout} />
-          </AuthenticationSystem>
+          <ExamplesContainer onLogout={handleLogout} />
         </MattermostProvider>
       )}
     </MattermostThemeProvider>

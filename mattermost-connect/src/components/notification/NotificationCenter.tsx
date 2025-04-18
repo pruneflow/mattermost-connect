@@ -1,5 +1,5 @@
 // src/components/notification/NotificationCenter.tsx
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Drawer,
   Box,
@@ -12,7 +12,6 @@ import {
   IconButton,
   Badge,
   Divider,
-  Button,
   Tooltip,
 } from "@mui/material";
 import {
@@ -25,13 +24,10 @@ import {
   Person as PersonIcon,
   Error as ErrorIcon,
 } from "@mui/icons-material";
-import { Notification } from "../../services/notification.service";
-import { useMattermost } from "../../context/MattermostProvider";
-import {
-  formatTimestamp,
-  getInitials,
-  generateColorFromString,
-} from "../../utils";
+import { Notification } from "../../services/";
+import { useMattermost } from "../../context";
+import { formatTimestamp, generateColorFromString } from "../../utils";
+import { assertServiceInitialized } from "../../services";
 
 /**
  * Props pour le composant NotificationCenter
@@ -49,14 +45,18 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { notificationService } = useMattermost();
-
+  const { services } = useMattermost();
+  assertServiceInitialized(services, "NotificationSnackbar requires services");
+  assertServiceInitialized(
+    services.notificationService,
+    "NotificationSnackbar requires notificationService",
+  );
   // Charger les notifications initiales
   useEffect(() => {
-    setNotifications(notificationService.getNotifications());
+    setNotifications(services.notificationService.getNotifications());
 
     // Écouter les nouvelles notifications
-    const removeListener = notificationService.addEventListener(
+    const removeListener = services.notificationService.addEventListener(
       "notification_added",
       (notification: Notification) => {
         setNotifications((prev) => [notification, ...prev]);
@@ -64,7 +64,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     );
 
     // Écouter les mises à jour de toutes les notifications
-    const updateListener = notificationService.addEventListener(
+    const updateListener = services.notificationService.addEventListener(
       "notifications_updated",
       (updatedNotifications: Notification[]) => {
         setNotifications([...updatedNotifications]);
@@ -91,7 +91,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
   // Marquer une notification comme lue
   const handleMarkAsRead = (notificationId: string) => {
-    notificationService.markNotificationAsRead(notificationId);
+    services.notificationService.markNotificationAsRead(notificationId);
     setNotifications((prev) =>
       prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
     );
@@ -99,13 +99,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
   // Marquer toutes les notifications comme lues
   const handleMarkAllAsRead = () => {
-    notificationService.markAllNotificationsAsRead();
+    services.notificationService.markAllNotificationsAsRead();
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
   // Effacer toutes les notifications
   const handleClearAll = () => {
-    notificationService.clearNotifications();
+    services.notificationService.clearNotifications();
     setNotifications([]);
   };
 

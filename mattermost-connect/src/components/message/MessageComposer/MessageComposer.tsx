@@ -1,5 +1,6 @@
+// src/components/message/MessageComposer/MessageComposer.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 import {
   Box,
   Collapse,
@@ -15,6 +16,7 @@ import { ComposerToolbar } from "./components/ComposerToolbar";
 import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../../context/EmojiProvider";
 import { MattermostFile } from "../Attachment/Attachment";
+import { assertServiceInitialized } from "../../../services";
 
 export enum MessageComposerMode {
   AUTO = "auto",
@@ -62,7 +64,15 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   style,
   sx,
 }) => {
-  const { service, replyTo, clearReply, isReplying } = useMattermost();
+  const { services, replyTo, clearReply, isReplying } = useMattermost();
+
+  assertServiceInitialized(services, "MessageComposer requires services");
+  assertServiceInitialized(
+    services.mattermostService,
+    "MessageComposer requires MattermostService",
+  );
+
+  const mattermostService = services.mattermostService;
 
   // État pour le texte du message
   const [message, setMessage] = useState(initialText);
@@ -113,7 +123,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       (status) => !status.uploading && !status.uploaded && !status.error,
     );
 
-    if (filesToUpload.length > 0 && !uploadInProgress && service?.uploadFiles) {
+    if (filesToUpload.length > 0 && !uploadInProgress) {
       const uploadFiles = async () => {
         setUploadInProgress(true);
 
@@ -135,7 +145,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           formData.append("channel_id", channelId);
 
           // Upload the files
-          const response = await service.uploadFiles(formData);
+          const response = await mattermostService.uploadFiles(formData);
 
           // Update the status of uploaded files
           if (response && response.file_infos) {
@@ -196,7 +206,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
       void uploadFiles();
     }
-  }, [attachmentStatus, uploadInProgress, service, channelId]);
+  }, [attachmentStatus, uploadInProgress, channelId]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -241,13 +251,12 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   };
 
   const handleSendMessage = async () => {
-    // Validation de base
     if (!message.trim() && attachmentStatus.length === 0) return;
 
-    // Protection contre les soumissions multiples
+    // Protect against multiple submissions
     if (isSubmittingRef.current || sending) return;
 
-    // Vérifier si tous les uploads sont terminés
+    // Check if all uploads are finished
     if (hasUploadsInProgress) {
       setError("Please wait for all files to finish uploading");
       return;
@@ -255,7 +264,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
 
     isSubmittingRef.current = true;
 
-    // En mode manual, on laisse le parent gérer l'envoi du message
+    // In manual mode, let the parent handle sending
     if (mode === MessageComposerMode.MANUAL) {
       try {
         const messageData: MessageData = {
@@ -266,16 +275,16 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           replyToMessageId: isReplying && replyTo ? replyTo.id : undefined,
         };
 
-        // Appeler le callback avec les données du message
+        // Call the onMessageSent callback with the message data
         if (onMessageSent) {
           (onMessageSent as (data: MessageData) => void)(messageData);
         }
 
-        // Réinitialiser l'état
+        // Reset state
         setMessage("");
         setAttachmentStatus([]);
 
-        // Effacer l'état de réponse
+        // Clear the reply state
         if (isReplying && clearReply) {
           clearReply();
         }
@@ -290,15 +299,15 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
       return;
     }
 
-    // Mode auto: le composant gère l'envoi du message
+    // Auto mode: the component handles sending
     try {
       setSending(true);
       setError(null);
 
       if (isReplying && replyTo && replyTo.id) {
-        // Envoi d'une réponse à un message
-        if (service.replyToMessage) {
-          await service.replyToMessage(
+        // Send a reply
+        if (mattermostService.replyToMessage) {
+          await mattermostService.replyToMessage(
             channelId,
             replyTo.id,
             message,
@@ -308,15 +317,19 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           throw new Error("Reply functionality is not available");
         }
       } else {
-        // Message normal avec les IDs de fichiers uploadés
-        await service.postMessage(channelId, message, uploadedFileIds);
+        // Regular message with uploaded file IDs
+        await mattermostService.postMessage(
+          channelId,
+          message,
+          uploadedFileIds,
+        );
       }
 
       // Reset state
       setMessage("");
       setAttachmentStatus([]);
 
-      // Call the callback if provided (in auto mode, just the message text)
+      // Call the onMessageSent callback (in auto mode, just the message text)
       if (onMessageSent) {
         (onMessageSent as (message: string) => void)(message);
       }
@@ -326,12 +339,12 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
     } finally {
       setSending(false);
 
-      // Toujours nettoyer l'état de réponse, que l'envoi réussisse ou échoue
+      // Always clear the reply state whether send succeeds or fails
       if (isReplying && clearReply) {
         clearReply();
       }
 
-      // Réinitialiser le verrou de soumission
+      // Reset the submit lock
       isSubmittingRef.current = false;
     }
   };
@@ -358,20 +371,20 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         ...sx,
       }}
     >
-      {/* Contexte de réponse */}
+      {/* Reply context */}
       <Collapse in={isReplying}>
         {replyTo && <ReplyContext replyTo={replyTo} clearReply={clearReply} />}
       </Collapse>
 
-      {/* Prévisualisation des pièces jointes */}
+      {/* Attachment previews */}
       <AttachmentPreview
         attachmentStatus={attachmentStatus}
         handleRemoveAttachment={handleRemoveAttachment}
       />
 
-      {/* Zone de saisie du message */}
+      {/* Message input area */}
       <Box sx={{ display: "flex", alignItems: "flex-end" }} ref={toolbarRef}>
-        {/* Champ de texte */}
+        {/* Text field */}
         <ComposerInput
           placeholder={placeholder}
           message={message}
@@ -382,7 +395,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
           handleKeyPress={handleKeyPress}
         />
 
-        {/* Barre d'outils */}
+        {/* Toolbar */}
         <ComposerToolbar
           allowAttachments={allowAttachments}
           disabled={disabled}
@@ -398,7 +411,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         />
       </Box>
 
-      {/* Message d'erreur */}
+      {/* Error message */}
       {error && (
         <Typography
           variant="caption"
@@ -410,7 +423,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
         </Typography>
       )}
 
-      {/* Emoji picker - Utilisation de Popper au lieu de Fade pour améliorer les performances */}
+      {/* Emoji picker - using Popper instead of Fade for performance */}
       <Popper
         open={showEmojiPicker}
         anchorEl={toolbarRef.current}
