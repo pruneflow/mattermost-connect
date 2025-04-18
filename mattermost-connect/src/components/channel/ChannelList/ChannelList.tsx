@@ -105,6 +105,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
     userService,
     setActiveChannel,
     activeChannel,
+    knownUsers,
+    getUserDisplayName,
   } = useMattermost();
 
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -146,9 +148,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
         const parts = channel.name.split("__");
         // Trouver l'ID qui n'est pas celui de l'utilisateur actuel
         const otherUserId = parts.find((id) => id !== currentUser.id);
-        if (otherUserId) {
-          return userService.getUserDisplayName(otherUserId);
-        }
+        return getUserDisplayName(otherUserId!);
       }
 
       // Fallback sur le nom d'affichage par défaut
@@ -171,7 +171,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
         const channelsData = await service?.getChannels(teamId);
 
         if (channelsData && channelsData.length > 0) {
-          let currentChannel = null;
+          let currentChannel;
           if (activeChannel) {
             const activeChannelIsInTeam = channelsData.find(
               (c) => c.id === activeChannel.id,
@@ -392,12 +392,13 @@ const ChannelList: React.FC<ChannelListProps> = ({
                   onSelectChannel && onSelectChannel(channel);
                   setActiveChannel(channel);
                 };
+                const displayName = getChannelDisplayName(channel);
                 return (
                   <ChannelItem
                     key={channel.id}
                     channel={{
                       ...channel,
-                      display_name: getChannelDisplayName(channel),
+                      display_name: displayName,
                     }}
                     isSelected={channel.id === activeChannel?.id}
                     onClick={handleSelectChannel}

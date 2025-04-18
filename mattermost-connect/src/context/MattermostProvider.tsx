@@ -40,6 +40,7 @@ import {
   WebSocketEventType,
 } from "../services/notification.service";
 import { NotificationSnackbar } from "../components/notification";
+import { formatUserDisplayName } from "../utils";
 
 /**
  * Type of the Mattermost context that provides access to
@@ -165,6 +166,20 @@ export const useMattermost = (): MattermostContextType => {
 };
 
 /**
+ * Sépare l'état de l'utilisateur courant de l'état principal pour éviter les re-renders
+ */
+const CurrentUserProvider = ({ children }: { children: ReactNode }) => {
+  const context = useContext(MattermostContext);
+  if (!context) {
+    throw new Error(
+      "CurrentUserProvider must be used within a MattermostProvider",
+    );
+  }
+
+  return <>{children}</>;
+};
+
+/**
  * Props for the MattermostProvider component
  */
 interface MattermostProviderProps extends ProviderConfig {
@@ -191,7 +206,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   // Common options
   enableWebsocket = true,
-  refreshInterval = 30000,
+  refreshInterval = 300000, // Augmenté à 5 minutes au lieu de 30 secondes
 
   // Child components
   children,
@@ -215,10 +230,13 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // État pour stocker tous les utilisateurs connus (pas seulement ceux de l'équipe)
   const [knownUsers, setKnownUsers] = useState<Record<string, User>>({});
 
+  // Références pour éviter les re-renders inutiles
   const serviceInitializedRef = useRef<boolean>(false);
   const socketInitializedRef = useRef<boolean>(false);
   const currentServiceRef = useRef<MattermostService | null>(null);
   const currentSocketRef = useRef<WebSocketConnection | null>(null);
+  const currentUserRef = useRef<User | null>(null);
+  const lastUserRefreshRef = useRef<number>(0);
 
   // Secondary services
   const [fileService, setFileService] = useState<FileService | null>(null);
@@ -271,7 +289,23 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   const getUserDisplayName = useCallback(
     (userId: string): string => {
       if (!userId || !userService) return "Utilisateur inconnu";
-      return userService.getUserDisplayName(userId);
+      if (knownUsers[userId]) {
+        const user = knownUsers[userId];
+        return formatUserDisplayName(user);
+      }
+      if (userService) {
+        const displayName = userService.getUserDisplayName(userId);
+        // Si le résultat est différent de "Chargement...", le retourner
+        if (displayName !== "Chargement...") {
+          return displayName;
+        }
+
+        // Déclencher le chargement de l'utilisateur en arrière-plan (si pas déjà fait)
+        void userService.getUser(userId);
+      }
+
+      // Valeur par défaut
+      return "Chargement...";
     },
     [userService],
   );
@@ -330,6 +364,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     [getTypingUsersForChannel, getUserDisplayName],
   );
 
+  // Initialisation du service et du websocket
   useEffect(() => {
     if (!mode) {
       setError(
@@ -417,11 +452,25 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           try {
             // Get current user - now uses caching
             const user = await currentServiceRef.current.getCurrentUser();
+
+            // Only update the user state if it has actually changed to avoid re-renders
+            if (
+              !currentUserRef.current ||
+              JSON.stringify(currentUserRef.current) !== JSON.stringify(user)
+            ) {
+              currentUserRef.current = user;
+              if (isMounted) {
+                setCurrentUser(user);
+              }
+            }
+
             if (isMounted) {
-              setCurrentUser(user);
               setIsConnected(true);
               setError(null);
             }
+
+            // Record last refresh time
+            lastUserRefreshRef.current = Date.now();
 
             // Initialiser les services avec l'ID utilisateur
             if (notificationService) {
@@ -436,7 +485,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
             }
 
             // Mettre à jour la liste des utilisateurs connus
-            if (isMounted) {
+            if (isMounted && user) {
               setKnownUsers((prev) => ({
                 ...prev,
                 [user.id]: user,
@@ -445,58 +494,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
             // If WebSocket is enabled, initialize it only if it doesn't exist
             if (enableWebsocket && !socketInitializedRef.current) {
-              try {
-                console.debug("Initializing WebSocket connection...");
-                // Get WebSocket URL and token
-                const wsUrl = currentServiceRef.current.getWebsocketUrl();
-                const wsToken =
-                  await currentServiceRef.current.getWebsocketToken();
-
-                // Set up WebSocket connection
-                const ws = await setupWebsocket({
-                  mode: mode as "direct" | "proxy" | "custom",
-                  serverUrl: wsUrl,
-                  token: wsToken,
-                  onMessage: (msg) => {
-                    console.debug("WebSocket message received:", msg);
-
-                    if (notificationService) {
-                      notificationService.processWebSocketEvent(
-                        msg as WebSocketEvent,
-                      );
-                    } else if (localNotificationService) {
-                      localNotificationService.processWebSocketEvent(
-                        msg as WebSocketEvent,
-                      );
-                    }
-                  },
-                  onError: (err) => {
-                    console.error("WebSocket error:", err);
-                    // Consider reconnecting or showing an error message
-                  },
-                  onClose: (closeEvent) => {
-                    console.log("WebSocket closed:", closeEvent);
-                    if (isMounted) {
-                      setWebsocket(null);
-                    }
-                    socketInitializedRef.current = false;
-                    currentSocketRef.current = null;
-                    // Consider reconnecting or showing a connection lost message
-                  },
-                });
-
-                currentSocketRef.current = ws;
-                socketInitializedRef.current = true;
-                if (isMounted) {
-                  setWebsocket(ws);
-                }
-                console.debug("WebSocket connection established successfully");
-              } catch (wsError) {
-                console.error("Failed to initialize WebSocket:", wsError);
-                // Consider this a warning, not a fatal error
-                socketInitializedRef.current = false;
-                currentSocketRef.current = null;
-              }
+              await initializeWebSocket(
+                currentServiceRef.current,
+                mode,
+                localNotificationService,
+              );
             }
           } catch (connErr) {
             console.error("Connection error:", connErr);
@@ -513,6 +515,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
           }
         } else if (mode === "custom" && serviceProvider?.currentUser) {
           // For custom services that provide a current user
+          currentUserRef.current = serviceProvider.currentUser;
           if (isMounted) {
             setCurrentUser(serviceProvider.currentUser);
             setIsConnected(true);
@@ -547,47 +550,17 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
           // If the custom service provides a user cache
           if ((currentServiceRef.current as any)._currentUser && isMounted) {
-            setCurrentUser((currentServiceRef.current as any)._currentUser);
-          }
-        }
+            const customUser = (currentServiceRef.current as any)._currentUser;
 
-        // Set up an interval to refresh the current user if needed
-        // This is useful for keeping status, permissions, etc. up to date
-        if (refreshInterval > 0 && currentServiceRef.current) {
-          const intervalId = setInterval(async () => {
-            if (!isMounted) return;
-
-            try {
-              // If the service implements refreshCurrentUser, use it
-              if (
-                (currentServiceRef.current instanceof DirectService ||
-                  currentServiceRef.current instanceof ProxyService) &&
-                isConnected
-              ) {
-                const freshUser =
-                  await currentServiceRef.current.refreshCurrentUser();
-                if (isMounted) {
-                  setCurrentUser(freshUser);
-
-                  // Mettre à jour l'utilisateur dans le service utilisateur
-                  if (userService) {
-                    userService.addUser(freshUser);
-                  }
-
-                  // Mettre à jour la liste des utilisateurs connus
-                  setKnownUsers((prev) => ({
-                    ...prev,
-                    [freshUser.id]: freshUser,
-                  }));
-                }
-              }
-            } catch (refreshError) {
-              console.warn("Error refreshing user:", refreshError);
+            // Only update if different
+            if (
+              JSON.stringify(currentUserRef.current) !==
+              JSON.stringify(customUser)
+            ) {
+              currentUserRef.current = customUser;
+              setCurrentUser(customUser);
             }
-          }, refreshInterval);
-
-          // Clean up interval on unmount
-          return () => clearInterval(intervalId);
+          }
         }
       } catch (err) {
         console.error("Service initialization error:", err);
@@ -603,8 +576,108 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         }
       }
     };
+
     console.debug("initService");
     void initService();
+
+    // Fonction pour initialiser WebSocket
+    async function initializeWebSocket(
+      service: MattermostService,
+      mode: string,
+      notificationSvc: NotificationService | null,
+    ) {
+      try {
+        console.debug("Initializing WebSocket connection...");
+        // Get WebSocket URL and token
+        const wsUrl = service.getWebsocketUrl();
+        const wsToken = await service.getWebsocketToken();
+
+        // Set up WebSocket connection
+        const ws = await setupWebsocket({
+          mode: mode as "direct" | "proxy" | "custom",
+          serverUrl: wsUrl,
+          token: wsToken,
+          onMessage: (msg) => {
+            // Vérifier si le message concerne une mise à jour utilisateur
+            if (msg.event === WebSocketEventType.USER_UPDATED) {
+              handleUserUpdatedEvent(msg);
+            }
+
+            // Traiter normalement le message
+            if (notificationSvc) {
+              notificationSvc.processWebSocketEvent(msg as WebSocketEvent);
+            }
+          },
+          onError: (err) => {
+            console.error("WebSocket error:", err);
+          },
+          onClose: (closeEvent) => {
+            console.log("WebSocket closed:", closeEvent);
+            if (isMounted) {
+              setWebsocket(null);
+            }
+            socketInitializedRef.current = false;
+            currentSocketRef.current = null;
+          },
+        });
+
+        currentSocketRef.current = ws;
+        socketInitializedRef.current = true;
+        if (isMounted) {
+          setWebsocket(ws);
+        }
+        console.debug("WebSocket connection established successfully");
+      } catch (wsError) {
+        console.error("Failed to initialize WebSocket:", wsError);
+        // Consider this a warning, not a fatal error
+        socketInitializedRef.current = false;
+        currentSocketRef.current = null;
+      }
+    }
+
+    // Fonction pour gérer les mises à jour d'utilisateur via WebSocket
+    const handleUserUpdatedEvent = (event: any) => {
+      if (event.data && event.data.user && currentUserRef.current) {
+        try {
+          const updatedUser =
+            typeof event.data.user === "string"
+              ? JSON.parse(event.data.user)
+              : event.data.user;
+          // Vérifier si c'est l'utilisateur courant
+          if (updatedUser.id === currentUserRef.current.id) {
+            console.debug("User updated via WebSocket event:", updatedUser.id);
+            currentUserRef.current = updatedUser;
+            setCurrentUser(updatedUser); // Ne pas sauter cette étape!
+            // Mettre à jour uniquement si les données ont changé
+
+            // Mettre à jour l'utilisateur dans le service utilisateur
+            if (userService) {
+              userService.addUser(updatedUser);
+            }
+
+            // Mettre à jour la liste des utilisateurs connus
+            setKnownUsers((prev) => ({
+              ...prev,
+              [updatedUser.id]: updatedUser,
+            }));
+
+            // Mettre à jour le timestamp du dernier rafraîchissement
+            lastUserRefreshRef.current = Date.now();
+          } else if (userService) {
+            // Si c'est un autre utilisateur, juste le mettre à jour dans le service
+            userService.addUser(updatedUser);
+
+            // Et dans la liste des utilisateurs connus
+            setKnownUsers((prev) => ({
+              ...prev,
+              [updatedUser.id]: updatedUser,
+            }));
+          }
+        } catch (error) {
+          console.error("Error handling user updated event:", error);
+        }
+      }
+    };
 
     // Cleanup on unmount
     return () => {
@@ -640,9 +713,81 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     userId,
     serviceProvider,
     enableWebsocket,
+    notificationService,
+    userService,
   ]);
 
-  // Écouter les nouvelles notifications pour afficher une Snackbar
+  // Effet périodique de rafraîchissement utilisateur (beaucoup moins fréquent)
+  useEffect(() => {
+    // Ne pas configurer l'intervalle si refreshInterval est désactivé (0 ou négatif)
+    if (refreshInterval <= 0 || !currentServiceRef.current || !isConnected) {
+      return;
+    }
+
+    console.debug(`Setting up user refresh interval (${refreshInterval}ms)`);
+
+    // Fonction pour rafraîchir l'utilisateur
+    const refreshUser = async () => {
+      // Vérifier si suffisamment de temps s'est écoulé depuis le dernier rafraîchissement
+      const now = Date.now();
+      if (now - lastUserRefreshRef.current < refreshInterval) {
+        return;
+      }
+
+      try {
+        // Si le service implémente refreshCurrentUser, l'utiliser
+        if (
+          (currentServiceRef.current instanceof DirectService ||
+            currentServiceRef.current instanceof ProxyService) &&
+          isConnected
+        ) {
+          console.debug("Refreshing current user...");
+          const freshUser =
+            await currentServiceRef.current.refreshCurrentUser();
+          // Mettre à jour seulement si l'utilisateur a changé
+          if (
+            JSON.stringify(currentUserRef.current) !== JSON.stringify(freshUser)
+          ) {
+            console.debug("User refreshed with changes detected");
+            currentUserRef.current = freshUser;
+            setCurrentUser(freshUser);
+
+            // Mettre à jour l'utilisateur dans le service utilisateur
+            if (userService) {
+              userService.addUser(freshUser);
+            }
+
+            // Mettre à jour la liste des utilisateurs connus
+            setKnownUsers((prev) => ({
+              ...prev,
+              [freshUser.id]: freshUser,
+            }));
+          } else {
+            console.debug("User refreshed, no changes detected");
+          }
+
+          // Mettre à jour le timestamp même si aucun changement
+          lastUserRefreshRef.current = now;
+        }
+      } catch (refreshError) {
+        console.warn("Error refreshing user:", refreshError);
+      }
+    };
+
+    // Exécuter le rafraîchissement immédiatement si nécessaire
+    void refreshUser();
+
+    // Configurer l'intervalle pour les rafraîchissements périodiques
+    const intervalId = setInterval(refreshUser, refreshInterval);
+
+    // Nettoyer l'intervalle lors du démontage
+    return () => {
+      clearInterval(intervalId);
+      console.debug("User refresh interval cleared");
+    };
+  }, [refreshInterval, isConnected, userService]);
+
+  // Écouter les nouvelles notifications pour afficher une Snackbar (pas de changement - faible fréquence)
   useEffect(() => {
     if (!notificationService) return;
 
@@ -667,7 +812,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     );
   }, [activeChannel, notificationService]);
 
-  // Gérer l'affichage des notifications une par une - Optimisé
+  // Gérer l'affichage des notifications une par une
   useEffect(() => {
     // Si nous n'avons pas de notification en cours d'affichage et qu'il y en a dans la file d'attente
     if (!currentNotification && notifications.length > 0) {
@@ -738,26 +883,37 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     }
   }, [isConnected, service, activeChannel, userService]);
 
-  // Synchroniser knownUsers avec userService
+  // Synchroniser knownUsers avec userService (moins fréquent)
   useEffect(() => {
     if (!userService) return;
 
     const updateKnownUsers = () => {
       // Cette fonction sera appelée moins fréquemment que les appels à getUser
       const allUsers = userService.getAllUsers();
-      setKnownUsers(allUsers);
+
+      // Ne mettre à jour que si nécessaire (comparaison profonde)
+      const hasChanges = Object.keys(allUsers).some(
+        (userId) =>
+          !knownUsers[userId] ||
+          JSON.stringify(knownUsers[userId]) !==
+            JSON.stringify(allUsers[userId]),
+      );
+
+      if (hasChanges) {
+        setKnownUsers(allUsers);
+      }
     };
 
     // Mettre à jour au démarrage
     updateKnownUsers();
 
-    // Configurer un intervalle pour mettre à jour périodiquement (toutes les 10 secondes)
-    const interval = setInterval(updateKnownUsers, 10000);
+    // Configurer un intervalle pour mettre à jour périodiquement (toutes les 30 secondes)
+    const interval = setInterval(updateKnownUsers, 30000);
 
     return () => clearInterval(interval);
-  }, [userService]);
+  }, [userService, knownUsers]);
 
-  // Fonction pour naviguer vers un canal spécifique - Optimisée avec useCallback
+  // Fonction pour naviguer vers un message - Optimisée avec useCallback
   const navigateToMessage = useCallback(
     async (notification: Notification) => {
       const { channelId, messageId } = notification;
@@ -900,6 +1056,22 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     [isConnected, service, notificationService],
   );
 
+  // Création d'une version stable du contexte pour éviter les re-renders inutiles
+  const stableSetActiveChannel = useCallback((channel: Channel | null) => {
+    setActiveChannel(channel);
+  }, []);
+
+  const stableSetActiveTeam = useCallback((team: Team | null) => {
+    setActiveTeam(team);
+  }, []);
+
+  const stableSetHighlightMessageId = useCallback(
+    (messageId: string | undefined) => {
+      setHighlightMessageId(messageId);
+    },
+    [],
+  );
+
   // Mémoriser la valeur du contexte pour éviter les re-renders inutiles
   const contextValue = useMemo<MattermostContextType>(
     () => ({
@@ -907,7 +1079,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       mode,
       isConnected,
       error,
-      currentUser,
+      currentUser: currentUserRef.current,
       service: service!,
       websocket,
 
@@ -925,11 +1097,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       // Navigation
       navigateToMessage,
       activeChannel,
-      setActiveChannel,
+      setActiveChannel: stableSetActiveChannel,
 
       // Team management
       activeTeam,
-      setActiveTeam,
+      setActiveTeam: stableSetActiveTeam,
 
       // Users management
       knownUsers,
@@ -950,7 +1122,11 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       notificationService: notificationService!,
 
       highlightMessageId,
-      setHighlightMessageId,
+      setHighlightMessageId: stableSetHighlightMessageId,
+
+      isCurrentUser: (userId: string): boolean => {
+        return !!currentUser && currentUser.id === userId;
+      },
     }),
     [
       // Dépendances explicites pour éviter les rendus inutiles
@@ -969,7 +1145,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       userService,
       navigateToMessage,
       activeChannel,
+      stableSetActiveChannel,
       activeTeam,
+      stableSetActiveTeam,
       knownUsers,
       getUser,
       getUserDisplayName,
@@ -982,6 +1160,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
       markChannelAsRead,
       notificationService,
       highlightMessageId,
+      stableSetHighlightMessageId,
     ],
   );
 

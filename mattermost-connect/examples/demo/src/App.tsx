@@ -256,7 +256,6 @@ const ExamplesContainer: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
   const { currentUser, mode } = useMattermost();
-  console.debug("currentUser", formatUserDisplayName(currentUser));
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       {/* Example content */}

@@ -140,7 +140,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
       }
 
       try {
-        console.debug("Fetching teams data");
         const teamsData = await service.getTeams();
 
         // Vérifier si le composant est toujours monté
@@ -209,7 +208,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     fetchingRef.current = true;
 
     try {
-      console.debug("Fetching team unread counts");
       const unreadCounts: Record<
         string,
         { msg_count: number; mention_count: number }

@@ -1,8 +1,9 @@
 import { User } from "../../../types";
 import Message from "./Message";
-import { useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { Message as MessageType } from "../../../types";
+import { useMattermost } from "../../../context/MattermostProvider";
 
 interface MessageListProps {
   /** Liste des messages à afficher */
@@ -26,6 +27,7 @@ interface MessageListProps {
   /** Propriétés personnalisées pour les messages */
   messageProps?: Partial<React.ComponentProps<typeof Message>>;
   messagesToHighlight: Set<string>;
+  autoScrollToBottom?: boolean;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -38,9 +40,34 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleDeleteMessage,
   messageProps,
   messagesToHighlight,
+  autoScrollToBottom = true,
 }) => {
+  const { currentUser } = useMattermost();
   // Référence pour le scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const isMessageFromCurrentUser = useCallback(
+    (message: MessageType): boolean => {
+      return (
+        // Utiliser userId des props si présent
+        (!!currentUserId && message.user_id === currentUserId) ||
+        // Sinon, utiliser l'utilisateur du contexte
+        (!!currentUser && message.user_id === currentUser.id)
+      );
+    },
+    [currentUserId, currentUser],
+  );
+
+  useEffect(() => {
+    // Forcer le défilement après le montage du composant
+    if (messagesEndRef.current && autoScrollToBottom) {
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: "auto" });
+        }
+      }, 100);
+    }
+  }, [messagesEndRef]);
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -49,7 +76,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           key={message.id}
           message={message}
           renderer={messageRenderer}
-          isFromCurrentUser={message.user_id === currentUserId}
+          isFromCurrentUser={isMessageFromCurrentUser(message)}
           showActions={!readOnly}
           onReply={handleReply}
           onEdit={handleEditMessage}

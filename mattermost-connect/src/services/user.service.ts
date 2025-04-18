@@ -140,7 +140,7 @@ export class UserService {
    * @param userId ID de l'utilisateur
    * @returns Nom d'affichage formaté, ou texte de chargement si l'utilisateur n'est pas encore chargé
    */
-  getUserDisplayName(userId: string): string {
+  public getUserDisplayName(userId: string): string {
     if (!userId) return "Utilisateur inconnu";
 
     const user = this.knownUsers[userId];
@@ -151,6 +151,49 @@ export class UserService {
     }
 
     return formatUserDisplayName(user);
+  }
+
+  public async loadUsersForDirectChannels(channels: Channel[]): Promise<void> {
+    if (!channels || channels.length === 0 || !this.currentUserId) return;
+
+    try {
+      // Extraire tous les IDs utilisateurs uniques des canaux directs
+      const userIds = new Set<string>();
+
+      channels.forEach((channel) => {
+        if ((channel.type === "D" || channel.type === "G") && channel.name) {
+          const parts = channel.name.split("__");
+          parts.forEach((part) => {
+            if (part !== this.currentUserId) {
+              userIds.add(part);
+            }
+          });
+        }
+      });
+
+      // Filtrer les utilisateurs déjà connus
+      const idsToFetch = Array.from(userIds).filter(
+        (id) => !this.knownUsers[id],
+      );
+
+      if (idsToFetch.length === 0) return;
+
+      // Charger tous les utilisateurs en une seule requête
+      console.debug(
+        `Chargement groupé de ${idsToFetch.length} utilisateurs pour canaux DM`,
+      );
+      const users = await this.service.getUsers({ ids: idsToFetch });
+
+      // Stocker les utilisateurs dans le cache
+      users.forEach((user) => {
+        this.knownUsers[user.id] = user;
+      });
+    } catch (error) {
+      console.error(
+        "Erreur lors du chargement des utilisateurs pour les canaux directs:",
+        error,
+      );
+    }
   }
 
   /**

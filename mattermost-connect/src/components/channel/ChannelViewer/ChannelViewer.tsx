@@ -174,31 +174,21 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           !isMounted.current ||
           currentChannelId !== stableChannelId.current
         ) {
-          console.debug(
-            "!isMounted.current || currentChannelId !== stableChannelId.current",
-          );
           return;
         }
 
         // Si le canal actif correspond déjà à ce que nous voulons, l'utiliser directement
         if (activeChannel && activeChannel.id === channelId) {
-          console.debug("activeChannel is set and same id ");
           if (!channel || channel.id !== activeChannel.id) {
-            console.debug("set channel from activeChannel");
             setChannel(activeChannel);
           }
-          console.debug(
-            "return from this activeChannel && activeChannel.id === channelId",
-          );
           return; // Important: sortir tôt pour éviter des appels supplémentaires
         }
 
         // Éviter de recharger le même canal
         if (channel && channel.id === channelId) {
-          console.debug("channel is already set");
           return;
         }
-        console.debug("set from fetching channelData");
         setLoading(true);
         const channelData = await service.getChannel(channelId);
         setChannel(channelData);
@@ -224,11 +214,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     if (!isConnected || !channelId) return;
 
     const currentChannelId = stableChannelId.current;
-    console.debug("loading", loading);
     if (loading && currentChannelId === channelId) {
-      console.debug(
-        "return from this loading && currentChannelId === channelId",
-      );
       return;
     }
 
@@ -298,6 +284,76 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     }
   }, [isConnected, channel, service, loadMessageCount, highlightMessageId]);
 
+  // Fonction pour scroller vers le bas (mémorisée)
+  const scrollToBottom = useCallback(
+    (force = false) => {
+      if (!messagesContainerRef.current) return;
+
+      const container = messagesContainerRef.current;
+      const wasAtBottom = isAtBottom; // Utiliser la référence actuelle
+
+      // Fonction pour vérifier si on est réellement au bas du conteneur
+      const checkIfAtBottom = () => {
+        if (!container) return false;
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        // Considérer qu'on est en bas si on est à moins de 20px du bas
+        return scrollHeight - scrollTop - clientHeight < 20;
+      };
+
+      // Définir une fonction de défilement progressive pour une meilleure fiabilité
+      const performScroll = (attempt = 1) => {
+        if (!container) return;
+
+        // Force immédiatement à la position maximale
+        container.scrollTop = container.scrollHeight;
+
+        // Vérifier après un court délai si le défilement a fonctionné
+        setTimeout(() => {
+          if (!container) return;
+
+          const isNowAtBottom = checkIfAtBottom();
+
+          // Si on n'est toujours pas en bas et qu'on a moins de 3 tentatives, réessayer
+          if (!isNowAtBottom && attempt < 3) {
+            // Réessayer avec une valeur encore plus large pour forcer le recalcul
+            container.scrollTop = container.scrollHeight + 2000;
+            performScroll(attempt + 1);
+          } else if (!isNowAtBottom) {
+            // Dernière tentative désespérée
+            if (messagesEndRef.current) {
+              messagesEndRef.current.scrollIntoView({
+                block: "end",
+                behavior: "auto",
+              });
+            }
+          }
+
+          // Mettre à jour l'état visuel
+          setIsAtBottom(checkIfAtBottom());
+          setShowScrollToBottom(!checkIfAtBottom());
+
+          // Réinitialiser le compteur si on est descendu en bas
+          if (checkIfAtBottom() && newMessagesCount > 0) {
+            setNewMessagesCount(0);
+            setShowNewMessagesBanner(false);
+          }
+        }, 50 * attempt); // Délai progressif selon la tentative
+      };
+
+      // Exécuter le défilement uniquement si on était déjà en bas ou si on force le défilement
+      if (wasAtBottom || force) {
+        performScroll();
+      }
+    },
+    [isAtBottom, newMessagesCount],
+  );
+
+  const handleScrollButtonClick = useCallback(() => {
+    scrollToBottom(true); // Force le défilement quand l'utilisateur clique sur le bouton
+    setNewMessagesCount(0);
+    setShowNewMessagesBanner(false);
+  }, [scrollToBottom]);
+
   // Fonctions pour gérer les événements WebSocket, mémorisées avec useCallback
   const handleNewMessage = useCallback(
     (data: any) => {
@@ -323,16 +379,25 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           );
         });
 
-        // Si l'utilisateur n'est pas en bas, afficher le compteur
-        const isBottom = isScrolledToBottom();
-        if (!isBottom && post.user_id !== userIdToUse) {
+        const wasAtBottom = isScrolledToBottom();
+
+        if (post.user_id === userIdToUse) {
+          // Laisser un peu de temps pour le rendu
+          setTimeout(() => {
+            scrollToBottom(true); // Force le défilement pour les messages de l'utilisateur
+          }, 50);
+        }
+        // Sinon, si l'utilisateur n'est pas en bas, montrer le compteur
+        else if (!wasAtBottom) {
           setNewMessagesCount((prev) => prev + 1);
           setShowNewMessagesBanner(true);
         }
-
-        // Si c'est un message de l'utilisateur actuel, scroller vers le bas
-        if (post.user_id === userIdToUse) {
-          scrollToBottom();
+        // Si l'utilisateur était en bas, défiler automatiquement
+        else {
+          // Laisser un peu de temps pour le rendu
+          setTimeout(() => {
+            scrollToBottom(false);
+          }, 50);
         }
 
         // Mettre en évidence les nouveaux messages
@@ -359,7 +424,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         console.error("Error processing new message:", error);
       }
     },
-    [userIdToUse, isScrolledToBottom],
+    [userIdToUse, isScrolledToBottom, scrollToBottom],
   );
 
   const handleEditedMessage = useCallback((data: any) => {
@@ -472,27 +537,34 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
 
   // Auto-scroll quand les messages changent
   useEffect(() => {
-    if (
-      autoScrollToBottom &&
-      messagesEndRef.current &&
-      messages.length > 0 &&
-      !loading
-    ) {
-      // Utiliser un court délai pour s'assurer que le rendu est terminé
-      const timer = setTimeout(() => {
-        if (messagesContainerRef.current) {
-          // Défilement vers le bas en utilisant scrollHeight
-          messagesContainerRef.current.scrollTop =
-            messagesContainerRef.current.scrollHeight;
-        } else if (messagesEndRef.current) {
-          // Fallback
-          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-        }
-      }, 100);
+    // Ne défiler automatiquement que si autoScrollToBottom est activé
+    // messages contient des éléments, n'est pas en chargement
+    // et soit on était déjà en bas, soit c'est le premier chargement
+    if (autoScrollToBottom && messages.length > 0 && !loading) {
+      // Forcer le défilement si:
+      // - C'est le chargement initial (lastMessageIdRef.current était null)
+      // - L'utilisateur était déjà au bas de la conversation
+      // - Le dernier message vient de l'utilisateur actuel (pour voir ses propres messages)
+      const isInitialLoad = !lastMessageIdRef.current;
+      const isUserMessage =
+        messages.length > 0 &&
+        messages[messages.length - 1].user_id === currentUser?.id;
 
-      return () => clearTimeout(timer);
+      if (isInitialLoad) {
+        scrollToBottom(true); // Force le défilement pour le chargement initial
+      } else if (isUserMessage) {
+        scrollToBottom(true); // Force le défilement pour les messages de l'utilisateur
+      } else {
+        // Sinon, défilement normal qui respecte la position
+        scrollToBottom(false);
+      }
+
+      // Mettre à jour la référence pour le dernier message
+      if (messages.length > 0) {
+        lastMessageIdRef.current = messages[messages.length - 1].id;
+      }
     }
-  }, [messages, autoScrollToBottom, loading]);
+  }, [messages, autoScrollToBottom, loading, scrollToBottom, currentUser]);
 
   // Gérer le défilement
   useEffect(() => {
@@ -627,16 +699,6 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     loadMessageCount,
   ]);
 
-  // Fonction pour scroller vers le bas (mémorisée)
-  const scrollToBottom = useCallback(() => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop =
-        messagesContainerRef.current.scrollHeight;
-      setNewMessagesCount(0);
-      setShowNewMessagesBanner(false);
-    }
-  }, []);
-
   // Gestionnaire pour les réponses aux messages (mémorisé)
   const handleReply = useCallback(
     (messageToReply: MessageType) => {
@@ -716,6 +778,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         handleDeleteMessage={handleDeleteMessage}
         messagesToHighlight={messagesToHighlight}
         messageProps={messageProps}
+        autoScrollToBottom={autoScrollToBottom}
       />
     ),
     [
@@ -728,6 +791,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       handleDeleteMessage,
       messagesToHighlight,
       messageProps,
+      autoScrollToBottom,
     ],
   );
 
@@ -802,7 +866,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           variant="contained"
           color="primary"
           size="small"
-          onClick={scrollToBottom}
+          onClick={handleScrollButtonClick}
           startIcon={<ScrollDownIcon />}
           sx={{
             position: "absolute",
@@ -823,7 +887,11 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         open={showNewMessagesBanner}
         message={`${newMessagesCount} new message${newMessagesCount > 1 ? "s" : ""}`}
         action={
-          <Button color="primary" size="small" onClick={scrollToBottom}>
+          <Button
+            color="primary"
+            size="small"
+            onClick={handleScrollButtonClick}
+          >
             View
           </Button>
         }

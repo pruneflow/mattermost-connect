@@ -75,7 +75,7 @@ export interface MessageHeaderProps {
   timestamp: string;
 
   /** Whether the message is from the current user */
-  isFromCurrentUser?: boolean;
+  isFromCurrentUser: boolean | null;
 
   /** Custom styling */
   sx?: SxProps<Theme>;
@@ -109,7 +109,7 @@ export interface MessageActionsProps {
   isHovered: boolean;
 
   /** Whether the message is from the current user */
-  isFromCurrentUser?: boolean;
+  isFromCurrentUser: boolean | null;
 
   /** Callback for reply action */
   onReply?: (message: MessageType) => void;
@@ -132,7 +132,7 @@ export interface MessageReactionsProps {
   message: MessageType;
 
   /** Whether the message is from the current user */
-  isFromCurrentUser?: boolean;
+  isFromCurrentUser: boolean | null;
 
   /** Custom styling */
   sx?: SxProps<Theme>;

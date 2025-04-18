@@ -1,5 +1,5 @@
 // src/components/ChannelViewer/message/Message.tsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useMattermost } from "../../../context/MattermostProvider";
 import {
   Box,
@@ -24,8 +24,8 @@ import { User, Message as MessageType } from "../../../types";
  */
 const Message: React.FC<MessageProps> = ({
   message,
-  renderer,
   isFromCurrentUser = false,
+  renderer,
   showActions = true,
   onReply,
   onEdit,
@@ -40,7 +40,7 @@ const Message: React.FC<MessageProps> = ({
   avatarSx,
   highlight = false,
 }) => {
-  const { service, getUser, getUserDisplayName } = useMattermost();
+  const { service, getUser, currentUser } = useMattermost();
   const [author, setAuthor] = useState<User | null>(null);
   const [formattedText, setFormattedText] = useState("");
   const [isHovered, setIsHovered] = useState(false);
@@ -50,6 +50,12 @@ const Message: React.FC<MessageProps> = ({
   const [referencedAuthor, setReferencedAuthor] = useState<User | null>(null);
 
   const messageRef = useRef<HTMLDivElement>(null);
+
+  const isFromUser = useMemo(() => {
+    return (
+      isFromCurrentUser || (currentUser && message.user_id === currentUser.id)
+    );
+  }, [isFromCurrentUser, currentUser, message.user_id]);
 
   // Function to determine if the message is a reply
   const isReplyMessage = (msg: MessageType): boolean => {
@@ -194,12 +200,12 @@ const Message: React.FC<MessageProps> = ({
   const timestamp = formatTimestamp(message?.create_at || 0);
 
   // Determine message alignment and styling based on sender
-  const messageAlignment = isFromCurrentUser ? "flex-end" : "flex-start";
+  const messageAlignment = isFromUser ? "flex-end" : "flex-start";
   const bubbleColor = (theme: Theme) =>
-    isFromCurrentUser
+    isFromUser
       ? alpha(theme.palette.primary.main, 0.1)
       : theme.palette.background.paper;
-  const bubbleBorder = isFromCurrentUser
+  const bubbleBorder = isFromUser
     ? "1px solid rgba(25, 118, 210, 0.2)"
     : "1px solid rgba(0, 0, 0, 0.12)";
 
@@ -232,7 +238,7 @@ const Message: React.FC<MessageProps> = ({
           <MessageHeader
             author={author}
             timestamp={timestamp}
-            isFromCurrentUser={isFromCurrentUser}
+            isFromCurrentUser={isFromUser}
             sx={authorSx}
             avatarSx={avatarSx}
           />
@@ -298,7 +304,7 @@ const Message: React.FC<MessageProps> = ({
               <MessageActions
                 message={message}
                 isHovered={isHovered}
-                isFromCurrentUser={isFromCurrentUser}
+                isFromCurrentUser={isFromUser}
                 onReply={onReply}
                 onEdit={onEdit}
                 onDelete={onDelete}
@@ -308,10 +314,7 @@ const Message: React.FC<MessageProps> = ({
           </Box>
 
           {/* Message reactions */}
-          <MessageReactions
-            message={message}
-            isFromCurrentUser={isFromCurrentUser}
-          />
+          <MessageReactions message={message} isFromCurrentUser={isFromUser} />
         </Box>
       </Zoom>
     </>
