@@ -1,19 +1,48 @@
 // src/index.ts
-// Fichier d'entrée principal pour la bibliothèque
+/**
+ * MattermostConnect - Bibliothèque de composants Mattermost intégrables
+ *
+ * Cette bibliothèque permet d'intégrer facilement des composants Mattermost
+ * dans n'importe quelle application React.
+ *
+ * Architecture hybride:
+ * - En interne: organisation modulaire avec services spécialisés
+ * - En externe: API unifiée via Provider et hooks
+ */
 
-// Exporter le context et le provider
+// ---------- API Principale ----------
+
+// Exporter le Provider principal et le hook
 export {
   MattermostProvider,
   useMattermost,
   MattermostContext,
-} from "./context/MattermostProvider";
+} from "./context";
 
-// Exporter les composants
+// ---------- Hooks Spécialisés ----------
+
+// Exporter les hooks pour interagir avec les canaux, équipes et utilisateurs
+export {
+  useChannel,
+  useTeam,
+  useUser,
+  useUsers,
+  useAuth,
+  useFile,
+  useRealtime,
+  useMattermostConnect,
+} from "./hooks";
+
+// ---------- Composants UI ----------
+
+// Exporter les composants de canal
 export { default as ChannelList } from "./components/channel/ChannelList/ChannelList";
 export { default as ChannelItem } from "./components/channel/ChannelList/ChannelItem";
 export { default as ChannelViewer } from "./components/channel/ChannelViewer/ChannelViewer";
 export { default as ChannelHeader } from "./components/channel/ChannelViewer/components/ChannelHeader";
-export { default as Message } from "./components/message/MessageViewer/Message";
+
+// Exporter les composants de message (avec alias pour éviter la duplication)
+export { default as MessageComponent } from "./components/message/MessageViewer/Message";
 export { default as MessageComposer } from "./components/message/MessageComposer/MessageComposer";
 
 // Exporter les composants de sélection d'équipe
@@ -29,8 +58,6 @@ export type {
 } from "./components/team/TeamSelector/TeamSelector";
 
 // Exporter les composants d'emoji
-export { default as EmojiProvider } from "./context/EmojiProvider";
-export { useEmoji } from "./context/EmojiProvider";
 export { default as EmojiPicker } from "./components/message/EmojiPicker/EmojiPicker";
 export { PickerMode } from "./types/emoji.types";
 
@@ -40,23 +67,24 @@ export {
   NotificationCenter,
   TypingIndicator,
 } from "./components/notification";
+
+// ---------- Services et Utilitaires ----------
+
+// Exporter uniquement les factory et types publics des services
+export { createServiceContainer } from "./services/factory";
+
+// Exporter les types de notification et événements WebSocket
 export {
-  NotificationService,
   WebSocketEventType,
-} from "./services/notification.service";
-export type {
-  Notification,
-  WebSocketEvent,
-  UnreadState,
-} from "./services/notification.service";
+  type Notification,
+  type WebSocketEvent,
+  type UnreadState,
+} from "./services/notification/notification.service";
 
 // Exporter le thème
 export { createDefaultTheme, MattermostThemeProvider } from "./theme";
 
-// Exporter les services
-export { createMattermostService, createMockService } from "./services";
-
-// Exporter les utilitaires
+// Exporter les utilitaires de formatage
 export {
   formatMessageText,
   formatTimestamp,
@@ -68,10 +96,44 @@ export {
   formatUserDisplayName,
 } from "./utils/formatting";
 
-// Exporter les types
-export * from "./types";
+// ---------- Types Publics ----------
 
+// Exporter les types principaux
+export type {
+  // Types entité
+  Channel,
+  Team,
+  User,
+  Message,
+  MessageAttachment,
+  MessageReaction,
+
+  // Types configuration
+  ProviderConfig,
+  DirectModeConfig,
+  ProxyModeConfig,
+  CustomModeConfig,
+  ProviderOptions,
+
+  // Types service
+  MattermostService,
+  GetMessagesOptions,
+  GetUsersOptions,
+  MessagesResponse,
+
+  // Types emoji/GIF
+  GifData,
+
+  // Types WebSocket
+  WebSocketConnection,
+  WebSocketSetupOptions,
+} from "./types";
+
+// Exporter le composant d'authentification
 export { default as AuthenticationSystem } from "./components/auth/AuthenticationSystem";
 
+// Exporter les types des hooks
+export type { FileInfo, UploadingFile, AuthResult } from "./hooks";
+
 // Export par défaut est le provider pour plus de commodité
-export { MattermostProvider as default } from "./context/MattermostProvider";
+export { MattermostProvider as default } from "./context";

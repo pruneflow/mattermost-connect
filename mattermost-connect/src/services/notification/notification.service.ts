@@ -1,0 +1,717 @@
+// src/services/notification/notification.service.ts
+import { MattermostService, User } from "../../types";
+import { formatUserDisplayName } from "../../utils";
+
+/**
+ * Types d'événements WebSocket de Mattermost
+ * Liste non exhaustive qui peut être étendue selon les besoins
+ */
+export enum WebSocketEventType {
+  // Messages
+  POSTED = "posted",
+  POST_EDITED = "post_edited",
+  POST_DELETED = "post_deleted",
+
+  // Statuts
+  STATUS_CHANGE = "status_change",
+  TYPING = "typing",
+
+  // Canaux
+  CHANNEL_VIEWED = "channel_viewed",
+  CHANNEL_CREATED = "channel_created",
+  CHANNEL_UPDATED = "channel_updated",
+  CHANNEL_DELETED = "channel_deleted",
+
+  // Réactions
+  REACTION_ADDED = "reaction_added",
+  REACTION_REMOVED = "reaction_removed",
+
+  // Autres
+  HELLO = "hello",
+  USER_UPDATED = "user_updated",
+  PREFERENCE_CHANGED = "preference_changed",
+  EPHEMERAL_MESSAGE = "ephemeral_message",
+  WEBSOCKET_CLOSED = "websocket_closed",
+}
+
+/**
+ * Format d'événement WebSocket de Mattermost
+ */
+export interface WebSocketEvent {
+  event: WebSocketEventType | string;
+  data: any;
+  broadcast?: {
+    omit_users?: Record<string, boolean>;
+    user_id?: string;
+    channel_id?: string;
+    team_id?: string;
+  };
+  seq?: number;
+}
+
+/**
+ * Format d'une notification à afficher à l'utilisateur
+ */
+export interface Notification {
+  id: string;
+  type: "message" | "reaction" | "mention" | "system" | "error";
+  title: string;
+  content: string;
+  channelId?: string;
+  messageId?: string;
+  sender?: User;
+  timestamp: number;
+  read: boolean;
+  priority: "low" | "medium" | "high";
+}
+
+/**
+ * État des non-lus par canal
+ */
+export interface UnreadState {
+  [channelId: string]: {
+    msg_count: number;
+    mention_count: number;
+    lastMessageId?: string;
+    lastViewedAt?: number;
+  };
+}
+
+/**
+ * Gestionnaire de notifications et événements temps réel
+ * Cette classe centralise la logique de notification et mise à jour de l'UI
+ */
+export class NotificationService {
+  // Utiliser un Set pour les listeners pour éviter les doublons
+  private listeners: Record<string, Set<(data: any) => void>> = {};
+  private notifications: Notification[] = [];
+  private unreadState: UnreadState = {};
+  private typingUsers: Record<string, Record<string, number>> = {}; // Utilisateurs en train de taper par canal
+  private typingTimeouts: Record<string, Record<string, NodeJS.Timeout>> = {}; // Timeouts pour effacer l'état de frappe
+  private currentChannelId: string | null = null;
+  private currentUserId: string | null = null;
+
+  /**
+   * Cache pour les derniers messages traités, pour éviter les doublons
+   * Clé: ID du message, Valeur: timestamp de traitement
+   */
+  private processedEvents: Map<string, number> = new Map();
+
+  /**
+   * Durée (en ms) pendant laquelle un événement est conservé dans le cache des doublons
+   */
+  private static readonly EVENT_CACHE_DURATION = 10000; // 10 secondes
+
+  private mattermostService: MattermostService;
+
+  // Liste des événements internes personnalisés
+  private static readonly CUSTOM_EVENTS = [
+    "notification_added",
+    "notifications_updated",
+    "unread_updated",
+    "typing_updated",
+  ];
+
+  /**
+   * Crée un service de notification
+   * @param mattermostService Service Mattermost sous-jacent
+   */
+  constructor(mattermostService: MattermostService) {
+    this.mattermostService = mattermostService;
+
+    // Initialiser les catégories d'événements avec des Sets
+    // pour empêcher automatiquement les écouteurs dupliqués
+    Object.values(WebSocketEventType).forEach((eventType) => {
+      this.listeners[eventType] = new Set();
+    });
+
+    // Initialiser nos événements internes personnalisés
+    NotificationService.CUSTOM_EVENTS.forEach((eventType) => {
+      this.listeners[eventType] = new Set();
+    });
+  }
+
+  /**
+   * Nettoie le cache des événements traités (pour éviter une croissance infinie)
+   */
+  private cleanEventCache() {
+    const now = Date.now();
+    const expireTime = now - NotificationService.EVENT_CACHE_DURATION;
+
+    // Supprimer les entrées plus anciennes que EVENT_CACHE_DURATION
+    this.processedEvents.forEach((timestamp, eventId) => {
+      if (timestamp < expireTime) {
+        this.processedEvents.delete(eventId);
+      }
+    });
+  }
+
+  /**
+   * Définir l'ID du canal actuel (celui que l'utilisateur est en train de visualiser)
+   */
+  setCurrentChannelId(channelId: string | null) {
+    this.currentChannelId = channelId;
+
+    // Réinitialiser les non-lus du canal actif
+    if (channelId && this.unreadState[channelId]) {
+      this.unreadState[channelId] = {
+        ...this.unreadState[channelId],
+        msg_count: 0,
+        mention_count: 0,
+        lastViewedAt: Date.now(),
+      };
+
+      this.notifyListeners("unread_updated", this.unreadState);
+    }
+  }
+
+  /**
+   * Définir l'ID de l'utilisateur actuel
+   */
+  setCurrentUserId(userId: string | null) {
+    this.currentUserId = userId;
+  }
+
+  /**
+   * Ajouter un écouteur pour un type d'événement spécifique
+   * Utilise un Set pour éviter les écouteurs en double
+   *
+   * @param event Type d'événement à écouter
+   * @param callback Fonction à appeler quand l'événement se produit
+   * @returns Fonction pour supprimer l'écouteur
+   */
+  addEventListener(event: string, callback: (data: any) => void) {
+    if (!this.listeners[event]) {
+      this.listeners[event] = new Set();
+    }
+
+    // Le Set garantit l'unicité des callbacks - pas de doublons
+    this.listeners[event].add(callback);
+
+    // Retourner une fonction de nettoyage
+    return () => {
+      if (this.listeners[event]) {
+        this.listeners[event].delete(callback);
+      }
+    };
+  }
+
+  /**
+   * Notifier tous les écouteurs pour un événement spécifique
+   */
+  private notifyListeners(event: string, data: any) {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach((callback) => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in ${event} listener:`, error);
+        }
+      });
+    }
+  }
+
+  /**
+   * Traiter un événement WebSocket reçu du serveur Mattermost
+   */
+  processWebSocketEvent(event: WebSocketEvent) {
+    if (!event.event) {
+      console.warn("Received WebSocket message without event type:", event);
+      return;
+    }
+
+    // Générer un identifiant unique pour cet événement
+    // Pour les messages, utiliser l'ID du message
+    // Pour les autres événements, combiner le type et le timestamp
+    let eventId: string;
+
+    if (event.event === WebSocketEventType.POSTED && event.data?.post) {
+      try {
+        // Pour les messages, utiliser l'ID du message
+        const post = JSON.parse(event.data.post);
+        eventId = `${event.event}_${post.id}`;
+      } catch (err) {
+        // En cas d'erreur, utiliser une combinaison du type et du timestamp
+        eventId = `${event.event}_${Date.now()}`;
+      }
+    } else {
+      // Pour les autres événements, utiliser une combinaison du type et du sequence (s'il existe)
+      eventId = `${event.event}_${event.seq || Date.now()}`;
+    }
+
+    // Vérifier si cet événement a déjà été traité récemment
+    if (this.processedEvents.has(eventId)) {
+      return;
+    }
+
+    // Marquer cet événement comme traité
+    this.processedEvents.set(eventId, Date.now());
+
+    // Nettoyer périodiquement le cache des événements
+    // Ne nettoyer que si le cache devient trop grand ou périodiquement
+    if (this.processedEvents.size > 100 || Math.random() < 0.1) {
+      this.cleanEventCache();
+    }
+
+    // Notifier les écouteurs spécifiques à ce type d'événement
+    this.notifyListeners(event.event, event.data);
+
+    // Traiter selon le type d'événement
+    switch (event.event) {
+      case WebSocketEventType.POSTED:
+        this.handleNewPost(event.data);
+        break;
+
+      case WebSocketEventType.POST_EDITED:
+        this.handlePostEdited(event.data);
+        break;
+
+      case WebSocketEventType.POST_DELETED:
+        this.handlePostDeleted(event.data);
+        break;
+
+      case WebSocketEventType.TYPING:
+        this.handleTyping(event);
+        break;
+
+      case WebSocketEventType.REACTION_ADDED:
+      case WebSocketEventType.REACTION_REMOVED:
+        this.handleReactionChange(
+          event.data,
+          event.broadcast,
+          event.event === WebSocketEventType.REACTION_ADDED,
+        );
+        break;
+
+      case WebSocketEventType.CHANNEL_VIEWED:
+        this.handleChannelViewed(event.data);
+        break;
+    }
+  }
+
+  /**
+   * Gérer un nouveau message
+   */
+  private handleNewPost(data: any) {
+    try {
+      const post = JSON.parse(data.post);
+      const isFromCurrentUser = post.user_id === this.currentUserId;
+
+      // Vérifier si le message est dans le canal actif
+      const isInCurrentChannel = post.channel_id === this.currentChannelId;
+
+      // Ne pas notifier pour les messages de l'utilisateur actuel ou dans le canal actif
+      if (isFromCurrentUser || isInCurrentChannel) {
+        return;
+      }
+
+      // Incrémenter les compteurs non lus pour le canal
+      if (!isInCurrentChannel) {
+        // Initialiser si c'est le premier message non lu dans ce canal
+        if (!this.unreadState[post.channel_id]) {
+          this.unreadState[post.channel_id] = {
+            msg_count: 0,
+            mention_count: 0,
+          };
+        }
+
+        // Mettre à jour les compteurs
+        this.unreadState[post.channel_id].msg_count++;
+        this.unreadState[post.channel_id].lastMessageId = post.id;
+
+        // Vérifier si le message mentionne l'utilisateur actuel
+        const hasMention =
+          post.props?.mentions &&
+          Array.isArray(post.props.mentions) &&
+          post.props.mentions.includes(this.currentUserId);
+
+        if (hasMention) {
+          this.unreadState[post.channel_id].mention_count++;
+        }
+
+        // Notifier les écouteurs que les non-lus ont changé
+        this.notifyListeners("unread_updated", this.unreadState);
+
+        // Créer une notification pour l'utilisateur
+        const notification: Notification = {
+          id: `msg_${post.id}`,
+          type: hasMention ? "mention" : "message",
+          title: data.sender_name || "Nouveau message",
+          content:
+            post.message.substring(0, 100) +
+            (post.message.length > 100 ? "..." : ""),
+          channelId: post.channel_id,
+          messageId: post.id,
+          timestamp: post.create_at,
+          read: false,
+          priority: hasMention ? "high" : "medium",
+        };
+
+        this.notifications.push(notification);
+        this.notifyListeners("notification_added", notification);
+      }
+    } catch (error) {
+      console.error("Erreur lors du traitement d'un nouveau message:", error);
+    }
+  }
+
+  /**
+   * Gérer un message modifié
+   */
+  private handlePostEdited(data: any) {
+    try {
+      const post = JSON.parse(data.post);
+      // Notifier que le message a été modifié pour mise à jour de l'UI
+      this.notifyListeners(WebSocketEventType.POST_EDITED, post);
+    } catch (error) {
+      console.error("Erreur lors du traitement d'un message modifié:", error);
+    }
+  }
+
+  /**
+   * Gérer un message supprimé
+   */
+  private handlePostDeleted(data: any) {
+    try {
+      const post = JSON.parse(data.post);
+      // Notifier que le message a été supprimé pour mise à jour de l'UI
+      this.notifyListeners(WebSocketEventType.POST_DELETED, post);
+    } catch (error) {
+      console.error("Erreur lors du traitement d'un message supprimé:", error);
+    }
+  }
+
+  /**
+   * Gérer les événements de saisie
+   */
+  private handleTyping(event: any) {
+    const { data, broadcast } = event;
+    try {
+      const { user_id } = data;
+      const { channel_id, omit_users } = broadcast;
+
+      // Ignorer les événements de frappe de l'utilisateur actuel
+      if (user_id === this.currentUserId) {
+        return;
+      }
+
+      if (omit_users && this.currentUserId && omit_users[this.currentUserId]) {
+        return;
+      }
+
+      // Initialiser l'objet des utilisateurs en train de taper pour ce canal si nécessaire
+      if (!this.typingUsers[channel_id]) {
+        this.typingUsers[channel_id] = {};
+      }
+
+      // Initialiser l'objet des timeouts pour ce canal si nécessaire
+      if (!this.typingTimeouts[channel_id]) {
+        this.typingTimeouts[channel_id] = {};
+      }
+
+      // Effacer le timeout existant si présent
+      if (this.typingTimeouts[channel_id][user_id]) {
+        clearTimeout(this.typingTimeouts[channel_id][user_id]);
+      }
+
+      // Enregistrer l'horodatage de la dernière activité de frappe
+      const timestamp = Date.now();
+      this.typingUsers[channel_id][user_id] = timestamp;
+
+      // Définir un nouveau timeout pour supprimer l'utilisateur après 5 secondes
+      this.typingTimeouts[channel_id][user_id] = setTimeout(() => {
+        this.removeTypingUser(channel_id, user_id, timestamp);
+      }, 5000);
+
+      // Notifier les écouteurs que les états de frappe ont changé
+      this.notifyListeners("typing_updated", {
+        channelId: channel_id,
+        typingUsers: this.getTypingUsers(channel_id),
+        timestamp,
+      });
+    } catch (error) {
+      console.error(
+        "Erreur lors du traitement d'un événement de frappe:",
+        error,
+      );
+    }
+  }
+
+  /**
+   * Supprimer un utilisateur de la liste des utilisateurs en train de taper
+   */
+  private removeTypingUser(
+    channelId: string,
+    userId: string,
+    timestamp: number,
+  ) {
+    // Vérifier si l'utilisateur existe encore dans la liste et si la timestamp correspond
+    if (this.typingUsers[channelId]?.[userId] === timestamp) {
+      // Supprimer l'utilisateur
+      delete this.typingUsers[channelId][userId];
+      delete this.typingTimeouts[channelId][userId];
+
+      // Si aucun utilisateur ne tape plus dans ce canal, nettoyer l'objet
+      if (Object.keys(this.typingUsers[channelId]).length === 0) {
+        delete this.typingUsers[channelId];
+        delete this.typingTimeouts[channelId];
+      }
+
+      // Notifier à nouveau les écouteurs
+      this.notifyListeners("typing_updated", {
+        channelId,
+        typingUsers: this.getTypingUsers(channelId),
+        timestamp,
+      });
+    }
+  }
+
+  /**
+   * Obtenir la liste des IDs utilisateurs actuellement en train de taper dans un canal
+   */
+  getTypingUsers(channelId: string): string[] {
+    if (!channelId || !this.typingUsers[channelId]) {
+      return [];
+    }
+
+    const now = Date.now();
+    const typingUserIds: string[] = [];
+
+    // Ne retourner que les utilisateurs qui ont tapé dans les 5 dernières secondes
+    Object.entries(this.typingUsers[channelId]).forEach(
+      ([userId, timestamp]) => {
+        if (now - timestamp < 5000) {
+          typingUserIds.push(userId);
+        } else {
+          // Nettoyer automatiquement les entrées expirées
+          this.removeTypingUser(channelId, userId, timestamp);
+        }
+      },
+    );
+
+    return typingUserIds;
+  }
+
+  /**
+   * Gérer les changements de réactions (ajout/suppression)
+   */
+  private async handleReactionChange(
+    data: any,
+    broadcast: any,
+    isAdded: boolean,
+  ) {
+    // Notifier pour mise à jour de l'UI
+    const eventType = isAdded
+      ? WebSocketEventType.REACTION_ADDED
+      : WebSocketEventType.REACTION_REMOVED;
+
+    if (isAdded) {
+      try {
+        const reaction = JSON.parse(data.reaction);
+        const isFromCurrentUser = reaction.user_id === this.currentUserId;
+
+        // Vérifier si le message est dans le canal actif
+        const isInCurrentChannel =
+          broadcast.channel_id === this.currentChannelId;
+
+        // Ne pas notifier pour les messages de l'utilisateur actuel
+        if (isFromCurrentUser || isInCurrentChannel) {
+          return;
+        }
+
+        // Incrémenter les compteurs non lus pour le canal
+        if (!isInCurrentChannel) {
+          // Créer une notification enrichie
+          let notificationTitle = "Nouvelle réaction";
+          let notificationContent = reaction.emoji_name;
+
+          try {
+            // Tenter de récupérer des informations sur l'utilisateur qui a réagi
+            if (this.mattermostService.getUsers) {
+              const users = await this.mattermostService.getUsers({
+                ids: [reaction.user_id],
+              });
+
+              if (users && users.length > 0) {
+                const reactingUser = users[0];
+                const displayName = formatUserDisplayName(reactingUser);
+
+                notificationTitle = `${displayName} a réagi avec ${reaction.emoji_name}`;
+              }
+            }
+
+            // Tenter de récupérer des informations sur le message concerné
+            if (this.mattermostService.getPost) {
+              const post = await this.mattermostService.getPost(
+                reaction.post_id,
+              );
+              if (post) {
+                // Limiter la longueur du message pour la notification
+                const messagePreview =
+                  post.message.length > 50
+                    ? post.message.substring(0, 50) + "..."
+                    : post.message;
+
+                notificationContent = `${reaction.emoji_name} sur: "${messagePreview}"`;
+              }
+            }
+          } catch (enrichError) {
+            // Si l'enrichissement échoue, utiliser les valeurs par défaut
+            console.warn(
+              "Échec de l'enrichissement de la notification de réaction:",
+              enrichError,
+            );
+          }
+
+          const notification: Notification = {
+            id: `reaction_added_${reaction.emoji_name}_${reaction.post_id}`,
+            type: "reaction",
+            title: notificationTitle,
+            content: notificationContent,
+            channelId: broadcast.channel_id,
+            messageId: reaction.post_id,
+            timestamp: reaction.create_at || Date.now(),
+            read: false,
+            priority: "medium",
+          };
+
+          this.notifications.push(notification);
+          this.notifyListeners("notification_added", notification);
+        }
+      } catch (error) {
+        console.error("Erreur lors du traitement d'une réaction:", error);
+      }
+    }
+    this.notifyListeners(eventType, data);
+  }
+
+  /**
+   * Gérer l'événement de visualisation d'un canal
+   */
+  private handleChannelViewed(data: any) {
+    const { channel_id } = data;
+
+    // Réinitialiser les compteurs non lus pour ce canal
+    if (this.unreadState[channel_id]) {
+      this.unreadState[channel_id] = {
+        ...this.unreadState[channel_id],
+        msg_count: 0,
+        mention_count: 0,
+        lastViewedAt: Date.now(),
+      };
+
+      this.notifyListeners("unread_updated", this.unreadState);
+    }
+  }
+
+  /**
+   * Obtenir toutes les notifications
+   */
+  getNotifications(): Notification[] {
+    return [...this.notifications];
+  }
+
+  /**
+   * Marquer une notification comme lue
+   */
+  markNotificationAsRead(notificationId: string) {
+    const notification = this.notifications.find(
+      (n) => n.id === notificationId,
+    );
+    if (notification) {
+      notification.read = true;
+      this.notifyListeners("notification_updated", notification);
+    }
+  }
+
+  /**
+   * Marquer toutes les notifications comme lues
+   */
+  markAllNotificationsAsRead() {
+    this.notifications.forEach((notification) => {
+      notification.read = true;
+    });
+    this.notifyListeners("notifications_updated", this.notifications);
+  }
+
+  /**
+   * Obtenir l'état des non-lus pour tous les canaux
+   */
+  getUnreadState(): UnreadState {
+    return { ...this.unreadState };
+  }
+
+  /**
+   * Obtenir l'état des non-lus pour un canal spécifique
+   */
+  getChannelUnreadState(channelId: string) {
+    return this.unreadState[channelId] || { msg_count: 0, mention_count: 0 };
+  }
+
+  /**
+   * Définit manuellement l'état non lu d'un canal
+   * @param channelId ID du canal
+   * @param state Nouvel état non lu
+   */
+  setChannelUnreadState(
+    channelId: string,
+    state: {
+      msg_count: number;
+      mention_count: number;
+      lastViewedAt?: number;
+      lastMessageId?: string;
+    },
+  ): void {
+    if (!channelId) return;
+
+    this.unreadState[channelId] = state;
+    this.notifyListeners("unread_updated", this.unreadState);
+  }
+
+  /**
+   * Réinitialise l'état non lu d'un canal
+   * @param channelId ID du canal
+   */
+  resetChannelUnreadState(channelId: string): void {
+    if (channelId && this.unreadState[channelId]) {
+      this.unreadState[channelId] = {
+        msg_count: 0,
+        mention_count: 0,
+        lastViewedAt: Date.now(),
+      };
+
+      this.notifyListeners("unread_updated", this.unreadState);
+    }
+  }
+
+  /**
+   * Supprimer toutes les notifications
+   */
+  clearNotifications() {
+    this.notifications = [];
+    this.notifyListeners("notifications_updated", this.notifications);
+  }
+
+  /**
+   * Méthode pour nettoyer toutes les ressources du service
+   * Appelée lorsque le service n'est plus nécessaire
+   */
+  dispose() {
+    // Nettoyer tous les timeouts
+    Object.values(this.typingTimeouts).forEach((channelTimeouts) => {
+      Object.values(channelTimeouts).forEach((timeout) => {
+        clearTimeout(timeout);
+      });
+    });
+
+    // Vider les collections
+    this.typingUsers = {};
+    this.typingTimeouts = {};
+    this.processedEvents.clear();
+
+    // Vider les listeners
+    Object.keys(this.listeners).forEach((eventType) => {
+      this.listeners[eventType].clear();
+    });
+  }
+}

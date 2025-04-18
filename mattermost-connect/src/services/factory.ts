@@ -3,15 +3,42 @@ import {
   MattermostService,
   ServiceConfig,
   CustomServiceProvider,
-  User,
 } from "../types";
-import { createDirectService, DirectService } from "./direct.service";
-import { createProxyService, ProxyService } from "./proxy.service";
-import { GifData } from "../types";
-import { MOCK_GIFS } from "../components/message/EmojiPicker";
+import { createDirectService } from "./direct/direct.service";
+import { createProxyService } from "./proxy/proxy.service";
+import { createFileService, FileServiceInterface } from "./file/file.service";
+import { createUserService, UserServiceInterface } from "./user/user.service";
+import {
+  createEmojiService,
+  EmojiServiceInterface,
+} from "./emoji/emoji.service";
+import { NotificationService } from "./notification/notification.service";
+
+/**
+ * Interface pour le conteneur de services
+ * Centralise l'accès à tous les services spécialisés
+ */
+export interface ServiceContainer {
+  /** Service principal Mattermost */
+  mattermostService: MattermostService;
+
+  /** Service de gestion des fichiers */
+  fileService: FileServiceInterface;
+
+  /** Service de gestion des utilisateurs */
+  userService: UserServiceInterface;
+
+  /** Service de gestion des emoji et GIFs */
+  emojiService: EmojiServiceInterface;
+
+  /** Service de gestion des notifications */
+  notificationService: NotificationService;
+}
 
 /**
  * Creates a custom service based on the service provider
+ * @param provider Configuration pour le service personnalisé
+ * @returns Service Mattermost
  */
 function createCustomService(
   provider: CustomServiceProvider,
@@ -29,51 +56,25 @@ function createCustomService(
 }
 
 /**
- * Main function to create a Mattermost service
- * Automatically determines the mode based on the configuration
- *
- * @param config - Service configuration
- * @returns A Mattermost service instance
+ * Crée le service Mattermost principal en fonction de la configuration
+ * @param config Configuration du service
+ * @returns Service Mattermost
  */
-export function createMattermostService(
-  config: ServiceConfig,
-): MattermostService {
+function createMainService(config: ServiceConfig): MattermostService {
   // Determine mode based on configuration
   if (config.serviceProvider) {
     return createCustomService(config.serviceProvider);
   } else if (config.serverUrl && config.token) {
-    const service = createDirectService({
+    return createDirectService({
       serverUrl: config.serverUrl,
       token: config.token,
     });
-
-    // Preload the current user in the background
-    if (service instanceof DirectService) {
-      Promise.resolve().then(() => {
-        service
-          .getCurrentUser()
-          .catch((err) => console.warn("Failed to preload user:", err));
-      });
-    }
-
-    return service;
   } else if (config.proxyUrl && config.clientId) {
-    const service = createProxyService({
+    return createProxyService({
       proxyUrl: config.proxyUrl,
       clientId: config.clientId,
       userId: config.userId,
     });
-
-    // Preload the current user in the background
-    if (service instanceof ProxyService) {
-      Promise.resolve().then(() => {
-        service
-          .getCurrentUser()
-          .catch((err) => console.warn("Failed to preload user:", err));
-      });
-    }
-
-    return service;
   } else if (config.serverUrl) {
     // Add this condition to allow creation with just the URL
     return createDirectService({
@@ -88,248 +89,43 @@ export function createMattermostService(
 }
 
 /**
- * Creates a mock service for testing and development
+ * Crée tous les services nécessaires et les assemble dans un conteneur
+ * @param config Configuration des services
+ * @returns Conteneur de services
  */
-export function createMockService(): MattermostService {
-  // Create a mock service with preloaded current user
-  const mockUser: User = {
-    id: "user1",
-    username: "johndoe",
-    first_name: "John",
-    last_name: "Doe",
-    email: "john@example.com",
-    roles: "system_user",
-  };
+export function createServiceContainer(
+  config: ServiceConfig,
+): ServiceContainer {
+  // Créer le service principal
+  const mattermostService = createMainService(config);
 
-  // Use an object-based approach to simulate caching
-  // This will also help test if service methods work correctly
-  let _cachedUser: User = mockUser;
+  // Créer les services spécialisés
+  const fileService = createFileService(mattermostService);
+  const userService = createUserService(mattermostService);
+  const emojiService = createEmojiService(mattermostService);
+  const notificationService = new NotificationService(mattermostService);
 
+  // Assembler tous les services dans un conteneur
   return {
-    mode: "custom",
-
-    // User cache simulation
-    _currentUser: mockUser,
-
-    authenticate: async (username: string, password: string) => {
-      // Simulate authentication
-      if (username === "demo" && password === "password") {
-        return { token: "mock-user-token" };
-      }
-      throw new Error("Authentication failed");
-    },
-
-    validateToken: async (token) => {
-      return token === "mock-user-token";
-    },
-
-    getCurrentUser: async () => {
-      // Use the cached user
-      return _cachedUser;
-    },
-
-    getTeams: async () => [
-      { id: "team1", name: "team1", display_name: "Team One" },
-      { id: "team2", name: "team2", display_name: "Team Two" },
-    ],
-
-    getTeam: async (teamId) => ({
-      id: teamId,
-      name: `team-${teamId}`,
-      display_name: `Team ${teamId.charAt(0).toUpperCase() + teamId.slice(1)}`,
-    }),
-
-    getChannels: async () => [
-      {
-        id: "channel1",
-        team_id: "team1",
-        name: "general",
-        display_name: "General",
-        type: "O",
-        create_at: Date.now(),
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-      {
-        id: "channel2",
-        team_id: "team1",
-        name: "random",
-        display_name: "Random",
-        type: "O",
-        create_at: Date.now(),
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-    ],
-
-    getChannel: async (channelId) => ({
-      id: channelId,
-      team_id: "team1",
-      name: `channel-${channelId}`,
-      display_name: `Channel ${channelId}`,
-      type: "O",
-      create_at: Date.now(),
-      update_at: Date.now(),
-      delete_at: 0,
-    }),
-
-    getChannelMessages: async () => ({
-      posts: {
-        post1: {
-          id: "post1",
-          user_id: "user1",
-          channel_id: "channel1",
-          message: "This is a test message",
-          create_at: Date.now() - 1000 * 60 * 5,
-          update_at: Date.now() - 1000 * 60 * 5,
-        },
-        post2: {
-          id: "post2",
-          user_id: "user2",
-          channel_id: "channel1",
-          message: "This is a response",
-          create_at: Date.now() - 1000 * 60 * 2,
-          update_at: Date.now() - 1000 * 60 * 2,
-        },
-      },
-      order: ["post1", "post2"],
-    }),
-
-    postMessage: async (channelId, message) => ({
-      id: `post-${Date.now()}`,
-      user_id: "user1",
-      channel_id: channelId,
-      message,
-      create_at: Date.now(),
-      update_at: Date.now(),
-    }),
-
-    getPost: async (messageId) => ({
-      id: messageId,
-      user_id: "user1",
-      channel_id: "channel1",
-      message: "This is a referenced message",
-      create_at: Date.now() - 1000 * 60 * 10,
-      update_at: Date.now() - 1000 * 60 * 10,
-    }),
-
-    editMessage: async (messageId, newMessage) => {
-      // Simulate message editing
-      console.log(`Mock: Message ${messageId} edited with text:`, newMessage);
-
-      return {
-        id: messageId,
-        user_id: "user1",
-        channel_id: "channel1",
-        message: newMessage,
-        create_at: Date.now() - 1000 * 60 * 5, // Keep original creation timestamp
-        update_at: Date.now(), // Update modification timestamp
-      };
-    },
-
-    deleteMessage: async (messageId) => {
-      // Simulate message deletion
-      console.log(`Mock: Message ${messageId} deleted`);
-
-      return { success: true };
-    },
-
-    replyToMessage: async (channelId, messageId, responseMessage) => {
-      // Simulate replying to a message
-      console.log(
-        `Mock: Reply to message ${messageId} in channel ${channelId}:`,
-        responseMessage,
-      );
-
-      return {
-        id: `post-reply-${Date.now()}`,
-        user_id: "user1",
-        channel_id: channelId,
-        message: responseMessage,
-        create_at: Date.now(),
-        update_at: Date.now(),
-        // Reply-specific properties
-        root_id: messageId,
-        props: {
-          quoted_message_id: messageId,
-        },
-      };
-    },
-
-    getUsers: async () => [
-      {
-        id: "user1",
-        username: "testuser",
-        first_name: "Test",
-        last_name: "User",
-      },
-      {
-        id: "user2",
-        username: "anotheruser",
-        first_name: "Another",
-        last_name: "User",
-      },
-    ],
-
-    getUserStatus: async () => ({
-      user_id: "user1",
-      status: "online",
-    }),
-
-    // WebSocket methods - ADDED MISSING METHODS
-    getWebsocketUrl: () => {
-      // Use consistent format with real API
-      return "ws://mock-websocket-url/api/v4/websocket";
-    },
-
-    getWebsocketToken: async () => {
-      return "mock-token";
-    },
-
-    // Emoji/GIF methods - ADDED MISSING METHODS
-    getFrequentEmojis: async () => [
-      "👍",
-      "❤️",
-      "😂",
-      "🎉",
-      "🔥",
-      "👏",
-      "✅",
-      "🙏",
-    ],
-    addReaction: async (messageId, emoji) => ({ success: true }),
-    removeReaction: async () => ({ success: true }),
-    hasReacted: async () => false,
-    searchGifs: async (query: string): Promise<GifData[]> => {
-      // Find GIFs that match the query or return trending
-      const allGifs = Object.values(MOCK_GIFS).flat();
-      const results = query.trim()
-        ? allGifs.filter((gif) =>
-            gif.title.toLowerCase().includes(query.toLowerCase()),
-          )
-        : MOCK_GIFS["Trending"] || [];
-
-      return results;
-    },
-    getGifs: async (category): Promise<GifData[]> => {
-      return MOCK_GIFS[category] || [];
-    },
-
-    // File methods
-    uploadFiles: async () => ({
-      file_infos: [{ id: "file1", name: "test.jpg" }],
-    }),
-
-    // Utility methods
-    getBaseUrl: () => "https://example.com",
-
-    // Methods like BaseService to simulate user cache
-    setCurrentUser: (user: User) => {
-      _cachedUser = user;
-    },
-
-    refreshCurrentUser: async () => {
-      return _cachedUser;
-    },
+    mattermostService,
+    fileService,
+    userService,
+    emojiService,
+    notificationService,
   };
+}
+
+/**
+ * Fonction d'aide pour vérifier si un service est initialisé
+ * Utile pour les vérifications de type avant d'utiliser un service
+ * @param service Service à vérifier
+ * @param serviceName Nom du service pour les messages d'erreur
+ */
+export function assertServiceInitialized<T>(
+  service: T | null | undefined,
+  serviceName: string,
+): asserts service is T {
+  if (!service) {
+    throw new Error(`Le service ${serviceName} n'est pas initialisé`);
+  }
 }

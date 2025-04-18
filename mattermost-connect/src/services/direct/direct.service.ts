@@ -50,7 +50,7 @@ export class DirectService extends BaseService implements MattermostService {
     options: RequestInit = {},
   ): Promise<T> {
     const url = `${this.baseUrl}/api/v4/${endpoint}`;
-    const headers: Record<string, string> = {
+    const headers: Record<string, any> = {
       "Content-Type": "application/json",
       ...options.headers,
     };
@@ -86,7 +86,8 @@ export class DirectService extends BaseService implements MattermostService {
       }
 
       return response.json() as Promise<T>;
-    } catch (error) {
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
       console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
       throw error;
     }

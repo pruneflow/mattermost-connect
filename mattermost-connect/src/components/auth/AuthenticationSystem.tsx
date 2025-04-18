@@ -1,169 +1,415 @@
 // src/components/auth/AuthenticationSystem.tsx
-import React, { useState, useEffect } from "react";
-import { useAuthRetry } from "../../hooks/useAuthRetry";
-import AuthErrorHandler from "../common/AuthErrorHandler";
-import { useMattermost } from "../../context/MattermostProvider";
-import { Snackbar, Alert } from "@mui/material";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  TextField,
+  Button,
+  CircularProgress,
+  Alert,
+  Stack,
+  FormControlLabel,
+  Checkbox,
+  IconButton,
+  InputAdornment,
+  Link,
+  Divider,
+  SxProps,
+} from "@mui/material";
+import { Visibility, VisibilityOff } from "@mui/icons-material";
+import { useAuth } from "../../hooks/useAuth";
+import { useMattermost } from "../../context";
 
 /**
- * Props pour le système d'authentification
+ * Types d'authentification supportés
+ */
+type AuthType = "direct" | "proxy" | "token";
+
+/**
+ * Props pour le composant d'authentification
  */
 interface AuthenticationSystemProps {
-  /**
-   * Composants enfants
-   */
-  children: React.ReactNode;
+  /** Types d'authentification à afficher (défaut: tous) */
+  authTypes?: AuthType[];
 
-  /**
-   * Callback à appeler lorsque l'utilisateur est déconnecté
-   */
-  onLogout?: () => void;
+  /** Type d'authentification par défaut */
+  defaultAuthType?: AuthType;
 
-  /**
-   * Fréquence de vérification de l'authentification (en ms)
-   * @default 60000 (1 minute)
-   */
-  authCheckInterval?: number;
+  /** URL du serveur par défaut pour le mode direct */
+  defaultServerUrl?: string;
+
+  /** Label pour le bouton de connexion */
+  loginButtonLabel?: string;
+
+  /** Titre du formulaire d'authentification */
+  title?: string;
+
+  /** Si vrai, se souvient des identifiants entre les sessions */
+  rememberCredentials?: boolean;
+
+  /** Si vrai, masque le formulaire quand l'utilisateur est connecté */
+  hideWhenAuthenticated?: boolean;
+
+  /** Callback appelé après une connexion réussie */
+  onLoginSuccess?: (token: string) => void;
+
+  /** Callback appelé en cas d'échec de connexion */
+  onLoginError?: (error: Error) => void;
+
+  /** Styles personnalisés pour le composant Card */
+  sx?: SxProps;
+
+  /** Classes CSS personnalisées */
+  className?: string;
 }
 
 /**
- * Composant principal qui gère l'authentification à l'échelle de l'application
- *
- * Ce composant doit être placé au plus haut niveau de votre application,
- * en englobant tous les composants qui ont besoin d'authentification.
+ * Composant de système d'authentification pour Mattermost
+ * Prend en charge les modes direct (serveur), proxy et token
  */
 const AuthenticationSystem: React.FC<AuthenticationSystemProps> = ({
-  children,
-  onLogout,
-  authCheckInterval = 60000, // 1 minute par défaut
+  authTypes = ["direct", "proxy", "token"],
+  defaultAuthType = "direct",
+  defaultServerUrl = "",
+  loginButtonLabel = "Se connecter",
+  title = "Connexion à Mattermost",
+  rememberCredentials = true,
+  hideWhenAuthenticated = true,
+  onLoginSuccess,
+  onLoginError,
+  sx,
+  className,
 }) => {
-  const [authDialogOpen, setAuthDialogOpen] = useState<boolean>(false);
-  const [authCheckTimer, setAuthCheckTimer] = useState<number | null>(null);
-  const { isConnected, service, fileService } = useMattermost();
-
-  // Utiliser notre hook personnalisé
-  const { error, resetError } = useAuthRetry({
-    onAuthError: () => {
-      setAuthDialogOpen(true);
-    },
-    onMaxRetriesExceeded: () => {
-      // Si toutes les tentatives échouent, déconnecter l'utilisateur
-      if (onLogout) {
-        onLogout();
-      }
-    },
+  // Hooks pour l'authentification et l'état Mattermost
+  const {
+    login,
+    isAuthenticating,
+    error: authError,
+  } = useAuth({
+    onAuthSuccess: onLoginSuccess,
+    onAuthError: onLoginError,
+    storeToken: rememberCredentials,
   });
+  const { isConnected, currentUser } = useMattermost();
 
-  // Vérifier périodiquement l'authentification
+  // État du formulaire
+  const [authType, setAuthType] = useState<AuthType>(defaultAuthType);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [serverUrl, setServerUrl] = useState(defaultServerUrl);
+  const [token, setToken] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(rememberCredentials);
+  const [error, setError] = useState<string | null>(null);
+
+  // Chargement des identifiants stockés
   useEffect(() => {
-    if (!isConnected || !fileService || authCheckInterval <= 0) {
-      // Ne pas vérifier si pas connecté ou pas d'intervalle configuré
-      return;
-    }
+    if (rememberCredentials) {
+      const storedUsername = localStorage.getItem("mattermost_username");
+      const storedServer = localStorage.getItem("mattermost_server");
 
-    // Fonction de vérification d'authentification
-    const checkAuthentication = async () => {
+      if (storedUsername) {
+        setUsername(storedUsername);
+      }
+
+      if (storedServer) {
+        setServerUrl(storedServer);
+      }
+    }
+  }, [rememberCredentials]);
+
+  // Réinitialiser l'erreur lorsqu'un champ est modifié
+  useEffect(() => {
+    setError(null);
+  }, [username, password, serverUrl, token, authType]);
+
+  // Convertir l'erreur d'authentification en message d'erreur
+  useEffect(() => {
+    if (authError) {
+      setError(authError.message);
+    }
+  }, [authError]);
+
+  // Fonction de soumission du formulaire
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
+
+      // Valider les champs requis selon le type d'authentification
+      if (authType === "direct") {
+        if (!username.trim() || !password.trim() || !serverUrl.trim()) {
+          setError("Veuillez remplir tous les champs");
+          return;
+        }
+
+        // Valider le format de l'URL du serveur
+        try {
+          new URL(serverUrl);
+        } catch {
+          setError("URL du serveur invalide");
+          return;
+        }
+      } else if (authType === "proxy") {
+        if (!username.trim() || !password.trim()) {
+          setError("Veuillez remplir tous les champs");
+          return;
+        }
+      } else if (authType === "token") {
+        if (!token.trim() || !serverUrl.trim()) {
+          setError("Veuillez remplir tous les champs");
+          return;
+        }
+
+        // Valider le format de l'URL du serveur
+        try {
+          new URL(serverUrl);
+        } catch {
+          setError("URL du serveur invalide");
+          return;
+        }
+      }
+
       try {
-        // Vérifier si le fileService a une méthode isAuthenticated
-        if ("isAuthenticated" in fileService) {
-          const isAuth = (fileService as any).isAuthenticated();
-          if (!isAuth) {
-            setAuthDialogOpen(true);
+        // Stocker les identifiants si "Se souvenir de moi" est coché
+        if (remember) {
+          localStorage.setItem("mattermost_username", username);
+
+          if (authType === "direct" || authType === "token") {
+            localStorage.setItem("mattermost_server", serverUrl);
           }
-        } else if (service.mode === "direct") {
-          // Pour le mode direct, essayer de récupérer l'utilisateur courant
-          await service.getCurrentUser();
         }
-      } catch (error) {
-        console.error(
-          "Erreur lors de la vérification d'authentification:",
-          error,
-        );
 
-        if (
-          error instanceof Error &&
-          (error.message.includes("401") ||
-            error.message.includes("unauthorized") ||
-            error.message.includes("session invalide") ||
-            error.message.includes("invalid session"))
-        ) {
-          setAuthDialogOpen(true);
+        // Gérer chaque type d'authentification
+        if (authType === "direct" || authType === "proxy") {
+          await login(username, password);
+        } else if (authType === "token") {
+          // Pour le mode token, nous ne pouvons pas faire l'authentification ici
+          // car le token est utilisé lors de l'initialisation du MattermostProvider
+          setError("Le mode token nécessite une reconfiguration du provider");
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(errorMessage);
+
+        if (onLoginError) {
+          onLoginError(err instanceof Error ? err : new Error(errorMessage));
         }
       }
-    };
+    },
+    [
+      authType,
+      username,
+      password,
+      serverUrl,
+      token,
+      remember,
+      login,
+      onLoginError,
+    ],
+  );
 
-    // Démarrer le timer
-    const timer = window.setInterval(checkAuthentication, authCheckInterval);
-    setAuthCheckTimer(timer);
+  // Gérer le basculement d'affichage du mot de passe
+  const handleTogglePasswordVisibility = () => {
+    setShowPassword((prev) => !prev);
+  };
 
-    // Nettoyer le timer à la destruction du composant
-    return () => {
-      if (timer) {
-        window.clearInterval(timer);
-      }
-    };
-  }, [isConnected, service, fileService, authCheckInterval, onLogout]);
-
-  // Nettoyer le timer lorsque le composant est démonté
-  useEffect(() => {
-    return () => {
-      if (authCheckTimer) {
-        window.clearInterval(authCheckTimer);
-      }
-    };
-  }, [authCheckTimer]);
-
-  // Si une erreur d'authentification est détectée, afficher la boîte de dialogue
-  useEffect(() => {
-    if (error && isAuthError(error)) {
-      setAuthDialogOpen(true);
-    }
-  }, [error]);
-
-  // Fonction pour vérifier si une erreur est liée à l'authentification
-  const isAuthError = (error: Error): boolean => {
+  // Si l'utilisateur est connecté et hideWhenAuthenticated est vrai, masquer le formulaire
+  if (isConnected && currentUser && hideWhenAuthenticated) {
     return (
-      error.message.includes("401") ||
-      error.message.includes("unauthorized") ||
-      error.message.includes("session invalide") ||
-      error.message.includes("invalid session")
+      <Box className={className} sx={sx}>
+        <Card elevation={3}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom align="center">
+              Connecté en tant que {currentUser.username}
+            </Typography>
+            {currentUser.first_name && currentUser.last_name && (
+              <Typography variant="body2" color="textSecondary" align="center">
+                {currentUser.first_name} {currentUser.last_name}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
     );
-  };
-
-  // Gérer la fermeture de la boîte de dialogue
-  const handleAuthDialogClose = () => {
-    setAuthDialogOpen(false);
-    resetError();
-  };
-
-  // Gérer le succès de l'authentification
-  const handleAuthSuccess = () => {
-    setAuthDialogOpen(false);
-    resetError();
-  };
-
-  // Gérer l'échec de l'authentification
-  const handleAuthFailure = () => {
-    // Si toutes les tentatives échouent, déconnecter l'utilisateur
-    if (onLogout) {
-      onLogout();
-    }
-  };
+  }
 
   return (
-    <>
-      {children}
+    <Box className={className} sx={sx}>
+      <Card elevation={3}>
+        <CardContent>
+          <Typography variant="h5" component="h2" gutterBottom align="center">
+            {title}
+          </Typography>
 
-      {/* Boîte de dialogue d'erreur d'authentification */}
-      <AuthErrorHandler
-        open={authDialogOpen}
-        onClose={handleAuthDialogClose}
-        onAuthSuccess={handleAuthSuccess}
-        onAuthFailure={handleAuthFailure}
-        message="Votre session a expiré ou n'est plus valide. Voulez-vous vous reconnecter automatiquement ?"
-        title="Session expirée"
-      />
-    </>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            {/* Sélection du type d'authentification */}
+            {authTypes.length > 1 && (
+              <Box mb={3}>
+                <Stack direction="row" spacing={1} justifyContent="center">
+                  {authTypes.includes("direct") && (
+                    <Button
+                      variant={authType === "direct" ? "contained" : "outlined"}
+                      color="primary"
+                      onClick={() => setAuthType("direct")}
+                    >
+                      Serveur
+                    </Button>
+                  )}
+                  {authTypes.includes("proxy") && (
+                    <Button
+                      variant={authType === "proxy" ? "contained" : "outlined"}
+                      color="primary"
+                      onClick={() => setAuthType("proxy")}
+                    >
+                      Proxy
+                    </Button>
+                  )}
+                  {authTypes.includes("token") && (
+                    <Button
+                      variant={authType === "token" ? "contained" : "outlined"}
+                      color="primary"
+                      onClick={() => setAuthType("token")}
+                    >
+                      Token
+                    </Button>
+                  )}
+                </Stack>
+              </Box>
+            )}
+
+            {/* Champs communs aux modes direct et proxy */}
+            {(authType === "direct" || authType === "proxy") && (
+              <>
+                <TextField
+                  label="Nom d'utilisateur ou email"
+                  variant="outlined"
+                  fullWidth
+                  margin="normal"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={isAuthenticating}
+                  autoComplete="username"
+                  InputProps={{
+                    autoComplete: "username",
+                  }}
+                />
+                <TextField
+                  label="Mot de passe"
+                  variant="outlined"
+                  type={showPassword ? "text" : "password"}
+                  fullWidth
+                  margin="normal"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isAuthenticating}
+                  autoComplete="current-password"
+                  InputProps={{
+                    autoComplete: "current-password",
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={handleTogglePasswordVisibility}
+                          edge="end"
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </>
+            )}
+
+            {/* Champ URL serveur pour les modes direct et token */}
+            {(authType === "direct" || authType === "token") && (
+              <TextField
+                label="URL du serveur"
+                variant="outlined"
+                placeholder="https://mattermost.example.com"
+                fullWidth
+                margin="normal"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                disabled={isAuthenticating}
+              />
+            )}
+
+            {/* Champ token pour le mode token */}
+            {authType === "token" && (
+              <TextField
+                label="Token d'accès personnel"
+                variant="outlined"
+                fullWidth
+                margin="normal"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                disabled={isAuthenticating}
+              />
+            )}
+
+            {/* Checkbox "Se souvenir de moi" */}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  color="primary"
+                  disabled={isAuthenticating}
+                />
+              }
+              label="Se souvenir de moi"
+              sx={{ mt: 1 }}
+            />
+
+            {/* Bouton de connexion */}
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              fullWidth
+              size="large"
+              disabled={isAuthenticating}
+              sx={{ mt: 2 }}
+            >
+              {isAuthenticating ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                loginButtonLabel
+              )}
+            </Button>
+          </form>
+
+          {/* Aide mode token - visible uniquement en mode token */}
+          {authType === "token" && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="body2" color="textSecondary">
+                Le token d'accès personnel peut être généré dans les paramètres
+                de votre compte Mattermost, sous "Intégrations" &gt; "Tokens
+                d'accès personnels".
+              </Typography>
+            </>
+          )}
+
+          {/* Aide URL serveur - visible pour les modes qui utilisent l'URL du serveur */}
+          {(authType === "direct" || authType === "token") && (
+            <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
+              L'URL du serveur est l'adresse de votre installation Mattermost,
+              par exemple https://mattermost.example.com
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+    </Box>
   );
 };
 

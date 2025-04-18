@@ -38,6 +38,8 @@ export interface Message {
   has_reactions?: boolean;
   reply_count?: number;
   root_id?: string;
+  // File attachments
+  file_ids?: string[];
   // Additional properties
   props?: Record<string, unknown>;
 }
