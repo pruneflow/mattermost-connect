@@ -1,7 +1,7 @@
 // src/components/channel/ChannelList/ChannelItem.tsx
 import React from "react";
 import { Channel } from "../../../types";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 
 // Material-UI Components
 import {

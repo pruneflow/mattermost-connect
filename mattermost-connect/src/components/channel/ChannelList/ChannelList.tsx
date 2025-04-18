@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 import { Channel } from "../../../types";
 
 // Material-UI Components
@@ -99,15 +99,15 @@ const ChannelList: React.FC<ChannelListProps> = ({
 }) => {
   const theme = useTheme();
   const {
-    service,
+    services,
     isConnected,
     currentUser,
-    userService,
     setActiveChannel,
     activeChannel,
-    knownUsers,
     getUserDisplayName,
   } = useMattermost();
+
+  const userService = services?.userService;
 
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -168,7 +168,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
 
       setLoading(true);
       try {
-        const channelsData = await service?.getChannels(teamId);
+        const channelsData =
+          await services?.mattermostService.getChannels(teamId);
 
         if (channelsData && channelsData.length > 0) {
           let currentChannel;
@@ -246,7 +247,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
   }, [
     isConnected,
     teamId,
-    service,
+    services,
     setActiveChannel,
     activeChannel,
     onSelectChannel,

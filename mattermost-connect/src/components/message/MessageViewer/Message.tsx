@@ -1,6 +1,6 @@
 // src/components/ChannelViewer/message/Message.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 import {
   Box,
   Paper,
@@ -40,7 +40,7 @@ const Message: React.FC<MessageProps> = ({
   avatarSx,
   highlight = false,
 }) => {
-  const { service, getUser, currentUser } = useMattermost();
+  const { services, getUser, currentUser } = useMattermost();
   const [author, setAuthor] = useState<User | null>(null);
   const [formattedText, setFormattedText] = useState("");
   const [isHovered, setIsHovered] = useState(false);
@@ -56,6 +56,8 @@ const Message: React.FC<MessageProps> = ({
       isFromCurrentUser || (currentUser && message.user_id === currentUser.id)
     );
   }, [isFromCurrentUser, currentUser, message.user_id]);
+
+  const mattermostService = services?.mattermostService;
 
   // Function to determine if the message is a reply
   const isReplyMessage = (msg: MessageType): boolean => {
@@ -77,14 +79,14 @@ const Message: React.FC<MessageProps> = ({
           // This approach depends on the available API
           try {
             // Some API implementations allow retrieving a specific message
-            if (typeof service.getPost === "function") {
-              const parentPost = await service.getPost(
+            if (typeof mattermostService?.getPost === "function") {
+              const parentPost = await mattermostService?.getPost(
                 parentMessageId as string,
               );
               setReferencedMessage(parentPost);
 
               if (parentPost.user_id) {
-                // Utiliser getUser plutôt que service.getUsers
+                // Utiliser getUser plutôt que mattermostService?.getUsers
                 const author = await getUser(parentPost.user_id);
                 if (author) {
                   setReferencedAuthor(author);
@@ -100,18 +102,20 @@ const Message: React.FC<MessageProps> = ({
           }
 
           // Alternative approach: retrieve channel messages and look for the parent message
-          const response = await service.getChannelMessages(
+          const response = await mattermostService?.getChannelMessages(
             message.channel_id,
             {
               perPage: 100, // Increase to increase chances of finding the parent
             },
           );
 
+          if (!response) return;
+
           if (response.posts && response.posts[parentMessageId as string]) {
             setReferencedMessage(response.posts[parentMessageId as string]);
 
             if (response.posts[parentMessageId as string].user_id) {
-              // Utiliser getUser plutôt que service.getUsers
+              // Utiliser getUser plutôt que mattermostService?.getUsers
               const author = await getUser(
                 response.posts[parentMessageId as string].user_id,
               );
@@ -131,7 +135,7 @@ const Message: React.FC<MessageProps> = ({
 
       void fetchReferencedMessage();
     }
-  }, [message, service, getUser]);
+  }, [message, mattermostService, getUser]);
 
   // Load author information
   useEffect(() => {

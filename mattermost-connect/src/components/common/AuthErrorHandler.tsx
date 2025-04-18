@@ -58,8 +58,9 @@ const AuthErrorHandler: React.FC<AuthErrorHandlerProps> = ({
   >("info");
 
   // Accéder au contexte Mattermost
-  const { service, fileService } = useMattermost();
-
+  const { services } = useMattermost();
+  const fileService = services?.fileService;
+  const mattermostService = services?.mattermostService;
   // Déterminer si la boîte de dialogue doit être ouverte (contrôle externe ou interne)
   const isOpen = externalOpen !== undefined ? externalOpen : internalOpen;
 
@@ -114,30 +115,27 @@ const AuthErrorHandler: React.FC<AuthErrorHandlerProps> = ({
         }
       }
 
-      // Si le service de fichiers n'a pas réussi, essayer d'utiliser le service principal
-      if (service) {
-        // Essayer de rafraîchir l'utilisateur actuel pour forcer une réauthentification
-        if ("refreshCurrentUser" in service) {
-          await (service as any).refreshCurrentUser();
+      // Essayer de rafraîchir l'utilisateur actuel pour forcer une réauthentification
+      if (mattermostService?.refreshCurrentUser) {
+        await mattermostService?.refreshCurrentUser();
 
-          setNotificationMessage("Reconnexion réussie !");
-          setNotificationSeverity("success");
-          setNotificationOpen(true);
+        setNotificationMessage("Reconnexion réussie !");
+        setNotificationSeverity("success");
+        setNotificationOpen(true);
 
-          // Fermer la boîte de dialogue
-          if (externalOnClose) {
-            externalOnClose();
-          } else {
-            setInternalOpen(false);
-          }
-
-          // Appeler le callback de succès
-          if (onAuthSuccess) {
-            onAuthSuccess();
-          }
-
-          return;
+        // Fermer la boîte de dialogue
+        if (externalOnClose) {
+          externalOnClose();
+        } else {
+          setInternalOpen(false);
         }
+
+        // Appeler le callback de succès
+        if (onAuthSuccess) {
+          onAuthSuccess();
+        }
+
+        return;
       }
 
       // Si aucune des méthodes n'a fonctionné

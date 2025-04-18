@@ -16,7 +16,7 @@ import {
   PictureAsPdf as PdfIcon,
   Archive as ArchiveIcon,
 } from "@mui/icons-material";
-import { useMattermost } from "../../../../context/MattermostProvider";
+import { useMattermost } from "../../../../context";
 
 /**
  * Vérifie si le fichier est de type PDF
@@ -57,9 +57,10 @@ const ImageAttachment: React.FC<ImageAttachmentProps> = ({
   const [errorType, setErrorType] = useState<"auth" | "load" | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [secureUrl, setSecureUrl] = useState<string | null>(null);
-  const { fileService } = useMattermost();
-  const { service } = useMattermost();
-  const baseUrl = service?.getBaseUrl?.() || "";
+  const { services } = useMattermost();
+  const mattermostService = services?.mattermostService;
+  const fileService = services?.fileService;
+  const baseUrl = mattermostService?.getBaseUrl?.() || "";
 
   // Détermine le type de fichier
   const isPdf = isPdfType(fileType || "", fileName);
@@ -90,8 +91,8 @@ const ImageAttachment: React.FC<ImageAttachmentProps> = ({
 
       try {
         // Utiliser la nouvelle méthode du service de fichiers
-        const thumbnailBlobUrl = await fileService.fetchThumbnail(fileId);
-        setSecureUrl(thumbnailBlobUrl);
+        const thumbnailBlobUrl = await fileService?.fetchThumbnail(fileId);
+        if (thumbnailBlobUrl) setSecureUrl(thumbnailBlobUrl);
       } catch (error) {
         console.error("Erreur lors du chargement de la miniature:", error);
 
@@ -137,7 +138,7 @@ const ImageAttachment: React.FC<ImageAttachmentProps> = ({
 
   // Handle image load errors (fallback)
   const handleImageError = (
-    e: React.SyntheticEvent<HTMLImageElement, Event>,
+    _e: React.SyntheticEvent<HTMLImageElement, Event>,
   ) => {
     // Si l'image ne se charge pas, on affiche une erreur
     setErrorType("load");
@@ -163,7 +164,7 @@ const ImageAttachment: React.FC<ImageAttachmentProps> = ({
 
       // Réinitialiser l'URL sécurisée pour forcer un nouveau chargement
       if (secureUrl && secureUrl.startsWith("blob:")) {
-        fileService.revokeObjectURL(secureUrl);
+        fileService?.revokeObjectURL(secureUrl);
       }
       setSecureUrl(null);
 
@@ -194,6 +195,11 @@ const ImageAttachment: React.FC<ImageAttachmentProps> = ({
       return <ArchiveIcon />;
     }
     return <ImageIcon />;
+  };
+
+  const refresh = (e: any) => {
+    e.stopPropagation();
+    void handleRefresh();
   };
 
   return (
@@ -277,10 +283,7 @@ const ImageAttachment: React.FC<ImageAttachmentProps> = ({
             <Tooltip title="Rafraîchir">
               <IconButton
                 size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRefresh();
-                }}
+                onClick={refresh}
                 sx={{
                   position: "absolute",
                   bottom: -8,

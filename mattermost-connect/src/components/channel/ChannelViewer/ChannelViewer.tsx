@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 import { Channel, Message as MessageType, User } from "../../../types";
 
 // Material-UI Components
@@ -23,7 +23,7 @@ import { ChannelLoadMoreButton } from "./components/ChannelLoadMoreButton";
 import { MessageList } from "../../message/MessageViewer/MessageList";
 
 import { TypingIndicator } from "../../notification";
-import { WebSocketEventType } from "../../../services/notification.service";
+import { WebSocketEventType } from "../../../services";
 
 /**
  * Props for the ChannelViewer component
@@ -93,18 +93,18 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
 }) => {
   const {
     isConnected,
-    service,
+    services,
     currentUser,
     setReplyTo,
     typingUsers,
     activeChannel,
     setActiveChannel,
     markChannelAsRead,
-    notificationService,
     highlightMessageId,
     setHighlightMessageId,
   } = useMattermost();
-
+  const notificationService = services?.notificationService;
+  const mattermostService = services?.mattermostService;
   // État
   const [channel, setChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -190,10 +190,12 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
           return;
         }
         setLoading(true);
-        const channelData = await service.getChannel(channelId);
-        setChannel(channelData);
-        setActiveChannel(channelData);
-        setError(null);
+        const channelData = await mattermostService?.getChannel(channelId);
+        if (channelData) {
+          setChannel(channelData);
+          setActiveChannel(channelData);
+          setError(null);
+        }
       } catch (err) {
         if (!isMounted.current || currentChannelId !== stableChannelId.current)
           return;
@@ -207,7 +209,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     void fetchChannel();
 
     // Retirer channel de la liste des dépendances pour briser la boucle
-  }, [isConnected, channelId, service, setActiveChannel, activeChannel]);
+  }, [isConnected, channelId, services, setActiveChannel, activeChannel]);
 
   // Charger les messages de façon optimisée
   useEffect(() => {
@@ -223,11 +225,18 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       setLoading(true);
 
       try {
-        const response = await service.getChannelMessages(channelId, {
-          perPage: loadMessageCount,
-        });
+        const response = await mattermostService?.getChannelMessages(
+          channelId,
+          {
+            perPage: loadMessageCount,
+          },
+        );
 
-        if (!isMounted.current || currentChannelId !== stableChannelId.current)
+        if (
+          !isMounted.current ||
+          currentChannelId !== stableChannelId.current ||
+          !response
+        )
           return;
 
         // Conversion et tri des messages
@@ -282,7 +291,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     } else {
       setMessagesToHighlight(new Set());
     }
-  }, [isConnected, channel, service, loadMessageCount, highlightMessageId]);
+  }, [isConnected, channel, services, loadMessageCount, highlightMessageId]);
 
   // Fonction pour scroller vers le bas (mémorisée)
   const scrollToBottom = useCallback(
@@ -658,12 +667,12 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       // Récupérer les messages avant le premier message affiché
       const firstMessage = messages[0];
 
-      const response = await service.getChannelMessages(channelId, {
+      const response = await mattermostService?.getChannelMessages(channelId, {
         perPage: loadMessageCount,
         before: firstMessage.id,
       });
 
-      if (!isMounted.current) return;
+      if (!isMounted.current || !response) return;
 
       // Conversion et tri des nouveaux messages
       const newPostsArray = Object.values(response.posts || {});
@@ -695,7 +704,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     isConnected,
     channelId,
     messages,
-    service,
+    services,
     loadMessageCount,
   ]);
 
@@ -719,7 +728,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   // Gestionnaire pour l'édition d'un message (mémorisé)
   const handleEditMessage = useCallback(
     async (messageToEdit: MessageType) => {
-      if (!service.editMessage) {
+      if (!mattermostService?.editMessage) {
         console.error("Edit message functionality not available");
         return;
       }
@@ -736,19 +745,19 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         console.error("Error editing message:", error);
       }
     },
-    [service.editMessage],
+    [mattermostService?.editMessage],
   );
 
   // Gestionnaire pour la suppression d'un message (mémorisé)
   const handleDeleteMessage = useCallback(
     async (messageToDelete: MessageType) => {
-      if (!service.deleteMessage) {
+      if (!mattermostService?.deleteMessage) {
         console.error("Delete message functionality not available");
         return;
       }
 
       try {
-        await service.deleteMessage(messageToDelete.id);
+        await mattermostService?.deleteMessage(messageToDelete.id);
 
         // Supprimer de la map de référence
         delete messageMap.current[messageToDelete.id];
@@ -762,7 +771,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         setError("Failed to delete message. Please try again.");
       }
     },
-    [service.deleteMessage],
+    [mattermostService?.deleteMessage],
   );
 
   // Mémorisation de la liste de messages pour éviter des re-renders inutiles

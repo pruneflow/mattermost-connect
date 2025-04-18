@@ -330,4 +330,9 @@ export interface MattermostService
    * @returns URL de base du serveur
    */
   getBaseUrl(): string;
+  /**
+   * Rafraîchit les informations de l'utilisateur courant
+   * @returns Les informations utilisateur mises à jour
+   */
+  refreshCurrentUser?(): Promise<User>;
 }

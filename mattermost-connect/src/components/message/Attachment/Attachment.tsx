@@ -1,6 +1,6 @@
 // src/components/message/Attachment/Attachment.tsx
 import React, { useState, useEffect } from "react";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useMattermost } from "../../../context";
 
 // Types
 import { MessageAttachment as AttachmentType } from "../../../types";
@@ -143,7 +143,8 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   // Hooks
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { fileService } = useMattermost();
+  const { services } = useMattermost();
+  const fileService = services?.fileService;
 
   // State
   const [thumbnailError, setThumbnailError] = useState<boolean>(false);
@@ -158,7 +159,6 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     "success" | "error" | "info" | "warning"
   >("success");
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
-  const { service } = useMattermost();
 
   // État pour la gestion des erreurs d'authentification
   const [authError, setAuthError] = useState<boolean>(false);
@@ -169,9 +169,6 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState<boolean>(false);
-
-  // Derived states
-  const baseUrl = service?.getBaseUrl?.() || "";
 
   // Determine if we have a File object or an AttachmentType object
   const isLocalFile = !isUploaded && file instanceof File;
@@ -309,15 +306,16 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
       setPublicLinkLoading(true);
 
       // Use the file service to create a public link
-      const publicLink = await fileService.createPublicLink(fileId);
+      const publicLink = await fileService?.createPublicLink(fileId);
+      if (publicLink) {
+        await navigator.clipboard.writeText(publicLink);
 
+        // User notification
+        setSnackbarMessage("Public link created and copied to clipboard!");
+        setSnackbarSeverity("success");
+        setSnackbarOpen(true);
+      }
       // Copy the link to clipboard
-      await navigator.clipboard.writeText(publicLink);
-
-      // User notification
-      setSnackbarMessage("Public link created and copied to clipboard!");
-      setSnackbarSeverity("success");
-      setSnackbarOpen(true);
     } catch (error) {
       console.error("Error creating public link:", error);
 
@@ -357,7 +355,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
 
     try {
-      await fileService.downloadFile(fileId);
+      await fileService?.downloadFile(fileId);
     } catch (error) {
       console.error("Error downloading file:", error);
 
@@ -593,7 +591,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
             <Button
               onClick={() => {
                 if (fileId) {
-                  void fileService.downloadFile(fileId);
+                  void fileService?.downloadFile(fileId);
                 }
               }}
               color="primary"
