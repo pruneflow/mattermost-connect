@@ -20,17 +20,17 @@ export interface AuthService {
    * @param password Mot de passe
    * @returns Token d'authentification
    */
-  authenticate(
+  authenticate?: (
     username: string,
     password: string,
-  ): Promise<{ token: string; serverUrl?: string }>;
+  ) => Promise<{ token: string; serverUrl?: string }>;
 
   /**
    * Valide un token existant
    * @param token Token à valider
    * @returns Booléen indiquant la validité du token
    */
-  validateToken(token: string): Promise<boolean>;
+  validateToken?: (token: string) => Promise<boolean>;
 }
 
 /**
@@ -282,4 +282,10 @@ export interface MattermostService
    * Mode de fonctionnement du service
    */
   readonly mode: "direct" | "proxy" | "custom";
+
+  /**
+   * Récupère l'URL de base du serveur Mattermost
+   * @returns URL de base du serveur
+   */
+  getBaseUrl(): string;
 }

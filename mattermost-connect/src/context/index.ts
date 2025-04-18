@@ -12,8 +12,5 @@ export {
   type MattermostContextType,
 } from "./MattermostProvider";
 
-// Réexporter le contexte Emoji si présent
+// Réexporter le contexte Emoji
 export { EmojiProvider, useEmoji, EmojiContext } from "./EmojiProvider";
-
-// Ajouter d'autres contextes au besoin
-// export { ... } from './OtherContext';

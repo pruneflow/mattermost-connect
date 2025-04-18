@@ -4,15 +4,12 @@ import {
   ServiceConfig,
   CustomServiceProvider,
 } from "../types";
-import { createDirectService } from "./direct/direct.service";
-import { createProxyService } from "./proxy/proxy.service";
-import { createFileService, FileServiceInterface } from "./file/file.service";
-import { createUserService, UserServiceInterface } from "./user/user.service";
-import {
-  createEmojiService,
-  EmojiServiceInterface,
-} from "./emoji/emoji.service";
-import { NotificationService } from "./notification/notification.service";
+import { createDirectService } from "./direct";
+import { createProxyService } from "./proxy";
+import { createFileService, FileServiceInterface } from "./file";
+import { createUserService, UserServiceInterface } from "./user";
+import { createEmojiService, EmojiServiceInterface } from "./emoji";
+import { NotificationService } from "./notification";
 
 /**
  * Interface pour le conteneur de services

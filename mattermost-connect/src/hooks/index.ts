@@ -6,17 +6,14 @@
 
 // Hooks spécifiques par domaine
 export { useAuth } from "./useAuth";
+export type { AuthResult } from "./useAuth";
 export { useChannel } from "./useChannel";
 export { useTeam } from "./useTeam";
 export { useUser, useUsers } from "./useUser";
 export { useFile } from "./useFile";
+export type { FileInfo, UploadingFile } from "./useFile";
 export { useRealtime } from "./useRealtime";
+export { useAuthRetry } from "./useAuthRetry";
 
 // Hook principal intégré
 export { useMattermostConnect } from "./useMattermostConnect";
-
-// Exporter également les types associés
-export type { FileInfo, UploadingFile } from "./useFile";
-
-// Ajouter d'autres hooks au besoin
-// export { ... } from './otherHook';

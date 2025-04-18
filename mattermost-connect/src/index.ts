@@ -79,7 +79,7 @@ export {
   type Notification,
   type WebSocketEvent,
   type UnreadState,
-} from "./services/notification/notification.service";
+} from "./services/notification";
 
 // Exporter le thème
 export { createDefaultTheme, MattermostThemeProvider } from "./theme";
