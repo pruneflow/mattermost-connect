@@ -1,4 +1,4 @@
-// src/components/navigation/TeamChannelNavigator/TeamChannelNavigator.tsx
+// src/components/navigation/TeamChannelNavigator.tsx
 import React, {
   useState,
   useEffect,
@@ -78,13 +78,7 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
   teamSx,
   channelListSx,
 }) => {
-  const {
-    services,
-    activeTeam,
-    activeChannel,
-    setActiveTeam,
-    setActiveChannel,
-  } = useMattermost();
+  const { services, activeTeam, setActiveTeam } = useMattermost();
 
   // State
   const [teams, setTeams] = useState<Team[]>([]);
@@ -97,7 +91,7 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
   // Track mounted state to avoid memory leaks
   const isMounted = React.useRef(true);
   const instanceIdRef = useRef(
-    `team-channelènavigator-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    `team-channel-navigator-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
 
   useEffect(() => {
@@ -160,40 +154,7 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
     };
 
     void loadTeams();
-  }, [services, activeTeam]);
-
-  // Handle team expansion change
-  const handleTeamChange = useCallback(
-    (teamId: string) => (_event: React.SyntheticEvent, isExpanded: boolean) => {
-      setExpandedTeamId(isExpanded ? teamId : null);
-    },
-    [teams],
-  );
-
-  // Handle channel selection
-  const handleChannelSelect = useCallback(
-    (team: Team, channel: Channel) => {
-      if (!activeTeam || team.id !== activeTeam.id) {
-        setActiveTeam(team);
-      }
-      if (!activeChannel || channel.id !== activeChannel.id) {
-        setActiveChannel(channel);
-      }
-
-      // Close the drawer if requested
-      if (closeOnSelect && onClose) {
-        onClose();
-      }
-    },
-    [setActiveTeam, setActiveChannel, closeOnSelect, onClose],
-  );
-
-  // When active team changes, expand that team
-  useEffect(() => {
-    if (activeTeam) {
-      setExpandedTeamId(activeTeam.id);
-    }
-  }, [activeTeam]);
+  }, [services]);
 
   // Render loading state
   const renderLoading = useMemo(
@@ -214,12 +175,18 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
   const renderTeamAccordion = useCallback(
     (team: Team) => {
       const isExpanded = expandedTeamId === team.id;
-      const isActive = activeTeam?.id === team.id;
+      const handleChannelSelect = () => {
+        if (!activeTeam || team.id !== activeTeam.id) {
+          setActiveTeam(team);
+        }
 
-      const handleChange = () => {
-        handleTeamChange(team.id);
+        // Close the drawer if requested
+        if (closeOnSelect && onClose) {
+          onClose();
+        }
       };
 
+      const handleChange = () => setExpandedTeamId(isExpanded ? null : team.id);
       return (
         <Accordion
           key={team.id}
@@ -241,7 +208,7 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
               "&.Mui-expanded": {
                 minHeight: 56,
               },
-              bgcolor: isActive ? "action.selected" : "transparent",
+              bgcolor: isExpanded ? "action.selected" : "transparent",
             }}
           >
             <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -259,27 +226,18 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
               <Typography variant="subtitle1" component="div">
                 {team.display_name}
               </Typography>
-              {/*     {team.member_count && (
-                <Badge
-                  badgeContent={team.member_count}
-                  color="primary"
-                  sx={{ ml: "8px" }}
-                />
-              )}*/}
             </Box>
           </AccordionSummary>
 
           <AccordionDetails sx={{ p: 0, pt: 1 }}>
-            {isActive && isExpanded && (
+            {isExpanded && (
               <ChannelList
                 teamId={team.id}
                 showSearch={showSearch}
                 showPrivateChannels={showPrivateChannels}
                 showDirectMessages={showDirectMessages}
                 groupByType={groupByType}
-                onSelectChannel={(channel: Channel) =>
-                  handleChannelSelect(team, channel)
-                }
+                onSelectChannel={handleChannelSelect}
                 sx={channelListSx}
               />
             )}
@@ -290,8 +248,6 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
     [
       expandedTeamId,
       activeTeam,
-      handleTeamChange,
-      handleChannelSelect,
       showSearch,
       showPrivateChannels,
       showDirectMessages,
