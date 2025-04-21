@@ -1,42 +1,67 @@
 // src/services/direct/direct.service.ts
-
 import { BaseService } from "../base";
 import {
   MattermostService,
   GetMessagesOptions,
   GetUsersOptions,
   MessagesResponse,
+  ServiceConfig,
 } from "../base";
 import { User, Message, Channel, Team } from "../../types";
 import { HttpClient, createDirectHttpClient } from "../http";
 import { AuthManager, createDirectAuthManager } from "../auth";
+import { TeamServiceInterface, createTeamService } from "../team/team.service";
+import {
+  ChannelServiceInterface,
+  createChannelService,
+} from "../channel/channel.service";
+import {
+  MessageServiceInterface,
+  createMessageService,
+} from "../message/message.service";
+import { UserServiceInterface, createUserService } from "../user";
+import {
+  ReactionServiceInterface,
+  createReactionService,
+} from "../reaction/reaction.service";
+import {
+  ErrorHandlerInterface,
+  createErrorHandler,
+} from "../error/error-handler";
 
 /**
- * Configuration for the direct service
+ * Configuration pour le service direct
  */
 export interface DirectServiceConfig {
-  /** URL of the Mattermost server */
+  /** URL du serveur Mattermost */
   serverUrl: string;
-  /** User API token (optional) */
+  /** Token API utilisateur (optionnel) */
   token?: string;
-  /** Whether to use local storage for token persistence */
+  /** Utiliser le stockage local pour la persistance du token */
   useLocalStorage?: boolean;
 }
 
 /**
- * Service implementing direct communication with a Mattermost server
- * without intermediaries
+ * Service implémentant la communication directe avec un serveur Mattermost
+ * Agit comme une façade déléguant aux services spécialisés
  */
 export class DirectService extends BaseService implements MattermostService {
   private httpClient: HttpClient;
   private authManager: AuthManager;
+  private teamService: TeamServiceInterface;
+  private channelService: ChannelServiceInterface;
+  private messageService: MessageServiceInterface;
+  private userService: UserServiceInterface;
+  private reactionService: ReactionServiceInterface;
+  private errorHandler: ErrorHandlerInterface;
+
   public readonly mode: "direct" | "proxy" | "custom" = "direct";
 
   /**
-   * Creates a new instance of the direct service
-   * @param serverUrl URL of the Mattermost server
-   * @param token User API token (optional)
-   * @param useLocalStorage Whether to use local storage for token persistence
+   * Crée une nouvelle instance du service direct
+   * @param serverUrl URL du serveur Mattermost
+   * @param token Token API utilisateur (optionnel)
+   * @param useLocalStorage Utiliser le stockage local pour la persistance du token
    */
   constructor(
     serverUrl: string,
@@ -45,47 +70,93 @@ export class DirectService extends BaseService implements MattermostService {
   ) {
     super(serverUrl);
 
-    // Create HTTP client with token provider that gets token from auth manager
-    this.httpClient = createDirectHttpClient(
-      serverUrl,
-      // Instead of passing token directly, we'll get it from auth manager
-      undefined,
-    );
+    // Créer le gestionnaire d'erreurs
+    this.errorHandler = createErrorHandler();
 
-    // Create authentication manager
+    // Créer le client HTTP
+    this.httpClient = createDirectHttpClient(serverUrl, undefined);
+
+    // Créer le gestionnaire d'authentification
     this.authManager = createDirectAuthManager(
       this.httpClient,
       serverUrl,
       useLocalStorage,
     );
 
-    // Set token if provided
+    // Définir le token s'il est fourni
     if (token) {
       this.authManager.setToken(token);
     }
+
+    // Créer les services spécialisés
+    this.teamService = createTeamService(this.httpClient, this.errorHandler);
+    this.channelService = createChannelService(
+      this.httpClient,
+      this.errorHandler,
+    );
+    this.messageService = createMessageService(
+      this.httpClient,
+      this.errorHandler,
+    );
+    this.userService = createUserService(this);
+    this.reactionService = createReactionService(
+      this.httpClient,
+      this.errorHandler,
+    );
+
+    // Définir la fonction de fournisseur de token pour le client HTTP
+    // Cela permet au client HTTP d'accéder au token actuel via l'authManager
+    (this.httpClient as any).tokenProvider = () => this.authManager.getToken();
   }
 
   /**
-   * Get the current token
+   * Obtenir le token actuel
    */
   public get token(): string | null {
     return this.authManager.getToken();
   }
 
   /**
-   * Implementation of abstract method to fetch current user
+   * Implémentation de la méthode abstraite pour récupérer l'utilisateur courant
+   * @protected
    */
   protected async fetchCurrentUser(): Promise<User> {
     try {
       const response = await this.httpClient.get<User>("users/me");
+
+      // Si le service utilisateur a une méthode setCurrentUser, on l'utilise
+      if (
+        this.userService &&
+        typeof (this.userService as any).setCurrentUserId === "function"
+      ) {
+        (this.userService as any).setCurrentUserId(response.data.id);
+      }
+
+      // Si le service de réactions a une méthode setCurrentUser, on l'utilise
+      if (
+        this.reactionService &&
+        typeof (this.reactionService as any).setCurrentUserId === "function"
+      ) {
+        (this.reactionService as any).setCurrentUserId(response.data.id);
+      }
+
       return response.data;
     } catch (error) {
-      console.error("Error fetching current user:", error);
-      throw error;
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error("Error fetching current user:", typedError);
+      throw typedError;
     }
   }
 
-  // ----- Authentication methods -----
+  /**
+   * Actualise les informations de l'utilisateur courant
+   */
+  async refreshCurrentUser(): Promise<User> {
+    this._currentUser = null; // Vider le cache
+    return this.getCurrentUser(); // Récupérer à nouveau l'utilisateur
+  }
+
+  // ----- Méthodes d'authentification (déléguées à authManager) -----
 
   async authenticate(
     username: string,
@@ -94,7 +165,7 @@ export class DirectService extends BaseService implements MattermostService {
     try {
       const result = await this.authManager.authenticate(username, password);
 
-      // Try to fetch and cache current user
+      // Essayer de récupérer et mettre en cache l'utilisateur courant
       try {
         const user = await this.fetchCurrentUser();
         this.setCurrentUser(user);
@@ -107,8 +178,9 @@ export class DirectService extends BaseService implements MattermostService {
         serverUrl: this.baseUrl,
       };
     } catch (error) {
-      console.error("Authentication error:", error);
-      throw error;
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error("Authentication error:", typedError);
+      throw typedError;
     }
   }
 
@@ -116,133 +188,51 @@ export class DirectService extends BaseService implements MattermostService {
     return this.authManager.validateToken(tokenToValidate);
   }
 
-  // ----- Team and channel methods -----
+  // ----- Méthodes d'équipe (déléguées à teamService) -----
 
   async getTeams(): Promise<Team[]> {
-    try {
-      const response = await this.httpClient.get<Team[]>("users/me/teams");
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching teams:", error);
-      throw error;
-    }
+    return this.teamService.getTeams();
   }
 
   async getTeam(teamId: string): Promise<Team> {
-    try {
-      const response = await this.httpClient.get<Team>(`teams/${teamId}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching team ${teamId}:`, error);
-      throw error;
-    }
+    return this.teamService.getTeam(teamId);
   }
 
   async getTeamUnreadCount(
     teamId: string,
   ): Promise<{ msg_count: number; mention_count: number }> {
-    if (!this._currentUser) {
-      await this.getCurrentUser();
-    }
-
-    try {
-      const response = await this.httpClient.get<{
-        msg_count: number;
-        mention_count: number;
-      }>(`users/${this._currentUser!.id}/teams/${teamId}/unread`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error getting unread count for team ${teamId}:`, error);
-      return { msg_count: 0, mention_count: 0 };
-    }
+    const userId = this._currentUser?.id;
+    return this.teamService.getTeamUnreadCount(teamId, userId);
   }
 
-  async getChannels(teamId: string): Promise<Channel[]> {
-    if (!teamId || teamId === "") return [];
+  // ----- Méthodes de canal (déléguées à channelService) -----
 
-    try {
-      const response = await this.httpClient.get<Channel[]>(
-        `users/me/teams/${teamId}/channels`,
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching channels for team ${teamId}:`, error);
-      throw error;
-    }
+  async getChannels(teamId: string): Promise<Channel[]> {
+    return this.channelService.getChannels(teamId);
   }
 
   async getChannel(channelId: string): Promise<Channel> {
-    try {
-      const response = await this.httpClient.get<Channel>(
-        `channels/${channelId}`,
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching channel ${channelId}:`, error);
-      throw error;
-    }
+    return this.channelService.getChannel(channelId);
+  }
+
+  async viewChannel(channelId: string): Promise<{ status: "OK" }> {
+    return this.channelService.viewChannel(channelId);
   }
 
   async getChannelUnreadCount(
     channelId: string,
   ): Promise<{ msg_count: number; mention_count: number }> {
-    if (!this._currentUser) {
-      await this.getCurrentUser();
-    }
-
-    try {
-      const response = await this.httpClient.get<{
-        msg_count: number;
-        mention_count: number;
-      }>(`users/${this._currentUser!.id}/channels/${channelId}/unread`);
-      return response.data;
-    } catch (error) {
-      console.error(
-        `Error getting unread count for channel ${channelId}:`,
-        error,
-      );
-      return { msg_count: 0, mention_count: 0 };
-    }
+    const userId = this._currentUser?.id;
+    return this.channelService.getChannelUnreadCount(channelId, userId);
   }
 
-  async viewChannel(channelId: string): Promise<{ status: "OK" }> {
-    if (!channelId) {
-      throw new Error("channelId is required to mark a channel as read");
-    }
-
-    try {
-      const response = await this.httpClient.post<{ status: "OK" }>(
-        "channels/members/me/view",
-        { channel_id: channelId },
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`Error marking channel ${channelId} as viewed:`, error);
-      throw error;
-    }
-  }
-
-  // ----- Messages methods -----
+  // ----- Méthodes de message (déléguées à messageService) -----
 
   async getChannelMessages(
     channelId: string,
     options: GetMessagesOptions = {},
   ): Promise<MessagesResponse> {
-    const { page = 0, perPage = 60, since = 0, before, after } = options;
-
-    let endpoint = `channels/${channelId}/posts?page=${page}&per_page=${perPage}`;
-
-    if (since) endpoint += `&since=${since}`;
-    if (before) endpoint += `&before=${before}`;
-    if (after) endpoint += `&after=${after}`;
-
-    try {
-      const response = await this.httpClient.get<MessagesResponse>(endpoint);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching messages for channel ${channelId}:`, error);
-      throw error;
-    }
+    return this.messageService.getChannelMessages(channelId, options);
   }
 
   async postMessage(
@@ -250,59 +240,19 @@ export class DirectService extends BaseService implements MattermostService {
     message: string,
     fileIds?: string[],
   ): Promise<Message> {
-    try {
-      const response = await this.httpClient.post<Message>("posts", {
-        channel_id: channelId,
-        message,
-        file_ids: fileIds || [],
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error posting message to channel ${channelId}:`, error);
-      throw error;
-    }
+    return this.messageService.postMessage(channelId, message, fileIds);
   }
 
   async getPost(messageId: string): Promise<Message> {
-    try {
-      const response = await this.httpClient.get<Message>(`posts/${messageId}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching post ${messageId}:`, error);
-      throw error;
-    }
+    return this.messageService.getMessage(messageId);
   }
 
   async editMessage(messageId: string, newMessage: string): Promise<Message> {
-    try {
-      // First get the message to obtain channel_id
-      const message = await this.getPost(messageId);
-
-      // Then update the message
-      const response = await this.httpClient.put<Message>(
-        `posts/${messageId}/patch`,
-        {
-          message: newMessage,
-          file_ids: message.file_ids,
-          has_reactions: message.has_reactions,
-          props: message.props,
-        },
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`Error editing message ${messageId}:`, error);
-      throw error;
-    }
+    return this.messageService.editMessage(messageId, newMessage);
   }
 
   async deleteMessage(messageId: string): Promise<{ success: boolean }> {
-    try {
-      await this.httpClient.delete(`posts/${messageId}`);
-      return { success: true };
-    } catch (error) {
-      console.error(`Error deleting message ${messageId}:`, error);
-      throw error;
-    }
+    return this.messageService.deleteMessage(messageId);
   }
 
   async replyToMessage(
@@ -311,89 +261,32 @@ export class DirectService extends BaseService implements MattermostService {
     responseMessage: string,
     fileIds?: string[],
   ): Promise<Message> {
-    if (!channelId || !messageId || !responseMessage.trim()) {
-      throw new Error("Invalid parameters for message reply");
-    }
-
-    try {
-      const response = await this.httpClient.post<Message>("posts", {
-        channel_id: channelId,
-        message: responseMessage.trim(),
-        root_id: messageId,
-        file_ids: fileIds || [],
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error replying to message ${messageId}:`, error);
-      throw error;
-    }
+    return this.messageService.replyToMessage(
+      channelId,
+      messageId,
+      responseMessage,
+      fileIds,
+    );
   }
 
-  // ----- User methods -----
+  // ----- Méthodes d'utilisateur (déléguées à userService) -----
 
   async getUsers(options: GetUsersOptions = {}): Promise<User[]> {
-    try {
-      const params = new URLSearchParams();
-
-      if (options.inChannel) params.append("in_channel", options.inChannel);
-      if (options.inTeam) params.append("in_team", options.inTeam);
-      if (options.perPage)
-        params.append("per_page", options.perPage.toString());
-      if (options.page) params.append("page", options.page.toString());
-
-      // If specific IDs are requested, use a different endpoint
-      if (options.ids && options.ids.length > 0) {
-        const response = await this.httpClient.post<User[]>(
-          "users/ids",
-          options.ids,
-        );
-        return response.data;
-      }
-
-      const response = await this.httpClient.get<User[]>(
-        `users?${params.toString()}`,
-      );
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      throw error;
-    }
+    return this.userService.getUsers(options);
   }
 
   async getUserStatus(userId: string): Promise<any> {
-    try {
-      const response = await this.httpClient.get<any>(`users/${userId}/status`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching status for user ${userId}:`, error);
-      throw error;
-    }
+    return this.userService.getUserStatus(userId);
   }
 
-  // ----- Emoji and reaction methods -----
+  // ----- Méthodes de réaction (déléguées à reactionService) -----
 
   async getFrequentEmojis(): Promise<string[]> {
-    // In a real implementation, we would fetch frequent emojis from the server
-    // For now, return a predefined list
-    return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
+    return this.reactionService.getFrequentEmojis();
   }
 
   async addReaction(messageId: string, emoji: string): Promise<any> {
-    if (!this._currentUser) {
-      await this.getCurrentUser();
-    }
-
-    try {
-      const response = await this.httpClient.post<any>("reactions", {
-        post_id: messageId,
-        emoji_name: emoji,
-        user_id: this._currentUser!.id,
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error adding reaction to message ${messageId}:`, error);
-      throw error;
-    }
+    return this.reactionService.addReaction(messageId, emoji);
   }
 
   async removeReaction(
@@ -401,24 +294,7 @@ export class DirectService extends BaseService implements MattermostService {
     messageId: string,
     emoji: string,
   ): Promise<any> {
-    if (!this._currentUser) {
-      await this.getCurrentUser();
-    }
-
-    const userId = this._currentUser!.id;
-
-    try {
-      const response = await this.httpClient.delete<any>(
-        `users/${userId}/posts/${messageId}/reactions/${emoji}`,
-      );
-      return response.data;
-    } catch (error) {
-      console.error(
-        `Error removing reaction from message ${messageId}:`,
-        error,
-      );
-      throw error;
-    }
+    return this.reactionService.removeReaction(channelId, messageId, emoji);
   }
 
   async hasReacted(
@@ -426,41 +302,23 @@ export class DirectService extends BaseService implements MattermostService {
     messageId: string,
     emoji: string,
   ): Promise<boolean> {
-    try {
-      const response = await this.httpClient.get<any[]>(
-        `posts/${messageId}/reactions`,
-      );
-
-      if (!this._currentUser) {
-        await this.getCurrentUser();
-      }
-
-      return response.data.some(
-        (reaction) =>
-          reaction.emoji_name === emoji &&
-          reaction.user_id === this._currentUser!.id,
-      );
-    } catch (error) {
-      console.error("Error checking reaction:", error);
-      return false;
-    }
+    return this.reactionService.hasReacted(channelId, messageId, emoji);
   }
 
-  // ----- GIF methods -----
+  // ----- Méthodes GIF -----
+  // Implémentations simplifiées pour maintenir la compatibilité
 
   async searchGifs(query: string, category?: string): Promise<any[]> {
-    // Simulate search in a real implementation
-    // Would call an external API like Giphy
+    // Implémentation minimale - à améliorer dans un service dédié aux GIFs
     return [];
   }
 
   async getGifs(category: string, limit: number = 20): Promise<any[]> {
-    // Simulate fetching in a real implementation
-    // Would call an external API like Giphy
+    // Implémentation minimale - à améliorer dans un service dédié aux GIFs
     return [];
   }
 
-  // ----- WebSocket methods -----
+  // ----- Méthodes WebSocket -----
 
   getWebsocketUrl(): string {
     return this.baseUrl.replace(/^http/, "ws") + "/api/v4/websocket";
@@ -470,11 +328,11 @@ export class DirectService extends BaseService implements MattermostService {
     return this.token || "";
   }
 
-  // ----- File methods -----
+  // ----- Méthodes pour les fichiers -----
 
   async uploadFiles(formData: FormData): Promise<any> {
     try {
-      // Custom handling for file uploads since they use FormData
+      // Traitement spécial pour les téléchargements de fichiers car ils utilisent FormData
       const response = await fetch(`${this.baseUrl}/api/v4/files`, {
         method: "POST",
         headers: {
@@ -492,31 +350,24 @@ export class DirectService extends BaseService implements MattermostService {
 
       return response.json();
     } catch (error) {
-      console.error("Error uploading files:", error);
-      throw error;
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error("Error uploading files:", typedError);
+      throw typedError;
     }
-  }
-
-  /**
-   * Refreshes the current user information
-   */
-  async refreshCurrentUser(): Promise<User> {
-    this._currentUser = null; // Clear cache
-    return this.getCurrentUser(); // Fetch user again
   }
 }
 
 /**
- * Creates a direct service for communication with a Mattermost server
- * @param config Configuration for the direct service
- * @returns Mattermost service
+ * Crée un service direct pour la communication avec un serveur Mattermost
+ * @param config Configuration pour le service direct
+ * @returns Service Mattermost
  */
 export function createDirectService(
   config: DirectServiceConfig,
 ): MattermostService {
   const { serverUrl, token, useLocalStorage = false } = config;
 
-  // Validate parameters
+  // Valider les paramètres
   if (!serverUrl) {
     throw new Error("serverUrl is required for direct mode");
   }

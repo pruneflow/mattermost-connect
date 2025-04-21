@@ -4,7 +4,7 @@
  * Exporte les interfaces, implémentations et factories
  */
 
-// Base exports - service interfaces
+// Interfaces de base des services
 export { BaseService, type ServiceBase } from "./base";
 
 export type {
@@ -19,30 +19,36 @@ export type {
   MattermostService,
 } from "./base";
 
-// Direct service
-export * from "./direct";
-
-// Emoji service
-export * from "./emoji";
-
-// File service
+// Services spécialisés
+export * from "./team";
+export * from "./channel";
+export * from "./message";
+export * from "./user";
+export * from "./reaction";
 export * from "./file";
+export * from "./error";
 
-// Notification service
-export * from "./notification";
-
-// Proxy service
-export * from "./proxy";
-
-// User service - the canonical source for UserServiceInterface
+// Gestion des erreurs
 export {
-  UserService,
-  createUserService,
-  type UserServiceInterface,
-} from "./user";
+  MattermostError,
+  AuthError,
+  NetworkError,
+  ValidationError,
+  PermissionError,
+  RateLimitError,
+  NotFoundError,
+  createErrorHandler,
+  type ErrorHandlerInterface,
+} from "./error";
 
-// WebSocket service
+// Services d'implémentation
+export * from "./direct";
+export * from "./proxy";
+export * from "./notification";
+export * from "./emoji";
 export * from "./websocket";
+export * from "./auth";
+export * from "./http";
 
-// Export the factory
+// Factory
 export * from "./factory";

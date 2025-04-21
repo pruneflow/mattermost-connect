@@ -1,267 +1,168 @@
-// src/services/file/file.service.ts
-import { MattermostService } from "../base/service.interfaces";
+// src/services/file/file.service.ts (Refactored)
+import { HttpClient } from "../http";
+import { ErrorHandlerInterface } from "../error/error-handler";
 
 /**
- * Interface pour le service de fichiers
- * Ce service spécialisé gère toutes les opérations liées aux fichiers
+ * Interface pour le service de gestion des fichiers
+ * Centralise toutes les opérations liées aux fichiers
  */
 export interface FileServiceInterface {
   /**
-   * Télécharge un fichier en utilisant son ID
+   * Télécharge un fichier depuis le serveur
    * @param fileId ID du fichier à télécharger
-   * @returns Promise void
+   * @returns Promise qui se résout quand le téléchargement est terminé
    */
-  downloadFile: (fileId: string) => Promise<void>;
+  downloadFile(fileId: string): Promise<void>;
 
   /**
    * Crée un lien public pour un fichier
    * @param fileId ID du fichier
    * @returns URL du lien public
    */
-  createPublicLink: (fileId: string) => Promise<string>;
+  createPublicLink(fileId: string): Promise<string>;
 
   /**
-   * Récupère l'image miniature de manière sécurisée avec l'authentification appropriée
+   * Récupère l'image miniature de manière sécurisée
    * @param fileId ID du fichier
-   * @returns Promise avec URL blob pour l'image miniature
+   * @returns URL blob pour la miniature
    */
-  fetchThumbnail: (fileId: string) => Promise<string>;
+  fetchThumbnail(fileId: string): Promise<string>;
 
   /**
-   * Récupère le fichier de manière sécurisée avec l'authentification appropriée
+   * Récupère le fichier complet de manière sécurisée
    * @param fileId ID du fichier
-   * @returns Promise avec URL blob pour le fichier
+   * @returns URL blob pour le fichier
    */
-  fetchFile: (fileId: string) => Promise<string>;
+  fetchFile(fileId: string): Promise<string>;
 
   /**
-   * Vérifie si le service est authentifié
-   * @returns true si authentifié, false sinon
+   * Télécharge des fichiers sur le serveur
+   * @param formData FormData contenant les fichiers
+   * @returns Information sur les fichiers téléchargés
    */
-  isAuthenticated: () => boolean;
-
-  /**
-   * Gère une erreur d'authentification et tente une réauthentification
-   * @returns Promise boolean - true si réauthentifié avec succès
-   */
-  handleAuthError: () => Promise<boolean>;
-
-  /**
-   * Ajoute un écouteur pour les changements d'état d'authentification
-   * @param listener Fonction à appeler lors d'un changement d'état
-   * @returns Fonction pour supprimer l'écouteur
-   */
-  addAuthStateListener: (
-    listener: (isAuthenticated: boolean) => void,
-  ) => () => void;
+  uploadFiles(formData: FormData): Promise<{
+    file_infos: Array<{
+      id: string;
+      name: string;
+      type?: string;
+      size?: number;
+      url?: string;
+    }>;
+  }>;
 
   /**
    * Libère une URL blob précédemment créée
    * @param url URL blob à libérer
    */
-  revokeObjectURL: (url: string) => void;
+  revokeObjectURL(url: string): void;
+
+  /**
+   * Vérifie si le service est authentifié
+   * @returns true si le service est authentifié
+   */
+  isAuthenticated(): boolean;
 }
 
 /**
- * Implémentation du service de fichiers
+ * Implémentation du service de gestion des fichiers
  */
-class FileService implements FileServiceInterface {
-  private service: MattermostService;
-  private authErrorCount: number = 0;
-  private isReauthenticating: boolean = false;
-  private readonly MAX_AUTH_RETRIES: number = 3;
-  private authListeners: Array<(isAuthenticated: boolean) => void> = [];
-  private blobCache: Map<string, string> = new Map(); // Cache pour les URLs blob
+export class FileService implements FileServiceInterface {
+  private httpClient: HttpClient;
+  private errorHandler: ErrorHandlerInterface;
+  private blobUrlsRef: Set<string> = new Set<string>();
+  private token: string | null = null;
+  private tokenProvider?: () => string | null;
+  private baseUrl: string;
+  private mode: "direct" | "proxy" | "custom";
 
   /**
-   * Crée une instance du service de fichiers
-   * @param service Service Mattermost pour les appels API
+   * Crée une nouvelle instance du service de fichiers
+   * @param httpClient Client HTTP pour les appels API
+   * @param errorHandler Gestionnaire d'erreurs
+   * @param baseUrl URL de base du serveur
+   * @param mode Mode de fonctionnement (direct, proxy, custom)
+   * @param tokenProvider Fonction fournissant le token d'authentification
    */
-  constructor(service: MattermostService) {
-    this.service = service;
+  constructor(
+    httpClient: HttpClient,
+    errorHandler: ErrorHandlerInterface,
+    baseUrl: string,
+    mode: "direct" | "proxy" | "custom",
+    tokenProvider?: () => string | null,
+  ) {
+    this.httpClient = httpClient;
+    this.errorHandler = errorHandler;
+    this.baseUrl = baseUrl;
+    this.mode = mode;
+    this.tokenProvider = tokenProvider;
   }
 
   /**
-   * Ajoute un écouteur pour les changements d'état d'authentification
+   * Définit le token d'authentification
+   * @param token Token d'authentification
    */
-  public addAuthStateListener(
-    listener: (isAuthenticated: boolean) => void,
-  ): () => void {
-    this.authListeners.push(listener);
-    return () => {
-      this.authListeners = this.authListeners.filter((l) => l !== listener);
-    };
+  setToken(token: string | null): void {
+    this.token = token;
   }
 
   /**
-   * Notifie tous les écouteurs d'un changement d'état d'authentification
+   * Récupère le token courant via le tokenProvider ou le token stocké
+   * @returns Token d'authentification
    */
-  private notifyAuthStateChange(isAuthenticated: boolean): void {
-    this.authListeners.forEach((listener) => listener(isAuthenticated));
+  private getToken(): string | null {
+    if (this.tokenProvider) {
+      return this.tokenProvider();
+    }
+    return this.token;
   }
 
   /**
    * Vérifie si le service est authentifié
    */
-  public isAuthenticated(): boolean {
-    // Vérifie si un token est disponible
-    if (this.service.mode === "direct") {
-      return !!(this.service as any).token;
-    }
-    return true; // En mode proxy, on suppose toujours authentifié
+  isAuthenticated(): boolean {
+    return !!this.getToken();
   }
 
   /**
    * Libère une URL blob précédemment créée
    */
-  public revokeObjectURL(url: string): void {
+  revokeObjectURL(url: string): void {
     if (url && url.startsWith("blob:")) {
       URL.revokeObjectURL(url);
-
-      // Retirer du cache si présent
-      for (const [key, value] of this.blobCache.entries()) {
-        if (value === url) {
-          this.blobCache.delete(key);
-          break;
-        }
-      }
+      this.blobUrlsRef.delete(url);
     }
   }
 
   /**
-   * Gère une erreur d'authentification et tente une réauthentification
+   * Libère toutes les URLs blob créées par ce service
+   * Utile pour nettoyer les ressources lors du démontage des composants
    */
-  public async handleAuthError(): Promise<boolean> {
-    // Éviter les tentatives multiples simultanées
-    if (this.isReauthenticating) {
-      return new Promise((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (!this.isReauthenticating) {
-            clearInterval(checkInterval);
-            resolve(this.isAuthenticated());
-          }
-        }, 500);
-      });
-    }
-
-    this.isReauthenticating = true;
-    this.authErrorCount++;
-
-    try {
-      // Si trop de tentatives échouées, abandonner
-      if (this.authErrorCount > this.MAX_AUTH_RETRIES) {
-        console.error("Trop de tentatives de réauthentification échouées");
-        this.notifyAuthStateChange(false);
-        return false;
+  cleanup(): void {
+    this.blobUrlsRef.forEach((url) => {
+      if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
       }
-
-      console.log("Tentative de réauthentification...");
-
-      // Différentes stratégies selon le mode du service
-      if (
-        typeof (this.service as any).refreshCurrentUser === "function" &&
-        this.isAuthenticated()
-      ) {
-        // Si le service a une méthode pour rafraîchir l'utilisateur, l'utiliser
-        await (this.service as any).refreshCurrentUser();
-        this.notifyAuthStateChange(true);
-        this.authErrorCount = 0;
-
-        // Vider le cache après réauthentification
-        this.clearBlobCache();
-
-        return true;
-      } else if (this.service.mode === "proxy") {
-        // En mode proxy, essayer de rafraîchir via l'API proxy
-        // Implémentation à adapter selon votre API proxy
-        console.log("Réauthentification en mode proxy non implémentée");
-        return false;
-      }
-
-      // Si aucune méthode de réauthentification n'est disponible
-      console.warn("Aucune méthode de réauthentification disponible");
-      return false;
-    } catch (error) {
-      console.error("Erreur lors de la réauthentification:", error);
-      return false;
-    } finally {
-      this.isReauthenticating = false;
-    }
+    });
+    this.blobUrlsRef.clear();
   }
 
   /**
-   * Vide le cache des URLs blob
+   * Télécharge un fichier depuis le serveur
    */
-  private clearBlobCache(): void {
-    // Libérer toutes les URLs blob
-    for (const blobUrl of this.blobCache.values()) {
-      URL.revokeObjectURL(blobUrl);
-    }
-    this.blobCache.clear();
-  }
-
-  /**
-   * Exécute une fonction avec gestion des erreurs d'authentification
-   */
-  private async executeWithAuthRetry<T>(
-    operation: () => Promise<T>,
-    retryCount: number = 0,
-  ): Promise<T> {
-    const MAX_RETRIES = 2;
-
-    try {
-      return await operation();
-    } catch (error) {
-      // Détecter les erreurs d'authentification
-      if (
-        error instanceof Error &&
-        (error.message.includes("401") ||
-          error.message.includes("unauthorized") ||
-          error.message.includes("session invalide") ||
-          error.message.includes("invalid session")) &&
-        retryCount < MAX_RETRIES
-      ) {
-        console.log(
-          "Erreur d'authentification détectée, tentative de récupération...",
-        );
-
-        // Tenter une réauthentification
-        const reauthSuccess = await this.handleAuthError();
-
-        if (reauthSuccess) {
-          console.log(
-            "Réauthentification réussie, nouvelle tentative de l'opération",
-          );
-          // Réessayer l'opération
-          return this.executeWithAuthRetry(operation, retryCount + 1);
-        }
-      }
-
-      // Propager l'erreur si on ne peut pas récupérer
-      throw error;
-    }
-  }
-
-  /**
-   * Télécharge un fichier en utilisant son ID
-   */
-  public async downloadFile(fileId: string): Promise<void> {
+  async downloadFile(fileId: string): Promise<void> {
     if (!fileId) {
       throw new Error("ID de fichier requis pour le téléchargement");
     }
 
-    return this.executeWithAuthRetry(async () => {
-      const baseUrl = this.service.getBaseUrl();
+    try {
+      const token = this.getToken();
+      if (this.mode === "direct" && !token) {
+        throw new Error("Token requis pour le téléchargement en mode direct");
+      }
+
       let url: string;
-
-      // Pour le mode direct, on utilise une approche sécurisée avec fetch pour ajouter l'en-tête d'autorisation
-      if (this.service.mode === "direct") {
-        url = `${baseUrl}/api/v4/files/${fileId}`;
-        const token = (this.service as any).token;
-
-        if (!token) {
-          throw new Error("Token requis pour le téléchargement");
-        }
+      if (this.mode === "direct") {
+        url = `${this.baseUrl}/api/v4/files/${fileId}`;
 
         // Faire une requête avec l'en-tête d'autorisation
         const response = await fetch(url, {
@@ -289,6 +190,7 @@ class FileService implements FileServiceInterface {
         // Créer un blob et un lien de téléchargement
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
+        this.blobUrlsRef.add(blobUrl);
 
         const a = document.createElement("a");
         a.href = blobUrl;
@@ -300,11 +202,11 @@ class FileService implements FileServiceInterface {
         // Nettoyer
         setTimeout(() => {
           document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
+          this.revokeObjectURL(blobUrl);
         }, 100);
       } else {
         // Mode proxy - plus simple car le proxy gère l'authentification
-        url = `${baseUrl}/files/${fileId}`;
+        url = `${this.baseUrl}/files/${fileId}`;
 
         const a = document.createElement("a");
         a.href = url;
@@ -315,94 +217,95 @@ class FileService implements FileServiceInterface {
         a.click();
         document.body.removeChild(a);
       }
-    });
+    } catch (error) {
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error(
+        `Erreur lors du téléchargement du fichier ${fileId}:`,
+        typedError,
+      );
+      throw typedError;
+    }
   }
 
   /**
    * Crée un lien public pour un fichier
    */
-  public async createPublicLink(fileId: string): Promise<string> {
+  async createPublicLink(fileId: string): Promise<string> {
     if (!fileId) {
       throw new Error("ID de fichier requis pour créer un lien public");
     }
 
-    return this.executeWithAuthRetry(async () => {
-      try {
-        const baseUrl = this.service.getBaseUrl();
-        let url: string;
+    try {
+      const token = this.getToken();
+      let url: string;
 
-        if (this.service.mode === "direct") {
-          url = `${baseUrl}/api/v4/files/${fileId}/link`;
-          const token = (this.service as any).token;
+      if (this.mode === "direct") {
+        url = `${this.baseUrl}/api/v4/files/${fileId}/link`;
 
-          if (!token) {
-            throw new Error("Token requis pour créer un lien public");
-          }
-
-          const response = await fetch(url, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(
-              `Erreur lors de la création du lien public: ${response.status} ${response.statusText}`,
-            );
-          }
-
-          const data = await response.json();
-          return data.link;
-        } else {
-          // Mode proxy
-          url = `${baseUrl}/files/${fileId}/link`;
-
-          const response = await fetch(url, {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(
-              `Erreur lors de la création du lien public: ${response.status} ${response.statusText}`,
-            );
-          }
-
-          const data = await response.json();
-          return data.link;
+        if (!token) {
+          throw new Error("Token requis pour créer un lien public");
         }
-      } catch (error) {
-        console.error("Erreur lors de la création du lien public:", error);
-        throw error;
+
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Erreur lors de la création du lien public: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const data = await response.json();
+        return data.link;
+      } else {
+        // Mode proxy
+        url = `${this.baseUrl}/files/${fileId}/link`;
+
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Erreur lors de la création du lien public: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const data = await response.json();
+        return data.link;
       }
-    });
+    } catch (error) {
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error(
+        `Erreur lors de la création du lien public pour ${fileId}:`,
+        typedError,
+      );
+      throw typedError;
+    }
   }
 
   /**
    * Récupère l'image miniature d'un fichier de manière sécurisée
-   * Cette méthode utilise fetch avec l'en-tête d'autorisation approprié et renvoie une URL blob
    */
-  public async fetchThumbnail(fileId: string): Promise<string> {
+  async fetchThumbnail(fileId: string): Promise<string> {
     if (!fileId) {
       throw new Error("ID de fichier requis pour récupérer la miniature");
     }
 
-    // Vérifier si nous avons déjà cette miniature en cache
-    const cacheKey = `thumbnail_${fileId}`;
-    if (this.blobCache.has(cacheKey)) {
-      return this.blobCache.get(cacheKey)!;
-    }
+    try {
+      const token = this.getToken();
+      const baseUrl = this.baseUrl;
 
-    return this.executeWithAuthRetry(async () => {
-      const baseUrl = this.service.getBaseUrl();
-
-      if (this.service.mode === "direct") {
+      if (this.mode === "direct") {
         const url = `${baseUrl}/api/v4/files/${fileId}/thumbnail`;
-        const token = (this.service as any).token;
 
         if (!token) {
           throw new Error("Token requis pour récupérer la miniature");
@@ -424,14 +327,11 @@ class FileService implements FileServiceInterface {
         // Convertir la réponse en blob et créer une URL
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
-
-        // Mettre en cache l'URL blob
-        this.blobCache.set(cacheKey, blobUrl);
+        this.blobUrlsRef.add(blobUrl);
 
         return blobUrl;
       } else {
         // Mode proxy - l'authentification est gérée par le proxy
-        // Nous pouvons toujours utiliser fetch pour obtenir un contrôle similaire et profiter du cache
         const url = `${baseUrl}/files/${fileId}/thumbnail?_=${Date.now()}`;
 
         const response = await fetch(url);
@@ -444,36 +344,34 @@ class FileService implements FileServiceInterface {
 
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
-
-        // Mettre en cache l'URL blob
-        this.blobCache.set(cacheKey, blobUrl);
+        this.blobUrlsRef.add(blobUrl);
 
         return blobUrl;
       }
-    });
+    } catch (error) {
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error(
+        `Erreur lors de la récupération de la miniature pour ${fileId}:`,
+        typedError,
+      );
+      throw typedError;
+    }
   }
 
   /**
-   * Récupère un fichier de manière sécurisée
-   * Cette méthode utilise fetch avec l'en-tête d'autorisation approprié et renvoie une URL blob
+   * Récupère un fichier complet de manière sécurisée
    */
-  public async fetchFile(fileId: string): Promise<string> {
+  async fetchFile(fileId: string): Promise<string> {
     if (!fileId) {
       throw new Error("ID de fichier requis pour récupérer le fichier");
     }
 
-    // Vérifier si nous avons déjà ce fichier en cache
-    const cacheKey = `file_${fileId}`;
-    if (this.blobCache.has(cacheKey)) {
-      return this.blobCache.get(cacheKey)!;
-    }
+    try {
+      const token = this.getToken();
+      const baseUrl = this.baseUrl;
 
-    return this.executeWithAuthRetry(async () => {
-      const baseUrl = this.service.getBaseUrl();
-
-      if (this.service.mode === "direct") {
+      if (this.mode === "direct") {
         const url = `${baseUrl}/api/v4/files/${fileId}`;
-        const token = (this.service as any).token;
 
         if (!token) {
           throw new Error("Token requis pour récupérer le fichier");
@@ -495,9 +393,7 @@ class FileService implements FileServiceInterface {
         // Convertir la réponse en blob et créer une URL
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
-
-        // Mettre en cache l'URL blob
-        this.blobCache.set(cacheKey, blobUrl);
+        this.blobUrlsRef.add(blobUrl);
 
         return blobUrl;
       } else {
@@ -514,23 +410,107 @@ class FileService implements FileServiceInterface {
 
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
-
-        // Mettre en cache l'URL blob
-        this.blobCache.set(cacheKey, blobUrl);
+        this.blobUrlsRef.add(blobUrl);
 
         return blobUrl;
       }
-    });
+    } catch (error) {
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error(
+        `Erreur lors de la récupération du fichier ${fileId}:`,
+        typedError,
+      );
+      throw typedError;
+    }
+  }
+
+  /**
+   * Télécharge des fichiers sur le serveur
+   */
+  async uploadFiles(formData: FormData): Promise<{
+    file_infos: Array<{
+      id: string;
+      name: string;
+      type?: string;
+      size?: number;
+      url?: string;
+    }>;
+  }> {
+    if (!formData) {
+      throw new Error("FormData requis pour télécharger des fichiers");
+    }
+
+    try {
+      const token = this.getToken();
+      let url: string;
+      let headers: Record<string, string> = {};
+
+      if (this.mode === "direct") {
+        url = `${this.baseUrl}/api/v4/files`;
+
+        if (!token) {
+          throw new Error("Token requis pour télécharger des fichiers");
+        }
+
+        headers = {
+          Authorization: `Bearer ${token}`,
+        };
+      } else {
+        // Mode proxy
+        url = `${this.baseUrl}/files`;
+
+        // Pour le mode proxy, ajouter des en-têtes spécifiques si nécessaire
+        // Ces en-têtes devraient être fournis par le créateur du service
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || `Erreur de téléchargement: ${response.status}`,
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      const typedError = this.errorHandler.handleHttpError(error);
+      console.error("Erreur lors du téléchargement des fichiers:", typedError);
+      throw typedError;
+    }
   }
 }
 
 /**
- * Crée un service de fichiers Mattermost
- * @param service Instance du service Mattermost
+ * Crée un service de gestion des fichiers
+ * @param httpClient Client HTTP pour les appels API
+ * @param errorHandler Gestionnaire d'erreurs
+ * @param baseUrl URL de base du serveur
+ * @param mode Mode de fonctionnement (direct, proxy, custom)
+ * @param tokenProvider Fonction fournissant le token d'authentification
  * @returns Service de fichiers
  */
 export function createFileService(
-  service: MattermostService,
+  httpClient: HttpClient,
+  errorHandler: ErrorHandlerInterface,
+  baseUrl: string,
+  mode: "direct" | "proxy" | "custom",
+  tokenProvider?: () => string | null,
 ): FileServiceInterface {
-  return new FileService(service);
+  return new FileService(
+    httpClient,
+    errorHandler,
+    baseUrl,
+    mode,
+    tokenProvider,
+  );
 }
+
+export default {
+  FileService,
+  createFileService,
+};

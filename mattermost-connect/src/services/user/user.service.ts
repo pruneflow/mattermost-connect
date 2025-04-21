@@ -1,7 +1,8 @@
-// src/services/user/user.service.ts
-import { User, Channel } from "../../types";
+// src/services/user/user.service.ts (Fixed)
+import { User, Channel, UserStatus } from "../../types";
 import { MattermostService } from "../base";
 import { formatUserDisplayName } from "../../utils";
+import { ErrorHandlerInterface } from "../error/error-handler";
 
 /**
  * Interface pour le service utilisateur
@@ -32,7 +33,14 @@ export interface UserServiceInterface {
    * @param userIds Liste des IDs d'utilisateurs à récupérer
    * @returns Liste des utilisateurs trouvés
    */
-  getUsers(userIds: string[]): Promise<User[]>;
+  getUsers(options?: any): Promise<User[]>;
+
+  /**
+   * Récupère le statut d'un utilisateur
+   * @param userId ID de l'utilisateur
+   * @returns Statut de l'utilisateur
+   */
+  getUserStatus(userId: string): Promise<UserStatus>;
 
   /**
    * Récupère le nom d'affichage formaté d'un utilisateur
@@ -89,7 +97,8 @@ export interface UserServiceInterface {
 export class UserService implements UserServiceInterface {
   private knownUsers: Record<string, User> = {};
   private pendingRequests: Record<string, Promise<User | null>> = {};
-  private service: MattermostService;
+  private readonly service: MattermostService;
+  private readonly errorHandler?: ErrorHandlerInterface;
   private currentUserId: string | null = null;
   private isLoading = false;
   private lastLoadTime = 0;
@@ -100,9 +109,14 @@ export class UserService implements UserServiceInterface {
   /**
    * Crée une nouvelle instance du service utilisateur
    * @param service Service Mattermost pour les appels API
+   * @param errorHandler Gestionnaire d'erreurs optionnel
    */
-  constructor(service: MattermostService) {
+  constructor(
+    service: MattermostService,
+    errorHandler?: ErrorHandlerInterface,
+  ) {
     this.service = service;
+    this.errorHandler = errorHandler;
   }
 
   /**
@@ -151,30 +165,47 @@ export class UserService implements UserServiceInterface {
 
   /**
    * Récupère plusieurs utilisateurs à la fois
-   * @param userIds Liste des IDs d'utilisateurs à récupérer
    * @returns Liste des utilisateurs trouvés
+   * @param options
    */
-  async getUsers(userIds: string[]): Promise<User[]> {
-    if (!userIds || !userIds.length || !this.service) return [];
-
-    // Filtrer les IDs déjà présents dans le cache
-    const cachedUsers = userIds
-      .filter((id) => this.knownUsers[id])
-      .map((id) => this.knownUsers[id]);
-
-    // Filtrer les IDs qui ne sont pas dans le cache et pas déjà en cours de chargement
-    const idsToFetch = userIds.filter(
-      (id) => !this.knownUsers[id] && !this.pendingRequests[id],
-    );
-
-    if (idsToFetch.length === 0) {
-      // Si tous les utilisateurs sont dans le cache ou en cours de chargement
-      return cachedUsers;
-    }
-
+  async getUsers(options: any = {}): Promise<User[]> {
     try {
+      const userIds = options.ids || [];
+
+      if (userIds.length === 0 && !options.inChannel && !options.inTeam) {
+        // Si aucun critère de sélection n'est fourni, retourner tous les utilisateurs connus
+        return Object.values(this.knownUsers);
+      }
+
+      // Filtrer les IDs déjà présents dans le cache
+      const cachedUsers = userIds
+        .filter((id: string) => this.knownUsers[id])
+        .map((id: string) => this.knownUsers[id]);
+
+      // Filtrer les IDs qui ne sont pas dans le cache et pas déjà en cours de chargement
+      const idsToFetch = userIds.filter(
+        (id: string) => !this.knownUsers[id] && !this.pendingRequests[id],
+      );
+
+      if (idsToFetch.length === 0 && !options.inChannel && !options.inTeam) {
+        // Si tous les utilisateurs sont dans le cache ou en cours de chargement
+        return cachedUsers;
+      }
+
+      // Construire les options pour l'appel API
+      const apiOptions: any = {};
+      if (options.inChannel) apiOptions.inChannel = options.inChannel;
+      if (options.inTeam) apiOptions.inTeam = options.inTeam;
+      if (options.page) apiOptions.page = options.page;
+      if (options.perPage) apiOptions.perPage = options.perPage;
+
+      // Si des IDs spécifiques sont à charger, les ajouter
+      if (idsToFetch.length > 0) {
+        apiOptions.ids = idsToFetch;
+      }
+
       // Charger les utilisateurs manquants
-      const users = await this.service.getUsers({ ids: idsToFetch });
+      const users = await this.service.getUsers(apiOptions);
 
       // Ajouter les nouveaux utilisateurs au cache
       users.forEach((user) => {
@@ -182,10 +213,57 @@ export class UserService implements UserServiceInterface {
       });
 
       // Retourner tous les utilisateurs (ceux du cache + ceux nouvellement chargés)
-      return [...cachedUsers, ...users];
+      // Si c'était une requête par ID, retourner uniquement les utilisateurs demandés
+      if (userIds.length > 0) {
+        return [
+          ...cachedUsers,
+          ...users.filter(
+            (user) =>
+              !cachedUsers.some((cached: User) => cached.id === user.id),
+          ),
+        ];
+      }
+
+      // Sinon retourner tous les utilisateurs chargés
+      return users;
     } catch (error) {
-      console.error("Erreur lors du chargement des utilisateurs:", error);
-      return cachedUsers;
+      const typedError = this.errorHandler
+        ? this.errorHandler.handleHttpError(error)
+        : error instanceof Error
+          ? error
+          : new Error(String(error));
+
+      console.error("Erreur lors du chargement des utilisateurs:", typedError);
+      throw typedError;
+    }
+  }
+
+  /**
+   * Récupère le statut d'un utilisateur
+   * @param userId ID de l'utilisateur
+   * @returns Statut de l'utilisateur
+   */
+  async getUserStatus(userId: string): Promise<UserStatus> {
+    if (!userId || !this.service) {
+      throw new Error("userId et service sont requis pour obtenir le statut");
+    }
+
+    try {
+      // Utilise directement le service Mattermost sous-jacent
+      // car cette opération n'est pas mise en cache
+      return await this.service.getUserStatus(userId);
+    } catch (error) {
+      const typedError = this.errorHandler
+        ? this.errorHandler.handleHttpError(error)
+        : error instanceof Error
+          ? error
+          : new Error(String(error));
+
+      console.error(
+        `Erreur lors de la récupération du statut pour l'utilisateur ${userId}:`,
+        typedError,
+      );
+      throw typedError;
     }
   }
 
@@ -266,12 +344,7 @@ export class UserService implements UserServiceInterface {
       console.debug(
         `Chargement groupé de ${idsToFetch.length} utilisateurs pour canaux DM`,
       );
-      const users = await this.service.getUsers({ ids: idsToFetch });
-
-      // Stocker les utilisateurs dans le cache
-      users.forEach((user) => {
-        this.knownUsers[user.id] = user;
-      });
+      await this.getUsers({ ids: idsToFetch });
     } catch (error) {
       console.error(
         "Erreur lors du chargement des utilisateurs pour les canaux directs:",
@@ -332,12 +405,7 @@ export class UserService implements UserServiceInterface {
       if (usersToFetch.length === 0) return;
 
       // Charger les utilisateurs en batch
-      const users = await this.service.getUsers({ ids: usersToFetch });
-
-      // Ajouter les utilisateurs au cache
-      users.forEach((user) => {
-        this.knownUsers[user.id] = user;
-      });
+      await this.getUsers({ ids: usersToFetch });
     } catch (error) {
       console.error(
         "Erreur lors du chargement des utilisateurs pour les DMs:",
@@ -417,10 +485,17 @@ export class UserService implements UserServiceInterface {
 /**
  * Crée un service utilisateur
  * @param service Service Mattermost pour les appels API
+ * @param errorHandler Gestionnaire d'erreurs optionnel
  * @returns Une instance du service utilisateur
  */
 export function createUserService(
   service: MattermostService,
+  errorHandler?: ErrorHandlerInterface,
 ): UserServiceInterface {
-  return new UserService(service);
+  return new UserService(service, errorHandler);
 }
+
+export default {
+  UserService,
+  createUserService,
+};
