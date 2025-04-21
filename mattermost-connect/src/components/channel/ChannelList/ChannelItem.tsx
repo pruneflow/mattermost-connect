@@ -217,7 +217,7 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
           color={unreadCount > 0 ? "primary" : "default"}
           variant={unreadCount > 0 ? "standard" : "dot"}
           sx={{
-            ml: 1,
+            ml: "8px",
             "& .MuiBadge-badge": {
               bgcolor: unreadCount > 0 ? "primary.main" : "text.secondary",
             },

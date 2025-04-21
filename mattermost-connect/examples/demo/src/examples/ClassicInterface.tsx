@@ -9,6 +9,7 @@ import {
   TeamSelector,
   formatUserDisplayName,
   Notification,
+  TeamChannelNavigator,
 } from "mattermost-connect";
 
 // Material-UI Components
@@ -50,10 +51,8 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
     setDrawerOpen(!drawerOpen);
   };
 
-  const handleTeamSelect = () => {
-    if (isMobile) {
-      setDrawerOpen(false);
-    }
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
   };
 
   // Handler pour l'envoi de messages
@@ -126,32 +125,21 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
             },
           }}
         >
-          {/* Teams List */}
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
             <Typography variant="subtitle1" component="div" fontWeight="bold">
-              Équipes
+              {currentUser ? formatUserDisplayName(currentUser) : "Navigation"}
             </Typography>
           </Box>
-          <TeamSelector
-            showIcons
-            variant="list"
-            onSelectTeam={handleTeamSelect}
+
+          {/* The new integrated TeamChannelNavigator component */}
+          <TeamChannelNavigator
+            closeOnSelect={true}
+            onClose={handleCloseDrawer}
+            showSearch={false}
+            showPrivateChannels={true}
+            showDirectMessages={true}
+            groupByType={false}
           />
-
-          <Divider sx={{ my: 1 }} />
-
-          {/* Channels List */}
-          {activeTeam && (
-            <Box sx={{ flexGrow: 1, overflow: "auto" }}>
-              <ChannelList
-                teamId={activeTeam.id}
-                showSearch
-                showPrivateChannels
-                showDirectMessages
-                groupByType
-              />
-            </Box>
-          )}
         </Drawer>
 
         {/* Content Area */}
@@ -281,7 +269,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
           {activeTeam ? (
             <ChannelList
               teamId={activeTeam.id}
-              onSelectChannel={handleChannelSelect}
               showSearch
               showPrivateChannels
               showDirectMessages

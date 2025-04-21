@@ -231,10 +231,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
                 }
               }
             }
-
-            if (onSelectChannel) {
-              onSelectChannel(currentChannel);
-            }
           }
         } else {
           console.log(
@@ -266,7 +262,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
     services,
     setActiveChannel,
     activeChannel,
-    onSelectChannel,
     userService,
   ]);
 
@@ -280,9 +275,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
     },
     [],
   );
-
-  console.debug("channels", channels);
-  console.debug("activeChannel", activeChannel);
 
   // Filter channels based on search and visibility settings - memoized
   const filteredChannels = useMemo(() => {
@@ -305,7 +297,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
       return true;
     });
   }, [channels, showPrivateChannels, showDirectMessages, searchQuery]);
-  console.debug("filteredChannels", filteredChannels);
   // Group channels by type if requested
   const groupedChannels = useMemo(() => {
     if (groupByType) {
@@ -319,8 +310,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
     }
     return { all: filteredChannels };
   }, [filteredChannels, groupByType]);
-
-  console.debug("groupedChannels", groupedChannels);
 
   // Render loading skeletons
   const renderSkeletons = useCallback(
@@ -443,10 +432,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
       toggleSection,
     ],
   );
-  console.debug("loading", loading);
-  console.debug("error", error);
-
-  console.debug("groupByType", groupByType);
   return (
     <Box
       className={className}

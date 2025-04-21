@@ -52,6 +52,9 @@ export { default as TeamGrid } from "./components/team/TeamSelector/variants/Tea
 export { default as TeamTabs } from "./components/team/TeamSelector/variants/TeamTabs";
 export { default as TeamSidebar } from "./components/team/TeamSelector/variants/TeamSidebar";
 
+// Navigation between Teams and Channles
+export { default as TeamChannelNavigator } from "./components/navigation/TeamChannelNavigator";
+
 export type {
   TeamSelectorVariant,
   TeamSelectorProps,
