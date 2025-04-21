@@ -21,7 +21,7 @@ import {
 } from "@mui/icons-material";
 import { MessageActionsProps } from "./MessageTypes";
 import { EmojiPicker, PickerMode } from "../EmojiPicker";
-import EmojiProvider, { useMattermost } from "../../../index";
+import { useMattermost, EmojiProvider } from "../../../context";
 
 /**
  * Displays action buttons and menus for a message

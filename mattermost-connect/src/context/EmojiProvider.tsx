@@ -37,10 +37,10 @@ interface EmojiProviderProps {
 
 /**
  * Provider pour les fonctionnalités d'emoji
- * Utilise le nouveau service Mattermost centralisé au lieu d'un service emoji séparé
+ * Utilise le nouveau services Mattermost centralisé au lieu d'un services emoji séparé
  */
 export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
-  const { service, currentUser } = useMattermost();
+  const { services, currentUser } = useMattermost();
 
   // États pour les emojis
   const [frequentEmojis, setFrequentEmojis] = useState<string[]>([]);
@@ -58,13 +58,13 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
   // État pour la recherche
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Charger les emojis fréquents lorsque le service est disponible
+  // Charger les emojis fréquents lorsque le services est disponible
   useEffect(() => {
-    if (!service) return;
+    if (!services) return;
 
     const loadFrequentEmojis = async () => {
       try {
-        const emojis = await service.getFrequentEmojis();
+        const emojis = await services?.emojiService?.getFrequentEmojis();
         setFrequentEmojis(emojis);
       } catch (error) {
         console.error("Error loading frequent emojis:", error);
@@ -74,16 +74,17 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
     };
 
     void loadFrequentEmojis();
-  }, [service]);
+  }, [services]);
 
   // Charger les GIFs lorsque la catégorie change
   useEffect(() => {
-    if (!service || searchQuery) return;
+    if (!services || searchQuery) return;
 
     const loadGifs = async () => {
       setLoadingGifs(true);
       try {
-        const gifData = await service.getGifs(activeGifCategory);
+        const gifData =
+          await services?.emojiService?.getGifs(activeGifCategory);
         setGifs(gifData);
       } catch (error) {
         console.error(
@@ -96,25 +97,25 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
     };
 
     void loadGifs();
-  }, [service, activeGifCategory, searchQuery]);
+  }, [services, activeGifCategory, searchQuery]);
 
   /**
    * Ajoute une réaction à un message
    */
   const addReaction = useCallback(
     async (messageId: string, emoji: string): Promise<void> => {
-      if (!service) return;
+      if (!services) return;
 
       try {
         // L'utilisateur actuel est disponible via le context useMattermost
-        // service.addReaction utilisera directement ou indirectement l'ID utilisateur
-        await service.addReaction(messageId, emoji);
+        // services?.emojiService?.addReaction utilisera directement ou indirectement l'ID utilisateur
+        await services?.emojiService?.addReaction(messageId, emoji);
       } catch (error) {
         console.error("Error adding reaction:", error);
         throw error;
       }
     },
-    [service, currentUser], // Ajouter currentUser à la liste des dépendances
+    [services, currentUser], // Ajouter currentUser à la liste des dépendances
   );
 
   /**
@@ -126,16 +127,20 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
       messageId: string,
       emoji: string,
     ): Promise<void> => {
-      if (!service) return;
+      if (!services) return;
 
       try {
-        await service.removeReaction(channelId, messageId, emoji);
+        await services?.emojiService?.removeReaction(
+          channelId,
+          messageId,
+          emoji,
+        );
       } catch (error) {
         console.error("Error removing reaction:", error);
         throw error;
       }
     },
-    [service],
+    [services],
   );
 
   /**
@@ -147,16 +152,20 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
       messageId: string,
       emoji: string,
     ): Promise<boolean> => {
-      if (!service) return false;
+      if (!services) return false;
 
       try {
-        return await service.hasReacted(channelId, messageId, emoji);
+        return await services?.emojiService?.hasReacted(
+          channelId,
+          messageId,
+          emoji,
+        );
       } catch (error) {
         console.error("Error checking reaction:", error);
         return false;
       }
     },
-    [service],
+    [services],
   );
 
   /**
@@ -164,11 +173,11 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
    */
   const searchGifs = useCallback(
     async (query: string): Promise<void> => {
-      if (!service || !query.trim()) return;
+      if (!services || !query.trim()) return;
 
       setLoadingGifs(true);
       try {
-        const results = await service.searchGifs(query);
+        const results = await services?.emojiService?.searchGifs(query);
         setGifs(results);
       } catch (error) {
         console.error("Error searching GIFs:", error);
@@ -176,7 +185,7 @@ export const EmojiProvider: React.FC<EmojiProviderProps> = ({ children }) => {
         setLoadingGifs(false);
       }
     },
-    [service],
+    [services],
   );
 
   // Effectuer une recherche quand searchQuery change

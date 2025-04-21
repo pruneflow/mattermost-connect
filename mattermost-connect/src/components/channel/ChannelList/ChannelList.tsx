@@ -184,19 +184,14 @@ const ChannelList: React.FC<ChannelListProps> = ({
             console.log(
               `[ChannelList] Setting channels state with ${channelsData.length} channels`,
             );
-            let currentChannel;
             if (activeChannel) {
               const activeChannelIsInTeam = channelsData.find(
                 (c) => c.id === activeChannel.id,
               );
               if (!activeChannelIsInTeam) {
-                currentChannel = channelsData[0];
                 setActiveChannel(channelsData[0]);
-              } else {
-                currentChannel = activeChannel;
               }
             } else {
-              currentChannel = channelsData[0];
               setActiveChannel(channelsData[0]);
             }
             setChannels(channelsData);
@@ -256,14 +251,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
       console.log(`[ChannelList] Unmounting, attempt #${attemptId}`);
       isMountedRef.current = false;
     };
-  }, [
-    isConnected,
-    teamId,
-    services,
-    setActiveChannel,
-    activeChannel,
-    userService,
-  ]);
+  }, [isConnected, teamId, services, setActiveChannel, userService]);
 
   // Toggle a section's expanded state
   const toggleSection = useCallback(
