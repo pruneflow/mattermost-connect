@@ -6,36 +6,3 @@ export { default as AttachmentContextMenu } from "./AttachmentContextMenu";
 export { default as AttachmentNotification } from "./AttachmentNotification";
 export { default as AttachmentPreviewControls } from "./AttachmentPreviewControls";
 export { default as AttachmentUploadIndicator } from "./AttachmentUploadIndicator";
-
-// Utility functions for attachment type checking
-export const isImageType = (type: string, fileName?: string): boolean => {
-  return (
-    type.includes("image") ||
-    (fileName ? /\.(jpg|jpeg|png|gif|svg|webp)$/i.test(fileName) : false)
-  );
-};
-
-export const isPdfType = (type: string, fileName?: string): boolean => {
-  return (
-    type.includes("pdf") || (fileName ? /\.(pdf)$/i.test(fileName) : false)
-  );
-};
-
-export const isMediaType = (type: string, fileName?: string): boolean => {
-  return (
-    type.includes("video") ||
-    type.includes("audio") ||
-    (fileName
-      ? /\.(mp4|mov|avi|webm|mp3|wav|ogg|flac)$/i.test(fileName)
-      : false)
-  );
-};
-
-export const isArchiveType = (type: string, fileName?: string): boolean => {
-  return (
-    type.includes("zip") ||
-    type.includes("archive") ||
-    type.includes("odt") ||
-    (fileName ? /\.(zip|rar|7z|tar|gz)$/i.test(fileName) : false)
-  );
-};

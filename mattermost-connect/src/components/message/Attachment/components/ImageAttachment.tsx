@@ -35,7 +35,7 @@ const isArchiveType = (type: string, fileName?: string): boolean => {
     type.includes("zip") ||
     type.includes("archive") ||
     type.includes("odt") ||
-    (fileName ? /\.(zip|rar|7z|tar|gz)$/i.test(fileName) : false)
+    (fileName ? /\.(zip|rar|7z|tar|gz|odt)$/i.test(fileName) : false)
   );
 };
 
