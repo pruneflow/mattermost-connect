@@ -1,10 +1,10 @@
 // src/context/index.ts
 /**
- * Exporte tous les contextes et providers de la bibliothèque
- * Pour faciliter les imports et assurer la cohérence
+ * Exports all contexts and providers from the library
+ * For easy imports and ensuring consistency
  */
 
-// Réexporter le contexte Mattermost principal
+// Main MattermostProvider (acts as the root provider)
 export {
   MattermostProvider,
   useMattermost,
@@ -12,5 +12,47 @@ export {
   type MattermostContextType,
 } from "./MattermostProvider";
 
-// Réexporter le contexte Emoji
+// Specialized context providers
+export {
+  ConnectionProvider,
+  useConnection,
+  ConnectionContext,
+  type ConnectionContextType,
+  type ConnectionProviderProps,
+} from "./ConnectionContext";
+
+export {
+  UserProvider,
+  useUserContext,
+  UserContext,
+  type UserContextType,
+  type UserProviderProps,
+} from "./UserContext";
+
+export {
+  TeamProvider,
+  useTeamContext,
+  TeamContext,
+  type TeamContextType,
+  type TeamProviderProps,
+} from "./TeamContext";
+
+export {
+  ChannelProvider,
+  useChannelContext,
+  ChannelContext,
+  type ChannelContextType,
+  type ChannelProviderProps,
+  type GetMessagesOptions,
+} from "./ChannelContext";
+
+export {
+  MessageProvider,
+  useMessageContext,
+  MessageContext,
+  type MessageContextType,
+  type MessageProviderProps,
+} from "./MessageContext";
+
+// Legacy context exports for backward compatibility
 export { EmojiProvider, useEmoji, EmojiContext } from "./EmojiProvider";

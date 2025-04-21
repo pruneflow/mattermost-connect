@@ -1,67 +1,67 @@
-// src/hooks/useTeam.ts
+// src/hooks/useTeam.ts (Updated)
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Team, Channel } from "../types";
-import { useMattermost } from "../context";
-import { assertServiceInitialized } from "../services/factory";
+import { useTeamContext, useChannelContext } from "../context";
 
 /**
- * Options pour le hook useTeam
+ * Options for the useTeam hook
  */
 interface UseTeamOptions {
-  /** Inclure les canaux de l'équipe (défaut: true) */
+  /** Include channels for the team (default: true) */
   includeChannels?: boolean;
 
-  /** Précharger les utilisateurs impliqués dans les messages directs (défaut: true) */
+  /** Preload users involved in direct messages (default: true) */
   preloadDirectMessageUsers?: boolean;
 
-  /** Précharger l'état des messages non lus pour tous les canaux (défaut: true) */
+  /** Preload unread states for all channels (default: true) */
   preloadUnreadStates?: boolean;
 
-  /** Intervalle de rafraîchissement des canaux en ms (défaut: 0 - désactivé) */
+  /** Refresh interval in ms (default: 0 - disabled) */
   refreshInterval?: number;
 
-  /** Callback appelé lorsque le changement d'équipe est terminé */
+  /** Callback called when team change is completed */
   onTeamChange?: (team: Team) => void;
 }
 
 /**
- * État de retour du hook useTeam
+ * Return state for the useTeam hook
  */
 interface UseTeamState {
-  /** L'équipe active */
+  /** The active team */
   team: Team | null;
 
-  /** État de chargement de l'équipe */
+  /** Team loading state */
   loading: boolean;
 
-  /** Erreur éventuelle lors du chargement de l'équipe */
+  /** Error when loading team */
   error: Error | null;
 
-  /** Liste des canaux de l'équipe */
+  /** List of team channels */
   channels: Channel[];
 
-  /** État de chargement des canaux */
+  /** Channels loading state */
   loadingChannels: boolean;
 
-  /** Erreur éventuelle lors du chargement des canaux */
+  /** Error when loading channels */
   channelsError: Error | null;
 
-  /** Nombre total de messages non lus dans l'équipe */
+  /** Total unread message count in the team */
   unreadMessagesCount: number;
 
-  /** Nombre total de mentions dans l'équipe */
+  /** Total unread mentions count in the team */
   unreadMentionsCount: number;
 }
 
 /**
- * Hook personnalisé pour interagir avec une équipe Mattermost
+ * Custom hook for interacting with a Mattermost team
+ * This version is backward compatible but leverages the new context architecture
  *
- * @param teamId ID de l'équipe à utiliser
- * @param options Options de configuration
- * @returns État et fonctions pour interagir avec l'équipe
+ * @param teamId ID of the team to use
+ * @param options Configuration options
+ * @returns State and functions to interact with the team
  */
 export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
-  // Options avec valeurs par défaut
+  // Options with default values
   const {
     includeChannels = true,
     preloadDirectMessageUsers = true,
@@ -70,173 +70,115 @@ export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
     onTeamChange,
   } = options;
 
-  // Contexte Mattermost
-  const { services, activeTeam, setActiveTeam, initializeTeamUnreadStates } =
-    useMattermost();
+  // Use the specialized team and channel contexts
+  const teamContext = useTeamContext();
+  const channelContext = useChannelContext();
 
-  // États locaux
-  const [team, setTeam] = useState<Team | null>(
-    activeTeam && activeTeam.id === teamId ? activeTeam : null,
-  );
+  // States for backward compatibility
+  const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loadingChannels, setLoadingChannels] = useState<boolean>(false);
   const [channelsError, setChannelsError] = useState<Error | null>(null);
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
-  // Compteurs de messages non lus et de mentions
-  const [unreadStats, setUnreadStats] = useState<{
-    unreadMessagesCount: number;
-    unreadMentionsCount: number;
-  }>({
-    unreadMessagesCount: 0,
-    unreadMentionsCount: 0,
-  });
-
-  // Fonction pour charger les informations de l'équipe
+  // Function to load team information
   const loadTeam = useCallback(async () => {
-    if (!teamId || !services) return;
-
-    assertServiceInitialized(services.mattermostService, "mattermostService");
+    if (!teamId) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const teamData = await services.mattermostService.getTeam(teamId);
-      setTeam(teamData);
+      // Check if team already exists in context
+      const existingTeam = teamContext.getTeamById(teamId);
 
-      // Si cette équipe n'est pas déjà l'équipe active, la définir
-      if (!activeTeam || activeTeam.id !== teamId) {
-        setActiveTeam(teamData);
+      if (existingTeam) {
+        setTeam(existingTeam);
+        teamContext.setActiveTeam(existingTeam);
+
+        if (onTeamChange) {
+          onTeamChange(existingTeam);
+        }
+
+        return existingTeam;
       }
 
-      // Appeler le callback si fourni
-      if (onTeamChange) {
-        onTeamChange(teamData);
+      // Otherwise, switch to the team which will load it
+      const loadedTeam = await teamContext.switchTeam(teamId);
+
+      if (loadedTeam) {
+        setTeam(loadedTeam);
+
+        if (onTeamChange) {
+          onTeamChange(loadedTeam);
+        }
+
+        return loadedTeam;
+      } else {
+        throw new Error(`Failed to load team ${teamId}`);
       }
     } catch (err) {
-      console.error(`Erreur lors du chargement de l'équipe ${teamId}:`, err);
+      console.error(`Error loading team ${teamId}:`, err);
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
     }
-  }, [teamId, services, activeTeam, setActiveTeam, onTeamChange]);
+  }, [teamId, teamContext, onTeamChange]);
 
-  // Fonction pour charger les canaux de l'équipe
+  // Function to load channels for a team
   const loadChannels = useCallback(async () => {
-    if (!teamId || !services || !includeChannels) return;
-
-    assertServiceInitialized(services.mattermostService, "mattermostService");
-    assertServiceInitialized(services.userService, "userService");
+    if (!teamId || !includeChannels) return;
 
     setLoadingChannels(true);
     setChannelsError(null);
 
     try {
-      const channelsList = await services.mattermostService.getChannels(teamId);
+      // Load channels using the team context
+      const channelsList = await teamContext.loadChannels(teamId, true);
       setChannels(channelsList);
-      setLastFetchTime(Date.now());
 
-      // Précharger les utilisateurs des messages directs
-      if (preloadDirectMessageUsers) {
-        const directChannels = channelsList.filter(
-          (channel) => channel.type === "D" || channel.type === "G",
-        );
-
-        if (directChannels.length > 0) {
-          void services.userService.loadUsersForDirectChannels(directChannels);
-        }
-      }
-
-      // Précharger les états non lus
+      // Initialize unread states if requested
       if (preloadUnreadStates) {
-        void initializeTeamUnreadStates(teamId, channelsList);
+        await teamContext.initializeTeamUnreadStates(teamId);
       }
 
-      // Charger les utilisateurs de l'équipe en arrière-plan
-      void services.userService.loadTeamUsers(teamId);
-
-      // Tenter de récupérer les statistiques de non-lus globales
-      try {
-        if (
-          typeof (services.mattermostService as any).getTeamUnreadCount ===
-          "function"
-        ) {
-          const unreadData = await (
-            services.mattermostService as any
-          ).getTeamUnreadCount(teamId);
-
-          setUnreadStats({
-            unreadMessagesCount: unreadData.msg_count || 0,
-            unreadMentionsCount: unreadData.mention_count || 0,
-          });
-        }
-      } catch (unreadError) {
-        console.warn(
-          `Impossible de récupérer les statistiques non lues pour l'équipe ${teamId}:`,
-          unreadError,
-        );
-      }
+      return channelsList;
     } catch (err) {
-      console.error(
-        `Erreur lors du chargement des canaux pour l'équipe ${teamId}:`,
-        err,
-      );
+      console.error(`Error loading channels for team ${teamId}:`, err);
       setChannelsError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoadingChannels(false);
     }
-  }, [
-    teamId,
-    services,
-    includeChannels,
-    preloadDirectMessageUsers,
-    preloadUnreadStates,
-    initializeTeamUnreadStates,
-  ]);
+  }, [teamId, includeChannels, teamContext, preloadUnreadStates]);
 
-  // Fonction pour trier les canaux par catégorie
+  // Function to get channels by type
   const getChannelsByType = useCallback(
     (type: "public" | "private" | "direct" | "group" | "favorite") => {
-      if (!channels.length) return [];
-
-      switch (type) {
-        case "public":
-          return channels.filter((c) => c.type === "O");
-        case "private":
-          return channels.filter((c) => c.type === "P");
-        case "direct":
-          return channels.filter((c) => c.type === "D");
-        case "group":
-          return channels.filter((c) => c.type === "G");
-        case "favorite":
-          return channels.filter((c) => c.is_favorite);
-        default:
-          return channels;
-      }
+      if (!teamId) return [];
+      return teamContext.getChannelsByType(teamId, type);
     },
-    [channels],
+    [teamId, teamContext],
   );
 
-  // Fonction pour obtenir un canal par son ID
+  // Function to get a channel by ID
   const getChannelById = useCallback(
     (channelId: string): Channel | undefined => {
-      return channels.find((c) => c.id === channelId);
+      return teamContext.getChannelById(channelId, teamId || undefined);
     },
-    [channels],
+    [teamContext, teamId],
   );
 
-  // Fonction pour obtenir un canal par son nom
+  // Function to get a channel by name
   const getChannelByName = useCallback(
     (channelName: string): Channel | undefined => {
-      return channels.find((c) => c.name === channelName);
+      if (!teamId) return undefined;
+      return teamContext.getChannelByName(channelName, teamId);
     },
-    [channels],
+    [teamContext, teamId],
   );
 
-  // Charger l'équipe quand l'ID change
+  // Load team when teamId changes
   useEffect(() => {
     if (teamId) {
       void loadTeam();
@@ -246,7 +188,7 @@ export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
     }
   }, [teamId, loadTeam]);
 
-  // Charger les canaux quand l'équipe change ou quand includeChannels change
+  // Load channels when team changes or includeChannels changes
   useEffect(() => {
     if (teamId && includeChannels) {
       void loadChannels();
@@ -256,7 +198,7 @@ export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
     }
   }, [teamId, includeChannels, loadChannels]);
 
-  // Configurer le rafraîchissement périodique des canaux si demandé
+  // Periodic channel refresh if requested
   useEffect(() => {
     if (
       !refreshInterval ||
@@ -268,17 +210,24 @@ export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
     }
 
     const intervalId = setInterval(() => {
-      // Ne charger que si le dernier chargement date d'au moins refreshInterval ms
-      const now = Date.now();
-      if (now - lastFetchTime >= refreshInterval) {
-        void loadChannels();
-      }
+      void loadChannels();
     }, refreshInterval);
 
     return () => clearInterval(intervalId);
-  }, [teamId, includeChannels, refreshInterval, lastFetchTime, loadChannels]);
+  }, [teamId, includeChannels, refreshInterval, loadChannels]);
 
-  // Calculer les statistiques par type de canal
+  // Compute unread stats from team context
+  const unreadStats = useMemo(() => {
+    if (!teamId) return { unreadMessagesCount: 0, unreadMentionsCount: 0 };
+
+    const stats = teamContext.getTeamUnreadCount(teamId);
+    return {
+      unreadMessagesCount: stats.messageCount,
+      unreadMentionsCount: stats.mentionCount,
+    };
+  }, [teamContext, teamId]);
+
+  // Calculate channel stats by type
   const stats = useMemo(() => {
     return {
       publicChannelsCount: channels.filter((c) => c.type === "O").length,
@@ -289,7 +238,7 @@ export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
     };
   }, [channels]);
 
-  // État combiné à retourner
+  // Combined state to return
   const state: UseTeamState = {
     team,
     loading,
@@ -301,7 +250,7 @@ export function useTeam(teamId: string | null, options: UseTeamOptions = {}) {
     unreadMentionsCount: unreadStats.unreadMentionsCount,
   };
 
-  // Retourner l'état, les fonctions et les statistiques
+  // Return the state, functions, and statistics
   return {
     ...state,
     ...stats,
