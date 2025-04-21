@@ -1,4 +1,4 @@
-// src/components/EmojiPicker/EmojiPickerContent.tsx
+// src/components/message/EmojiPicker/components/EmojiPickerContent.tsx
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -10,7 +10,8 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import { EmojiPickerContentProps } from "../../../../types";
-import { EMOJI_MAP, getEmojiName } from "../data/emojiData";
+import { useMattermost } from "../../../../context";
+import { EMOJI_MAP, getEmojiName, searchEmojis } from "../../../../utils";
 
 /**
  * Affiche une grille d'emojis catégorisée ou filtrée par recherche
@@ -23,6 +24,7 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { services } = useMattermost();
 
   // État pour les emojis filtrés
   const [filteredEmojis, setFilteredEmojis] = useState<string[]>([]);
@@ -30,26 +32,19 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
   // Effet pour filtrer les emojis lors de la recherche ou du changement de catégorie
   useEffect(() => {
     if (searchQuery) {
-      // Recherche dans toutes les catégories
-      const allEmojis: string[] = [];
-      Object.values(EMOJI_MAP).forEach((categoryEmojis) => {
-        allEmojis.push(...categoryEmojis);
-      });
-
-      // Filtrage par emoji ou par nom
-      const lowerQuery = searchQuery.toLowerCase();
-      const filtered = allEmojis.filter((emoji) => {
-        // Recherche par emoji ou par son nom API
-        const emojiName = getEmojiName(emoji).toLowerCase();
-        return emoji.includes(lowerQuery) || emojiName.includes(lowerQuery);
-      });
-
-      setFilteredEmojis(filtered);
+      // Utiliser notre utilitaire de recherche centralisé
+      if (services?.emojiService) {
+        // Utiliser le service emoji si disponible
+        setFilteredEmojis(services.emojiService.searchEmojis(searchQuery));
+      } else {
+        // Fallback vers la fonction utilitaire directe
+        setFilteredEmojis(searchEmojis(searchQuery));
+      }
     } else {
       // Afficher les emojis de la catégorie sélectionnée
       setFilteredEmojis(EMOJI_MAP[activeCategory] || []);
     }
-  }, [searchQuery, activeCategory]);
+  }, [searchQuery, activeCategory, services?.emojiService]);
 
   // Paramètres d'affichage
   const emojisPerRow = 8; // Afficher 8 emojis par ligne

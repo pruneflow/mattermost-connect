@@ -1,4 +1,4 @@
-// src/components/ChannelViewer/message/MessageActions.tsx
+// src/components/message/MessageViewer/MessageActions.tsx
 import React, { useState } from "react";
 import {
   Box,
@@ -56,9 +56,9 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   const handleReactionSelect = async (result: any) => {
     handleReactionMenuClose();
     try {
-      // Add the reaction to the message
-      if (result.emoji && message.id) {
-        await services?.emojiService?.addReaction(message.id, result.emoji);
+      // Add the reaction to the message using the centralized emoji service
+      if (result.emoji && message.id && services?.emojiService) {
+        await services.emojiService.addReaction(message.id, result.emoji);
       }
     } catch (error) {
       console.error("Error adding reaction:", error);

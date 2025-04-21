@@ -9,7 +9,7 @@ import {
 } from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
 import { useMattermost } from "../../../context";
-import { getEmojiFromName } from "../EmojiPicker";
+import { getEmojiFromName } from "../../../utils";
 import { WebSocketEventType } from "../../../services/";
 
 /**
@@ -47,11 +47,15 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
     message.metadata.reactions.forEach((reaction) => {
       const { emoji_name, user_id } = reaction;
 
+      // Convertir le nom d'emoji en caractère en utilisant notre utilitaire centralisé
+      // Si le caractère n'est pas trouvé, utiliser le nom comme fallback
+      const emojiChar = getEmojiFromName(emoji_name) || emoji_name;
+
       // Si cette réaction n'existe pas encore, l'initialiser
       if (!reactionsMap.has(emoji_name)) {
         reactionsMap.set(emoji_name, {
           emojiName: emoji_name,
-          emoji: getEmojiFromName(emoji_name) || emoji_name,
+          emoji: emojiChar,
           count: 0,
           userIds: new Set<string>(),
         });
@@ -102,6 +106,9 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
 
         const { emoji_name, user_id } = reactionData;
 
+        // Obtenir le caractère emoji depuis son nom API
+        const emojiChar = getEmojiFromName(emoji_name) || emoji_name;
+
         // Mettre à jour l'état local des réactions
         setReactions((prevReactions) => {
           // Créer une copie pour ne pas modifier l'état directement
@@ -133,7 +140,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
             // Nouvelle réaction
             updatedReactions.push({
               emojiName: emoji_name,
-              emoji: getEmojiFromName(emoji_name) || emoji_name,
+              emoji: emojiChar,
               count: 1,
               userIds: new Set([user_id]),
             });
@@ -251,14 +258,16 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
 
         if (alreadyReacted) {
           // L'utilisateur a déjà réagi, supprimer la réaction
-          await services?.emojiService?.removeReaction(
+          await services.emojiService.removeReaction(
             message.channel_id,
             message.id,
             emojiName,
           );
         } else {
           // L'utilisateur n'a pas encore réagi, ajouter la réaction
-          await services?.emojiService.addReaction(message.id, emojiName);
+          // Utiliser getEmojiFromName pour obtenir le caractère emoji à partir du nom API
+          const emojiChar = getEmojiFromName(emojiName) || emojiName;
+          await services.emojiService.addReaction(message.id, emojiChar);
         }
       } catch (error) {
         console.error("Error toggling reaction:", error);

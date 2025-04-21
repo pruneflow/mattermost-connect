@@ -1,7 +1,7 @@
-// src/components/EmojiPicker/index.ts
+// src/components/message/EmojiPicker/index.ts
 /**
  * Export principal du module EmojiPicker
- * Permet d'accéder facilement aux composants et fonctionnalités liés aux emojis
+ * Les données d'emoji sont maintenant gérées de manière centralisée par les utils et services
  */
 
 // Composants
@@ -12,34 +12,17 @@ export { default as EmojiPickerCategoryBar } from "./components/EmojiPickerCateg
 
 // Types
 export { PickerMode } from "../../../types";
-export type {
-  EmojiPickerProps,
-  EmojiPickerContentProps,
-  GifPickerContentProps,
-  CategoryBarProps,
-  EmojiSelectionResult,
-  GifData,
-} from "../../../types";
 
-// Utilitaires et données
+// Icônes standard pour les catégories
+export { DEFAULT_CATEGORY_ICONS } from "./components/EmojiPickerCategoryBar";
+
+// Réexporter les fonctions utilitaires depuis utils pour compatibilité descendante
 export {
   getEmojiName,
   getEmojiFromName,
   EMOJI_CATEGORIES,
   EMOJI_MAP,
   EMOJI_NAMES,
-} from "./data/emojiData";
-
-export {
   GIF_CATEGORIES,
   GIF_API_CONFIG,
-  MOCK_GIFS,
-  buildApiUrl,
-  parseApiResponse,
-} from "./data/gifData";
-
-// Context et hooks
-export { useEmoji } from "../../../context/EmojiProvider";
-
-// Icônes standard pour les catégories
-export { DEFAULT_CATEGORY_ICONS } from "./components/EmojiPickerCategoryBar";
+} from "../../../utils/emoji.utils";

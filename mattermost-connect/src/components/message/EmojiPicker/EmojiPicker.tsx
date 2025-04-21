@@ -1,4 +1,4 @@
-// src/components/EmojiPicker/EmojiPicker.tsx
+// src/components/message/EmojiPicker/EmojiPicker.tsx
 import React, { useState } from "react";
 import { Box, useTheme, useMediaQuery } from "@mui/material";
 
@@ -9,7 +9,7 @@ import EmojiPickerCategoryBar from "./components/EmojiPickerCategoryBar";
 import { DEFAULT_CATEGORY_ICONS } from "./components/EmojiPickerCategoryBar";
 
 // Context et types
-import { useEmoji } from "../../../context/EmojiProvider";
+import { useEmoji } from "../../../context";
 import {
   EmojiPickerProps,
   PickerMode,
@@ -23,6 +23,7 @@ import { EmojiPickerTabs } from "./components/EmojiPickerTabs";
 /**
  * Sélecteur d'emojis et de GIFs
  * Prend en charge deux modes : sélection d'emoji pour un message ou ajout d'une réaction
+ * Utilise maintenant les utilitaires centralisés via le service emoji
  */
 const EmojiPicker: React.FC<EmojiPickerProps> = ({
   onSelect,
@@ -122,28 +123,6 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
     onClose?.();
   };
 
-  /**
-   * Gère la recherche d'emojis ou de GIFs
-   */
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(event.target.value);
-  };
-
-  /**
-   * Efface la recherche
-   */
-  const clearSearch = () => {
-    setSearchQuery("");
-  };
-
-  // Titre à afficher en fonction du mode
-  const getTitle = () => {
-    if (mode === PickerMode.REACTION) {
-      return "Ajouter une réaction";
-    }
-    return activeTab === 0 ? "Emojis" : "GIFs";
-  };
-
   return (
     <Box
       sx={{
@@ -168,7 +147,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         mode={mode}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        clearSearch={clearSearch}
+        clearSearch={() => setSearchQuery("")}
       />
 
       {/* Barre de recherche */}
@@ -176,7 +155,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         activeTab={activeTab}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        clearSearch={clearSearch}
+        clearSearch={() => setSearchQuery("")}
       />
 
       {/* Contenu principal */}

@@ -1,10 +1,21 @@
 // src/services/emoji/emoji.service.ts
 import { MattermostService } from "../base";
 import { GifData } from "../../types";
+import {
+  getEmojiName,
+  getEmojiFromName,
+  DEFAULT_FREQUENT_EMOJIS,
+  GIF_API_CONFIG,
+  buildGifApiUrl,
+  parseGifApiResponse,
+  EMOJI_NAMES,
+  EMOJI_MAP,
+  searchEmojis,
+} from "../../utils";
 
 /**
  * Interface pour le service emoji
- * Ce service spécialisé gère les émojis et GIFs
+ * Ce service spécialisé gère les émojis et GIFs en utilisant les utilitaires centralisés
  */
 export interface EmojiServiceInterface {
   /**
@@ -75,26 +86,34 @@ export interface EmojiServiceInterface {
    * @param emojiName Nom de l'emoji
    * @returns Caractère emoji correspondant
    */
-  getEmojiFromName: (emojiName: string) => string | null;
+  getEmojiFromName: (emojiName: string) => string | undefined;
+
+  /**
+   * Recherche des emojis correspondant à un terme
+   * @param query Terme de recherche
+   * @returns Emojis correspondants
+   */
+  searchEmojis: (query: string) => string[];
+
+  /**
+   * Récupère tous les emojis supportés sous forme de mapping
+   * @returns Map des emojis vers leurs noms API
+   */
+  getAllEmojisMap: () => Record<string, string>;
+
+  /**
+   * Récupère tous les emojis par catégorie
+   * @returns Structure des emojis par catégorie
+   */
+  getEmojisByCategory: () => Record<string, string[]>;
 }
 
 /**
  * Implémentation du service emoji
+ * Utilise les utilitaires centralisés pour la gestion des emojis et les appels API pour les réactions
  */
 export class EmojiService implements EmojiServiceInterface {
   private service: MattermostService;
-  private emojiNameMap: Record<string, string> = {
-    "👍": "thumbsup",
-    "❤️": "heart",
-    "😂": "joy",
-    "🎉": "tada",
-    "🔥": "fire",
-    "👏": "clap",
-    "✅": "white_check_mark",
-    "🙏": "pray",
-  };
-
-  private emojiCharMap: Record<string, string> = {};
 
   /**
    * Crée une instance du service emoji
@@ -103,28 +122,41 @@ export class EmojiService implements EmojiServiceInterface {
   constructor(service: MattermostService) {
     this.service = service;
 
-    // Initialiser la map inverse pour getEmojiFromName
-    Object.entries(this.emojiNameMap).forEach(([emoji, name]) => {
-      this.emojiCharMap[name] = emoji;
-    });
+    // Initialiser les GIFs mockés pour le développement
+    this.initMockGifs();
+  }
+
+  /**
+   * Initialise les GIFs mockés pour le développement
+   */
+  private initMockGifs(): void {
+    // Cette fonction pourrait charger des données de GIFs de test
+    // Elle est vide pour l'instant car nous utilisons des données statiques
   }
 
   /**
    * Convertit un caractère emoji en nom utilisable par l'API
-   * @param emoji Caractère emoji
-   * @returns Nom de l'emoji pour l'API
+   * Utilise notre utilitaire centralisé
    */
   getEmojiName(emoji: string): string {
-    return this.emojiNameMap[emoji] || emoji;
+    return getEmojiName(emoji);
   }
 
   /**
    * Convertit un nom d'emoji en caractère
-   * @param emojiName Nom de l'emoji
-   * @returns Caractère emoji correspondant
+   * Utilise notre utilitaire centralisé
    */
-  getEmojiFromName(emojiName: string): string | null {
-    return this.emojiCharMap[emojiName] || null;
+  getEmojiFromName(emojiName: string): string | undefined {
+    return getEmojiFromName(emojiName);
+  }
+
+  /**
+   * Recherche des emojis correspondant à un terme
+   * @param query Terme de recherche
+   * @returns Emojis correspondants
+   */
+  searchEmojis(query: string): string[] {
+    return searchEmojis(query);
   }
 
   /**
@@ -138,8 +170,11 @@ export class EmojiService implements EmojiServiceInterface {
     }
 
     try {
+      // Convertir l'emoji en nom API
+      const emojiName = this.getEmojiName(emoji);
+
       // Utiliser directement le service Mattermost sous-jacent
-      return await this.service.addReaction(messageId, emoji);
+      return await this.service.addReaction(messageId, emojiName);
     } catch (error) {
       console.error(`Erreur lors de l'ajout de la réaction:`, error);
       throw error;
@@ -162,8 +197,11 @@ export class EmojiService implements EmojiServiceInterface {
     }
 
     try {
+      // Convertir l'emoji en nom API
+      const emojiName = this.getEmojiName(emoji);
+
       // Utiliser directement le service Mattermost sous-jacent
-      return await this.service.removeReaction(channelId, messageId, emoji);
+      return await this.service.removeReaction(channelId, messageId, emojiName);
     } catch (error) {
       console.error(`Erreur lors de la suppression de la réaction:`, error);
       throw error;
@@ -186,8 +224,11 @@ export class EmojiService implements EmojiServiceInterface {
     }
 
     try {
+      // Convertir l'emoji en nom API
+      const emojiName = this.getEmojiName(emoji);
+
       // Utiliser directement le service Mattermost sous-jacent
-      return await this.service.hasReacted(channelId, messageId, emoji);
+      return await this.service.hasReacted(channelId, messageId, emojiName);
     } catch (error) {
       console.error(`Erreur lors de la vérification de la réaction:`, error);
       return false;
@@ -205,7 +246,20 @@ export class EmojiService implements EmojiServiceInterface {
     }
 
     try {
-      // Utiliser directement le service Mattermost sous-jacent
+      // Si l'API réelle est activée
+      if (GIF_API_CONFIG.USE_API_PROVIDER) {
+        const apiUrl = buildGifApiUrl("search", query, category);
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+          throw new Error(`Erreur API GIF: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return parseGifApiResponse(data, GIF_API_CONFIG.PROVIDER);
+      }
+
+      // Sinon, utiliser le service sous-jacent
       return await this.service.searchGifs(query, category);
     } catch (error) {
       console.error("Erreur lors de la recherche de GIFs:", error);
@@ -224,7 +278,25 @@ export class EmojiService implements EmojiServiceInterface {
     }
 
     try {
-      // Utiliser directement le service Mattermost sous-jacent
+      // Si l'API réelle est activée
+      if (GIF_API_CONFIG.USE_API_PROVIDER) {
+        const apiUrl = buildGifApiUrl(
+          category.toLowerCase() === "trending" ? "trending" : "category",
+          undefined,
+          category,
+        );
+
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+          throw new Error(`Erreur API GIF: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return parseGifApiResponse(data, GIF_API_CONFIG.PROVIDER);
+      }
+
+      // Sinon, utiliser le service sous-jacent
       return await this.service.getGifs(category, limit);
     } catch (error) {
       console.error(`Erreur lors de la récupération des GIFs:`, error);
@@ -237,16 +309,40 @@ export class EmojiService implements EmojiServiceInterface {
    */
   async getFrequentEmojis(): Promise<string[]> {
     try {
-      // Utiliser directement le service Mattermost sous-jacent
-      return await this.service.getFrequentEmojis();
+      // Essayer d'obtenir les emojis fréquents depuis le service Mattermost
+      const emojis = await this.service.getFrequentEmojis().catch(() => null);
+
+      // Si le service a réussi à renvoyer des emojis, les utiliser
+      if (emojis && emojis.length > 0) {
+        return emojis;
+      }
+
+      // Sinon, utiliser les emojis fréquents par défaut
+      return DEFAULT_FREQUENT_EMOJIS;
     } catch (error) {
       console.error(
         "Erreur lors de la récupération des emojis fréquents:",
         error,
       );
       // Retourner une liste par défaut en cas d'erreur
-      return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
+      return DEFAULT_FREQUENT_EMOJIS;
     }
+  }
+
+  /**
+   * Récupère tous les emojis supportés sous forme de mapping
+   * @returns Map des emojis vers leurs noms API
+   */
+  getAllEmojisMap(): Record<string, string> {
+    return EMOJI_NAMES;
+  }
+
+  /**
+   * Récupère tous les emojis par catégorie
+   * @returns Structure des emojis par catégorie
+   */
+  getEmojisByCategory(): Record<string, string[]> {
+    return { ...EMOJI_MAP };
   }
 }
 

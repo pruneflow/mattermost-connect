@@ -423,13 +423,11 @@ export class DirectService extends BaseService implements MattermostService {
       await this.getCurrentUser();
     }
 
-    const emojiName = this.getEmojiName(emoji);
-
     return this.apiCall("reactions", {
       method: "POST",
       body: JSON.stringify({
         post_id: messageId,
-        emoji_name: emojiName,
+        emoji_name: emoji,
         user_id: this._currentUser!.id,
       }),
     });
@@ -444,11 +442,10 @@ export class DirectService extends BaseService implements MattermostService {
       await this.getCurrentUser();
     }
 
-    const emojiName = this.getEmojiName(emoji);
     const userId = this._currentUser!.id;
 
     return this.apiCall(
-      `users/${userId}/posts/${messageId}/reactions/${emojiName}`,
+      `users/${userId}/posts/${messageId}/reactions/${emoji}`,
       {
         method: "DELETE",
       },
@@ -460,8 +457,6 @@ export class DirectService extends BaseService implements MattermostService {
     messageId: string,
     emoji: string,
   ): Promise<boolean> {
-    const emojiName = this.getEmojiName(emoji);
-
     try {
       // Récupérer les réactions pour ce message
       const reactions = await this.apiCall<any[]>(
@@ -475,31 +470,13 @@ export class DirectService extends BaseService implements MattermostService {
 
       return reactions.some(
         (reaction) =>
-          reaction.emoji_name === emojiName &&
+          reaction.emoji_name === emoji &&
           reaction.user_id === this._currentUser!.id,
       );
     } catch (error) {
       console.error("Error checking reaction:", error);
       return false;
     }
-  }
-
-  // Helper function pour convertir un emoji en nom d'API
-  private getEmojiName(emoji: string): string {
-    // Mapping simple pour quelques emojis courants
-    // Dans une implémentation réelle, on utiliserait une bibliothèque complète
-    const emojiMap: Record<string, string> = {
-      "👍": "thumbsup",
-      "❤️": "heart",
-      "😂": "joy",
-      "🎉": "tada",
-      "🔥": "fire",
-      "👏": "clap",
-      "✅": "white_check_mark",
-      "🙏": "pray",
-    };
-
-    return emojiMap[emoji] || emoji;
   }
 
   // ----- Méthodes pour les GIFs -----

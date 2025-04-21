@@ -428,10 +428,8 @@ export class ProxyService extends BaseService implements MattermostService {
     }
   }
 
-  async addReaction(messageId: string, emoji: string): Promise<any> {
+  async addReaction(messageId: string, emojiName: string): Promise<any> {
     try {
-      const emojiName = this.getEmojiName(emoji);
-
       return this.apiCall("reactions", {
         method: "POST",
         body: JSON.stringify({
@@ -448,11 +446,9 @@ export class ProxyService extends BaseService implements MattermostService {
   async removeReaction(
     channelId: string,
     messageId: string,
-    emoji: string,
+    emojiName: string,
   ): Promise<any> {
     try {
-      const emojiName = this.getEmojiName(emoji);
-
       return this.apiCall(`reactions/${messageId}/${emojiName}`, {
         method: "DELETE",
       });
@@ -465,10 +461,8 @@ export class ProxyService extends BaseService implements MattermostService {
   async hasReacted(
     channelId: string,
     messageId: string,
-    emoji: string,
+    emojiName: string,
   ): Promise<boolean> {
-    const emojiName = this.getEmojiName(emoji);
-
     try {
       const response = await this.apiCall<{ has_reacted: boolean }>(
         `reactions/${messageId}/${emojiName}/check`,
@@ -478,24 +472,6 @@ export class ProxyService extends BaseService implements MattermostService {
       console.error("Erreur lors de la vérification de la réaction:", error);
       return false;
     }
-  }
-
-  // Helper function pour convertir un emoji en nom d'API
-  private getEmojiName(emoji: string): string {
-    // Mapping simple pour quelques emojis courants
-    // Dans une implémentation réelle, on utiliserait une bibliothèque complète
-    const emojiMap: Record<string, string> = {
-      "👍": "thumbsup",
-      "❤️": "heart",
-      "😂": "joy",
-      "🎉": "tada",
-      "🔥": "fire",
-      "👏": "clap",
-      "✅": "white_check_mark",
-      "🙏": "pray",
-    };
-
-    return emojiMap[emoji] || emoji;
   }
 
   // ----- Méthodes pour les GIFs -----
