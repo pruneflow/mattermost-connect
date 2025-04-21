@@ -1,4 +1,5 @@
 // src/services/direct/direct.service.ts
+
 import { BaseService } from "../base";
 import {
   MattermostService,
@@ -7,199 +8,134 @@ import {
   MessagesResponse,
 } from "../base";
 import { User, Message, Channel, Team } from "../../types";
+import { HttpClient, createDirectHttpClient } from "../http";
+import { AuthManager, createDirectAuthManager } from "../auth";
 
 /**
- * Configuration pour le service direct
+ * Configuration for the direct service
  */
 export interface DirectServiceConfig {
-  /** URL du serveur Mattermost */
+  /** URL of the Mattermost server */
   serverUrl: string;
-  /** Token d'API utilisateur (optionnel) */
+  /** User API token (optional) */
   token?: string;
+  /** Whether to use local storage for token persistence */
+  useLocalStorage?: boolean;
 }
 
 /**
- * Service direct implémentant la communication avec un serveur Mattermost
- * sans intermédiaire
+ * Service implementing direct communication with a Mattermost server
+ * without intermediaries
  */
 export class DirectService extends BaseService implements MattermostService {
-  private token?: string;
+  private httpClient: HttpClient;
+  private authManager: AuthManager;
   public readonly mode: "direct" | "proxy" | "custom" = "direct";
 
   /**
-   * Crée une nouvelle instance du service direct
-   * @param serverUrl URL du serveur Mattermost
-   * @param token Token d'API utilisateur (optionnel)
+   * Creates a new instance of the direct service
+   * @param serverUrl URL of the Mattermost server
+   * @param token User API token (optional)
+   * @param useLocalStorage Whether to use local storage for token persistence
    */
-  constructor(serverUrl: string, token?: string) {
+  constructor(
+    serverUrl: string,
+    token?: string,
+    useLocalStorage: boolean = false,
+  ) {
     super(serverUrl);
-    this.token = token;
+
+    // Create HTTP client with token provider that gets token from auth manager
+    this.httpClient = createDirectHttpClient(
+      serverUrl,
+      // Instead of passing token directly, we'll get it from auth manager
+      undefined,
+    );
+
+    // Create authentication manager
+    this.authManager = createDirectAuthManager(
+      this.httpClient,
+      serverUrl,
+      useLocalStorage,
+    );
+
+    // Set token if provided
+    if (token) {
+      this.authManager.setToken(token);
+    }
   }
 
   /**
-   * Effectue un appel API à Mattermost
-   * @param endpoint Point d'API (sans /api/v4/)
-   * @param options Options de la requête fetch
-   * @returns Promesse avec la réponse typée
+   * Get the current token
    */
-  protected async apiCall<T>(
-    endpoint: string,
-    options: RequestInit = {},
-  ): Promise<T> {
-    const url = `${this.baseUrl}/api/v4/${endpoint}`;
-    const headers: Record<string, any> = {
-      "Content-Type": "application/json",
-      ...options.headers,
-    };
+  public get token(): string | null {
+    return this.authManager.getToken();
+  }
 
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
-
+  /**
+   * Implementation of abstract method to fetch current user
+   */
+  protected async fetchCurrentUser(): Promise<User> {
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-
-      // Gestion spécifique des erreurs d'authentification
-      if (response.status === 401) {
-        throw new Error(
-          "Session invalide ou expirée, veuillez vous reconnecter.",
-        );
-      }
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-          error.message ||
-            `Erreur API : ${response.status} ${response.statusText}`,
-        );
-      }
-
-      // Si on a une réponse 204 (No Content), on renvoie un objet vide plutôt que de tenter de parser du JSON
-      if (response.status === 204) {
-        return {} as T;
-      }
-
-      return response.json() as Promise<T>;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
+      const response = await this.httpClient.get<User>("users/me");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching current user:", error);
       throw error;
     }
   }
 
-  /**
-   * Implémentation de la méthode abstraite pour récupérer l'utilisateur courant
-   */
-  protected async fetchCurrentUser(): Promise<User> {
-    return this.apiCall<User>("users/me");
-  }
-
-  // ----- Méthodes d'authentification -----
+  // ----- Authentication methods -----
 
   async authenticate(
     username: string,
     password: string,
   ): Promise<{ token: string; serverUrl?: string }> {
     try {
-      // Appel à l'API Mattermost pour obtenir un token
-      const response = await fetch(`${this.baseUrl}/api/v4/users/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          login_id: username,
-          password: password,
-        }),
-      });
+      const result = await this.authManager.authenticate(username, password);
 
-      if (!response.ok) {
-        throw new Error("Échec de l'authentification");
+      // Try to fetch and cache current user
+      try {
+        const user = await this.fetchCurrentUser();
+        this.setCurrentUser(user);
+      } catch (error) {
+        console.warn("Could not fetch user after authentication:", error);
       }
-
-      const user = await response.json();
-
-      // Stocker l'utilisateur dans le cache
-      this.setCurrentUser(user);
-
-      // Récupérer le token de session depuis les en-têtes
-      const sessionToken = response.headers.get("Token");
-
-      if (!sessionToken) {
-        throw new Error("Aucun token de session retourné par le serveur");
-      }
-
-      // Créer un token d'accès personnel (PAT)
-      const tokenResponse = await fetch(
-        `${this.baseUrl}/api/v4/users/${user.id}/tokens`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            description: "MattermostConnect Integration",
-          }),
-        },
-      );
-
-      if (!tokenResponse.ok) {
-        throw new Error("Échec de la génération du token");
-      }
-
-      const tokenData = await tokenResponse.json();
-
-      // Mettre à jour le token du service
-      this.token = tokenData.token;
 
       return {
-        token: tokenData.token,
+        token: result.token,
         serverUrl: this.baseUrl,
       };
     } catch (error) {
-      console.error("Erreur d'authentification :", error);
+      console.error("Authentication error:", error);
       throw error;
     }
   }
 
   async validateToken(tokenToValidate: string): Promise<boolean> {
+    return this.authManager.validateToken(tokenToValidate);
+  }
+
+  // ----- Team and channel methods -----
+
+  async getTeams(): Promise<Team[]> {
     try {
-      // Sauvegarde du token actuel
-      const originalToken = this.token;
-
-      // Utiliser temporairement le token à valider
-      this.token = tokenToValidate;
-
-      try {
-        // Tenter de récupérer l'utilisateur courant
-        const user = await this.fetchCurrentUser();
-
-        // Si réussi, stocker l'utilisateur et garder le nouveau token
-        this.setCurrentUser(user);
-        return true;
-      } catch (error) {
-        // Si échec, restaurer le token d'origine
-        this.token = originalToken;
-        return false;
-      }
+      const response = await this.httpClient.get<Team[]>("users/me/teams");
+      return response.data;
     } catch (error) {
-      console.error("Erreur de validation du token :", error);
-      return false;
+      console.error("Error fetching teams:", error);
+      throw error;
     }
   }
 
-  // ----- Méthodes pour les équipes et canaux -----
-
-  async getTeams(): Promise<Team[]> {
-    return this.apiCall("users/me/teams");
-  }
-
   async getTeam(teamId: string): Promise<Team> {
-    return this.apiCall(`teams/${teamId}`);
+    try {
+      const response = await this.httpClient.get<Team>(`teams/${teamId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching team ${teamId}:`, error);
+      throw error;
+    }
   }
 
   async getTeamUnreadCount(
@@ -210,25 +146,41 @@ export class DirectService extends BaseService implements MattermostService {
     }
 
     try {
-      return this.apiCall(
-        `users/${this._currentUser!.id}/teams/${teamId}/unread`,
-      );
+      const response = await this.httpClient.get<{
+        msg_count: number;
+        mention_count: number;
+      }>(`users/${this._currentUser!.id}/teams/${teamId}/unread`);
+      return response.data;
     } catch (error) {
-      console.error(
-        `Erreur lors de la récupération des non-lus pour l'équipe ${teamId}:`,
-        error,
-      );
+      console.error(`Error getting unread count for team ${teamId}:`, error);
       return { msg_count: 0, mention_count: 0 };
     }
   }
 
   async getChannels(teamId: string): Promise<Channel[]> {
     if (!teamId || teamId === "") return [];
-    return this.apiCall(`users/me/teams/${teamId}/channels`);
+
+    try {
+      const response = await this.httpClient.get<Channel[]>(
+        `users/me/teams/${teamId}/channels`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching channels for team ${teamId}:`, error);
+      throw error;
+    }
   }
 
   async getChannel(channelId: string): Promise<Channel> {
-    return this.apiCall(`channels/${channelId}`);
+    try {
+      const response = await this.httpClient.get<Channel>(
+        `channels/${channelId}`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching channel ${channelId}:`, error);
+      throw error;
+    }
   }
 
   async getChannelUnreadCount(
@@ -239,12 +191,14 @@ export class DirectService extends BaseService implements MattermostService {
     }
 
     try {
-      return this.apiCall(
-        `users/${this._currentUser!.id}/channels/${channelId}/unread`,
-      );
+      const response = await this.httpClient.get<{
+        msg_count: number;
+        mention_count: number;
+      }>(`users/${this._currentUser!.id}/channels/${channelId}/unread`);
+      return response.data;
     } catch (error) {
       console.error(
-        `Erreur lors de la récupération des non-lus pour le canal ${channelId}:`,
+        `Error getting unread count for channel ${channelId}:`,
         error,
       );
       return { msg_count: 0, mention_count: 0 };
@@ -253,27 +207,22 @@ export class DirectService extends BaseService implements MattermostService {
 
   async viewChannel(channelId: string): Promise<{ status: "OK" }> {
     if (!channelId) {
-      throw new Error("channelId est requis pour marquer un canal comme lu");
+      throw new Error("channelId is required to mark a channel as read");
     }
 
     try {
-      // L'API attend un objet avec channel_id
-      return this.apiCall("channels/members/me/view", {
-        method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-        }),
-      });
-    } catch (error) {
-      console.error(
-        `Erreur lors du marquage du canal ${channelId} comme lu:`,
-        error,
+      const response = await this.httpClient.post<{ status: "OK" }>(
+        "channels/members/me/view",
+        { channel_id: channelId },
       );
+      return response.data;
+    } catch (error) {
+      console.error(`Error marking channel ${channelId} as viewed:`, error);
       throw error;
     }
   }
 
-  // ----- Méthodes pour les messages -----
+  // ----- Messages methods -----
 
   async getChannelMessages(
     channelId: string,
@@ -287,7 +236,13 @@ export class DirectService extends BaseService implements MattermostService {
     if (before) endpoint += `&before=${before}`;
     if (after) endpoint += `&after=${after}`;
 
-    return this.apiCall<MessagesResponse>(endpoint);
+    try {
+      const response = await this.httpClient.get<MessagesResponse>(endpoint);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching messages for channel ${channelId}:`, error);
+      throw error;
+    }
   }
 
   async postMessage(
@@ -295,58 +250,57 @@ export class DirectService extends BaseService implements MattermostService {
     message: string,
     fileIds?: string[],
   ): Promise<Message> {
-    return this.apiCall("posts", {
-      method: "POST",
-      body: JSON.stringify({
+    try {
+      const response = await this.httpClient.post<Message>("posts", {
         channel_id: channelId,
         message,
         file_ids: fileIds || [],
-      }),
-    });
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error posting message to channel ${channelId}:`, error);
+      throw error;
+    }
   }
 
   async getPost(messageId: string): Promise<Message> {
-    return this.apiCall<Message>(`posts/${messageId}`);
+    try {
+      const response = await this.httpClient.get<Message>(`posts/${messageId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching post ${messageId}:`, error);
+      throw error;
+    }
   }
 
   async editMessage(messageId: string, newMessage: string): Promise<Message> {
     try {
-      // Récupérer d'abord le message pour obtenir le channel_id
-      // (Cette étape peut être facultative si vous avez déjà le channel_id)
-      const message = await this.apiCall<Message>(`posts/${messageId}`);
+      // First get the message to obtain channel_id
+      const message = await this.getPost(messageId);
 
-      // Ensuite, mettre à jour le message
-      return this.apiCall<Message>(`posts/${messageId}/patch`, {
-        method: "PUT",
-        body: JSON.stringify({
+      // Then update the message
+      const response = await this.httpClient.put<Message>(
+        `posts/${messageId}/patch`,
+        {
           message: newMessage,
-          // Conserver les propriétés existantes
           file_ids: message.file_ids,
           has_reactions: message.has_reactions,
           props: message.props,
-        }),
-      });
-    } catch (error) {
-      console.error(
-        `Erreur lors de la modification du message ${messageId}:`,
-        error,
+        },
       );
+      return response.data;
+    } catch (error) {
+      console.error(`Error editing message ${messageId}:`, error);
       throw error;
     }
   }
 
   async deleteMessage(messageId: string): Promise<{ success: boolean }> {
     try {
-      await this.apiCall(`posts/${messageId}`, {
-        method: "DELETE",
-      });
-
+      await this.httpClient.delete(`posts/${messageId}`);
       return { success: true };
     } catch (error) {
-      console.error(
-        `Erreur lors de la suppression du message ${messageId}:`,
-        error,
-      );
+      console.error(`Error deleting message ${messageId}:`, error);
       throw error;
     }
   }
@@ -358,63 +312,69 @@ export class DirectService extends BaseService implements MattermostService {
     fileIds?: string[],
   ): Promise<Message> {
     if (!channelId || !messageId || !responseMessage.trim()) {
-      throw new Error("Paramètres invalides pour la réponse à un message");
+      throw new Error("Invalid parameters for message reply");
     }
 
     try {
-      const requestBody = {
+      const response = await this.httpClient.post<Message>("posts", {
         channel_id: channelId,
         message: responseMessage.trim(),
         root_id: messageId,
         file_ids: fileIds || [],
-      };
-
-      // Appel direct à l'API
-      const response = await this.apiCall<Message>("posts", {
-        method: "POST",
-        body: JSON.stringify(requestBody),
       });
-
-      return response;
+      return response.data;
     } catch (error) {
-      console.error(
-        `DirectService: Erreur lors de la réponse au message ${messageId}:`,
-        error,
-      );
+      console.error(`Error replying to message ${messageId}:`, error);
       throw error;
     }
   }
 
-  // ----- Méthodes pour les utilisateurs -----
+  // ----- User methods -----
 
   async getUsers(options: GetUsersOptions = {}): Promise<User[]> {
-    const params = new URLSearchParams();
+    try {
+      const params = new URLSearchParams();
 
-    if (options.inChannel) params.append("in_channel", options.inChannel);
-    if (options.inTeam) params.append("in_team", options.inTeam);
-    if (options.perPage) params.append("per_page", options.perPage.toString());
-    if (options.page) params.append("page", options.page.toString());
+      if (options.inChannel) params.append("in_channel", options.inChannel);
+      if (options.inTeam) params.append("in_team", options.inTeam);
+      if (options.perPage)
+        params.append("per_page", options.perPage.toString());
+      if (options.page) params.append("page", options.page.toString());
 
-    // Si des IDs spécifiques sont demandés, utiliser un endpoint différent
-    if (options.ids && options.ids.length > 0) {
-      return this.apiCall("users/ids", {
-        method: "POST",
-        body: JSON.stringify(options.ids),
-      });
+      // If specific IDs are requested, use a different endpoint
+      if (options.ids && options.ids.length > 0) {
+        const response = await this.httpClient.post<User[]>(
+          "users/ids",
+          options.ids,
+        );
+        return response.data;
+      }
+
+      const response = await this.httpClient.get<User[]>(
+        `users?${params.toString()}`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      throw error;
     }
-
-    return this.apiCall(`users?${params.toString()}`);
   }
 
   async getUserStatus(userId: string): Promise<any> {
-    return this.apiCall(`users/${userId}/status`);
+    try {
+      const response = await this.httpClient.get<any>(`users/${userId}/status`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching status for user ${userId}:`, error);
+      throw error;
+    }
   }
 
-  // ----- Méthodes pour les emojis et réactions -----
+  // ----- Emoji and reaction methods -----
 
   async getFrequentEmojis(): Promise<string[]> {
-    // Dans une implémentation réelle, on pourrait récupérer les emojis fréquents depuis le serveur
-    // Pour l'instant, on retourne une liste prédéfinie
+    // In a real implementation, we would fetch frequent emojis from the server
+    // For now, return a predefined list
     return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
   }
 
@@ -423,14 +383,17 @@ export class DirectService extends BaseService implements MattermostService {
       await this.getCurrentUser();
     }
 
-    return this.apiCall("reactions", {
-      method: "POST",
-      body: JSON.stringify({
+    try {
+      const response = await this.httpClient.post<any>("reactions", {
         post_id: messageId,
         emoji_name: emoji,
         user_id: this._currentUser!.id,
-      }),
-    });
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error adding reaction to message ${messageId}:`, error);
+      throw error;
+    }
   }
 
   async removeReaction(
@@ -444,12 +407,18 @@ export class DirectService extends BaseService implements MattermostService {
 
     const userId = this._currentUser!.id;
 
-    return this.apiCall(
-      `users/${userId}/posts/${messageId}/reactions/${emoji}`,
-      {
-        method: "DELETE",
-      },
-    );
+    try {
+      const response = await this.httpClient.delete<any>(
+        `users/${userId}/posts/${messageId}/reactions/${emoji}`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        `Error removing reaction from message ${messageId}:`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async hasReacted(
@@ -458,17 +427,15 @@ export class DirectService extends BaseService implements MattermostService {
     emoji: string,
   ): Promise<boolean> {
     try {
-      // Récupérer les réactions pour ce message
-      const reactions = await this.apiCall<any[]>(
+      const response = await this.httpClient.get<any[]>(
         `posts/${messageId}/reactions`,
       );
 
-      // Vérifier si l'utilisateur actuel a réagi avec cet emoji
       if (!this._currentUser) {
         await this.getCurrentUser();
       }
 
-      return reactions.some(
+      return response.data.some(
         (reaction) =>
           reaction.emoji_name === emoji &&
           reaction.user_id === this._currentUser!.id,
@@ -479,21 +446,21 @@ export class DirectService extends BaseService implements MattermostService {
     }
   }
 
-  // ----- Méthodes pour les GIFs -----
+  // ----- GIF methods -----
 
   async searchGifs(query: string, category?: string): Promise<any[]> {
-    // Simuler une recherche dans une implémentation réelle
-    // On appellerait une API externe comme Giphy
+    // Simulate search in a real implementation
+    // Would call an external API like Giphy
     return [];
   }
 
   async getGifs(category: string, limit: number = 20): Promise<any[]> {
-    // Simuler une récupération dans une implémentation réelle
-    // On appellerait une API externe comme Giphy
+    // Simulate fetching in a real implementation
+    // Would call an external API like Giphy
     return [];
   }
 
-  // ----- Méthodes pour WebSocket -----
+  // ----- WebSocket methods -----
 
   getWebsocketUrl(): string {
     return this.baseUrl.replace(/^http/, "ws") + "/api/v4/websocket";
@@ -503,40 +470,56 @@ export class DirectService extends BaseService implements MattermostService {
     return this.token || "";
   }
 
-  // ----- Méthodes pour les fichiers -----
+  // ----- File methods -----
 
   async uploadFiles(formData: FormData): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/v4/files`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: formData,
-    });
+    try {
+      // Custom handling for file uploads since they use FormData
+      const response = await fetch(`${this.baseUrl}/api/v4/files`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: formData,
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `File upload error: ${response.status}`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(
+          error.message || `File upload error: ${response.status}`,
+        );
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      throw error;
     }
+  }
 
-    return response.json();
+  /**
+   * Refreshes the current user information
+   */
+  async refreshCurrentUser(): Promise<User> {
+    this._currentUser = null; // Clear cache
+    return this.getCurrentUser(); // Fetch user again
   }
 }
 
 /**
- * Crée un service direct pour communiquer avec un serveur Mattermost
- * @param config Configuration du service direct
- * @returns Service Mattermost
+ * Creates a direct service for communication with a Mattermost server
+ * @param config Configuration for the direct service
+ * @returns Mattermost service
  */
 export function createDirectService(
   config: DirectServiceConfig,
 ): MattermostService {
-  const { serverUrl, token } = config;
+  const { serverUrl, token, useLocalStorage = false } = config;
 
-  // Validation des paramètres
+  // Validate parameters
   if (!serverUrl) {
-    throw new Error("serverUrl est requis pour le mode direct");
+    throw new Error("serverUrl is required for direct mode");
   }
 
-  return new DirectService(serverUrl, token);
+  return new DirectService(serverUrl, token, useLocalStorage);
 }

@@ -1,4 +1,5 @@
 // src/services/proxy/proxy.service.ts
+
 import { BaseService } from "../base";
 import {
   MattermostService,
@@ -7,223 +8,183 @@ import {
   MessagesResponse,
 } from "../base";
 import { User, Message, Channel, Team } from "../../types";
+import { HttpClient, createProxyHttpClient } from "../http";
+import { AuthManager, createProxyAuthManager } from "../auth";
 
 /**
- * Configuration pour le service proxy
+ * Configuration for the proxy service
  */
 export interface ProxyServiceConfig {
-  /** URL du serveur proxy */
+  /** URL of the proxy server */
   proxyUrl: string;
-  /** ID client pour l'identification */
+  /** Client ID for identification */
   clientId: string;
-  /** ID utilisateur (optionnel) */
+  /** User ID (optional) */
   userId?: string;
+  /** Whether to use local storage for token persistence */
+  useLocalStorage?: boolean;
 }
 
 /**
- * Service proxy implémentant la communication via un serveur intermédiaire
- * Suit la même interface que le service direct mais communique via un proxy
+ * Service implementing communication via an intermediate server
+ * Follows the same interface as the direct service but communicates via a proxy
  */
 export class ProxyService extends BaseService implements MattermostService {
-  private clientId: string;
+  private readonly httpClient: HttpClient;
+  private authManager: AuthManager;
+  private readonly clientId: string;
   private userId?: string;
   public readonly mode: "direct" | "proxy" | "custom" = "proxy";
 
   /**
-   * Crée une nouvelle instance du service proxy
-   * @param proxyUrl URL du serveur proxy
-   * @param clientId ID client pour l'identification
-   * @param userId ID utilisateur (optionnel)
+   * Creates a new instance of the proxy service
+   * @param proxyUrl URL of the proxy server
+   * @param clientId Client ID for identification
+   * @param userId User ID (optional)
+   * @param useLocalStorage Whether to use local storage for token persistence
    */
-  constructor(proxyUrl: string, clientId: string, userId?: string) {
+  constructor(
+    proxyUrl: string,
+    clientId: string,
+    userId?: string,
+    useLocalStorage: boolean = false,
+  ) {
     super(proxyUrl);
+
     this.clientId = clientId;
     this.userId = userId;
+
+    // Create HTTP client
+    this.httpClient = createProxyHttpClient(proxyUrl, clientId, userId);
+
+    // Create authentication manager
+    this.authManager = createProxyAuthManager(
+      this.httpClient,
+      clientId,
+      useLocalStorage,
+      userId,
+    );
   }
 
   /**
-   * Effectue un appel API via le serveur proxy
-   * @param endpoint Point d'API
-   * @param options Options de la requête fetch
-   * @param requireAuth Si l'authentification est requise
-   * @returns Promesse avec la réponse typée
+   * Implementation of abstract method to fetch current user
    */
-  private async apiCall<T>(
-    endpoint: string,
-    options: RequestInit = {},
-    requireAuth = true,
-  ): Promise<T> {
-    const url = `${this.baseUrl}/${endpoint}`;
-    const headers: Record<string, string> = {
-      "X-Mattermost-Client-ID": this.clientId,
-      "Content-Type": "application/json",
-      ...((options.headers as Record<string, string>) || {}),
-    };
-
-    // Ajouter l'ID utilisateur si requis et disponible
-    if (requireAuth && this.userId) {
-      headers["X-Mattermost-User-ID"] = this.userId;
-    }
-
+  protected async fetchCurrentUser(): Promise<User> {
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-
-      if (!response.ok) {
-        // Gestion des erreurs d'authentification
-        if (response.status === 401) {
-          throw new Error(
-            "Session invalide ou expirée. Veuillez vous reconnecter.",
-          );
-        }
-
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-          error.message ||
-            `Erreur API Proxy : ${response.status} ${response.statusText}`,
-        );
-      }
-
-      // Si on a une réponse 204 (No Content), on renvoie un objet vide plutôt que de tenter de parser du JSON
-      if (response.status === 204) {
-        return {} as T;
-      }
-
-      return response.json() as Promise<T>;
+      const response = await this.httpClient.get<User>("users/me");
+      return response.data;
     } catch (error) {
-      console.error(`Erreur lors de l'appel à ${endpoint}:`, error);
+      console.error("Error fetching current user:", error);
       throw error;
     }
   }
 
-  /**
-   * Implémentation de la méthode abstraite pour récupérer l'utilisateur courant
-   */
-  protected async fetchCurrentUser(): Promise<User> {
-    return this.apiCall<User>("users/me");
-  }
-
-  // ----- Méthodes d'authentification -----
+  // ----- Authentication methods -----
 
   async authenticate(
     username: string,
     password: string,
   ): Promise<{ token: string; serverUrl?: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Mattermost-Client-ID": this.clientId,
-        },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
+      const result = await this.authManager.authenticate(username, password);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || "Échec de l'authentification via le proxy",
-        );
+      // Update user ID if provided in the result
+      if (result.userId) {
+        this.userId = result.userId;
       }
 
-      const authData = await response.json();
-
-      // Mettre à jour l'ID utilisateur si disponible dans la réponse
-      if (authData.user_id) {
-        this.userId = authData.user_id;
-      }
-
-      // Tenter de récupérer l'utilisateur avec le nouveau token
+      // Try to fetch and cache current user
       try {
         const user = await this.fetchCurrentUser();
         this.setCurrentUser(user);
       } catch (userError) {
-        console.warn(
-          "Impossible de récupérer l'utilisateur après authentification:",
-          userError,
-        );
+        console.warn("Could not fetch user after authentication:", userError);
       }
 
-      return { token: authData.token };
+      return { token: result.token };
     } catch (error) {
-      console.error("Erreur d'authentification proxy :", error);
+      console.error("Proxy authentication error:", error);
       throw error;
     }
   }
 
   async validateToken(token: string): Promise<boolean> {
-    try {
-      // En mode proxy, nous ne pouvons pas valider directement le token
-      // Nous devons passer par le proxy pour cela
-      const response = await fetch(`${this.baseUrl}/auth/validate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Mattermost-Client-ID": this.clientId,
-        },
-        body: JSON.stringify({ token }),
-      });
+    return this.authManager.validateToken(token);
+  }
 
-      return response.ok;
+  // ----- Team and channel methods -----
+
+  async getTeams(): Promise<Team[]> {
+    try {
+      const response = await this.httpClient.get<Team[]>("teams");
+      return response.data;
     } catch (error) {
-      console.error("Erreur de validation du token :", error);
-      return false;
+      console.error("Error fetching teams:", error);
+      throw error;
     }
   }
 
-  // ----- Méthodes pour les équipes et canaux -----
-
-  async getTeams(): Promise<Team[]> {
-    return this.apiCall("teams");
-  }
-
   async getTeam(teamId: string): Promise<Team> {
-    return this.apiCall(`teams/${teamId}`);
+    try {
+      const response = await this.httpClient.get<Team>(`teams/${teamId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching team ${teamId}:`, error);
+      throw error;
+    }
   }
 
   async getTeamUnreadCount(
     teamId: string,
   ): Promise<{ msg_count: number; mention_count: number }> {
     try {
-      return this.apiCall(`teams/${teamId}/unread`);
+      const response = await this.httpClient.get<{
+        msg_count: number;
+        mention_count: number;
+      }>(`teams/${teamId}/unread`);
+      return response.data;
     } catch (error) {
-      console.error(
-        `Erreur lors de la récupération des non-lus pour l'équipe ${teamId}:`,
-        error,
-      );
+      console.error(`Error getting unread count for team ${teamId}:`, error);
       return { msg_count: 0, mention_count: 0 };
     }
   }
 
   async getChannels(teamId: string): Promise<Channel[]> {
     try {
-      return this.apiCall(`teams/${teamId}/channels`);
-    } catch (error) {
-      console.error(
-        `Erreur lors de la récupération des canaux pour l'équipe ${teamId}:`,
-        error,
+      const response = await this.httpClient.get<Channel[]>(
+        `teams/${teamId}/channels`,
       );
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching channels for team ${teamId}:`, error);
       return [];
     }
   }
 
   async getChannel(channelId: string): Promise<Channel> {
-    return this.apiCall(`channels/${channelId}`);
+    try {
+      const response = await this.httpClient.get<Channel>(
+        `channels/${channelId}`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching channel ${channelId}:`, error);
+      throw error;
+    }
   }
 
   async getChannelUnreadCount(
     channelId: string,
   ): Promise<{ msg_count: number; mention_count: number }> {
     try {
-      return this.apiCall(`channels/${channelId}/unread`);
+      const response = await this.httpClient.get<{
+        msg_count: number;
+        mention_count: number;
+      }>(`channels/${channelId}/unread`);
+      return response.data;
     } catch (error) {
       console.error(
-        `Erreur lors de la récupération des non-lus pour le canal ${channelId}:`,
+        `Error getting unread count for channel ${channelId}:`,
         error,
       );
       return { msg_count: 0, mention_count: 0 };
@@ -232,23 +193,22 @@ export class ProxyService extends BaseService implements MattermostService {
 
   async viewChannel(channelId: string): Promise<{ status: "OK" }> {
     if (!channelId) {
-      throw new Error("channelId est requis pour marquer un canal comme lu");
+      throw new Error("channelId is required to mark a channel as read");
     }
 
     try {
-      return this.apiCall(`channels/${channelId}/view`, {
-        method: "POST",
-      });
-    } catch (error) {
-      console.error(
-        `Erreur lors du marquage du canal ${channelId} comme lu:`,
-        error,
+      const response = await this.httpClient.post<{ status: "OK" }>(
+        `channels/${channelId}/view`,
+        {},
       );
+      return response.data;
+    } catch (error) {
+      console.error(`Error marking channel ${channelId} as read:`, error);
       throw error;
     }
   }
 
-  // ----- Méthodes pour les messages -----
+  // ----- Message methods -----
 
   async getChannelMessages(
     channelId: string,
@@ -262,12 +222,10 @@ export class ProxyService extends BaseService implements MattermostService {
       if (before) endpoint += `&before=${before}`;
       if (after) endpoint += `&after=${after}`;
 
-      return this.apiCall<MessagesResponse>(endpoint);
+      const response = await this.httpClient.get<MessagesResponse>(endpoint);
+      return response.data;
     } catch (error) {
-      console.error(
-        `Erreur lors de la récupération des messages du canal ${channelId}:`,
-        error,
-      );
+      console.error(`Error fetching messages for channel ${channelId}:`, error);
       throw error;
     }
   }
@@ -278,64 +236,51 @@ export class ProxyService extends BaseService implements MattermostService {
     fileIds?: string[],
   ): Promise<Message> {
     try {
-      return this.apiCall("messages", {
-        method: "POST",
-        body: JSON.stringify({
-          channel_id: channelId,
-          message,
-          file_ids: fileIds || [],
-        }),
+      const response = await this.httpClient.post<Message>("messages", {
+        channel_id: channelId,
+        message,
+        file_ids: fileIds || [],
       });
+      return response.data;
     } catch (error) {
-      console.error(
-        `Erreur lors de l'envoi du message dans le canal ${channelId}:`,
-        error,
-      );
+      console.error(`Error posting message to channel ${channelId}:`, error);
       throw error;
     }
   }
 
   async getPost(messageId: string): Promise<Message> {
     try {
-      return this.apiCall<Message>(`messages/${messageId}`);
-    } catch (error) {
-      console.error(
-        `Erreur lors de la récupération du message ${messageId}:`,
-        error,
+      const response = await this.httpClient.get<Message>(
+        `messages/${messageId}`,
       );
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching message ${messageId}:`, error);
       throw error;
     }
   }
 
   async editMessage(messageId: string, newMessage: string): Promise<Message> {
     try {
-      return this.apiCall<Message>(`messages/${messageId}`, {
-        method: "PUT",
-        body: JSON.stringify({
+      const response = await this.httpClient.put<Message>(
+        `messages/${messageId}`,
+        {
           message: newMessage,
-        }),
-      });
-    } catch (error) {
-      console.error(
-        `Erreur lors de la modification du message ${messageId}:`,
-        error,
+        },
       );
+      return response.data;
+    } catch (error) {
+      console.error(`Error editing message ${messageId}:`, error);
       throw error;
     }
   }
 
   async deleteMessage(messageId: string): Promise<{ success: boolean }> {
     try {
-      await this.apiCall(`messages/${messageId}`, {
-        method: "DELETE",
-      });
-
+      await this.httpClient.delete(`messages/${messageId}`);
       return { success: true };
     } catch (error) {
-      console.error(
-        `Erreur lors de la suppression du message ${messageId}:`,
-        error,
-      );
+      console.error(`Error deleting message ${messageId}:`, error);
       throw error;
     }
   }
@@ -347,7 +292,7 @@ export class ProxyService extends BaseService implements MattermostService {
     fileIds?: string[],
   ): Promise<Message> {
     if (!channelId || !messageId || !responseMessage.trim()) {
-      throw new Error("Paramètres invalides pour la réponse à un message");
+      throw new Error("Invalid parameters for message reply");
     }
 
     try {
@@ -358,24 +303,21 @@ export class ProxyService extends BaseService implements MattermostService {
         file_ids: fileIds || [],
       };
 
-      const endpoint = "messages/reply";
-
-      const response = await this.apiCall<Message>(endpoint, {
-        method: "POST",
-        body: JSON.stringify(requestBody),
-      });
-
-      return response;
+      const response = await this.httpClient.post<Message>(
+        "messages/reply",
+        requestBody,
+      );
+      return response.data;
     } catch (error) {
       console.error(
-        `ProxyService: Erreur lors de la réponse au message ${messageId}:`,
+        `ProxyService: Error replying to message ${messageId}:`,
         error,
       );
       throw error;
     }
   }
 
-  // ----- Méthodes pour les utilisateurs -----
+  // ----- User methods -----
 
   async getUsers(options: GetUsersOptions = {}): Promise<User[]> {
     try {
@@ -388,57 +330,55 @@ export class ProxyService extends BaseService implements MattermostService {
       if (options.page) params.append("page", options.page.toString());
 
       if (options.ids && options.ids.length > 0) {
-        return this.apiCall("users/ids", {
-          method: "POST",
-          body: JSON.stringify(options.ids),
-        });
+        const response = await this.httpClient.post<User[]>(
+          "users/ids",
+          options.ids,
+        );
+        return response.data;
       }
 
-      return this.apiCall(`users?${params.toString()}`);
+      const response = await this.httpClient.get<User[]>(
+        `users?${params.toString()}`,
+      );
+      return response.data;
     } catch (error) {
-      console.error("Erreur lors de la récupération des utilisateurs:", error);
+      console.error("Error fetching users:", error);
       throw error;
     }
   }
 
   async getUserStatus(userId: string): Promise<any> {
     try {
-      return this.apiCall(`users/${userId}/status`);
+      const response = await this.httpClient.get<any>(`users/${userId}/status`);
+      return response.data;
     } catch (error) {
-      console.error(
-        `Erreur lors de la récupération du statut de l'utilisateur ${userId}:`,
-        error,
-      );
+      console.error(`Error fetching status for user ${userId}:`, error);
       throw error;
     }
   }
 
-  // ----- Méthodes pour les emojis et réactions -----
+  // ----- Emoji and reaction methods -----
 
   async getFrequentEmojis(): Promise<string[]> {
     try {
-      return this.apiCall("emojis/frequent");
+      const response = await this.httpClient.get<string[]>("emojis/frequent");
+      return response.data;
     } catch (error) {
-      console.error(
-        "Erreur lors de la récupération des emojis fréquents:",
-        error,
-      );
-      // Valeurs par défaut en cas d'erreur
+      console.error("Error fetching frequent emojis:", error);
+      // Default values in case of error
       return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
     }
   }
 
   async addReaction(messageId: string, emojiName: string): Promise<any> {
     try {
-      return this.apiCall("reactions", {
-        method: "POST",
-        body: JSON.stringify({
-          post_id: messageId,
-          emoji_name: emojiName,
-        }),
+      const response = await this.httpClient.post<any>("reactions", {
+        post_id: messageId,
+        emoji_name: emojiName,
       });
+      return response.data;
     } catch (error) {
-      console.error("Erreur lors de l'ajout de la réaction:", error);
+      console.error("Error adding reaction:", error);
       throw error;
     }
   }
@@ -449,11 +389,12 @@ export class ProxyService extends BaseService implements MattermostService {
     emojiName: string,
   ): Promise<any> {
     try {
-      return this.apiCall(`reactions/${messageId}/${emojiName}`, {
-        method: "DELETE",
-      });
+      const response = await this.httpClient.delete<any>(
+        `reactions/${messageId}/${emojiName}`,
+      );
+      return response.data;
     } catch (error) {
-      console.error("Erreur lors de la suppression de la réaction:", error);
+      console.error("Error removing reaction:", error);
       throw error;
     }
   }
@@ -464,17 +405,17 @@ export class ProxyService extends BaseService implements MattermostService {
     emojiName: string,
   ): Promise<boolean> {
     try {
-      const response = await this.apiCall<{ has_reacted: boolean }>(
+      const response = await this.httpClient.get<{ has_reacted: boolean }>(
         `reactions/${messageId}/${emojiName}/check`,
       );
-      return response.has_reacted;
+      return response.data.has_reacted;
     } catch (error) {
-      console.error("Erreur lors de la vérification de la réaction:", error);
+      console.error("Error checking reaction:", error);
       return false;
     }
   }
 
-  // ----- Méthodes pour les GIFs -----
+  // ----- GIF methods -----
 
   async searchGifs(query: string, category?: string): Promise<any[]> {
     try {
@@ -483,9 +424,10 @@ export class ProxyService extends BaseService implements MattermostService {
         endpoint += `&category=${encodeURIComponent(category)}`;
       }
 
-      return this.apiCall(endpoint);
+      const response = await this.httpClient.get<any[]>(endpoint);
+      return response.data;
     } catch (error) {
-      console.error("Erreur lors de la recherche de GIFs:", error);
+      console.error("Error searching GIFs:", error);
       return [];
     }
   }
@@ -501,14 +443,15 @@ export class ProxyService extends BaseService implements MattermostService {
         endpoint += `?limit=${limit}`;
       }
 
-      return this.apiCall(endpoint);
+      const response = await this.httpClient.get<any[]>(endpoint);
+      return response.data;
     } catch (error) {
-      console.error(`Erreur lors de la récupération des GIFs:`, error);
+      console.error(`Error fetching GIFs:`, error);
       return [];
     }
   }
 
-  // ----- Méthodes pour WebSocket -----
+  // ----- WebSocket methods -----
 
   getWebsocketUrl(): string {
     return `${this.baseUrl.replace(/^http/, "ws")}/websocket`;
@@ -516,64 +459,64 @@ export class ProxyService extends BaseService implements MattermostService {
 
   async getWebsocketToken(): Promise<string> {
     try {
-      const response = await this.apiCall<{ token: string }>(
+      const response = await this.httpClient.get<{ token: string }>(
         "websocket/token",
-        {},
-        true,
       );
-      return response.token;
+      return response.data.token;
     } catch (error) {
-      console.error(
-        "Erreur lors de la récupération du token WebSocket:",
-        error,
-      );
+      console.error("Error getting WebSocket token:", error);
       throw error;
     }
   }
 
-  // ----- Méthodes pour les fichiers -----
+  // ----- File methods -----
 
   async uploadFiles(formData: FormData): Promise<any> {
     try {
+      // Special handling for file uploads
+      const headers: Record<string, string> = {
+        "X-Mattermost-Client-ID": this.clientId,
+      };
+
+      if (this.userId) {
+        headers["X-Mattermost-User-ID"] = this.userId;
+      }
+
       const response = await fetch(`${this.baseUrl}/files`, {
         method: "POST",
-        headers: {
-          "X-Mattermost-Client-ID": this.clientId,
-          ...(this.userId ? { "X-Mattermost-User-ID": this.userId } : {}),
-        },
+        headers,
         body: formData,
       });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(
-          error.message ||
-            `Erreur de téléchargement de fichier: ${response.status}`,
+          error.message || `File upload error: ${response.status}`,
         );
       }
 
       return response.json();
     } catch (error) {
-      console.error("Erreur lors du téléchargement de fichiers:", error);
+      console.error("Error uploading files:", error);
       throw error;
     }
   }
 }
 
 /**
- * Crée un service proxy pour communiquer avec Mattermost via un serveur intermédiaire
- * @param config Configuration du service proxy
- * @returns Service Mattermost
+ * Creates a proxy service for communication with Mattermost via an intermediate server
+ * @param config Configuration for the proxy service
+ * @returns Mattermost service
  */
 export function createProxyService(
   config: ProxyServiceConfig,
 ): MattermostService {
-  const { proxyUrl, clientId, userId } = config;
+  const { proxyUrl, clientId, userId, useLocalStorage = false } = config;
 
-  // Validation des paramètres
+  // Validate parameters
   if (!proxyUrl || !clientId) {
-    throw new Error("proxyUrl et clientId sont requis pour le mode proxy");
+    throw new Error("proxyUrl and clientId are required for proxy mode");
   }
 
-  return new ProxyService(proxyUrl, clientId, userId);
+  return new ProxyService(proxyUrl, clientId, userId, useLocalStorage);
 }
