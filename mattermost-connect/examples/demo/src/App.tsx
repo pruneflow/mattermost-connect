@@ -282,9 +282,7 @@ const ExamplesContainer: React.FC<{
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       {/* Example content */}
-      <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
-        <ClassicInterface onLogout={onLogout} />
-      </Box>
+      <ClassicInterface onLogout={onLogout} />
 
       {/* Status footer */}
       <Box

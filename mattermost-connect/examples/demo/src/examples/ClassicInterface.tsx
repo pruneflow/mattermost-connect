@@ -46,16 +46,14 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   // État
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Handler pour la sélection d'un canal
-  const handleChannelSelect = useCallback(() => {
+  const toggleDrawer = () => {
+    setDrawerOpen(!drawerOpen);
+  };
+
+  const handleTeamSelect = () => {
     if (isMobile) {
       setDrawerOpen(false);
     }
-  }, [isMobile]);
-
-  // Basculer le tiroir
-  const toggleDrawer = () => {
-    setDrawerOpen(!drawerOpen);
   };
 
   // Handler pour l'envoi de messages
@@ -63,8 +61,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
     if (!activeChannel) return;
 
     try {
-      // Puisque nous sommes en mode AUTO (par défaut),
-      // l'envoi du message a déjà été géré par le composant MessageComposer
       console.log("Message envoyé avec succès:", message);
     } catch (error) {
       console.error("Error after message sent:", error);
@@ -136,7 +132,11 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
               Équipes
             </Typography>
           </Box>
-          <TeamSelector showIcons variant="list" />
+          <TeamSelector
+            showIcons
+            variant="list"
+            onSelectTeam={handleTeamSelect}
+          />
 
           <Divider sx={{ my: 1 }} />
 
@@ -145,7 +145,6 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
             <Box sx={{ flexGrow: 1, overflow: "auto" }}>
               <ChannelList
                 teamId={activeTeam.id}
-                onSelectChannel={handleChannelSelect}
                 showSearch
                 showPrivateChannels
                 showDirectMessages
