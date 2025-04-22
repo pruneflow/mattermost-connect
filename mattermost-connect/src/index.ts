@@ -30,7 +30,6 @@ export {
   useAuth,
   useFile,
   useRealtime,
-  useMattermostConnect,
 } from "./hooks";
 
 // ---------- Composants UI ----------

@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { WebSocketConnection, WebSocketSetupOptions } from "../types";
 import { setupWebsocket, releaseWebsocket } from "../services";
-import { WebSocketEventType } from "../services/notification/notification.service";
+import { WebSocketEventType } from "../services";
 
 /**
  * Interface for the ConnectionContext
@@ -29,7 +29,7 @@ export interface ConnectionContextType {
   socketState: number;
 
   // Methods for connection management
-  connect: () => Promise<void>;
+  connect: () => Promise<WebSocketConnection | null | undefined>;
   disconnect: () => void;
   reconnect: () => Promise<boolean>;
   sendMessage: (action: string, data?: any) => boolean;
@@ -162,14 +162,16 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       // Configure WebSocket based on mode
       if (mode === "direct") {
         if (!serverUrl || !token) {
-          throw new Error("Direct mode requires serverUrl and token");
+          console.debug("Direct mode requires serverUrl and token");
+          return;
         }
 
         wsUrl = serverUrl.replace(/^http/, "ws") + "/api/v4/websocket";
         wsToken = token;
       } else if (mode === "proxy") {
         if (!proxyUrl || !clientId) {
-          throw new Error("Proxy mode requires proxyUrl and clientId");
+          console.debug("Proxy mode requires proxyUrl and clientId");
+          return;
         }
 
         wsUrl = proxyUrl.replace(/^http/, "ws") + "/websocket";
@@ -186,21 +188,24 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
           });
 
           if (!response.ok) {
-            throw new Error(
-              `Failed to get WebSocket token: ${response.status}`,
-            );
+            console.debug(`Failed to get WebSocket token: ${response.status}`);
+            return;
           }
 
           const data = await response.json();
           wsToken = data.token;
         } catch (tokenError) {
-          throw new Error(
-            `Error getting WebSocket token: ${tokenError.message}`,
-          );
+          if (tokenError instanceof Error) {
+            console.error("Erreur de token:", tokenError.message);
+          } else {
+            console.error("Erreur inconnue lors de la récupération du token");
+          }
+          return;
         }
       } else {
         // Custom mode - placeholder, would need implementation
-        throw new Error("Custom WebSocket mode not implemented");
+        console.debug("Custom WebSocket mode not implemented");
+        return;
       }
 
       // Set up WebSocket options

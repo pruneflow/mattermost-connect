@@ -14,6 +14,3 @@ export { useFile } from "./useFile";
 export type { FileInfo, UploadingFile } from "./useFile";
 export { useRealtime } from "./useRealtime";
 export { useAuthRetry } from "./useAuthRetry";
-
-// Hook principal intégré
-export { useMattermostConnect } from "./useMattermostConnect";

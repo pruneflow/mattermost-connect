@@ -92,17 +92,21 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   currentUserId,
 }) => {
   const {
-    isConnected,
+    user,
+    channel: channelContext,
+    connection,
     services,
-    currentUser,
     setReplyTo,
-    typingUsers,
+    highlightMessageId,
+    setHighlightMessageId,
     activeChannel,
     setActiveChannel,
     markChannelAsRead,
-    highlightMessageId,
-    setHighlightMessageId,
   } = useMattermost();
+
+  const { isConnected } = connection;
+  const { current: currentUser } = user;
+  const { typingUsers } = channelContext;
   const notificationService = services?.notificationService;
   const mattermostService = services?.mattermostService;
   // État

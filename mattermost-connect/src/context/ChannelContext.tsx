@@ -10,7 +10,10 @@ import React, {
   useRef,
 } from "react";
 import { Channel, Message } from "../types";
-import { ServiceContainer } from "../services/factory";
+import {
+  assertServiceInitialized,
+  ServiceContainer,
+} from "../services/factory";
 import { useConnection } from "./ConnectionContext";
 import { useUserContext } from "./UserContext";
 import { useTeamContext } from "./TeamContext";
@@ -388,12 +391,19 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
    */
   const editMessage = useCallback(
     async (messageId: string, newMessage: string): Promise<Message | null> => {
-      if (!messageId || !newMessage.trim() || !services?.mattermostService) {
+      if (
+        !messageId ||
+        !newMessage.trim() ||
+        !services ||
+        !services?.mattermostService
+      ) {
         return null;
       }
+      assertServiceInitialized(services.mattermostService, "mattermostService");
 
       try {
-        const updatedMessage = await services?.mattermostService?.editMessage(
+        // @ts-ignore
+        const updatedMessage = await services!.mattermostService!.editMessage(
           messageId,
           newMessage,
         );
@@ -421,13 +431,15 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
    */
   const deleteMessage = useCallback(
     async (messageId: string): Promise<boolean> => {
-      if (!messageId || !services?.mattermostService) {
+      if (!messageId || !services || !services?.mattermostService) {
         return false;
       }
 
+      assertServiceInitialized(services.mattermostService, "mattermostService");
+
       try {
         const result =
-          await services?.mattermostService?.deleteMessage(messageId);
+          await services!.mattermostService!.deleteMessage(messageId);
 
         if (result.success) {
           // Remove message from state
@@ -466,7 +478,7 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
       }
 
       try {
-        const reply = await services?.mattermostService?.replyToMessage(
+        const reply = await services.mattermostService.replyToMessage(
           activeChannelRef.current.id,
           messageId,
           message,
