@@ -2,7 +2,7 @@
 import { User, Channel, UserStatus } from "../../types";
 import { MattermostService } from "../base";
 import { formatUserDisplayName } from "../../utils";
-import { ErrorHandlerInterface } from "../error/error-handler";
+import { ErrorHandlerInterface } from "../error";
 
 /**
  * Interface pour le service utilisateur
@@ -30,8 +30,8 @@ export interface UserServiceInterface {
 
   /**
    * Récupère plusieurs utilisateurs à la fois
-   * @param userIds Liste des IDs d'utilisateurs à récupérer
    * @returns Liste des utilisateurs trouvés
+   * @param options
    */
   getUsers(options?: any): Promise<User[]>;
 
@@ -52,7 +52,6 @@ export interface UserServiceInterface {
   /**
    * Charge les utilisateurs impliqués dans des canaux de messages directs
    * @param channels Liste des canaux à analyser
-   * @param force Forcer le rechargement même si déjà en cours
    */
   loadUsersForDirectChannels(channels: Channel[]): Promise<void>;
 
@@ -164,9 +163,80 @@ export class UserService implements UserServiceInterface {
   }
 
   /**
+   * Fait un appel API direct pour récupérer des utilisateurs
+   * Évite la récursion en appelant directement le client HTTP
+   * @private
+   * @param options Options de requête
+   * @returns Liste des utilisateurs récupérés
+   */
+  private async fetchUsers(options: any = {}): Promise<User[]> {
+    if (!this.service || !("httpClient" in this.service)) {
+      throw new Error(
+        "Impossible d'accéder au client HTTP sous-jacent du service Mattermost",
+      );
+    }
+
+    const httpClient = (this.service as any).httpClient;
+
+    // Construire l'URL de base pour la requête
+    let endpoint = "users";
+    const queryParams: string[] = [];
+
+    // Ajouter les paramètres de requête selon les options
+    if (options.ids && Array.isArray(options.ids) && options.ids.length > 0) {
+      // Pour les IDs, Mattermost s'attend généralement à un paramètre "id" multiple
+      options.ids.forEach((id: string) => {
+        queryParams.push(`id=${encodeURIComponent(id)}`);
+      });
+    }
+
+    if (options.inChannel) {
+      queryParams.push(`in_channel=${encodeURIComponent(options.inChannel)}`);
+    }
+
+    if (options.inTeam) {
+      queryParams.push(`in_team=${encodeURIComponent(options.inTeam)}`);
+    }
+
+    if (options.page !== undefined) {
+      queryParams.push(`page=${options.page}`);
+    }
+
+    if (options.perPage !== undefined) {
+      queryParams.push(`per_page=${options.perPage}`);
+    }
+
+    // Construire l'URL complète avec les paramètres
+    if (queryParams.length > 0) {
+      endpoint += `?${queryParams.join("&")}`;
+    }
+
+    try {
+      // Faire l'appel API directement avec le client HTTP
+      // Utiliser l'appel sans générique puis faire une assertion de type sur le résultat
+      const response = await httpClient.get(endpoint);
+
+      // Utiliser une assertion de type pour le résultat
+      return (response.data || []) as User[];
+    } catch (error) {
+      const typedError = this.errorHandler
+        ? this.errorHandler.handleHttpError(error)
+        : error instanceof Error
+          ? error
+          : new Error(String(error));
+
+      console.error(
+        "Erreur lors de l'appel API de récupération des utilisateurs:",
+        typedError,
+      );
+      throw typedError;
+    }
+  }
+
+  /**
    * Récupère plusieurs utilisateurs à la fois
+   * @param options Options de filtrage et pagination
    * @returns Liste des utilisateurs trouvés
-   * @param options
    */
   async getUsers(options: any = {}): Promise<User[]> {
     try {
@@ -204,8 +274,8 @@ export class UserService implements UserServiceInterface {
         apiOptions.ids = idsToFetch;
       }
 
-      // Charger les utilisateurs manquants
-      const users = await this.service.getUsers(apiOptions);
+      // Utiliser fetchUsers au lieu de this.service.getUsers pour éviter la récursion
+      const users = await this.fetchUsers(apiOptions);
 
       // Ajouter les nouveaux utilisateurs au cache
       users.forEach((user) => {

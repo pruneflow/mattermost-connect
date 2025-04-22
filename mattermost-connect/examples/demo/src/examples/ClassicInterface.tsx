@@ -1,7 +1,6 @@
 // examples/demo/src/examples/ClassicInterface.tsx
 import React, { useState, useCallback } from "react";
 import {
-  useMattermost,
   ChannelList,
   ChannelViewer,
   MessageComposer,
@@ -10,6 +9,11 @@ import {
   formatUserDisplayName,
   Notification,
   TeamChannelNavigator,
+  useChannelContext,
+  useConnection,
+  useMessageContext,
+  useTeamContext,
+  useUserContext,
 } from "mattermost-connect";
 
 // Material-UI Components
@@ -24,7 +28,6 @@ import {
   useTheme,
   useMediaQuery,
   Button,
-  Divider,
   Paper,
 } from "@mui/material";
 
@@ -41,8 +44,11 @@ import { Logout as LogoutIcon, Menu as MenuIcon } from "@mui/icons-material";
 const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const { error, navigateToMessage, activeChannel, currentUser, activeTeam } =
-    useMattermost();
+  const { error } = useConnection();
+  const { activeTeam } = useTeamContext();
+  const { activeChannel } = useChannelContext();
+  const { navigateToMessage } = useMessageContext();
+  const { currentUser } = useUserContext();
 
   // État
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -67,12 +73,11 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   };
 
   // Handler pour la navigation depuis les notifications
-  const handleNavigateToChannel = useCallback(
-    (notification: Notification) => {
-      navigateToMessage(notification);
-    },
-    [navigateToMessage],
-  );
+  const handleNavigateToChannel = (notification: Notification) => {
+    if (notification.channelId) {
+      navigateToMessage(notification.channelId, notification.messageId);
+    }
+  };
 
   // Afficher les erreurs si présentes
   if (error) {

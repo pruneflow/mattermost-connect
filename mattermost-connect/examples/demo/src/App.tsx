@@ -51,7 +51,7 @@ const LoginForm: React.FC<{
   onLogin: (credentials: LoginCredentials) => void;
 }> = ({ onLogin }) => {
   const [mode, setMode] = useState(MODES.MOCK); // Définir MOCK comme mode par défaut
-  const [serverUrl, setServerUrl] = useState("");
+  const [serverUrl, setServerUrl] = useState("http://localhost:8065");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");

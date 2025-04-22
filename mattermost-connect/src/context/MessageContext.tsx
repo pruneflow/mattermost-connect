@@ -14,13 +14,50 @@ import { useUserContext } from "./UserContext";
 import { useChannelContext } from "./ChannelContext";
 
 /**
- * Interface for the MessageContext
- * Provides message-specific functionality separate from channel operations
+ * Options pour la pagination des messages
+ */
+export interface GetMessagesOptions {
+  /** Nombre de messages par page */
+  perPage?: number;
+  /** Numéro de page */
+  page?: number;
+  /** Récupérer les messages depuis ce timestamp */
+  since?: number;
+  /** Récupérer les messages avant cet ID de message */
+  before?: string;
+  /** Récupérer les messages après cet ID de message */
+  after?: string;
+}
+
+/**
+ * Interface pour le MessageContext
+ * Fournit les fonctionnalités liées aux messages
  */
 export interface MessageContextType {
-  // Reply state (moved from ChannelContext)
+  // État des messages
+  messages: Message[];
+  isMessagesLoading: boolean;
+  messagesError: Error | null;
+  highlightMessageId?: string;
+
+  // État de réponse
   replyTo: Message | null;
   isReplying: boolean;
+
+  // Méthodes pour les messages
+  loadMessages: (
+    channelId?: string,
+    options?: GetMessagesOptions,
+  ) => Promise<Message[]>;
+  sendMessage: (message: string, fileIds?: string[]) => Promise<Message | null>;
+  editMessage: (
+    messageId: string,
+    newMessage: string,
+  ) => Promise<Message | null>;
+  deleteMessage: (messageId: string) => Promise<boolean>;
+  setHighlightMessageId: (messageId?: string) => void;
+
+  // Méthodes pour les réponses
   setReplyTo: (message: Message | null) => void;
   clearReply: () => void;
   replyToMessage: (
@@ -28,40 +65,34 @@ export interface MessageContextType {
     message: string,
     fileIds?: string[],
   ) => Promise<Message | null>;
-  sendMessage: (message: string, fileIds?: string[]) => Promise<Message | null>;
-  editMessage: (
-    messageId: string,
-    newMessage: string,
-  ) => Promise<Message | null>;
-  deleteMessage: (messageId: string) => Promise<boolean>;
 
-  // Message reactions
+  // Méthodes pour les réactions
   addReaction: (messageId: string, emoji: string) => Promise<boolean>;
   removeReaction: (messageId: string, emoji: string) => Promise<boolean>;
   hasReacted: (messageId: string, emoji: string) => Promise<boolean>;
 
-  // Message threads
+  // Méthodes pour les threads
   getThreadReplies: (rootMessageId: string) => Promise<Message[]>;
   isThreadLoading: Record<string, boolean>;
   threadMessages: Record<string, Message[]>;
   expandThread: (messageId: string) => Promise<Message[]>;
 
-  // Emoji and GIF functionality
+  // Méthodes pour les emojis et GIFs
   frequentEmojis: string[];
   searchGifs: (query: string) => Promise<any[]>;
   getGifs: (category: string) => Promise<any[]>;
 
-  // Message utility functions
+  // Méthodes utilitaires
   formatMessageText: (text: string) => string;
   enrichMessageWithMetadata: (message: Message) => Promise<Message>;
+  navigateToMessage: (channelId: string, messageId?: string) => Promise<void>;
 }
 
-// Create the context with a default value of null
+// Création du contexte avec une valeur par défaut null
 export const MessageContext = createContext<MessageContextType | null>(null);
 
 /**
- * Custom hook to access the MessageContext
- * Throws an error if used outside of a MessageProvider
+ * Hook personnalisé pour accéder au MessageContext
  */
 export function useMessageContext(): MessageContextType {
   const context = useContext(MessageContext);
@@ -72,7 +103,7 @@ export function useMessageContext(): MessageContextType {
 }
 
 /**
- * Props for MessageProvider component
+ * Props pour le MessageProvider
  */
 export interface MessageProviderProps {
   children: ReactNode;
@@ -80,23 +111,30 @@ export interface MessageProviderProps {
 }
 
 /**
- * Provider component for message-specific functionality
- * Handles reactions, threads, and message formatting
+ * Provider pour la gestion des messages
  */
 export const MessageProvider: React.FC<MessageProviderProps> = ({
   children,
   services,
 }) => {
-  // Get dependency contexts
+  // Récupération des contextes dépendants
   const { currentUser } = useUserContext();
-  const { activeChannel } = useChannelContext();
+  const { activeChannel, navigateToChannel } = useChannelContext();
 
   const activeChannelId = activeChannel?.id || null;
 
-  // Reply state (moved from ChannelContext)
+  // État des messages
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isMessagesLoading, setIsMessagesLoading] = useState<boolean>(false);
+  const [messagesError, setMessagesError] = useState<Error | null>(null);
+  const [highlightMessageId, setHighlightMessageIdState] = useState<
+    string | undefined
+  >(undefined);
+
+  // État de réponse
   const [replyTo, setReplyToState] = useState<Message | null>(null);
 
-  // Thread state
+  // État des threads
   const [threadMessages, setThreadMessages] = useState<
     Record<string, Message[]>
   >({});
@@ -104,7 +142,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
     Record<string, boolean>
   >({});
 
-  // Emoji state
+  // État des emojis
   const [frequentEmojis, setFrequentEmojis] = useState<string[]>([
     "👍",
     "❤️",
@@ -113,27 +151,129 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
     "🔥",
     "👏",
     "✅",
-    "🙏", // Default emojis
+    "🙏", // Emojis par défaut
   ]);
 
-  // Refs for tracking state
+  // Références pour suivi d'état
+  const messagesRef = useRef<Message[]>([]);
   const threadMessagesRef = useRef<Record<string, Message[]>>({});
+  const isLoadingRef = useRef<boolean>(false);
 
   /**
-   * Set reply target message
+   * Charge les messages pour un canal
+   */
+  const loadMessages = useCallback(
+    async (
+      channelId?: string,
+      options: GetMessagesOptions = {},
+    ): Promise<Message[]> => {
+      const targetChannelId = channelId || activeChannelId;
+
+      if (
+        !targetChannelId ||
+        !services?.mattermostService ||
+        isLoadingRef.current
+      ) {
+        return [];
+      }
+
+      setIsMessagesLoading(true);
+      setMessagesError(null);
+      isLoadingRef.current = true;
+
+      try {
+        const response = await services.mattermostService.getChannelMessages(
+          targetChannelId,
+          options,
+        );
+
+        // Convertir posts object en tableau
+        const messageArray = response.order
+          .map((postId) => response.posts[postId])
+          .filter(Boolean);
+
+        // Trier les messages
+        const sortedMessages = messageArray.sort(
+          (a, b) => a.create_at - b.create_at,
+        );
+
+        // Mise à jour état et références
+        setMessages(sortedMessages);
+        messagesRef.current = sortedMessages;
+
+        return sortedMessages;
+      } catch (error) {
+        console.error(
+          `Error loading messages for channel ${targetChannelId}:`,
+          error,
+        );
+        const typedError =
+          error instanceof Error ? error : new Error(String(error));
+        setMessagesError(typedError);
+        return [];
+      } finally {
+        setIsMessagesLoading(false);
+        isLoadingRef.current = false;
+      }
+    },
+    [services, activeChannelId],
+  );
+
+  /**
+   * Définit l'ID du message à mettre en évidence
+   */
+  const setHighlightMessageId = useCallback((messageId?: string) => {
+    setHighlightMessageIdState(messageId);
+  }, []);
+
+  /**
+   * Définit le message cible pour une réponse
    */
   const setReplyTo = useCallback((message: Message | null) => {
     setReplyToState(message);
   }, []);
 
   /**
-   * Clear the reply state
+   * Efface l'état de réponse
    */
   const clearReply = useCallback(() => {
     setReplyToState(null);
   }, []);
 
-  // Implémentation dans le provider
+  /**
+   * Envoyer un message au canal actif
+   */
+  const sendMessage = useCallback(
+    async (message: string, fileIds?: string[]): Promise<Message | null> => {
+      if (
+        !activeChannelId ||
+        (!message.trim() && (!fileIds || fileIds.length === 0)) ||
+        !services?.mattermostService
+      ) {
+        return null;
+      }
+
+      try {
+        const newMessage = await services.mattermostService.postMessage(
+          activeChannelId,
+          message,
+          fileIds,
+        );
+
+        // Recharger les messages pour mettre à jour la liste
+        void loadMessages(activeChannelId);
+        return newMessage;
+      } catch (error) {
+        console.error("Error sending message:", error);
+        return null;
+      }
+    },
+    [services, activeChannelId, loadMessages],
+  );
+
+  /**
+   * Répondre à un message
+   */
   const replyToMessage = useCallback(
     async (
       messageId: string,
@@ -150,7 +290,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
       }
 
       try {
-        const reply = await services!.mattermostService!.replyToMessage(
+        const reply = await services.mattermostService.replyToMessage(
           activeChannelId,
           messageId,
           message,
@@ -160,44 +300,25 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         // Effacer l'état de réponse
         clearReply();
 
+        // Mettre à jour les threads si nécessaire
+        if (threadMessages[messageId]) {
+          setThreadMessages((prev) => ({
+            ...prev,
+            [messageId]: [...(prev[messageId] || []), reply],
+          }));
+        }
+
         return reply;
       } catch (error) {
         console.error(`Error replying to message ${messageId}:`, error);
         return null;
       }
     },
-    [services, clearReply, activeChannelId],
-  );
-
-  const sendMessage = useCallback(
-    async (message: string, fileIds?: string[]): Promise<Message | null> => {
-      if (
-        !activeChannelId ||
-        (!message.trim() && (!fileIds || fileIds.length === 0)) ||
-        !services?.mattermostService?.postMessage
-      ) {
-        return null;
-      }
-
-      try {
-        return await services.mattermostService.postMessage(
-          activeChannelId,
-          message,
-          fileIds,
-        );
-      } catch (error) {
-        console.error("Error sending message:", error);
-        return null;
-      }
-    },
-    [services, activeChannelId],
+    [services, activeChannelId, clearReply, threadMessages],
   );
 
   /**
-   * Édite un message existant
-   * @param messageId ID du message à éditer
-   * @param newMessage Nouveau contenu du message
-   * @returns Le message modifié ou null en cas d'erreur
+   * Modifie un message existant
    */
   const editMessage = useCallback(
     async (messageId: string, newMessage: string): Promise<Message | null> => {
@@ -215,27 +336,28 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
           "mattermostService",
         );
 
-        const updatedMessage = await services!.mattermostService!.editMessage(
+        const updatedMessage = await services.mattermostService.editMessage(
           messageId,
           newMessage,
         );
 
-        // Vérifier si le message a été édité et s'il fait partie d'un thread
-        if (updatedMessage && updatedMessage.root_id) {
-          // Vérifier si nous avons des messages pour ce thread
+        // Mettre à jour les messages locaux
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === messageId ? updatedMessage : msg)),
+        );
+
+        // Mettre à jour le thread si nécessaire
+        if (updatedMessage.root_id) {
           const rootId = updatedMessage.root_id;
           if (threadMessages[rootId]) {
             setThreadMessages((prev) => {
-              // Créer une copie du tableau de messages du thread
               const threadMsgs = [...prev[rootId]];
-              // Trouver et remplacer le message modifié
               const msgIndex = threadMsgs.findIndex(
                 (msg) => msg.id === messageId,
               );
               if (msgIndex !== -1) {
                 threadMsgs[msgIndex] = updatedMessage;
               }
-
               return {
                 ...prev,
                 [rootId]: threadMsgs,
@@ -250,13 +372,11 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return null;
       }
     },
-    [services, threadMessages, setThreadMessages],
+    [services, threadMessages],
   );
 
   /**
    * Supprime un message
-   * @param messageId ID du message à supprimer
-   * @returns true si la suppression a réussi, false sinon
    */
   const deleteMessage = useCallback(
     async (messageId: string): Promise<boolean> => {
@@ -271,11 +391,14 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         );
 
         const result =
-          await services!.mattermostService!.deleteMessage(messageId);
+          await services.mattermostService.deleteMessage(messageId);
 
         // Si la suppression est réussie, mettre à jour les références locales
         if (result.success) {
-          // Parcourir tous les threads pour trouver et supprimer le message
+          // Mettre à jour les messages du canal
+          setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+
+          // Mettre à jour les threads
           Object.keys(threadMessages).forEach((rootId) => {
             const threadMsgs = threadMessages[rootId];
             const msgIndex = threadMsgs.findIndex(
@@ -286,7 +409,6 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
               setThreadMessages((prev) => {
                 const newThreadMsgs = [...prev[rootId]];
                 newThreadMsgs.splice(msgIndex, 1);
-
                 return {
                   ...prev,
                   [rootId]: newThreadMsgs,
@@ -295,7 +417,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
             }
           });
 
-          // Si c'était un message auquel on voulait répondre, annuler la réponse
+          // Annuler la réponse si nécessaire
           if (replyTo?.id === messageId) {
             clearReply();
           }
@@ -307,14 +429,11 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services, threadMessages, setThreadMessages, replyTo, clearReply],
+    [services, threadMessages, replyTo, clearReply],
   );
 
-  // Derive isReplying from replyTo
-  const isReplying = useMemo(() => replyTo !== null, [replyTo]);
-
   /**
-   * Add a reaction to a message
+   * Ajoute une réaction à un message
    */
   const addReaction = useCallback(
     async (messageId: string, emoji: string): Promise<boolean> => {
@@ -337,7 +456,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   );
 
   /**
-   * Remove a reaction from a message
+   * Supprime une réaction d'un message
    */
   const removeReaction = useCallback(
     async (messageId: string, emoji: string): Promise<boolean> => {
@@ -370,7 +489,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   );
 
   /**
-   * Check if the current user has reacted with a specific emoji
+   * Vérifie si l'utilisateur actuel a réagi avec un emoji spécifique
    */
   const hasReacted = useCallback(
     async (messageId: string, emoji: string): Promise<boolean> => {
@@ -402,43 +521,42 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   );
 
   /**
-   * Get replies to a message thread
+   * Récupère les réponses dans un thread
    */
   const getThreadReplies = useCallback(
     async (rootMessageId: string): Promise<Message[]> => {
-      if (!rootMessageId || !services?.mattermostService) {
+      if (!rootMessageId || !services?.mattermostService || !activeChannelId) {
         return [];
       }
 
-      // Return cached thread messages if available
+      // Retourner les messages du thread en cache si disponibles
       if (threadMessagesRef.current[rootMessageId]) {
         return threadMessagesRef.current[rootMessageId];
       }
 
-      // Mark as loading
+      // Marquer comme en cours de chargement
       setIsThreadLoading((prev) => ({
         ...prev,
         [rootMessageId]: true,
       }));
 
       try {
-        // For now, we'll stub this with an empty array
-        // In a real implementation, you would call a specific API method to get thread replies
-        // Example: const response = await services.mattermostService.getPostThread(rootMessageId);
+        // Rechercher les messages du thread dans les messages actuels
+        const threadResponses = messages.filter(
+          (msg) => msg.root_id === rootMessageId,
+        );
 
-        const messages: Message[] = [];
-
-        // Update state and refs
+        // Mise à jour état et références
         setThreadMessages((prev) => {
           const updated = {
             ...prev,
-            [rootMessageId]: messages,
+            [rootMessageId]: threadResponses,
           };
           threadMessagesRef.current = updated;
           return updated;
         });
 
-        return messages;
+        return threadResponses;
       } catch (error) {
         console.error(
           `Error loading thread replies for message ${rootMessageId}:`,
@@ -452,11 +570,11 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         }));
       }
     },
-    [services],
+    [services, activeChannelId, messages],
   );
 
   /**
-   * Expand a thread to view replies
+   * Développe un thread pour voir les réponses
    */
   const expandThread = useCallback(
     async (messageId: string): Promise<Message[]> => {
@@ -466,7 +584,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   );
 
   /**
-   * Search for GIFs with a query
+   * Recherche des GIFs
    */
   const searchGifs = useCallback(
     async (query: string): Promise<any[]> => {
@@ -488,7 +606,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   );
 
   /**
-   * Get GIFs by category
+   * Récupère des GIFs par catégorie
    */
   const getGifs = useCallback(
     async (category: string): Promise<any[]> => {
@@ -510,19 +628,16 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   );
 
   /**
-   * Format message text with Markdown and mentions
-   * This is a simplified version - a real implementation would use a proper parser
+   * Formate le texte des messages
    */
   const formatMessageText = useCallback((text: string): string => {
     if (!text) return "";
-
-    // In a real implementation, you would use the formatMessageText utility
-    // But for this example, we'll return the text as is
+    // Utiliser un utilitaire de formatage approprié
     return text;
   }, []);
 
   /**
-   * Enrich a message with additional metadata like reactions and attachments
+   * Enrichit un message avec des métadonnées supplémentaires
    */
   const enrichMessageWithMetadata = useCallback(
     async (message: Message): Promise<Message> => {
@@ -530,23 +645,22 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return message;
       }
 
-      // Clone the message to avoid mutation
+      // Cloner le message pour éviter la mutation
       const enrichedMessage = { ...message };
 
-      // If the message has file attachments, add preview URLs
+      // Traiter les pièces jointes si présentes
       if (enrichedMessage.file_ids?.length) {
         const metadata = enrichedMessage.metadata || { files: [] };
 
-        // Get file information for each attachment
         for (const fileId of enrichedMessage.file_ids) {
           try {
-            // Check if this file is already in metadata
+            // Vérifier si ce fichier est déjà dans les métadonnées
             if (metadata.files?.some((file) => file.id === fileId)) {
               continue;
             }
 
-            // For image files, get a preview URL
-            const isImage = true; // Simplified check
+            // Pour les fichiers image, obtenir une URL de prévisualisation
+            const isImage = true; // Vérification simplifiée
             if (isImage) {
               const previewUrl =
                 await services.fileService.fetchThumbnail(fileId);
@@ -572,7 +686,45 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
     [services],
   );
 
-  // Load frequent emojis on initialization
+  /**
+   * Naviguer vers un message spécifique
+   */
+  const navigateToMessage = useCallback(
+    async (channelId: string, messageId?: string): Promise<void> => {
+      if (!channelId || !services) return;
+
+      try {
+        // D'abord naviguer vers le canal
+        await navigateToChannel(channelId);
+
+        // Charger les messages du canal
+        await loadMessages(channelId);
+
+        // Si messageId fourni, le mettre en évidence
+        if (messageId) {
+          setHighlightMessageId(messageId);
+        }
+      } catch (error) {
+        console.error(
+          `Error navigating to message ${messageId} in channel ${channelId}:`,
+          error,
+        );
+      }
+    },
+    [services, navigateToChannel, loadMessages, setHighlightMessageId],
+  );
+
+  // Déduire isReplying de replyTo
+  const isReplying = useMemo(() => replyTo !== null, [replyTo]);
+
+  // Charger les messages quand le canal actif change
+  React.useEffect(() => {
+    if (activeChannelId && !isMessagesLoading) {
+      void loadMessages(activeChannelId);
+    }
+  }, [activeChannelId, isMessagesLoading, loadMessages]);
+
+  // Charger les emojis fréquents
   React.useEffect(() => {
     if (!services?.mattermostService) return;
 
@@ -588,54 +740,78 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         }
       } catch (error) {
         console.error("Error loading frequent emojis:", error);
-        // Keep default emojis on error
       }
     };
 
     void loadFrequentEmojis();
   }, [services]);
 
-  // Memoize context value to prevent unnecessary re-renders
+  // Mettre à jour la référence des messages
+  React.useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Valeur du contexte
   const contextValue = useMemo<MessageContextType>(
     () => ({
-      // Reply state (moved from ChannelContext)
+      // État des messages
+      messages,
+      isMessagesLoading,
+      messagesError,
+      highlightMessageId,
+
+      // État de réponse
       replyTo,
       isReplying,
-      setReplyTo,
-      clearReply,
-      replyToMessage,
+
+      // Méthodes des messages
+      loadMessages,
       sendMessage,
       editMessage,
       deleteMessage,
+      setHighlightMessageId,
 
-      // Reaction methods
-      addReaction,
-      removeReaction,
-      hasReacted,
-
-      // Thread methods
-      getThreadReplies,
-      isThreadLoading,
-      threadMessages,
-      expandThread,
-
-      // Emoji and GIF methods
-      frequentEmojis,
-      searchGifs,
-      getGifs,
-
-      // Utility methods
-      formatMessageText,
-      enrichMessageWithMetadata,
-    }),
-    [
-      // Reply state dependencies
-      replyTo,
-      isReplying,
+      // Méthodes de réponse
       setReplyTo,
       clearReply,
+      replyToMessage,
 
-      // Other dependencies
+      // Méthodes de réaction
+      addReaction,
+      removeReaction,
+      hasReacted,
+
+      // Méthodes de thread
+      getThreadReplies,
+      isThreadLoading,
+      threadMessages,
+      expandThread,
+
+      // Méthodes emoji et GIF
+      frequentEmojis,
+      searchGifs,
+      getGifs,
+
+      // Méthodes utilitaires
+      formatMessageText,
+      enrichMessageWithMetadata,
+      navigateToMessage,
+    }),
+    [
+      messages,
+      isMessagesLoading,
+      messagesError,
+      highlightMessageId,
+      replyTo,
+      isReplying,
+      loadMessages,
+      sendMessage,
+      editMessage,
+      deleteMessage,
+      setHighlightMessageId,
+      setReplyTo,
+      clearReply,
+      replyToMessage,
       addReaction,
       removeReaction,
       hasReacted,
@@ -648,6 +824,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
       getGifs,
       formatMessageText,
       enrichMessageWithMetadata,
+      navigateToMessage,
     ],
   );
 

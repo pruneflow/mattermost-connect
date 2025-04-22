@@ -12,6 +12,7 @@ import {
   useChannelContext,
   useUserContext,
   useConnection,
+  useMessageContext,
 } from "../../../context";
 import { Channel, Message as MessageType, User } from "../../../types";
 
@@ -101,17 +102,16 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   const { services } = useMattermost();
   const { isConnected } = useConnection();
   const { currentUser } = useUserContext();
+  const { markAsRead: markChannelAsRead, typingIndicator } =
+    useChannelContext();
+
   const {
-    activeChannel,
-    setActiveChannel,
+    setReplyTo,
     messages,
     loadMessages,
-    setReplyTo,
     highlightMessageId,
     setHighlightMessageId,
-    markAsRead: markChannelAsRead,
-    typingIndicator,
-  } = useChannelContext();
+  } = useMessageContext();
 
   const notificationService = services?.notificationService;
   const mattermostService = services?.mattermostService;
@@ -169,7 +169,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     // Considérer qu'on est au bas s'il reste moins de 50px à scroller
     return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
-
+  /*
   // Charger les informations du canal
   useEffect(() => {
     if (!isConnected || !channelId) return;
@@ -219,7 +219,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     void fetchChannel();
 
     // Retirer channel de la liste des dépendances pour briser la boucle
-  }, [isConnected, channelId, services, setActiveChannel, activeChannel]);
+  }, [isConnected, channelId, services, setActiveChannel, activeChannel]);*/
 
   // Charger les messages de façon optimisée
   useEffect(() => {

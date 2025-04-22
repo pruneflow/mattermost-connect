@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { WebSocketConnection, WebSocketSetupOptions } from "../types";
 import { setupWebsocket, releaseWebsocket } from "../services";
-import { WebSocketEventType } from "../services/notification/notification.service";
+import { WebSocketEventType } from "../services";
 
 /**
  * Interface for the ConnectionContext
@@ -292,7 +292,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
       // Create WebSocket connection
       const wsConnection = await setupWebsocket(wsOptions);
-
+      console.debug("webSocket", websocket);
       // Update state and refs
       setWebsocket(wsConnection);
       websocketRef.current = wsConnection;
@@ -459,13 +459,6 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     if (enableWebsocket && mode && !isConnected && !isConnecting) {
       void connect();
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (websocketRef.current) {
-        disconnect();
-      }
-    };
   }, [enableWebsocket, mode, isConnected, isConnecting, connect, disconnect]);
 
   // Memoize context value to prevent unnecessary re-renders

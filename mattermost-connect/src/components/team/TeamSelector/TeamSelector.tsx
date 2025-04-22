@@ -1,13 +1,6 @@
 // src/components/team/TeamSelector/TeamSelector.tsx
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useMattermost, useTeamContext } from "../../../context";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTeamContext } from "../../../context";
 import { Team } from "../../../types";
 
 // Material-UI Components
@@ -25,8 +18,6 @@ import TeamList from "./variants/TeamList";
 import TeamGrid from "./variants/TeamGrid";
 import TeamTabs from "./variants/TeamTabs";
 import TeamSidebar from "./variants/TeamSidebar";
-
-import { assertServiceInitialized } from "../../../services";
 
 /**
  * Type for the display variant of the TeamSelector
@@ -101,36 +92,65 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   selectedTeamSx,
   selectedTeamId,
 }) => {
-  const { services } = useMattermost();
-  const { setActiveTeam, activeTeam } = useTeamContext();
-  console.log(
-    `[TeamSelector] activeTeam=${activeTeam?.display_name || "null"}`,
-  );
+  // Utilisation directe du contexte d'équipe
+  const {
+    teams,
+    activeTeam,
+    isTeamsLoading,
+    teamsError,
+    loadTeams,
+    setActiveTeam,
+    unreadCounts,
+  } = useTeamContext();
 
-  assertServiceInitialized(services, "TeamSelector requires services");
-  assertServiceInitialized(
-    services.mattermostService,
-    "TeamSelector requires MattermostService",
-  );
-  assertServiceInitialized(
-    services.notificationService,
-    "TeamSelector requires NotificationService",
-  );
+  // État local pour suivre si les équipes ont été chargées
+  const [initialized, setInitialized] = useState(false);
 
-  const mattermostService = services.mattermostService;
-  const notificationService = services.notificationService;
+  // Triez les équipes si nécessaire
+  const sortedTeams = useMemo(() => {
+    if (!teams || teams.length === 0) return [];
 
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [teamUnreadCounts, setTeamUnreadCounts] = useState<
-    Record<string, { msg_count: number; mention_count: number }>
-  >({});
+    // Utiliser l'ordre du serveur ou trier par nom
+    if (useServerOrder) {
+      return [...teams];
+    } else {
+      return [...teams].sort((a, b) =>
+        a.display_name.localeCompare(b.display_name),
+      );
+    }
+  }, [teams, useServerOrder]);
 
-  // 1. Mémoriser la fonction de sélection d'équipe avec useCallback
+  // Chargement initial des équipes
+  useEffect(() => {
+    if (!initialized && (!teams || teams.length === 0)) {
+      void loadTeams().then(() => {
+        setInitialized(true);
+      });
+    } else if (teams.length > 0 && !initialized) {
+      setInitialized(true);
+    }
+  }, [teams, loadTeams, initialized]);
+
+  // Définir l'équipe initiale si nécessaire
+  useEffect(() => {
+    if (initialized && sortedTeams.length > 0) {
+      // Si selectedTeamId est fourni, l'utiliser pour sélectionner l'équipe
+      if (selectedTeamId && (!activeTeam || activeTeam.id !== selectedTeamId)) {
+        const team = sortedTeams.find((t) => t.id === selectedTeamId);
+        if (team) {
+          setActiveTeam(team);
+        }
+      }
+      // Si aucune équipe active n'est définie, définir la première équipe
+      else if (!activeTeam) {
+        setActiveTeam(sortedTeams[0]);
+      }
+    }
+  }, [sortedTeams, activeTeam, selectedTeamId, setActiveTeam, initialized]);
+
+  // Gérer la sélection d'équipe
   const handleTeamSelect = useCallback(
     (team: Team) => {
-      // Enlever la vérification d'isMounted ici
       setActiveTeam(team);
       if (onSelectTeam) {
         onSelectTeam(team);
@@ -139,159 +159,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     [onSelectTeam, setActiveTeam],
   );
 
-  // 2. Effet pour charger les équipes une seule fois
-  useEffect(() => {
-    // Fonction pour charger les équipes avec une gestion robuste du montage
-    const fetchTeams = async () => {
-      setLoading(true);
-
-      try {
-        const teamsData = await mattermostService.getTeams();
-
-        if (teamsData && teamsData.length > 0) {
-          // Sort teams if needed
-          let sortedTeams = [...teamsData];
-          if (!useServerOrder) {
-            sortedTeams.sort((a, b) =>
-              a.display_name.localeCompare(b.display_name),
-            );
-          }
-
-          setTeams(sortedTeams);
-
-          // Seulement définir une équipe active s'il n'y en a pas déjà une
-          if (!activeTeam && !selectedTeamId) {
-            setActiveTeam(sortedTeams[0]);
-          } else if (selectedTeamId) {
-            // Si selectedTeamId est fourni, l'utiliser pour sélectionner l'équipe
-            const selectedTeam = sortedTeams.find(
-              (t) => t.id === selectedTeamId,
-            );
-            if (selectedTeam) {
-              setActiveTeam(selectedTeam);
-            }
-          }
-
-          setError(null);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load teams");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void fetchTeams();
-  }, []);
-
-  // 3. Effet pour réinitialiser le flag de montage si le composant est réellement monté
-  // Ceci est crucial car si le composant est re-rendu mais pas démonté, nous devons réinitialiser le flag
-  useEffect(() => {
-    console.log(
-      `[TeamSelector] Component mounted/remounted, resetting isMountedRef`,
-    );
-    isMountedRef.current = true;
-
-    return () => {
-      console.log(
-        `[TeamSelector] Component unmounted, setting isMountedRef=false`,
-      );
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  // 3. Fonction optimisée pour récupérer les non-lus pour toutes les équipes
-  const fetchTeamUnreadCounts = useCallback(async () => {
-    if (teams.length === 0 || !isMountedRef.current) return;
-
-    // Éviter les appels redondants si déjà en cours
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-
-    try {
-      const unreadCounts: Record<
-        string,
-        { msg_count: number; mention_count: number }
-      > = {};
-
-      // Pour chaque équipe, récupérer l'état des non-lus
-      for (const team of teams) {
-        // Vérifier à nouveau si le composant est monté après chaque itération
-        if (!isMountedRef.current) return;
-
-        // Vérifie si la méthode getTeamUnreadCount existe dans le service
-        if (
-          typeof (mattermostService as any).getTeamUnreadCount === "function"
-        ) {
-          const unreadData = await (
-            mattermostService as any
-          ).getTeamUnreadCount(team.id);
-
-          unreadCounts[team.id] = {
-            msg_count: unreadData.msg_count || 0,
-            mention_count: unreadData.mention_count || 0,
-          };
-        }
-      }
-
-      if (isMountedRef.current) {
-        setTeamUnreadCounts(unreadCounts);
-      }
-    } catch (error) {
-      console.error(
-        "Erreur lors de la récupération des non-lus par équipe:",
-        error,
-      );
-    } finally {
-      fetchingRef.current = false;
-    }
-  }, [mattermostService, teams]);
-
-  // 4. Récupération initiale des non-lus - avec vérification de montage
-  useEffect(() => {
-    if (teams.length === 0) return;
-
-    console.log(
-      `[TeamSelector] Starting unread counts fetch for ${teams.length} teams`,
-    );
-
-    const loadUnreadCounts = async () => {
-      if (isMountedRef.current) {
-        await fetchTeamUnreadCounts();
-      }
-    };
-
-    void loadUnreadCounts();
-  }, [teams.length, fetchTeamUnreadCounts]);
-
-  // 5. S'abonner aux mises à jour de l'état des non-lus - optimisé pour une seule inscription
-  useEffect(() => {
-    if (!notificationService) return;
-
-    console.log(`[TeamSelector] Setting up notifications listener`);
-
-    // Fonction de gestionnaire d'événements - définie une seule fois
-    const handleUnreadUpdated = () => {
-      if (isMountedRef.current) {
-        console.log(`[TeamSelector] Received unread_updated notification`);
-        void fetchTeamUnreadCounts();
-      }
-    };
-
-    // S'abonner aux mises à jour une seule fois
-    const unsubscribe = notificationService.addEventListener(
-      "unread_updated",
-      handleUnreadUpdated,
-    );
-
-    // Nettoyer l'abonnement à la désactivation du composant
-    return () => {
-      console.log(`[TeamSelector] Cleaning up notifications listener`);
-      unsubscribe();
-    };
-  }, [notificationService, fetchTeamUnreadCounts]);
-
-  // 6. Fonction mémorisée pour le rendu des skeletons
+  // Fonction pour rendre les skeletons durant le chargement
   const renderSkeletons = useCallback(() => {
     // Return different skeleton layouts based on variant
     switch (variant) {
@@ -367,10 +235,25 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     }
   }, [variant]);
 
-  // 7. Mémoriser le rendu des variantes avec useMemo pour éviter les re-renders inutiles
+  // Formatage des données de non-lu pour les variantes
+  const teamUnreadCounts = useMemo(() => {
+    const result: Record<string, { msg_count: number; mention_count: number }> =
+      {};
+
+    Object.entries(unreadCounts).forEach(([teamId, counts]) => {
+      result[teamId] = {
+        msg_count: counts.messageCount,
+        mention_count: counts.mentionCount,
+      };
+    });
+
+    return result;
+  }, [unreadCounts]);
+
+  // Rendu de la variante sélectionnée
   const renderedVariant = useMemo(() => {
     const sharedProps = {
-      teams,
+      teams: sortedTeams,
       selectedTeamId: selectedTeamId || activeTeam?.id,
       onSelectTeam: handleTeamSelect,
       showIcons,
@@ -394,7 +277,7 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
         return <TeamList {...sharedProps} />;
     }
   }, [
-    teams,
+    sortedTeams,
     activeTeam?.id,
     selectedTeamId,
     handleTeamSelect,
@@ -408,21 +291,21 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     variant,
   ]);
 
-  // Rendu principal avec mémoisations
+  // Rendu du contenu basé sur l'état de chargement
   const renderContent = useMemo(() => {
-    if (loading) {
+    if (isTeamsLoading && !initialized) {
       return renderSkeletons();
     }
 
-    if (error) {
+    if (teamsError) {
       return (
         <Alert severity="error" sx={{ m: 1 }}>
-          {error}
+          {teamsError.message}
         </Alert>
       );
     }
 
-    if (teams.length === 0) {
+    if (sortedTeams.length === 0) {
       return (
         <Box sx={{ p: 2, textAlign: "center" }}>
           <Typography component={"div"} variant="body2" color="text.secondary">
@@ -433,7 +316,14 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     }
 
     return renderedVariant;
-  }, [loading, error, teams.length, renderSkeletons, renderedVariant]);
+  }, [
+    isTeamsLoading,
+    initialized,
+    teamsError,
+    sortedTeams.length,
+    renderSkeletons,
+    renderedVariant,
+  ]);
 
   return (
     <Box

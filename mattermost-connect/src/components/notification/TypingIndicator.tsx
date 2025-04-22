@@ -1,7 +1,7 @@
 // src/components/notification/TypingIndicator.tsx
 import React from "react";
 import { Box, Typography, Fade } from "@mui/material";
-import { useMattermost } from "../../context";
+import { useUserContext } from "../../context";
 
 /**
  * Props pour le composant TypingIndicator
@@ -20,7 +20,7 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({
   maxUsersToShow = 3,
 }) => {
   // Utiliser les nouvelles méthodes du MattermostProvider
-  const { getTypingIndicatorText, getTypingUsersForChannel } = useMattermost();
+  const { getTypingIndicatorText, getTypingUsersForChannel } = useUserContext();
 
   // Obtenir le texte formaté pour l'indicateur
   const typingText = getTypingIndicatorText(channelId);

@@ -1,6 +1,6 @@
 // src/hooks/useAuth.ts
 import { useState, useCallback } from "react";
-import { useMattermost } from "../context";
+import { useConnection, useMattermost } from "../context";
 import { assertServiceInitialized } from "../services/factory";
 
 /**
@@ -72,8 +72,8 @@ export function useAuth(options: UseAuthOptions = {}) {
   } = options;
 
   // Contexte Mattermost
-  const { services, isConnected } = useMattermost();
-
+  const { services } = useMattermost();
+  const { isConnected } = useConnection();
   // États locaux
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<Error | null>(null);

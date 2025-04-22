@@ -35,6 +35,9 @@ class WebSocketSingleton {
   // État pour les tentatives de reconnexion en cours
   private reconnecting: Set<string> = new Set();
 
+  private pendingConnections: Map<string, Promise<WebSocketConnection>> =
+    new Map();
+
   /**
    * Obtient l'instance unique du singleton
    */
@@ -70,10 +73,10 @@ class WebSocketSingleton {
   public async getConnection(
     options: WebSocketSetupOptions,
   ): Promise<WebSocketConnection> {
-    const { serverUrl, token, mode } = options;
+    const { serverUrl, token } = options;
     const connectionKey = this.getConnectionKey(serverUrl, token);
 
-    // Incrémenter le compteur de références pour cette connexion
+    // Incrémenter le compteur de références
     const currentRefCount = this.connectionRefs.get(connectionKey) || 0;
     this.connectionRefs.set(connectionKey, currentRefCount + 1);
 
@@ -81,12 +84,11 @@ class WebSocketSingleton {
       `Compteur de références de connexion pour ${connectionKey}: ${this.connectionRefs.get(connectionKey)}`,
     );
 
-    // Si une connexion existe déjà, la réutiliser
+    // Vérifier si une connexion existe déjà
     if (this.connections.has(connectionKey)) {
       console.debug(
         `Réutilisation de la connexion WebSocket existante pour ${connectionKey}`,
       );
-
       const existingConnection = this.connections.get(connectionKey)!;
 
       // Si la connexion est fermée et qu'aucune reconnexion n'est en cours, la recréer
@@ -98,14 +100,34 @@ class WebSocketSingleton {
           `La connexion existante est fermée, recréation pour ${connectionKey}`,
         );
         this.connections.delete(connectionKey);
+        // Supprimer aussi toute connexion en attente
+        this.pendingConnections.delete(connectionKey);
         return this.createConnection(options, connectionKey);
       }
 
       return existingConnection;
     }
 
-    // Sinon, créer une nouvelle connexion
-    return this.createConnection(options, connectionKey);
+    // Vérifier si une connexion est en cours de création
+    if (this.pendingConnections.has(connectionKey)) {
+      console.debug(
+        `Connexion en cours de création pour ${connectionKey}, attente...`,
+      );
+      return this.pendingConnections.get(connectionKey)!;
+    }
+
+    // Créer une nouvelle connexion
+    const connectionPromise = this.createConnection(options, connectionKey);
+
+    // Enregistrer la promesse de connexion en cours
+    this.pendingConnections.set(connectionKey, connectionPromise);
+
+    try {
+      return await connectionPromise;
+    } finally {
+      // Supprimer de la liste des connexions en attente une fois terminé
+      this.pendingConnections.delete(connectionKey);
+    }
   }
 
   /**
