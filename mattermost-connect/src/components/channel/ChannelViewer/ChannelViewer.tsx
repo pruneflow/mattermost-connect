@@ -14,7 +14,7 @@ import {
   useConnection,
   useMessageContext,
 } from "../../../context";
-import { Channel, Message as MessageType, User } from "../../../types";
+import { Message as MessageType } from "../../../types";
 
 // Material-UI Components
 import { Box, Button, Divider, Snackbar, SxProps, Theme } from "@mui/material";
@@ -28,9 +28,7 @@ import { ChannelErrorState } from "./components/ChannelErrorState";
 import { ChannelEmptyState } from "./components/ChannelEmptyState";
 import { ChannelLoadMoreButton } from "./components/ChannelLoadMoreButton";
 import { MessageList } from "../../message/MessageViewer/MessageList";
-
 import { TypingIndicator } from "../../notification";
-import { WebSocketEventType } from "../../../services";
 
 /**
  * Props for the ChannelViewer component
@@ -54,7 +52,7 @@ export interface ChannelViewerProps {
   /** Custom message renderer */
   messageRenderer?: (props: {
     message: MessageType;
-    author: User | null;
+    author: any;
     formattedText: string;
   }) => React.ReactNode;
 
@@ -98,34 +96,30 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   messageProps,
   currentUserId,
 }) => {
-  // Utiliser les hooks de contexte spécifiques au lieu du hook général
+  // Utiliser les hooks de contexte
   const { services } = useMattermost();
   const { isConnected } = useConnection();
   const { currentUser } = useUserContext();
-  const { markAsRead: markChannelAsRead, typingIndicator } =
-    useChannelContext();
+  const { activeChannel, markAsRead, typingIndicator } = useChannelContext();
 
   const {
-    setReplyTo,
     messages,
     loadMessages,
+    isMessagesLoading,
+    messagesError,
+    deleteMessage,
+    setReplyTo,
     highlightMessageId,
     setHighlightMessageId,
   } = useMessageContext();
 
-  const notificationService = services?.notificationService;
-  const mattermostService = services?.mattermostService;
-
-  // État
-  const [channel, setChannel] = useState<Channel | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  // État local
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [showNewMessagesBanner, setShowNewMessagesBanner] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [messagesToHighlight, setMessagesToHighlight] = useState<Set<string>>(
     new Set(),
   );
@@ -134,31 +128,10 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
-  const stableChannelId = useRef<string | undefined>(channelId);
-  const messageMap = useRef<Record<string, MessageType>>({});
   const highlightTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
-  const eventHandlersInitialized = useRef<boolean>(false);
-  const isMounted = useRef<boolean>(true);
 
   // ID utilisateur à utiliser (des props ou du contexte)
   const userIdToUse = currentUserId || currentUser?.id;
-
-  // Mettre à jour la référence stable quand channelId change
-  useEffect(() => {
-    isMounted.current = true;
-    stableChannelId.current = channelId;
-  }, [channelId]);
-
-  // Nettoyer lors du démontage
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-
-      // Nettoyer tous les timeouts
-      Object.values(highlightTimeouts.current).forEach(clearTimeout);
-      highlightTimeouts.current = {};
-    };
-  }, []);
 
   // Vérification optimisée si l'utilisateur est au bas du scrolling
   const isScrolledToBottom = useCallback(() => {
@@ -169,141 +142,50 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     // Considérer qu'on est au bas s'il reste moins de 50px à scroller
     return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
-  /*
-  // Charger les informations du canal
+
+  // Charger les messages lorsque le canal change
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
-    // Référence pour éviter des appels inutiles
-    const currentChannelId = stableChannelId.current;
-
-    const fetchChannel = async () => {
-      try {
-        // Vérifier que le composant est encore monté et que le canal n'a pas changé
-        if (
-          !isMounted.current ||
-          currentChannelId !== stableChannelId.current
-        ) {
-          return;
-        }
-
-        // Si le canal actif correspond déjà à ce que nous voulons, l'utiliser directement
-        if (activeChannel && activeChannel.id === channelId) {
-          if (!channel || channel.id !== activeChannel.id) {
-            setChannel(activeChannel);
-          }
-          return; // Important: sortir tôt pour éviter des appels supplémentaires
-        }
-
-        // Éviter de recharger le même canal
-        if (channel && channel.id === channelId) {
-          return;
-        }
-        setLoading(true);
-        const channelData = await mattermostService?.getChannel(channelId);
-        if (channelData) {
-          setChannel(channelData);
-          setActiveChannel(channelData);
-          setError(null);
-        }
-      } catch (err) {
-        if (!isMounted.current || currentChannelId !== stableChannelId.current)
-          return;
-        console.error("Error loading channel:", err);
-        setError(err instanceof Error ? err.message : "Failed to load channel");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void fetchChannel();
-
-    // Retirer channel de la liste des dépendances pour briser la boucle
-  }, [isConnected, channelId, services, setActiveChannel, activeChannel]);*/
-
-  // Charger les messages de façon optimisée
-  useEffect(() => {
-    if (!isConnected || !channelId) return;
-
-    const currentChannelId = stableChannelId.current;
-    if (loading && currentChannelId === channelId) {
-      return;
-    }
-
+    // Fonction pour charger les messages
     const fetchMessages = async () => {
-      console.debug("Fetching messages for channel:", channelId);
-      setLoading(true);
-
       try {
+        console.debug("Fetching messages for channel:", channelId);
+
         const options = {
           perPage: loadMessageCount,
         };
 
-        // Utiliser loadMessages du ChannelContext au lieu de l'appel direct à mattermostService
-        const messagesList = await loadMessages(channelId, options);
+        // Utiliser la méthode loadMessages du contexte
+        await loadMessages(channelId, options);
 
-        if (
-          !isMounted.current ||
-          currentChannelId !== stableChannelId.current ||
-          !messagesList
-        )
-          return;
+        // Réinitialiser les compteurs et affichages
+        setNewMessagesCount(0);
+        setShowNewMessagesBanner(false);
 
-        if (
-          JSON.stringify(messagesList.map((p) => p.id)) ===
-          JSON.stringify(messages.map((m) => m.id))
-        ) {
-          setLoading(false);
-          return;
+        // Mettre à jour hasMoreMessages en fonction du nombre de messages chargés
+        setHasMoreMessages(messages.length >= loadMessageCount);
+
+        // Conserver une référence au dernier message pour les optimisations
+        if (messages.length > 0) {
+          lastMessageIdRef.current = messages[messages.length - 1].id;
         }
-
-        // Mise à jour de la map de référence
-        messagesList.forEach((post) => {
-          messageMap.current[post.id] = post;
-        });
-
-        // Le state messages est maintenant géré par le contexte, pas besoin de le définir localement
-        // setMessages(messagesList);
-
-        if (messagesList.length > 0) {
-          lastMessageIdRef.current = messagesList[messagesList.length - 1].id;
-        }
-
-        setHasMoreMessages(messagesList.length >= loadMessageCount);
-        setError(null);
-      } catch (err) {
-        if (!isMounted.current || currentChannelId !== stableChannelId.current)
-          return;
-        console.error("Error loading messages:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to load messages",
-        );
-      } finally {
-        if (isMounted.current && currentChannelId === stableChannelId.current) {
-          setLoading(false);
-        }
+      } catch (error) {
+        console.error("Error loading messages:", error);
       }
     };
 
     void fetchMessages();
+  }, [channelId, isConnected]);
 
-    // Réinitialiser les compteurs et les états
-    setNewMessagesCount(0);
-    setShowNewMessagesBanner(false);
-
+  useEffect(() => {
+    // Définir les messages à mettre en évidence si nécessaire
     if (highlightMessageId) {
       setMessagesToHighlight(new Set([highlightMessageId]));
     } else {
       setMessagesToHighlight(new Set());
     }
-  }, [
-    isConnected,
-    channel,
-    loadMessages,
-    loadMessageCount,
-    highlightMessageId,
-    messages,
-  ]);
+  }, [highlightMessageId]);
 
   // Fonction pour scroller vers le bas (mémorisée)
   const scrollToBottom = useCallback(
@@ -375,175 +257,12 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     setShowNewMessagesBanner(false);
   }, [scrollToBottom]);
 
-  // Fonctions pour gérer les événements WebSocket, mémorisées avec useCallback
-  const handleNewMessage = useCallback(
-    (data: any) => {
-      try {
-        const post = JSON.parse(data.post);
-
-        // Vérifier si le message appartient à ce canal
-        if (post.channel_id !== stableChannelId.current) return;
-
-        // Ajouter à la map de référence
-        messageMap.current[post.id] = post;
-
-        // Nous n'avons plus besoin de mettre à jour messages localement, puisqu'il est géré par le contexte
-        // Le contexte se chargera de la mise à jour quand il recevra l'événement WebSocket
-
-        const wasAtBottom = isScrolledToBottom();
-
-        if (post.user_id === userIdToUse) {
-          // Laisser un peu de temps pour le rendu
-          setTimeout(() => {
-            scrollToBottom(true); // Force le défilement pour les messages de l'utilisateur
-          }, 50);
-        }
-        // Sinon, si l'utilisateur n'est pas en bas, montrer le compteur
-        else if (!wasAtBottom) {
-          setNewMessagesCount((prev) => prev + 1);
-          setShowNewMessagesBanner(true);
-        }
-        // Si l'utilisateur était en bas, défiler automatiquement
-        else {
-          // Laisser un peu de temps pour le rendu
-          setTimeout(() => {
-            scrollToBottom(false);
-          }, 50);
-        }
-
-        // Mettre en évidence les nouveaux messages
-        setMessagesToHighlight((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(post.id);
-          return newSet;
-        });
-
-        // Supprimer la mise en évidence après un délai
-        if (highlightTimeouts.current[post.id]) {
-          clearTimeout(highlightTimeouts.current[post.id]);
-        }
-
-        highlightTimeouts.current[post.id] = setTimeout(() => {
-          setMessagesToHighlight((prev) => {
-            const updated = new Set(prev);
-            updated.delete(post.id);
-            return updated;
-          });
-          delete highlightTimeouts.current[post.id];
-        }, 3000);
-      } catch (error) {
-        console.error("Error processing new message:", error);
-      }
-    },
-    [userIdToUse, isScrolledToBottom, scrollToBottom],
-  );
-
-  const handleEditedMessage = useCallback((data: any) => {
-    try {
-      const post = JSON.parse(data.post);
-
-      // Vérifier si le message appartient à ce canal
-      if (post.channel_id !== stableChannelId.current) return;
-
-      // Mettre à jour la map de référence
-      messageMap.current[post.id] = post;
-
-      // Contexte gère la mise à jour des messages
-
-      // Mettre en évidence le message édité
-      setMessagesToHighlight((prev) => {
-        const newSet = new Set(prev);
-        newSet.add(post.id);
-        return newSet;
-      });
-
-      // Supprimer la mise en évidence après un délai
-      if (highlightTimeouts.current[post.id]) {
-        clearTimeout(highlightTimeouts.current[post.id]);
-      }
-
-      highlightTimeouts.current[post.id] = setTimeout(() => {
-        setMessagesToHighlight((prev) => {
-          const updated = new Set(prev);
-          updated.delete(post.id);
-          return updated;
-        });
-        delete highlightTimeouts.current[post.id];
-      }, 3000);
-    } catch (error) {
-      console.error("Error processing edited message:", error);
-    }
-  }, []);
-
-  const handleDeletedMessage = useCallback((data: any) => {
-    try {
-      const post = JSON.parse(data.post);
-
-      // Vérifier si le message appartient à ce canal
-      if (post.channel_id !== stableChannelId.current) return;
-
-      // Supprimer de la map de référence
-      delete messageMap.current[post.id];
-
-      // Contexte gère la suppression du message
-    } catch (error) {
-      console.error("Error processing deleted message:", error);
-    }
-  }, []);
-
-  // Écouteurs d'événements WebSocket optimisés
-  useEffect(() => {
-    if (!channelId || !notificationService || eventHandlersInitialized.current)
-      return;
-
-    console.debug(
-      "Setting up WebSocket event listeners for channel:",
-      channelId,
-    );
-    eventHandlersInitialized.current = true;
-
-    // S'abonner aux événements en utilisant des fonctions mémorisées
-    const unsubscribePosted = notificationService.addEventListener(
-      WebSocketEventType.POSTED,
-      handleNewMessage,
-    );
-
-    const unsubscribeEdited = notificationService.addEventListener(
-      WebSocketEventType.POST_EDITED,
-      handleEditedMessage,
-    );
-
-    const unsubscribeDeleted = notificationService.addEventListener(
-      WebSocketEventType.POST_DELETED,
-      handleDeletedMessage,
-    );
-
-    // Nettoyer les écouteurs au démontage ou au changement de canal
-    return () => {
-      console.debug("Cleaning up WebSocket event listeners");
-      unsubscribePosted();
-      unsubscribeEdited();
-      unsubscribeDeleted();
-      eventHandlersInitialized.current = false;
-
-      // Nettoyer tous les timeouts
-      Object.values(highlightTimeouts.current).forEach(clearTimeout);
-      highlightTimeouts.current = {};
-    };
-  }, [
-    channelId,
-    notificationService,
-    handleNewMessage,
-    handleEditedMessage,
-    handleDeletedMessage,
-  ]);
-
   // Auto-scroll quand les messages changent
   useEffect(() => {
     // Ne défiler automatiquement que si autoScrollToBottom est activé
     // messages contient des éléments, n'est pas en chargement
     // et soit on était déjà en bas, soit c'est le premier chargement
-    if (autoScrollToBottom && messages.length > 0 && !loading) {
+    if (autoScrollToBottom && messages.length > 0) {
       // Forcer le défilement si:
       // - C'est le chargement initial (lastMessageIdRef.current était null)
       // - L'utilisateur était déjà au bas de la conversation
@@ -567,7 +286,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         lastMessageIdRef.current = messages[messages.length - 1].id;
       }
     }
-  }, [messages, autoScrollToBottom, loading, scrollToBottom, currentUser]);
+  }, [messages, autoScrollToBottom, scrollToBottom, currentUser]);
 
   // Gérer le défilement
   useEffect(() => {
@@ -594,9 +313,9 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     }
   }, [isScrolledToBottom, newMessagesCount]);
 
-  // Mise en évidence des messages
+  // Mise en évidence des messages sélectionnés
   useEffect(() => {
-    if (highlightMessageId && !loading && messages.length > 0) {
+    if (highlightMessageId && messages.length > 0) {
       setMessagesToHighlight(new Set([highlightMessageId]));
 
       // Faire défiler jusqu'au message à mettre en évidence
@@ -624,32 +343,32 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         setHighlightMessageId(undefined);
       }, 3000);
     }
-  }, [highlightMessageId, loading, messages.length, setHighlightMessageId]);
+  }, [highlightMessageId, messages.length, setHighlightMessageId]);
 
   // Marquer le canal comme lu
   useEffect(() => {
     if (!isConnected || !channelId) return;
 
-    const markAsViewed = async () => {
+    const markChannelAsViewed = async () => {
       try {
-        await markChannelAsRead(channelId);
+        await markAsRead(channelId);
       } catch (error) {
         console.error("Erreur lors du marquage du canal comme lu:", error);
       }
     };
 
     // Marquer comme lu immédiatement
-    void markAsViewed();
+    void markChannelAsViewed();
 
     // Également marquer comme lu périodiquement
     const interval = setInterval(() => {
-      void markAsViewed();
+      void markChannelAsViewed();
     }, 30000); // 30 secondes
 
     return () => {
       clearInterval(interval);
     };
-  }, [isConnected, channelId, markChannelAsRead]);
+  }, [isConnected, channelId, markAsRead]);
 
   // Charger plus de messages (optimisé avec useCallback)
   const loadMoreMessages = useCallback(async () => {
@@ -666,27 +385,14 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         before: firstMessage.id,
       };
 
-      // Utiliser loadMessages du ChannelContext
+      // Utiliser loadMessages du messageContext
       const messagesList = await loadMessages(channelId, options);
-
-      if (!isMounted.current || !messagesList) return;
-
-      // Mise à jour de la map de référence
-      messagesList.forEach((post) => {
-        messageMap.current[post.id] = post;
-      });
 
       setHasMoreMessages(messagesList.length >= loadMessageCount);
     } catch (err) {
-      if (!isMounted.current) return;
       console.error("Error loading more messages:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load more messages",
-      );
     } finally {
-      if (isMounted.current) {
-        setLoadingMore(false);
-      }
+      setLoadingMore(false);
     }
   }, [
     loadingMore,
@@ -717,47 +423,32 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   // Gestionnaire pour l'édition d'un message (mémorisé)
   const handleEditMessage = useCallback(
     async (messageToEdit: MessageType) => {
-      if (!mattermostService?.editMessage) {
-        console.error("Edit message functionality not available");
-        return;
-      }
-
       try {
         console.log("Editing message:", messageToEdit);
         // Dans une implémentation complète, vous pourriez:
         // 1. Ouvrir une boîte de dialogue avec le texte actuel
         // 2. Permettre à l'utilisateur de modifier le texte
         // 3. Envoyer la mise à jour via l'API
-        // const updatedMessage = await service.editMessage(messageToEdit.id, newText);
-        // 4. Mettre à jour l'état local des messages
+        // const updatedMessage = await editMessage(messageToEdit.id, newText);
       } catch (error) {
         console.error("Error editing message:", error);
       }
     },
-    [mattermostService?.editMessage],
+    [
+      /* editMessage */
+    ],
   );
 
   // Gestionnaire pour la suppression d'un message (mémorisé)
   const handleDeleteMessage = useCallback(
     async (messageToDelete: MessageType) => {
-      if (!mattermostService?.deleteMessage) {
-        console.error("Delete message functionality not available");
-        return;
-      }
-
       try {
-        await mattermostService?.deleteMessage(messageToDelete.id);
-
-        // Supprimer de la map de référence
-        delete messageMap.current[messageToDelete.id];
-
-        // La mise à jour de la liste des messages est gérée par le contexte
+        await deleteMessage(messageToDelete.id);
       } catch (error) {
         console.error("Error deleting message:", error);
-        setError("Failed to delete message. Please try again.");
       }
     },
-    [mattermostService?.deleteMessage],
+    [deleteMessage],
   );
 
   // Mémorisation de la liste de messages pour éviter des re-renders inutiles
@@ -790,6 +481,70 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
     ],
   );
 
+  // Mettre à jour les compteurs de nouveaux messages quand un message est reçu
+  // Cela serait normalement géré par un écouteur d'événements WebSocket
+  useEffect(() => {
+    if (!services?.notificationService) return;
+
+    const handleNewMessage = (data: any) => {
+      try {
+        const post = JSON.parse(data.post);
+
+        // Vérifier si le message appartient à ce canal
+        if (post.channel_id !== channelId) return;
+
+        // Si c'est un message de l'utilisateur actuel, défiler vers le bas
+        if (post.user_id === userIdToUse) {
+          setTimeout(() => scrollToBottom(true), 50);
+          return;
+        }
+
+        // Si on n'est pas en bas, incrémenter le compteur
+        if (!isScrolledToBottom()) {
+          setNewMessagesCount((prev) => prev + 1);
+          setShowNewMessagesBanner(true);
+        } else {
+          // Si on est en bas, défiler automatiquement
+          setTimeout(() => scrollToBottom(false), 50);
+        }
+
+        // Mettre en évidence le nouveau message
+        setMessagesToHighlight((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(post.id);
+          return newSet;
+        });
+
+        // Enlever la mise en évidence après 3 secondes
+        if (highlightTimeouts.current[post.id]) {
+          clearTimeout(highlightTimeouts.current[post.id]);
+        }
+
+        highlightTimeouts.current[post.id] = setTimeout(() => {
+          setMessagesToHighlight((prev) => {
+            const updated = new Set(prev);
+            updated.delete(post.id);
+            return updated;
+          });
+          delete highlightTimeouts.current[post.id];
+        }, 3000);
+      } catch (error) {
+        console.error("Error handling new message notification:", error);
+      }
+    };
+
+    // S'abonner à l'événement "posted"
+    const unsubscribePosted = services.notificationService.addEventListener(
+      "posted",
+      handleNewMessage,
+    );
+
+    return () => {
+      // Désabonnement lors du démontage
+      unsubscribePosted();
+    };
+  }, [services, channelId, userIdToUse, isScrolledToBottom, scrollToBottom]);
+
   return (
     <Box
       className={className}
@@ -803,8 +558,8 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
       }}
     >
       {/* Channel header */}
-      {showHeader && channel && (
-        <ChannelHeader channel={channel} sx={headerSx} />
+      {showHeader && activeChannel && (
+        <ChannelHeader channel={activeChannel} sx={headerSx} />
       )}
 
       <Divider />
@@ -822,10 +577,10 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
         }}
       >
         {/* Loading state */}
-        {loading ? (
+        {isMessagesLoading ? (
           <ChannelLoadingState />
-        ) : error ? (
-          <ChannelErrorState error={error} />
+        ) : messagesError ? (
+          <ChannelErrorState error={messagesError.message} />
         ) : messages.length === 0 ? (
           <ChannelEmptyState />
         ) : (
@@ -874,6 +629,7 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
             : "Bottom"}
         </Button>
       )}
+
       {/* New messages banner */}
       <Snackbar
         open={showNewMessagesBanner}

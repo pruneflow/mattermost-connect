@@ -68,7 +68,7 @@ export const MessageList: React.FC<MessageListProps> = ({
       }, 100);
     }
   }, [messagesEndRef]);
-
+  console.debug("MessageList");
   return (
     <Box sx={{ flexGrow: 1 }}>
       {messages.map((message) => (

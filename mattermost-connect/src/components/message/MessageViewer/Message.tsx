@@ -75,6 +75,9 @@ const Message: React.FC<MessageProps> = ({
 
     if (parentMessageId) {
       const fetchReferencedMessage = async () => {
+        console.debug(
+          `fetchReferencedMessage for parentMessageId="${parentMessageId}" and messageId="${message?.id}" `,
+        );
         try {
           // First, try a direct call to retrieve the specific message
           // This approach depends on the available API
@@ -136,7 +139,7 @@ const Message: React.FC<MessageProps> = ({
 
       void fetchReferencedMessage();
     }
-  }, [message, mattermostService, getUser]);
+  }, []);
 
   // Load author information
   useEffect(() => {
@@ -157,7 +160,7 @@ const Message: React.FC<MessageProps> = ({
     };
 
     void fetchAuthor();
-  }, [message, getUser]);
+  }, []);
 
   // Format message text
   useEffect(() => {
@@ -167,7 +170,7 @@ const Message: React.FC<MessageProps> = ({
     }
 
     setFormattedText(formatMessageText(message.message));
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     if (highlight && messageRef.current) {

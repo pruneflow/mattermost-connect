@@ -210,7 +210,8 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
       </Box>
     );
   }
-
+  console.debug("ClassicInterface");
+  console.debug("activeTeam", activeTeam);
   // Mise en page desktop avec deux colonnes
   return (
     <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>

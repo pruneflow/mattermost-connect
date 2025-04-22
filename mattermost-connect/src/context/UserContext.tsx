@@ -1,16 +1,16 @@
 // src/context/UserContext.tsx
 import React, {
   createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
   ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
   useRef,
+  useState,
 } from "react";
-import { User, UserStatus, Channel } from "../types";
-import { ServiceContainer } from "../services/factory";
+import { User } from "../types";
+import { ServiceContainer } from "../services";
 import { formatUserDisplayName } from "../utils";
 import { useConnection } from "./ConnectionContext";
 
@@ -21,28 +21,11 @@ import { useConnection } from "./ConnectionContext";
 export interface UserContextType {
   // Current user state
   currentUser: User | null;
-  isCurrentUserLoading: boolean;
-  currentUserError: Error | null;
-
-  // User roster management
-  knownUsers: Record<string, User>;
-  userStatuses: Record<string, UserStatus>;
 
   // Methods for user management
-  refreshCurrentUser: () => Promise<User | null>;
   getUser: (userId: string) => Promise<User | null>;
   getUserDisplayName: (userId: string) => string;
-  getUserStatus: (userId: string) => Promise<UserStatus | null>;
-  isCurrentUser: (userId: string) => boolean;
 
-  // Batch loading methods
-  loadUsers: (userIds: string[]) => Promise<User[]>;
-  loadTeamUsers: (teamId: string) => Promise<void>;
-  loadDirectMessageUsers: (channels: Channel[]) => Promise<void>;
-
-  // Typing indicator state
-  typingUsers: Record<string, string[]>;
-  isUserTyping: (channelId: string, userId: string) => boolean;
   getTypingUsersForChannel: (channelId: string) => string[];
   getTypingIndicatorText: (channelId: string) => string;
 }
@@ -85,15 +68,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({
 
   // State for current user
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isCurrentUserLoading, setIsCurrentUserLoading] =
-    useState<boolean>(false);
-  const [currentUserError, setCurrentUserError] = useState<Error | null>(null);
 
   // State for user roster
   const [knownUsers, setKnownUsers] = useState<Record<string, User>>({});
-  const [userStatuses, setUserStatuses] = useState<Record<string, UserStatus>>(
-    {},
-  );
 
   // State for typing indicators
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
@@ -104,19 +81,14 @@ export const UserProvider: React.FC<UserProviderProps> = ({
   const pendingUserRequestsRef = useRef<Record<string, Promise<User | null>>>(
     {},
   );
-  const isLoadingRef = useRef<boolean>(false);
 
   /**
    * Load current user data
    */
   const loadCurrentUser = useCallback(async (): Promise<User | null> => {
     if (!services?.mattermostService) {
-      setCurrentUserError(new Error("Mattermost service not available"));
       return null;
     }
-
-    setIsCurrentUserLoading(true);
-    setCurrentUserError(null);
 
     try {
       const user = await services.mattermostService.getCurrentUser();
@@ -148,13 +120,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({
       return user;
     } catch (error) {
       console.error("Error loading current user:", error);
-      const typedError =
-        error instanceof Error ? error : new Error(String(error));
-
-      setCurrentUserError(typedError);
       return null;
-    } finally {
-      setIsCurrentUserLoading(false);
     }
   }, [services]);
 
@@ -246,109 +212,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({
   );
 
   /**
-   * Load multiple users at once
-   */
-  const loadUsers = useCallback(
-    async (userIds: string[]): Promise<User[]> => {
-      if (!userIds.length || !services?.userService) {
-        return [];
-      }
-
-      try {
-        const users = await services.userService.getUsers({ ids: userIds });
-
-        // Update the known users cache
-        const newUsersMap = users.reduce(
-          (acc, user) => {
-            acc[user.id] = user;
-            return acc;
-          },
-          {} as Record<string, User>,
-        );
-
-        setKnownUsers((prev) => ({
-          ...prev,
-          ...newUsersMap,
-        }));
-
-        return users;
-      } catch (error) {
-        console.error("Error loading users:", error);
-        return [];
-      }
-    },
-    [services],
-  );
-
-  /**
-   * Load all users in a team
-   */
-  const loadTeamUsers = useCallback(
-    async (teamId: string): Promise<void> => {
-      if (!teamId || !services?.userService || isLoadingRef.current) {
-        return;
-      }
-
-      isLoadingRef.current = true;
-
-      try {
-        // Check if the function exists
-        if (typeof services.userService.loadTeamUsers === "function") {
-          await services.userService.loadTeamUsers(teamId);
-
-          // Update the known users from the service
-          if (typeof services.userService.getAllUsers === "function") {
-            const allUsers = services.userService.getAllUsers();
-            setKnownUsers((prev) => ({
-              ...prev,
-              ...allUsers,
-            }));
-          }
-        }
-      } catch (error) {
-        console.error(`Error loading team ${teamId} users:`, error);
-      } finally {
-        isLoadingRef.current = false;
-      }
-    },
-    [services],
-  );
-
-  /**
-   * Load users involved in direct message channels
-   */
-  const loadDirectMessageUsers = useCallback(
-    async (channels: Channel[]): Promise<void> => {
-      if (!channels.length || !services?.userService || isLoadingRef.current) {
-        return;
-      }
-
-      isLoadingRef.current = true;
-
-      try {
-        // Check if the function exists
-        if (typeof services.userService.loadDirectMessageUsers === "function") {
-          await services.userService.loadDirectMessageUsers(channels);
-
-          // Update the known users from the service
-          if (typeof services.userService.getAllUsers === "function") {
-            const allUsers = services.userService.getAllUsers();
-            setKnownUsers((prev) => ({
-              ...prev,
-              ...allUsers,
-            }));
-          }
-        }
-      } catch (error) {
-        console.error("Error loading direct message users:", error);
-      } finally {
-        isLoadingRef.current = false;
-      }
-    },
-    [services],
-  );
-
-  /**
    * Get user display name, formatted according to preferences
    */
   const getUserDisplayName = useCallback(
@@ -365,55 +228,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({
       return formatUserDisplayName(user);
     },
     [knownUsers, getUser],
-  );
-
-  /**
-   * Get user status
-   */
-  const getUserStatus = useCallback(
-    async (userId: string): Promise<UserStatus | null> => {
-      if (!userId || !services?.mattermostService) {
-        return null;
-      }
-
-      try {
-        const status = await services.mattermostService.getUserStatus(userId);
-
-        // Update status cache
-        setUserStatuses((prev) => ({
-          ...prev,
-          [userId]: status,
-        }));
-
-        return status;
-      } catch (error) {
-        console.error(`Error fetching status for user ${userId}:`, error);
-        return null;
-      }
-    },
-    [services],
-  );
-
-  /**
-   * Check if a user ID matches the current user
-   */
-  const isCurrentUser = useCallback(
-    (userId: string): boolean => {
-      if (!userId || !currentUser) return false;
-      return userId === currentUser.id;
-    },
-    [currentUser],
-  );
-
-  /**
-   * Check if a user is typing in a specific channel
-   */
-  const isUserTyping = useCallback(
-    (channelId: string, userId: string): boolean => {
-      if (!channelId || !userId || !typingUsers[channelId]) return false;
-      return typingUsers[channelId].includes(userId);
-    },
-    [typingUsers],
   );
 
   /**
@@ -555,43 +369,21 @@ export const UserProvider: React.FC<UserProviderProps> = ({
     () => ({
       // State
       currentUser,
-      isCurrentUserLoading,
-      currentUserError,
-      knownUsers,
-      userStatuses,
-      typingUsers,
 
       // Methods
-      refreshCurrentUser,
-      getUser,
-      getUserDisplayName,
-      getUserStatus,
-      isCurrentUser,
-      loadUsers,
-      loadTeamUsers,
-      loadDirectMessageUsers,
-      isUserTyping,
       getTypingUsersForChannel,
       getTypingIndicatorText,
+      getUserDisplayName,
+      getUser,
     }),
     [
       currentUser,
-      isCurrentUserLoading,
-      currentUserError,
-      knownUsers,
-      userStatuses,
-      typingUsers,
-      refreshCurrentUser,
-      getUser,
-      getUserDisplayName,
-      getUserStatus,
-      isCurrentUser,
-      loadUsers,
-      loadTeamUsers,
-      loadDirectMessageUsers,
-      isUserTyping,
+
+      // Methods
       getTypingUsersForChannel,
       getTypingIndicatorText,
+      getUserDisplayName,
+      getUser,
     ],
   );
 

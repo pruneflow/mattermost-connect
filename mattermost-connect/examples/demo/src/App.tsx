@@ -78,7 +78,8 @@ const LoginForm: React.FC<{
           } else if (username && password && serverUrl) {
             // Validation des champs
             if (!serverUrl) {
-              throw new Error("L'URL du serveur est requise");
+              console.error("L'URL du serveur est requise");
+              return;
             }
 
             onLogin({
@@ -88,15 +89,17 @@ const LoginForm: React.FC<{
               password,
             });
           } else {
-            throw new Error(
+            console.error(
               "Veuillez fournir un token ou des identifiants de connexion",
             );
+            return;
           }
           break;
 
         case MODES.PROXY:
           if (!proxyUrl || !clientId) {
-            throw new Error("L'URL du proxy et l'ID client sont requis");
+            console.error("L'URL du proxy et l'ID client sont requis");
+            return;
           }
 
           onLogin({
@@ -278,7 +281,7 @@ const LoginForm: React.FC<{
 const ExamplesContainer: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
-  const { currentUser, mode } = useMattermost();
+  const { mode } = useMattermost();
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       {/* Example content */}
