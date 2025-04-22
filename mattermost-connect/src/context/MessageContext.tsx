@@ -8,17 +8,33 @@ import React, {
   ReactNode,
   useRef,
 } from "react";
-import { Message, MessageReaction } from "../types";
-import { ServiceContainer } from "../services/factory";
-import { useConnection } from "./ConnectionContext";
+import { Message } from "../types";
+import { assertServiceInitialized, ServiceContainer } from "../services";
 import { useUserContext } from "./UserContext";
-import { WebSocketEventType } from "../services/notification/notification.service";
+import { useChannelContext } from "./ChannelContext";
 
 /**
  * Interface for the MessageContext
  * Provides message-specific functionality separate from channel operations
  */
 export interface MessageContextType {
+  // Reply state (moved from ChannelContext)
+  replyTo: Message | null;
+  isReplying: boolean;
+  setReplyTo: (message: Message | null) => void;
+  clearReply: () => void;
+  replyToMessage: (
+    messageId: string,
+    message: string,
+    fileIds?: string[],
+  ) => Promise<Message | null>;
+  sendMessage: (message: string, fileIds?: string[]) => Promise<Message | null>;
+  editMessage: (
+    messageId: string,
+    newMessage: string,
+  ) => Promise<Message | null>;
+  deleteMessage: (messageId: string) => Promise<boolean>;
+
   // Message reactions
   addReaction: (messageId: string, emoji: string) => Promise<boolean>;
   removeReaction: (messageId: string, emoji: string) => Promise<boolean>;
@@ -72,8 +88,13 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   services,
 }) => {
   // Get dependency contexts
-  const connection = useConnection();
   const { currentUser } = useUserContext();
+  const { activeChannel } = useChannelContext();
+
+  const activeChannelId = activeChannel?.id || null;
+
+  // Reply state (moved from ChannelContext)
+  const [replyTo, setReplyToState] = useState<Message | null>(null);
 
   // Thread state
   const [threadMessages, setThreadMessages] = useState<
@@ -96,8 +117,201 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   ]);
 
   // Refs for tracking state
-  const currentChannelIdRef = useRef<string | null>(null);
   const threadMessagesRef = useRef<Record<string, Message[]>>({});
+
+  /**
+   * Set reply target message
+   */
+  const setReplyTo = useCallback((message: Message | null) => {
+    setReplyToState(message);
+  }, []);
+
+  /**
+   * Clear the reply state
+   */
+  const clearReply = useCallback(() => {
+    setReplyToState(null);
+  }, []);
+
+  // Implémentation dans le provider
+  const replyToMessage = useCallback(
+    async (
+      messageId: string,
+      message: string,
+      fileIds?: string[],
+    ): Promise<Message | null> => {
+      if (
+        !activeChannelId ||
+        !messageId ||
+        (!message.trim() && (!fileIds || fileIds.length === 0)) ||
+        !services?.mattermostService?.replyToMessage
+      ) {
+        return null;
+      }
+
+      try {
+        const reply = await services!.mattermostService!.replyToMessage(
+          activeChannelId,
+          messageId,
+          message,
+          fileIds,
+        );
+
+        // Effacer l'état de réponse
+        clearReply();
+
+        return reply;
+      } catch (error) {
+        console.error(`Error replying to message ${messageId}:`, error);
+        return null;
+      }
+    },
+    [services, clearReply, activeChannelId],
+  );
+
+  const sendMessage = useCallback(
+    async (message: string, fileIds?: string[]): Promise<Message | null> => {
+      if (
+        !activeChannelId ||
+        (!message.trim() && (!fileIds || fileIds.length === 0)) ||
+        !services?.mattermostService?.postMessage
+      ) {
+        return null;
+      }
+
+      try {
+        return await services.mattermostService.postMessage(
+          activeChannelId,
+          message,
+          fileIds,
+        );
+      } catch (error) {
+        console.error("Error sending message:", error);
+        return null;
+      }
+    },
+    [services, activeChannelId],
+  );
+
+  /**
+   * Édite un message existant
+   * @param messageId ID du message à éditer
+   * @param newMessage Nouveau contenu du message
+   * @returns Le message modifié ou null en cas d'erreur
+   */
+  const editMessage = useCallback(
+    async (messageId: string, newMessage: string): Promise<Message | null> => {
+      if (
+        !messageId ||
+        !newMessage.trim() ||
+        !services?.mattermostService?.editMessage
+      ) {
+        return null;
+      }
+
+      try {
+        assertServiceInitialized(
+          services.mattermostService,
+          "mattermostService",
+        );
+
+        const updatedMessage = await services!.mattermostService!.editMessage(
+          messageId,
+          newMessage,
+        );
+
+        // Vérifier si le message a été édité et s'il fait partie d'un thread
+        if (updatedMessage && updatedMessage.root_id) {
+          // Vérifier si nous avons des messages pour ce thread
+          const rootId = updatedMessage.root_id;
+          if (threadMessages[rootId]) {
+            setThreadMessages((prev) => {
+              // Créer une copie du tableau de messages du thread
+              const threadMsgs = [...prev[rootId]];
+              // Trouver et remplacer le message modifié
+              const msgIndex = threadMsgs.findIndex(
+                (msg) => msg.id === messageId,
+              );
+              if (msgIndex !== -1) {
+                threadMsgs[msgIndex] = updatedMessage;
+              }
+
+              return {
+                ...prev,
+                [rootId]: threadMsgs,
+              };
+            });
+          }
+        }
+
+        return updatedMessage;
+      } catch (error) {
+        console.error(`Error editing message ${messageId}:`, error);
+        return null;
+      }
+    },
+    [services, threadMessages, setThreadMessages],
+  );
+
+  /**
+   * Supprime un message
+   * @param messageId ID du message à supprimer
+   * @returns true si la suppression a réussi, false sinon
+   */
+  const deleteMessage = useCallback(
+    async (messageId: string): Promise<boolean> => {
+      if (!messageId || !services?.mattermostService?.deleteMessage) {
+        return false;
+      }
+
+      try {
+        assertServiceInitialized(
+          services.mattermostService,
+          "mattermostService",
+        );
+
+        const result =
+          await services!.mattermostService!.deleteMessage(messageId);
+
+        // Si la suppression est réussie, mettre à jour les références locales
+        if (result.success) {
+          // Parcourir tous les threads pour trouver et supprimer le message
+          Object.keys(threadMessages).forEach((rootId) => {
+            const threadMsgs = threadMessages[rootId];
+            const msgIndex = threadMsgs.findIndex(
+              (msg) => msg.id === messageId,
+            );
+
+            if (msgIndex !== -1) {
+              setThreadMessages((prev) => {
+                const newThreadMsgs = [...prev[rootId]];
+                newThreadMsgs.splice(msgIndex, 1);
+
+                return {
+                  ...prev,
+                  [rootId]: newThreadMsgs,
+                };
+              });
+            }
+          });
+
+          // Si c'était un message auquel on voulait répondre, annuler la réponse
+          if (replyTo?.id === messageId) {
+            clearReply();
+          }
+        }
+
+        return result.success;
+      } catch (error) {
+        console.error(`Error deleting message ${messageId}:`, error);
+        return false;
+      }
+    },
+    [services, threadMessages, setThreadMessages, replyTo, clearReply],
+  );
+
+  // Derive isReplying from replyTo
+  const isReplying = useMemo(() => replyTo !== null, [replyTo]);
 
   /**
    * Add a reaction to a message
@@ -132,14 +346,14 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         !emoji ||
         !services?.mattermostService ||
         !currentUser ||
-        !currentChannelIdRef.current
+        !activeChannelId
       ) {
         return false;
       }
 
       try {
         await services.mattermostService.removeReaction(
-          currentChannelIdRef.current,
+          activeChannelId,
           messageId,
           emoji,
         );
@@ -152,7 +366,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services, currentUser],
+    [services, currentUser, activeChannelId],
   );
 
   /**
@@ -165,14 +379,14 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         !emoji ||
         !services?.mattermostService ||
         !currentUser ||
-        !currentChannelIdRef.current
+        !activeChannelId
       ) {
         return false;
       }
 
       try {
         return await services.mattermostService.hasReacted(
-          currentChannelIdRef.current,
+          activeChannelId,
           messageId,
           emoji,
         );
@@ -184,7 +398,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services, currentUser],
+    [services, currentUser, activeChannelId],
   );
 
   /**
@@ -381,30 +595,19 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
     void loadFrequentEmojis();
   }, [services]);
 
-  // Track current channel ID for reactions
-  React.useEffect(() => {
-    if (!services?.notificationService) return;
-
-    const updateCurrentChannelId = () => {
-      // In a real implementation, you would get this from the notification service
-      // This is a simplified approximation
-      const channelId = null; // services.notificationService.getCurrentChannelId();
-      currentChannelIdRef.current = channelId;
-    };
-
-    // Initial update
-    updateCurrentChannelId();
-
-    // Subscribe to channel view changes
-    return services.notificationService.addEventListener(
-      WebSocketEventType.CHANNEL_VIEWED,
-      updateCurrentChannelId,
-    );
-  }, [services]);
-
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo<MessageContextType>(
     () => ({
+      // Reply state (moved from ChannelContext)
+      replyTo,
+      isReplying,
+      setReplyTo,
+      clearReply,
+      replyToMessage,
+      sendMessage,
+      editMessage,
+      deleteMessage,
+
       // Reaction methods
       addReaction,
       removeReaction,
@@ -426,6 +629,13 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
       enrichMessageWithMetadata,
     }),
     [
+      // Reply state dependencies
+      replyTo,
+      isReplying,
+      setReplyTo,
+      clearReply,
+
+      // Other dependencies
       addReaction,
       removeReaction,
       hasReacted,

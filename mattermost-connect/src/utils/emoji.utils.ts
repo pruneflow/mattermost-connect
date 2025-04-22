@@ -728,7 +728,7 @@ export const GIF_API_CONFIG = {
   USE_API_PROVIDER: false,
 
   // API à utiliser (giphy | tenor)
-  PROVIDER: "giphy",
+  PROVIDER: "giphy" as "giphy" | "tenor",
 
   // Clé API (à remplacer par votre propre clé)
   API_KEY: "YOUR_API_KEY_HERE",

@@ -10,7 +10,7 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import { EmojiPickerContentProps } from "../../../../types";
-import { useMattermost } from "../../../../context";
+import { useMattermost, useEmoji } from "../../../../context";
 import { EMOJI_MAP, getEmojiName, searchEmojis } from "../../../../utils";
 
 /**
@@ -32,19 +32,14 @@ const EmojiPickerContent: React.FC<EmojiPickerContentProps> = ({
   // Effet pour filtrer les emojis lors de la recherche ou du changement de catégorie
   useEffect(() => {
     if (searchQuery) {
-      // Utiliser notre utilitaire de recherche centralisé
-      if (services?.emojiService) {
-        // Utiliser le service emoji si disponible
-        setFilteredEmojis(services.emojiService.searchEmojis(searchQuery));
-      } else {
-        // Fallback vers la fonction utilitaire directe
-        setFilteredEmojis(searchEmojis(searchQuery));
-      }
+      // In the new architecture, we use the utility function directly
+      // since emoji service is no longer exposed in the same way
+      setFilteredEmojis(searchEmojis(searchQuery));
     } else {
       // Afficher les emojis de la catégorie sélectionnée
       setFilteredEmojis(EMOJI_MAP[activeCategory] || []);
     }
-  }, [searchQuery, activeCategory, services?.emojiService]);
+  }, [searchQuery, activeCategory]);
 
   // Paramètres d'affichage
   const emojisPerRow = 8; // Afficher 8 emojis par ligne

@@ -1,6 +1,6 @@
 // src/components/ChannelViewer/message/Message.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useMattermost } from "../../../context";
+import { useMattermost, useUserContext } from "../../../context";
 import {
   Box,
   Paper,
@@ -40,7 +40,8 @@ const Message: React.FC<MessageProps> = ({
   avatarSx,
   highlight = false,
 }) => {
-  const { services, getUser, currentUser } = useMattermost();
+  const { services } = useMattermost();
+  const { getUser, currentUser } = useUserContext();
   const [author, setAuthor] = useState<User | null>(null);
   const [formattedText, setFormattedText] = useState("");
   const [isHovered, setIsHovered] = useState(false);

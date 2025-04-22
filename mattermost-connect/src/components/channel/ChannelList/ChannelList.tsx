@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import {
   useChannelContext,
+  useConnection,
   useMattermost,
   useUserContext,
 } from "../../../context";
@@ -102,7 +103,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
   channelsContainerSx,
 }) => {
   const theme = useTheme();
-  const { services, isConnected } = useMattermost();
+  const { services } = useMattermost();
+  const { isConnected } = useConnection();
   const { currentUser, getUserDisplayName } = useUserContext();
   const { setActiveChannel, activeChannel } = useChannelContext();
 

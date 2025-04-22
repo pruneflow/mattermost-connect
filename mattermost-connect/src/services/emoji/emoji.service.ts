@@ -252,7 +252,8 @@ export class EmojiService implements EmojiServiceInterface {
         const response = await fetch(apiUrl);
 
         if (!response.ok) {
-          throw new Error(`Erreur API GIF: ${response.status}`);
+          console.error(`Erreur API GIF: ${response.status}`);
+          return [];
         }
 
         const data = await response.json();
@@ -289,7 +290,8 @@ export class EmojiService implements EmojiServiceInterface {
         const response = await fetch(apiUrl);
 
         if (!response.ok) {
-          throw new Error(`Erreur API GIF: ${response.status}`);
+          console.error(`Erreur API GIF: ${response.status}`);
+          return [];
         }
 
         const data = await response.json();

@@ -10,14 +10,10 @@ import React, {
   useRef,
 } from "react";
 import { Channel, Message } from "../types";
-import {
-  assertServiceInitialized,
-  ServiceContainer,
-} from "../services/factory";
+import { ServiceContainer, WebSocketEventType } from "../services";
 import { useConnection } from "./ConnectionContext";
 import { useUserContext } from "./UserContext";
 import { useTeamContext } from "./TeamContext";
-import { WebSocketEventType } from "../services/notification/notification.service";
 
 /**
  * Options for messages pagination
@@ -78,18 +74,6 @@ export interface ChannelContextType {
     channelId?: string,
     options?: GetMessagesOptions,
   ) => Promise<Message[]>;
-  sendMessage: (message: string, fileIds?: string[]) => Promise<Message | null>;
-  editMessage: (
-    messageId: string,
-    newMessage: string,
-  ) => Promise<Message | null>;
-  deleteMessage: (messageId: string) => Promise<boolean>;
-  setReplyTo: (message: Message | null) => void;
-  replyToMessage: (
-    messageId: string,
-    message: string,
-    fileIds?: string[],
-  ) => Promise<Message | null>;
   setHighlightMessageId: (messageId?: string) => void;
 
   // Navigation method
@@ -131,7 +115,7 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
 }) => {
   // Get dependency contexts
   const connection = useConnection();
-  const { currentUser, getTypingIndicatorText } = useUserContext();
+  const { getTypingIndicatorText } = useUserContext();
   const { getChannelById } = useTeamContext();
 
   // Channel state
@@ -149,7 +133,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
   const [highlightMessageId, setHighlightMessageIdState] = useState<
     string | undefined
   >(undefined);
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
 
   // Refs for tracking state
   const activeChannelRef = useRef<Channel | null>(null);
@@ -349,164 +332,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
   );
 
   /**
-   * Send a message to the current channel
-   */
-  const sendMessage = useCallback(
-    async (message: string, fileIds?: string[]): Promise<Message | null> => {
-      if (
-        !activeChannelRef.current?.id ||
-        (!message.trim() && (!fileIds || fileIds.length === 0)) ||
-        !services?.mattermostService
-      ) {
-        return null;
-      }
-
-      try {
-        const newMessage = await services.mattermostService.postMessage(
-          activeChannelRef.current.id,
-          message,
-          fileIds,
-        );
-
-        // Add new message to state
-        setMessages((prev) => {
-          const updated = [...prev, newMessage].sort(
-            (a, b) => a.create_at - b.create_at,
-          );
-          messagesRef.current = updated;
-          return updated;
-        });
-
-        return newMessage;
-      } catch (error) {
-        console.error("Error sending message:", error);
-        return null;
-      }
-    },
-    [services],
-  );
-
-  /**
-   * Edit an existing message
-   */
-  const editMessage = useCallback(
-    async (messageId: string, newMessage: string): Promise<Message | null> => {
-      if (
-        !messageId ||
-        !newMessage.trim() ||
-        !services ||
-        !services?.mattermostService
-      ) {
-        return null;
-      }
-      assertServiceInitialized(services.mattermostService, "mattermostService");
-
-      try {
-        // @ts-ignore
-        const updatedMessage = await services!.mattermostService!.editMessage(
-          messageId,
-          newMessage,
-        );
-
-        // Update message in state
-        setMessages((prev) => {
-          const updated = prev.map((msg) =>
-            msg.id === messageId ? updatedMessage : msg,
-          );
-          messagesRef.current = updated;
-          return updated;
-        });
-
-        return updatedMessage;
-      } catch (error) {
-        console.error(`Error editing message ${messageId}:`, error);
-        return null;
-      }
-    },
-    [services],
-  );
-
-  /**
-   * Delete a message
-   */
-  const deleteMessage = useCallback(
-    async (messageId: string): Promise<boolean> => {
-      if (!messageId || !services || !services?.mattermostService) {
-        return false;
-      }
-
-      assertServiceInitialized(services.mattermostService, "mattermostService");
-
-      try {
-        const result =
-          await services!.mattermostService!.deleteMessage(messageId);
-
-        if (result.success) {
-          // Remove message from state
-          setMessages((prev) => {
-            const updated = prev.filter((msg) => msg.id !== messageId);
-            messagesRef.current = updated;
-            return updated;
-          });
-        }
-
-        return result.success;
-      } catch (error) {
-        console.error(`Error deleting message ${messageId}:`, error);
-        return false;
-      }
-    },
-    [services],
-  );
-
-  /**
-   * Reply to a message
-   */
-  const replyToMessage = useCallback(
-    async (
-      messageId: string,
-      message: string,
-      fileIds?: string[],
-    ): Promise<Message | null> => {
-      if (
-        !activeChannelRef.current?.id ||
-        !messageId ||
-        (!message.trim() && (!fileIds || fileIds.length === 0)) ||
-        !services?.mattermostService
-      ) {
-        return null;
-      }
-
-      try {
-        const reply = await services.mattermostService.replyToMessage(
-          activeChannelRef.current.id,
-          messageId,
-          message,
-          fileIds,
-        );
-
-        // Add reply to state
-        setMessages((prev) => {
-          const updated = [...prev, reply].sort(
-            (a, b) => a.create_at - b.create_at,
-          );
-          messagesRef.current = updated;
-          return updated;
-        });
-
-        // Clear reply state
-        setReplyTo(null);
-
-        return reply;
-      } catch (error) {
-        console.error(`Error replying to message ${messageId}:`, error);
-        return null;
-      }
-    },
-    [services],
-  );
-
-  /**
    * Set message highlight ID
    */
   const setHighlightMessageId = useCallback((messageId?: string) => {
@@ -527,7 +352,8 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
         const channel = await loadChannel(channelId);
 
         if (!channel) {
-          throw new Error(`Failed to load channel ${channelId}`);
+          console.error(`Failed to load channel ${channelId}`);
+          return;
         }
 
         // Then load messages
@@ -646,7 +472,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
       isMessagesLoading,
       messagesError,
       highlightMessageId,
-      replyToMessage: replyTo,
       unreadState,
       typingIndicator,
 
@@ -658,11 +483,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
 
       // Message methods
       loadMessages,
-      sendMessage,
-      editMessage,
-      deleteMessage,
-      setReplyTo,
-      replyToMessage,
       setHighlightMessageId,
 
       // Navigation
@@ -676,7 +496,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
       isMessagesLoading,
       messagesError,
       highlightMessageId,
-      replyTo,
       unreadState,
       typingIndicator,
       setActiveChannel,
@@ -684,11 +503,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
       getChannelUnreadState,
       markAsRead,
       loadMessages,
-      sendMessage,
-      editMessage,
-      deleteMessage,
-      setReplyTo,
-      replyToMessage,
       setHighlightMessageId,
       navigateToMessage,
     ],

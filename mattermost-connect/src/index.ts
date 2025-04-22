@@ -17,20 +17,17 @@ export {
   MattermostProvider,
   useMattermost,
   MattermostContext,
+  useUserContext,
+  useConnection,
+  useTeamContext,
+  useMessageContext,
+  useChannelContext,
 } from "./context";
 
 // ---------- Hooks Spécialisés ----------
 
 // Exporter les hooks pour interagir avec les canaux, équipes et utilisateurs
-export {
-  useChannel,
-  useTeam,
-  useUser,
-  useUsers,
-  useAuth,
-  useFile,
-  useRealtime,
-} from "./hooks";
+export { useAuth, useFile, useRealtime } from "./hooks";
 
 // ---------- Composants UI ----------
 

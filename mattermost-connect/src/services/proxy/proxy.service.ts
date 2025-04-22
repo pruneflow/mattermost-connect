@@ -9,24 +9,12 @@ import {
 import { User, Message, Channel, Team } from "../../types";
 import { HttpClient, createProxyHttpClient } from "../http";
 import { AuthManager, createProxyAuthManager } from "../auth";
-import { TeamServiceInterface, createTeamService } from "../team/team.service";
-import {
-  ChannelServiceInterface,
-  createChannelService,
-} from "../channel/channel.service";
-import {
-  MessageServiceInterface,
-  createMessageService,
-} from "../message/message.service";
+import { TeamServiceInterface, createTeamService } from "../team";
+import { ChannelServiceInterface, createChannelService } from "../channel";
+import { MessageServiceInterface, createMessageService } from "../message";
 import { UserServiceInterface, createUserService } from "../user";
-import {
-  ReactionServiceInterface,
-  createReactionService,
-} from "../reaction/reaction.service";
-import {
-  ErrorHandlerInterface,
-  createErrorHandler,
-} from "../error/error-handler";
+import { ReactionServiceInterface, createReactionService } from "../reaction";
+import { ErrorHandlerInterface, createErrorHandler } from "../error";
 
 /**
  * Configuration pour le service proxy
@@ -52,9 +40,9 @@ export class ProxyService extends BaseService implements MattermostService {
   private teamService: TeamServiceInterface;
   private channelService: ChannelServiceInterface;
   private messageService: MessageServiceInterface;
-  private userService: UserServiceInterface;
-  private reactionService: ReactionServiceInterface;
-  private errorHandler: ErrorHandlerInterface;
+  private readonly userService: UserServiceInterface;
+  private readonly reactionService: ReactionServiceInterface;
+  private readonly errorHandler: ErrorHandlerInterface;
 
   private readonly clientId: string;
   private userId?: string;
@@ -382,9 +370,8 @@ export class ProxyService extends BaseService implements MattermostService {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(
-          error.message || `File upload error: ${response.status}`,
-        );
+        console.error(error.message || `File upload error: ${response.status}`);
+        return;
       }
 
       return response.json();

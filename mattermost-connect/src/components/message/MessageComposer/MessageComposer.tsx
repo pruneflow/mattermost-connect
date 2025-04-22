@@ -1,6 +1,6 @@
 // src/components/message/MessageComposer/MessageComposer.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { useMattermost } from "../../../context";
+import { useMattermost, useMessageContext } from "../../../context";
 import {
   Box,
   Collapse,
@@ -13,10 +13,11 @@ import { ReplyContext } from "./components/ReplyContext";
 import { AttachmentPreview } from "./components/AttachmentPreview";
 import { ComposerInput } from "./components/ComposerInput";
 import { ComposerToolbar } from "./components/ComposerToolbar";
-import { EmojiPicker, EmojiSelectionResult, PickerMode } from "../EmojiPicker";
+import { EmojiPicker, PickerMode } from "../EmojiPicker";
 import { EmojiProvider } from "../../../context/EmojiProvider";
 import { MattermostFile } from "../Attachment/Attachment";
 import { assertServiceInitialized } from "../../../services";
+import { EmojiSelectionResult } from "../../../types";
 
 export enum MessageComposerMode {
   AUTO = "auto",
@@ -64,7 +65,8 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
   style,
   sx,
 }) => {
-  const { services, replyTo, clearReply, isReplying } = useMattermost();
+  const { services } = useMattermost();
+  const { replyTo, clearReply, isReplying } = useMessageContext();
 
   assertServiceInitialized(services, "MessageComposer requires services");
   assertServiceInitialized(
@@ -314,7 +316,7 @@ const MessageComposer: React.FC<MessageComposerProps> = ({
             uploadedFileIds,
           );
         } else {
-          throw new Error("Reply functionality is not available");
+          console.debug("Reply functionality is not available");
         }
       } else {
         // Regular message with uploaded file IDs

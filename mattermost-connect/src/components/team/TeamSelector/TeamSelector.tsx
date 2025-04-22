@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useMattermost } from "../../../context";
+import { useMattermost, useTeamContext } from "../../../context";
 import { Team } from "../../../types";
 
 // Material-UI Components
@@ -101,24 +101,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   selectedTeamSx,
   selectedTeamId,
 }) => {
-  const isMountedRef = useRef(true);
-  const instanceIdRef = useRef(
-    `team-selector-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
-
-  // Variables pour le débogage et comprendre le cycle de vie du composant
-  const renderCountRef = useRef(0);
-  const effectRunCountRef = useRef(0);
-  const fetchCountRef = useRef(0);
-
-  // Incrémenter le compteur de rendu à chaque rendu
-  renderCountRef.current += 1;
-
-  console.log(
-    `[TeamSelector] Render #${renderCountRef.current}, isMounted=${isMountedRef.current}`,
-  );
-
-  const { services, setActiveTeam, activeTeam } = useMattermost();
+  const { services } = useMattermost();
+  const { setActiveTeam, activeTeam } = useTeamContext();
   console.log(
     `[TeamSelector] activeTeam=${activeTeam?.display_name || "null"}`,
   );
@@ -143,31 +127,9 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     Record<string, { msg_count: number; mention_count: number }>
   >({});
 
-  // Référence pour les appels fetchTeams
-  const fetchingRef = useRef<boolean>(false);
-  const teamsLoadedRef = useRef<boolean>(false);
-
-  useLayoutEffect(() => {
-    const instanceId = instanceIdRef.current;
-    console.log(
-      `[TeamSelector ${instanceId}] MOUNTED, setting isMountedRef=true`,
-    );
-    isMountedRef.current = true;
-
-    return () => {
-      console.log(
-        `[TeamSelector ${instanceId}] UNMOUNTED, setting isMountedRef=false`,
-      );
-      isMountedRef.current = false;
-    };
-  }, []);
-
   // 1. Mémoriser la fonction de sélection d'équipe avec useCallback
   const handleTeamSelect = useCallback(
     (team: Team) => {
-      console.log(
-        `[TeamSelector] Team selected: ${team.display_name}, isMounted=${isMountedRef.current}`,
-      );
       // Enlever la vérification d'isMounted ici
       setActiveTeam(team);
       if (onSelectTeam) {
@@ -177,122 +139,50 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     [onSelectTeam, setActiveTeam],
   );
 
-  // Fonction pour charger les équipes avec une gestion robuste du montage
-  const fetchTeams = useCallback(async () => {
-    // Éviter les appels en parallèle
-    if (fetchingRef.current) {
-      console.log(`[TeamSelector] fetchTeams: Already fetching, skipping`);
-      return;
-    }
-
-    const fetchId = ++fetchCountRef.current;
-    console.log(
-      `[TeamSelector] fetchTeams #${fetchId} started, isMounted=${isMountedRef.current}`,
-    );
-
-    fetchingRef.current = true;
-
-    // Afficher le chargement seulement si nous n'avons pas déjà des équipes
-    if (!teamsLoadedRef.current && isMountedRef.current) {
-      setLoading(true);
-    }
-
-    try {
-      console.log(`[TeamSelector] fetchTeams #${fetchId}: Calling API...`);
-      const teamsData = await mattermostService.getTeams();
-      console.log(
-        `[TeamSelector] fetchTeams #${fetchId}: Got ${teamsData.length} teams, isMounted=${isMountedRef.current}`,
-      );
-
-      // Vérifier si le composant est toujours monté - POINT CRITIQUE
-      if (!isMountedRef.current) {
-        console.log(
-          `[TeamSelector] fetchTeams #${fetchId}: Component unmounted, aborting`,
-        );
-        return;
-      }
-
-      if (teamsData && teamsData.length > 0) {
-        // Sort teams if needed
-        let sortedTeams = [...teamsData];
-        if (!useServerOrder) {
-          sortedTeams.sort((a, b) =>
-            a.display_name.localeCompare(b.display_name),
-          );
-        }
-
-        console.log(
-          `[TeamSelector] fetchTeams #${fetchId}: Setting teams state...`,
-        );
-        setTeams(sortedTeams);
-        teamsLoadedRef.current = true;
-
-        console.log(
-          `[TeamSelector] fetchTeams #${fetchId}: Current activeTeam=${activeTeam?.display_name || "null"}, selectedTeamId=${selectedTeamId || "none"}`,
-        );
-
-        // Seulement définir une équipe active s'il n'y en a pas déjà une
-        if (!activeTeam && !selectedTeamId) {
-          console.log(
-            `[TeamSelector] fetchTeams #${fetchId}: Auto-selecting first team ${sortedTeams[0].display_name}`,
-          );
-          setActiveTeam(sortedTeams[0]);
-        } else if (selectedTeamId) {
-          // Si selectedTeamId est fourni, l'utiliser pour sélectionner l'équipe
-          const selectedTeam = sortedTeams.find((t) => t.id === selectedTeamId);
-          if (selectedTeam) {
-            console.log(
-              `[TeamSelector] fetchTeams #${fetchId}: Selecting team from prop ${selectedTeam.display_name}`,
-            );
-            setActiveTeam(selectedTeam);
-          }
-        }
-
-        setError(null);
-      }
-    } catch (err) {
-      console.error(
-        `[TeamSelector] fetchTeams #${fetchId}: Error loading teams:`,
-        err,
-      );
-      if (isMountedRef.current) {
-        setError(err instanceof Error ? err.message : "Failed to load teams");
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
-      fetchingRef.current = false;
-      console.log(`[TeamSelector] fetchTeams #${fetchId} completed`);
-    }
-  }, [
-    useServerOrder,
-    mattermostService,
-    activeTeam,
-    setActiveTeam,
-    selectedTeamId,
-  ]);
-
   // 2. Effet pour charger les équipes une seule fois
   useEffect(() => {
-    const effectId = ++effectRunCountRef.current;
-    console.log(
-      `[TeamSelector] useEffect #${effectId} for teams loading started`,
-    );
+    // Fonction pour charger les équipes avec une gestion robuste du montage
+    const fetchTeams = async () => {
+      setLoading(true);
 
-    // Charger les équipes
-    fetchTeams().catch((err) => {
-      console.error(`[TeamSelector] Error in fetchTeams:`, err);
-    });
+      try {
+        const teamsData = await mattermostService.getTeams();
 
-    // Nettoyage avec marquer comme démonté
-    return () => {
-      console.log(
-        `[TeamSelector] useEffect #${effectId} cleanup: marking as unmounted`,
-      );
-      isMountedRef.current = false;
+        if (teamsData && teamsData.length > 0) {
+          // Sort teams if needed
+          let sortedTeams = [...teamsData];
+          if (!useServerOrder) {
+            sortedTeams.sort((a, b) =>
+              a.display_name.localeCompare(b.display_name),
+            );
+          }
+
+          setTeams(sortedTeams);
+
+          // Seulement définir une équipe active s'il n'y en a pas déjà une
+          if (!activeTeam && !selectedTeamId) {
+            setActiveTeam(sortedTeams[0]);
+          } else if (selectedTeamId) {
+            // Si selectedTeamId est fourni, l'utiliser pour sélectionner l'équipe
+            const selectedTeam = sortedTeams.find(
+              (t) => t.id === selectedTeamId,
+            );
+            if (selectedTeam) {
+              setActiveTeam(selectedTeam);
+            }
+          }
+
+          setError(null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load teams");
+      } finally {
+        setLoading(false);
+      }
     };
-  }, [fetchTeams]);
+
+    void fetchTeams();
+  }, []);
 
   // 3. Effet pour réinitialiser le flag de montage si le composant est réellement monté
   // Ceci est crucial car si le composant est re-rendu mais pas démonté, nous devons réinitialiser le flag

@@ -14,13 +14,12 @@ import {
   Checkbox,
   IconButton,
   InputAdornment,
-  Link,
   Divider,
   SxProps,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useAuth } from "../../hooks/useAuth";
-import { useMattermost } from "../../context";
+import { useConnection, useUserContext } from "../../context";
 
 /**
  * Types d'authentification supportés
@@ -92,7 +91,8 @@ const AuthenticationSystem: React.FC<AuthenticationSystemProps> = ({
     onAuthError: onLoginError,
     storeToken: rememberCredentials,
   });
-  const { isConnected, currentUser } = useMattermost();
+  const { isConnected } = useConnection();
+  const { currentUser } = useUserContext();
 
   // État du formulaire
   const [authType, setAuthType] = useState<AuthType>(defaultAuthType);
@@ -298,8 +298,10 @@ const AuthenticationSystem: React.FC<AuthenticationSystemProps> = ({
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={isAuthenticating}
                   autoComplete="username"
-                  InputProps={{
-                    autoComplete: "username",
+                  slotProps={{
+                    input: {
+                      autoComplete: "username",
+                    },
                   }}
                 />
                 <TextField
@@ -312,18 +314,20 @@ const AuthenticationSystem: React.FC<AuthenticationSystemProps> = ({
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isAuthenticating}
                   autoComplete="current-password"
-                  InputProps={{
-                    autoComplete: "current-password",
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={handleTogglePasswordVisibility}
-                          edge="end"
-                        >
-                          {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
+                  slotProps={{
+                    input: {
+                      autoComplete: "current-password",
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={handleTogglePasswordVisibility}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
                   }}
                 />
               </>

@@ -386,6 +386,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     try {
       // Utiliser la méthode handleAuthError du service de fichiers amélioré
       if (fileService && "handleAuthError" in fileService) {
+        // @ts-ignore
         const success = await fileService.handleAuthError();
 
         if (success) {

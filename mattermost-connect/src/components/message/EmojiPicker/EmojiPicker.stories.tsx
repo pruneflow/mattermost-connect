@@ -1,89 +1,144 @@
-// src/components/MessageComposer/EmojiPicker.stories.tsx
+// src/components/message/EmojiPicker/EmojiPicker.stories.tsx
 import type { Decorator, Meta, StoryObj } from "@storybook/react";
 import React, { useState } from "react";
-import EmojiPicker from "./EmojiPicker";
-import {
-  Box,
-  Typography,
-  Paper,
-  IconButton,
-  TextField,
-  InputAdornment,
-} from "@mui/material";
-import { EmojiEmotions as EmojiIcon } from "@mui/icons-material";
-import MattermostProvider from "../../../context/MattermostProvider";
-import EmojiProvider from "../../../context/EmojiProvider";
-import { MOCK_GIFS } from "./data/gifData";
+import EmojiPicker from "../../../components/message/EmojiPicker/EmojiPicker";
+import { Box, Typography, Paper } from "@mui/material";
+import { MattermostProvider } from "../../../context";
+import { EMOJI_CATEGORIES, GIF_CATEGORIES } from "../../../utils";
+import { GifData, PickerMode } from "../../../types";
 
-// Mock Mattermost service pour Storybook
-const createMockMattermostService = () => ({
-  postMessage: async (channelId: string, message: string) => {
-    console.log(`Message envoyé au canal ${channelId}:`, message);
-    return {
-      id: "mock-message-id",
-      message,
-      channel_id: channelId,
-      user_id: "user1",
-      create_at: Date.now(),
-      update_at: Date.now(),
-    };
-  },
-  // Ajout des méthodes manquantes
-  getFrequentEmojis: async () => [
-    "👍",
-    "❤️",
-    "😂",
-    "🎉",
-    "🔥",
-    "👏",
-    "✅",
-    "🙏",
+// Mock GIFs data for Storybook
+const MOCK_GIFS: Record<string, GifData[]> = {
+  Trending: [
+    {
+      id: "trend1",
+      preview: "https://via.placeholder.com/150",
+      title: "Trending GIF 1",
+    },
+    {
+      id: "trend2",
+      preview: "https://via.placeholder.com/150",
+      title: "Trending GIF 2",
+    },
   ],
+  Reactions: [
+    {
+      id: "react1",
+      preview: "https://via.placeholder.com/150",
+      title: "Reaction GIF 1",
+    },
+    {
+      id: "react2",
+      preview: "https://via.placeholder.com/150",
+      title: "Reaction GIF 2",
+    },
+  ],
+  Memes: [
+    {
+      id: "meme1",
+      preview: "https://via.placeholder.com/150",
+      title: "Meme GIF 1",
+    },
+    {
+      id: "meme2",
+      preview: "https://via.placeholder.com/150",
+      title: "Meme GIF 2",
+    },
+  ],
+};
 
-  addReaction: async () => ({ success: true }),
-  removeReaction: async () => ({ success: true }),
-  hasReacted: async () => false,
-  getGifs: async (category: string) => {
-    // Utiliser les données de MOCK_GIFS
-    return MOCK_GIFS[category] || [];
-  },
+// Create mock services for Storybook
+const createMockServices = () => {
+  // Mock Mattermost service
+  const mattermostService = {
+    mode: "custom" as const,
+    getBaseUrl: () => "https://example.com",
+    getCurrentUser: async () => ({
+      id: "user1",
+      username: "testuser",
+      update_at: Date.now(),
+    }),
+    getFrequentEmojis: async () => [
+      "👍",
+      "❤️",
+      "😂",
+      "🎉",
+      "🔥",
+      "👏",
+      "✅",
+      "🙏",
+    ],
+    addReaction: async () => ({ success: true }),
+    removeReaction: async () => ({ success: true }),
+    hasReacted: async () => false,
+    getGifs: async (category: string) => MOCK_GIFS[category] || [],
+    searchGifs: async (query: string) => {
+      const allGifs = Object.values(MOCK_GIFS).flat();
+      return allGifs.filter((gif) =>
+        gif.title.toLowerCase().includes(query.toLowerCase()),
+      );
+    },
+  };
 
-  searchGifs: async (query: string) => {
-    // Recherche simple dans les GIFs
-    const allGifs = Object.values(MOCK_GIFS).flat();
-    return allGifs.filter((gif) =>
-      gif.title.toLowerCase().includes(query.toLowerCase()),
-    );
-  },
-  // Autres méthodes mockées si nécessaire
-});
+  // Mock notification service
+  const notificationService = {
+    addEventListener: () => () => {},
+    setCurrentUserId: () => {},
+  };
 
-// Decorateur pour fournir un MattermostProvider factice
+  // Mock emoji service
+  const emojiService = {
+    getFrequentEmojis: mattermostService.getFrequentEmojis,
+    addReaction: mattermostService.addReaction,
+    removeReaction: mattermostService.removeReaction,
+    hasReacted: mattermostService.hasReacted,
+    searchGifs: mattermostService.searchGifs,
+    getGifs: mattermostService.getGifs,
+  };
+
+  return {
+    mattermostService,
+    notificationService,
+    emojiService,
+    // Add minimal implementations of other required services
+    teamService: {},
+    channelService: {},
+    messageService: {},
+    userService: {},
+    reactionService: {},
+    fileService: {},
+    errorHandler: {},
+  };
+};
+
+// Decorator to provide a mock MattermostProvider
 const ProviderDecorator: Decorator = (Story) => (
   <MattermostProvider
     serviceProvider={{
-      setupService: createMockMattermostService,
+      setupService: () => createMockServices().mattermostService,
       isConnected: true,
       skipConnectionTest: true,
+      enableWebsocket: false,
     }}
   >
-    <EmojiProvider>
-      <Story />
-    </EmojiProvider>
+    <Story />
   </MattermostProvider>
 );
 
 const meta: Meta<typeof EmojiPicker> = {
   title: "Components/EmojiPicker",
   component: EmojiPicker,
-
   decorators: [ProviderDecorator],
   parameters: {
     layout: "centered",
   },
   argTypes: {
-    onEmojiSelect: { action: "emoji selected" },
+    onSelect: { action: "emoji selected" },
     onClose: { action: "closed" },
+    mode: {
+      control: "radio",
+      options: [PickerMode.MESSAGE, PickerMode.REACTION],
+    },
   },
 };
 
@@ -91,25 +146,27 @@ export default meta;
 
 type Story = StoryObj<typeof EmojiPicker>;
 
-// Story de base qui montre le EmojiPicker directement
+// Basic story showing the EmojiPicker directly
 export const Default: Story = {
-  args: {},
+  args: {
+    mode: PickerMode.MESSAGE,
+  },
 };
 
-// Story avec sélection d'emoji et affichage de l'emoji sélectionné
+// Story with emoji selection and display of the selected emoji
 export const WithSelection: Story = {
   render: (args) => {
     const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
     const [isPickerOpen, setIsPickerOpen] = useState(true);
 
-    const handleEmojiSelect = (emoji: string) => {
-      setSelectedEmoji(emoji);
-      args.onEmojiSelect?.(emoji);
+    const handleEmojiSelect = (result: any) => {
+      setSelectedEmoji(result.emoji);
+      args.onSelect?.(result);
     };
 
     const handleClose = () => {
       setIsPickerOpen(false);
-      setTimeout(() => setIsPickerOpen(true), 500); // Réouvrir après un délai pour la démo
+      setTimeout(() => setIsPickerOpen(true), 500); // Reopen after delay for demo
       args.onClose?.();
     };
 
@@ -118,7 +175,7 @@ export const WithSelection: Story = {
         {selectedEmoji && (
           <Paper elevation={2} sx={{ p: 2, mb: 3, maxWidth: 300, mx: "auto" }}>
             <Typography component={"div"} variant="body1" gutterBottom>
-              Emoji sélectionné:
+              Selected emoji:
             </Typography>
             <Box sx={{ fontSize: "2rem", textAlign: "center" }}>
               {selectedEmoji}
@@ -128,38 +185,25 @@ export const WithSelection: Story = {
         {isPickerOpen && (
           <EmojiPicker
             {...args}
-            onEmojiSelect={handleEmojiSelect}
+            onSelect={handleEmojiSelect}
             onClose={handleClose}
           />
         )}
       </Box>
     );
   },
-  args: {},
+  args: {
+    mode: PickerMode.MESSAGE,
+  },
 };
 
-// Story qui montre comment basculer entre les catégories
+// Story showing category navigation
 export const CategoryNavigation: Story = {
   render: (args) => {
-    const categories = [
-      "Smileys & Emotion",
-      "People & Body",
-      "Animals & Nature",
-      "Food & Drink",
-      "Travel & Places",
-      "Activities",
-      "Objects",
-      "Symbols",
-      "Flags",
-    ];
-
-    const [activeCategory, setActiveCategory] = useState(categories[0]);
-
     return (
       <Box sx={{ textAlign: "center" }}>
         <Typography component={"div"} variant="body2" gutterBottom>
-          Vous pouvez naviguer entre les différentes catégories dans le picker
-          ci-dessous
+          You can navigate between different categories in the picker below
         </Typography>
         <Typography
           variant="caption"
@@ -167,7 +211,7 @@ export const CategoryNavigation: Story = {
           gutterBottom
           sx={{ display: "block" }}
         >
-          Catégorie active: <strong>{activeCategory}</strong>
+          Available categories: <strong>{EMOJI_CATEGORIES.join(", ")}</strong>
         </Typography>
         <Box sx={{ mt: 2 }}>
           <EmojiPicker {...args} />
@@ -175,17 +219,26 @@ export const CategoryNavigation: Story = {
       </Box>
     );
   },
-  args: {},
+  args: {
+    mode: PickerMode.MESSAGE,
+  },
 };
 
-// Story qui montre l'onglet GIFs
+// Story showing the GIFs tab
 export const GifTab: Story = {
   render: (args) => {
     return (
       <Box sx={{ textAlign: "center" }}>
         <Typography component={"div"} variant="body2" gutterBottom>
-          Le picker prend également en charge les GIFs (cliquez sur l'onglet
-          GIFs)
+          The picker also supports GIFs (click on the GIFs tab)
+        </Typography>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          gutterBottom
+          sx={{ display: "block" }}
+        >
+          Available GIF categories: <strong>{GIF_CATEGORIES.join(", ")}</strong>
         </Typography>
         <Box sx={{ mt: 2 }}>
           <EmojiPicker {...args} />
@@ -193,9 +246,11 @@ export const GifTab: Story = {
       </Box>
     );
   },
-  args: {},
+  args: {
+    mode: PickerMode.MESSAGE,
+  },
   play: async ({ canvasElement }) => {
-    // Trouver et cliquer sur l'onglet GIFs
+    // Find and click on the GIFs tab
     const gifsTab =
       canvasElement.querySelector('[aria-label="GIFs"]') ||
       canvasElement.querySelector('[role="tab"]:nth-child(2)');
@@ -205,14 +260,16 @@ export const GifTab: Story = {
   },
 };
 
-// Story mobile pour montrer l'adaptabilité
+// Mobile story to show adaptability
 export const Mobile: Story = {
   render: (args) => (
     <Box sx={{ width: "100%", maxWidth: 350 }}>
       <EmojiPicker {...args} />
     </Box>
   ),
-  args: {},
+  args: {
+    mode: PickerMode.MESSAGE,
+  },
   parameters: {
     viewport: {
       defaultViewport: "mobile1",

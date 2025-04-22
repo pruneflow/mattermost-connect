@@ -8,7 +8,11 @@ import {
   Tooltip,
 } from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
-import { useMattermost, useUserContext } from "../../../context";
+import {
+  useMattermost,
+  useMessageContext,
+  useUserContext,
+} from "../../../context";
 import { getEmojiFromName } from "../../../utils";
 import { WebSocketEventType } from "../../../services/";
 
@@ -33,6 +37,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
 }) => {
   const { services } = useMattermost();
   const { currentUser } = useUserContext();
+  const { addReaction, removeReaction } = useMessageContext();
   const [reactions, setReactions] = useState<ReactionInfo[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
@@ -249,31 +254,24 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   // Gérer le clic sur une réaction
   const handleReactionClick = useCallback(
     async (emojiName: string) => {
-      if (!currentUser || !services?.emojiService) return;
+      if (!currentUser) return;
 
-      // Définir l'état de chargement pour cet emoji
       setLoading((prev) => ({ ...prev, [emojiName]: true }));
 
       try {
         const alreadyReacted = hasUserReacted(emojiName);
 
         if (alreadyReacted) {
-          // L'utilisateur a déjà réagi, supprimer la réaction
-          await services.emojiService.removeReaction(
-            message.channel_id,
-            message.id,
-            emojiName,
-          );
+          // Remplacer services?.emojiService.removeReaction par:
+          await removeReaction(message.id, emojiName);
         } else {
-          // L'utilisateur n'a pas encore réagi, ajouter la réaction
-          // Utiliser getEmojiFromName pour obtenir le caractère emoji à partir du nom API
           const emojiChar = getEmojiFromName(emojiName) || emojiName;
-          await services.emojiService.addReaction(message.id, emojiChar);
+          // Remplacer services?.emojiService.addReaction par:
+          await addReaction(message.id, emojiChar);
         }
       } catch (error) {
         console.error("Error toggling reaction:", error);
       } finally {
-        // Effacer l'état de chargement
         setLoading((prev) => {
           const newLoading = { ...prev };
           delete newLoading[emojiName];
@@ -281,7 +279,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
         });
       }
     },
-    [message, hasUserReacted, services?.emojiService, currentUser],
+    [message, hasUserReacted, addReaction, removeReaction, currentUser],
   );
 
   // Si aucune réaction, ne rien afficher

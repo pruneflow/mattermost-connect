@@ -7,8 +7,8 @@ import React, {
   useRef,
   useLayoutEffect,
 } from "react";
-import { useMattermost } from "../../context";
-import { Team, Channel } from "../../types";
+import { useMattermost, useTeamContext } from "../../context";
+import { Team } from "../../types";
 
 // Material-UI Components
 import {
@@ -78,7 +78,8 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
   teamSx,
   channelListSx,
 }) => {
-  const { services, activeTeam, setActiveTeam } = useMattermost();
+  const { services } = useMattermost();
+  const { activeTeam, setActiveTeam } = useTeamContext();
 
   // State
   const [teams, setTeams] = useState<Team[]>([]);
