@@ -3,7 +3,7 @@ import Message from "./Message";
 import React, { useCallback, useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { Message as MessageType } from "../../../types";
-import { useMattermost } from "../../../context/MattermostProvider";
+import { useUserContext } from "../../../context";
 
 interface MessageListProps {
   /** Liste des messages à afficher */
@@ -42,7 +42,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   messagesToHighlight,
   autoScrollToBottom = true,
 }) => {
-  const { currentUser } = useMattermost();
+  const { currentUser } = useUserContext();
   // Référence pour le scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

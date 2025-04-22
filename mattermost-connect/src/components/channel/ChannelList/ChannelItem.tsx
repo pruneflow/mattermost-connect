@@ -1,7 +1,7 @@
 // src/components/channel/ChannelList/ChannelItem.tsx
 import React from "react";
 import { Channel } from "../../../types";
-import { useMattermost } from "../../../context";
+import { useChannelContext, useUserContext } from "../../../context";
 
 // Material-UI Components
 import {
@@ -65,11 +65,9 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
   iconSx,
 }) => {
   // Utiliser les nouvelles méthodes du MattermostProvider
-  const {
-    getTypingUsersForChannel,
-    getTypingIndicatorText,
-    getChannelUnreadState,
-  } = useMattermost();
+  const { getChannelUnreadState } = useChannelContext();
+
+  const { getTypingUsersForChannel, getTypingIndicatorText } = useUserContext();
 
   // Vérifier si des utilisateurs sont en train de taper dans ce canal
   const typingUsers = getTypingUsersForChannel(channel.id);

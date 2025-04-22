@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { WebSocketConnection, WebSocketSetupOptions } from "../types";
 import { setupWebsocket, releaseWebsocket } from "../services";
-import { WebSocketEventType } from "../services";
+import { WebSocketEventType } from "../services/notification/notification.service";
 
 /**
  * Interface for the ConnectionContext
@@ -120,6 +120,9 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
   const clientIdRef = useRef<string | undefined>(clientId);
   const userIdRef = useRef<string | undefined>(userId);
 
+  // Ref for event listeners
+  const eventListeners = useRef<Record<string, Set<(data: any) => void>>>({});
+
   // Determine connection mode based on props
   const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
     if (initialMode) return initialMode;
@@ -138,12 +141,70 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
   }, [serverUrl, token, proxyUrl, clientId, userId]);
 
   /**
+   * Initialize event listeners system
+   */
+  const initEventListeners = useCallback(() => {
+    // Initialize basic WebSocket event types
+    Object.values(WebSocketEventType).forEach((eventType) => {
+      if (!eventListeners.current[eventType]) {
+        eventListeners.current[eventType] = new Set();
+      }
+    });
+
+    // Add custom internal events
+    const customEvents = [
+      "connection_established",
+      "connection_lost",
+      "connection_error",
+    ];
+
+    customEvents.forEach((eventType) => {
+      if (!eventListeners.current[eventType]) {
+        eventListeners.current[eventType] = new Set();
+      }
+    });
+  }, []);
+
+  /**
+   * Notify all listeners for a specific event
+   */
+  const notifyListeners = useCallback((event: string, data: any) => {
+    if (eventListeners.current[event]) {
+      eventListeners.current[event].forEach((callback) => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in ${event} listener:`, error);
+        }
+      });
+    }
+  }, []);
+
+  /**
+   * Process a WebSocket event
+   */
+  const processWebSocketEvent = useCallback(
+    (event: any) => {
+      // Pass to notification handler if provided
+      if (notificationHandler) {
+        notificationHandler(event);
+      }
+
+      // Also notify internal listeners
+      if (event.event && eventListeners.current[event.event]) {
+        notifyListeners(event.event, event.data);
+      }
+    },
+    [notificationHandler, notifyListeners],
+  );
+
+  /**
    * Connect to WebSocket server
    */
   const connect = useCallback(async () => {
     // Skip if websocket is disabled or already connecting/connected
     if (!enableWebsocket || isConnecting || isConnected) {
-      return;
+      return websocketRef.current;
     }
 
     // Determine WebSocket URL based on mode
@@ -152,7 +213,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
     if (!mode) {
       setError(new Error("Cannot connect: Invalid connection configuration"));
-      return;
+      return null;
     }
 
     setIsConnecting(true);
@@ -163,7 +224,8 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       if (mode === "direct") {
         if (!serverUrl || !token) {
           console.debug("Direct mode requires serverUrl and token");
-          return;
+          setIsConnecting(false);
+          return null;
         }
 
         wsUrl = serverUrl.replace(/^http/, "ws") + "/api/v4/websocket";
@@ -171,7 +233,8 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       } else if (mode === "proxy") {
         if (!proxyUrl || !clientId) {
           console.debug("Proxy mode requires proxyUrl and clientId");
-          return;
+          setIsConnecting(false);
+          return null;
         }
 
         wsUrl = proxyUrl.replace(/^http/, "ws") + "/websocket";
@@ -189,23 +252,22 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
           if (!response.ok) {
             console.debug(`Failed to get WebSocket token: ${response.status}`);
-            return;
+            setIsConnecting(false);
+            return null;
           }
 
           const data = await response.json();
           wsToken = data.token;
         } catch (tokenError) {
-          if (tokenError instanceof Error) {
-            console.error("Erreur de token:", tokenError.message);
-          } else {
-            console.error("Erreur inconnue lors de la récupération du token");
-          }
-          return;
+          console.error("Error retrieving WebSocket token:", tokenError);
+          setIsConnecting(false);
+          return null;
         }
       } else {
         // Custom mode - placeholder, would need implementation
         console.debug("Custom WebSocket mode not implemented");
-        return;
+        setIsConnecting(false);
+        return null;
       }
 
       // Set up WebSocket options
@@ -213,21 +275,18 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
         mode,
         serverUrl: wsUrl,
         token: wsToken,
-        onMessage: (message) => {
-          // Forward messages to notification handler if provided
-          if (notificationHandler) {
-            notificationHandler(message);
-          }
-        },
+        onMessage: processWebSocketEvent,
         onError: (wsError) => {
           console.error("WebSocket error:", wsError);
           setError(new Error("WebSocket connection error"));
+          notifyListeners("connection_error", wsError);
         },
         onClose: (closeEvent) => {
           console.log("WebSocket closed:", closeEvent);
           setIsConnected(false);
           setWebsocket(null);
           websocketRef.current = null;
+          notifyListeners("connection_lost", closeEvent);
         },
       };
 
@@ -240,6 +299,9 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       setIsConnected(true);
       setError(null);
 
+      // Notify listeners of successful connection
+      notifyListeners("connection_established", { timestamp: Date.now() });
+
       return wsConnection;
     } catch (connectionError) {
       const errorObj =
@@ -250,6 +312,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       console.error("WebSocket connection error:", errorObj);
       setError(errorObj);
       setIsConnected(false);
+      notifyListeners("connection_error", errorObj);
       return null;
     } finally {
       setIsConnecting(false);
@@ -264,7 +327,8 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     proxyUrl,
     clientId,
     userId,
-    notificationHandler,
+    processWebSocketEvent,
+    notifyListeners,
   ]);
 
   /**
@@ -279,15 +343,20 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
       // Clean up WebSocket resources based on mode
       if (mode === "direct" && serverUrlRef.current && tokenRef.current) {
-        releaseWebsocket(serverUrlRef.current, tokenRef.current);
+        const wsUrl =
+          serverUrlRef.current.replace(/^http/, "ws") + "/api/v4/websocket";
+        releaseWebsocket(wsUrl, tokenRef.current);
       } else if (
         mode === "proxy" &&
         proxyUrlRef.current &&
         clientIdRef.current
       ) {
-        // For proxy mode, we might need additional cleanup here
+        // For proxy mode, use the correct URL format
         const wsUrl = proxyUrlRef.current.replace(/^http/, "ws") + "/websocket";
-        releaseWebsocket(wsUrl, "proxy-token"); // May need actual token
+
+        // Use a placeholder token if needed
+        const proxyToken = "proxy-token"; // This should be the actual token if available
+        releaseWebsocket(wsUrl, proxyToken);
       }
 
       // Update state
@@ -342,16 +411,22 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
    */
   const addEventListener = useCallback(
     (event: string, callback: (data: any) => void) => {
-      if (!notificationHandler) {
-        console.warn("No notification handler available for event:", event);
-        return () => {}; // Return empty cleanup function
+      // Create the set if it doesn't exist
+      if (!eventListeners.current[event]) {
+        eventListeners.current[event] = new Set();
       }
 
-      // In a complete implementation, we would register with a notification service
-      // For now, we'll assume this is handled externally
-      return () => {}; // Return empty cleanup function
+      // Add to the set of listeners
+      eventListeners.current[event].add(callback);
+
+      // Return a cleanup function
+      return () => {
+        if (eventListeners.current[event]) {
+          eventListeners.current[event].delete(callback);
+        }
+      };
     },
-    [notificationHandler],
+    [],
   );
 
   /**
@@ -373,6 +448,11 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     },
     [addEventListener],
   );
+
+  // Initialize event listeners on first render
+  useEffect(() => {
+    initEventListeners();
+  }, [initEventListeners]);
 
   // Auto-connect when enabled and configuration changes
   useEffect(() => {

@@ -54,9 +54,13 @@ class WebSocketSingleton {
 
   /**
    * Génère une clé unique pour une connexion WebSocket
+   * Utilise uniquement l'URL et le token pour éviter les clés changeantes
    */
   private getConnectionKey(serverUrl: string, token: string): string {
-    return `${serverUrl}:${token}`;
+    // CORRECTION: Utiliser la même méthode pour la création et la libération
+    // S'assurer que l'URL ne contient pas déjà un protocole WebSocket
+    const normalizedUrl = serverUrl.replace(/^(ws|wss):\/\//, "");
+    return `${normalizedUrl}:${token}`;
   }
 
   /**
@@ -66,7 +70,7 @@ class WebSocketSingleton {
   public async getConnection(
     options: WebSocketSetupOptions,
   ): Promise<WebSocketConnection> {
-    const { serverUrl, token } = options;
+    const { serverUrl, token, mode } = options;
     const connectionKey = this.getConnectionKey(serverUrl, token);
 
     // Incrémenter le compteur de références pour cette connexion
@@ -129,10 +133,15 @@ class WebSocketSingleton {
    * Ne ferme la connexion que lorsque plus aucun client ne l'utilise
    */
   public releaseConnection(serverUrl: string, token: string): void {
+    // CORRECTION: Utiliser la même méthode pour la création et la libération
     const connectionKey = this.getConnectionKey(serverUrl, token);
 
     // Décrémenter le compteur de références
     const refCount = (this.connectionRefs.get(connectionKey) || 1) - 1;
+
+    console.debug(
+      `Libération de la connexion ${connectionKey}, nouveau compteur: ${refCount}`,
+    );
 
     if (refCount <= 0) {
       // Si plus aucun client n'utilise cette connexion, la fermer

@@ -4,7 +4,7 @@ import { createServiceContainer, ServiceContainer } from "../services/factory";
 import { ProviderConfig } from "../types";
 
 // Import specialized context providers
-import { ConnectionProvider } from "./ConnectionContext";
+import { ConnectionProvider, useConnection } from "./ConnectionContext";
 import { UserProvider } from "./UserContext";
 import { TeamProvider } from "./TeamContext";
 import { ChannelProvider } from "./ChannelContext";
@@ -15,17 +15,8 @@ import { MessageProvider } from "./MessageContext";
  * Acts as a gateway to the specialized contexts
  */
 export interface MattermostContextType {
-  /** Mode of connection (direct, proxy, custom) */
-  mode: "direct" | "proxy" | "custom" | null;
-
   /** Service container with all specialized services */
   services: ServiceContainer | null;
-
-  /** Indicates whether connected to Mattermost */
-  isConnected: boolean;
-
-  /** Error if connection failed */
-  error: Error | null;
 }
 
 // Create the context with a default value of null
@@ -37,12 +28,28 @@ export const MattermostContext = createContext<MattermostContextType | null>(
  * Hook to use the MattermostContext
  * Throws an error if used outside of MattermostProvider
  */
-export const useMattermost = (): MattermostContextType => {
-  const context = useContext(MattermostContext);
-  if (!context) {
+export const useMattermost = (): MattermostContextType & {
+  // Re-export key properties from ConnectionContext
+  // for backwards compatibility
+  mode: "direct" | "proxy" | "custom" | null;
+  isConnected: boolean;
+  error: Error | null;
+} => {
+  const mattermostContext = useContext(MattermostContext);
+  if (!mattermostContext) {
     throw new Error("useMattermost must be used within a MattermostProvider");
   }
-  return context;
+
+  // Get connection context to re-export key properties
+  const connectionContext = useConnection();
+
+  // Combine contexts for backwards compatibility
+  return {
+    ...mattermostContext,
+    mode: connectionContext.mode,
+    isConnected: connectionContext.isConnected,
+    error: connectionContext.error,
+  };
 };
 
 /**
@@ -127,12 +134,9 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo<MattermostContextType>(
     () => ({
-      mode,
       services,
-      isConnected: !!services,
-      error: !mode ? new Error("Invalid configuration") : null,
     }),
-    [mode, services],
+    [services],
   );
 
   // If no valid configuration is provided, render error state

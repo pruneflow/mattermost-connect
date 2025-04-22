@@ -8,7 +8,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
-import { useMattermost } from "../../../context";
+import { useMattermost, useUserContext } from "../../../context";
 import { getEmojiFromName } from "../../../utils";
 import { WebSocketEventType } from "../../../services/";
 
@@ -31,7 +31,8 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   isFromCurrentUser = false,
   sx,
 }) => {
-  const { services, currentUser } = useMattermost();
+  const { services } = useMattermost();
+  const { currentUser } = useUserContext();
   const [reactions, setReactions] = useState<ReactionInfo[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 

@@ -6,7 +6,11 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { useMattermost } from "../../../context";
+import {
+  useChannelContext,
+  useMattermost,
+  useUserContext,
+} from "../../../context";
 import { Channel } from "../../../types";
 
 // Material-UI Components
@@ -98,14 +102,9 @@ const ChannelList: React.FC<ChannelListProps> = ({
   channelsContainerSx,
 }) => {
   const theme = useTheme();
-  const {
-    services,
-    isConnected,
-    currentUser,
-    setActiveChannel,
-    activeChannel,
-    getUserDisplayName,
-  } = useMattermost();
+  const { services, isConnected } = useMattermost();
+  const { currentUser, getUserDisplayName } = useUserContext();
+  const { setActiveChannel, activeChannel } = useChannelContext();
 
   const userService = services?.userService;
 
