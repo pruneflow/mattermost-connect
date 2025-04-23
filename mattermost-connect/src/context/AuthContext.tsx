@@ -11,27 +11,50 @@ import React, {
 import { User } from "../types";
 import { ServiceContainer } from "../services";
 
+// Define authentication modes
+type AuthenticationMode =
+  | "direct_username"
+  | "direct_token"
+  | "proxy"
+  | "custom";
+
+// Expanded login credentials interface
+interface LoginCredentials {
+  username?: string;
+  password?: string;
+  token?: string;
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  userId?: string;
+}
+
 export interface AuthContextType {
-  // État d'authentification
+  // Authentication state
   isAuthenticated: boolean;
   token: string | null;
   currentUser: User | null;
+  config: LoginCredentials;
 
-  // Méthodes d'authentification
-  login: (username: string, password: string) => Promise<boolean>;
+  // Authentication methods
+  login: (
+    credentials: LoginCredentials | string,
+    password?: string,
+  ) => Promise<boolean>;
   loginWithToken: (token: string) => Promise<boolean>;
   logout: () => void;
   refreshCurrentUser: () => Promise<User | null>;
 
-  // Utilitaires
+  // Utilities
   validateToken: (token: string) => Promise<boolean>;
   storeTokenInLocalStorage: (store: boolean) => void;
+  updateConfig: (config: Partial<LoginCredentials>) => void;
 }
 
-// Création du contexte avec une valeur par défaut
+// Create the authentication context
 export const AuthContext = createContext<AuthContextType | null>(null);
 
-// Hook pour utiliser le contexte d'authentification
+// Hook to use the authentication context
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
@@ -45,7 +68,7 @@ export interface AuthProviderProps {
   services: ServiceContainer | null;
   initialToken?: string;
   useLocalStorage?: boolean;
-  tokenStorageKey?: string; // Prop pour la clé de stockage
+  tokenStorageKey?: string;
   onAuthSuccess?: (user: User) => void;
   onAuthError?: (error: Error) => void;
 }
@@ -55,151 +78,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   services,
   initialToken,
   useLocalStorage = false,
-  tokenStorageKey = "mattermost_token", // Valeur par défaut si non fournie
+  tokenStorageKey = "mattermost_token",
   onAuthSuccess,
   onAuthError,
 }) => {
-  // État
+  // State management
   const [token, setToken] = useState<string | null>(initialToken || null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] =
     useState<boolean>(!!initialToken);
   const [storeTokenLocally, setStoreTokenLocally] =
     useState<boolean>(useLocalStorage);
+  const [config, setConfig] = useState<LoginCredentials>({});
 
-  const [configState, setConfigState] = useState<{
-    serverUrl?: string;
-    proxyUrl?: string;
-    clientId?: string;
-    userId?: string;
-  }>({});
+  // Determine authentication mode based on credentials
+  const determineAuthMode = useCallback(
+    (credentials: LoginCredentials): AuthenticationMode => {
+      // Priority 1: Explicit credentials
+      if (credentials.username && credentials.password)
+        return "direct_username";
 
-  const updateConfig = useCallback(
-    (newConfig: {
-      serverUrl?: string;
-      proxyUrl?: string;
-      clientId?: string;
-      userId?: string;
-    }) => {
-      setConfigState((prev) => ({ ...prev, ...newConfig }));
-    },
-    [],
-  );
+      if (credentials.token) return "direct_token";
 
-  // Authentification avec identifiants
-  const login = useCallback(
-    async (
-      usernameOrConfig:
-        | string
-        | {
-            username: string;
-            password: string;
-            serverUrl?: string;
-            proxyUrl?: string;
-            clientId?: string;
-          },
-      password?: string,
-    ): Promise<boolean> => {
-      // Gestion d'un objet de configuration complet
-      if (typeof usernameOrConfig === "object") {
-        const config = usernameOrConfig;
+      if (credentials.proxyUrl && credentials.clientId) return "proxy";
 
-        // Mettre à jour la configuration
-        updateConfig({
-          serverUrl: config.serverUrl,
-          proxyUrl: config.proxyUrl,
-          clientId: config.clientId,
-        });
+      if (services?.mattermostService) {
+        const providerConfig = services.mattermostService;
+        if (providerConfig.mode === "direct" && providerConfig.token)
+          return "direct_token";
 
-        // Authentifier avec username/password
-        if (config.username && config.password) {
-          // Logic pour créer un service temporaire si nécessaire
-          // Ou utiliser le service existant si compatible avec la config
-
-          try {
-            // Auth logic...
-            return true;
-          } catch (error) {
-            if (onAuthError) onAuthError(error as Error);
-            return false;
-          }
-        }
+        if (providerConfig.mode === "proxy") return "proxy";
       }
 
-      // Cas classique username/password
-      else if (typeof usernameOrConfig === "string" && password) {
-        if (!services?.mattermostService?.authenticate) return false;
-
-        try {
-          const result = await services.mattermostService.authenticate(
-            usernameOrConfig,
-            password,
-          );
-
-          // Mettre à jour token et état...
-          return true;
-        } catch (error) {
-          if (onAuthError) onAuthError(error as Error);
-          return false;
-        }
-      }
-
-      return false;
+      // Fallback
+      return "custom";
     },
-    [services, updateConfig, onAuthSuccess, onAuthError],
+    [services],
   );
 
-  // Authentification avec token
-  const loginWithToken = useCallback(
-    async (newToken: string): Promise<boolean> => {
-      if (!services?.mattermostService) return false;
-
-      try {
-        // Valider le token
-        const isValid = await validateToken(newToken);
-        if (!isValid) {
-          throw new Error("Invalid token");
-        }
-
-        // Mettre à jour l'état
-        setToken(newToken);
-        setIsAuthenticated(true);
-
-        // Stocker le token si demandé
-        if (storeTokenLocally) {
-          localStorage.setItem(tokenStorageKey, newToken);
-        }
-
-        // Charger l'utilisateur
-        await refreshCurrentUser();
-
-        return true;
-      } catch (error) {
-        setIsAuthenticated(false);
-        setToken(null);
-        const typedError =
-          error instanceof Error ? error : new Error(String(error));
-        if (onAuthError) onAuthError(typedError);
-        return false;
-      }
-    },
-    [services, storeTokenLocally, tokenStorageKey, onAuthError],
-  );
-
-  // Déconnexion
-  const logout = useCallback((): void => {
-    // Supprimer le token du stockage local
-    if (storeTokenLocally) {
-      localStorage.removeItem(tokenStorageKey);
-    }
-
-    // Réinitialiser l'état
-    setToken(null);
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-  }, [storeTokenLocally, tokenStorageKey]);
-
-  // Validation de token
   const validateToken = useCallback(
     async (tokenToValidate: string): Promise<boolean> => {
       if (!services?.mattermostService?.validateToken) return false;
@@ -214,19 +130,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     [services],
   );
 
-  // Rafraîchir l'utilisateur courant
   const refreshCurrentUser = useCallback(async (): Promise<User | null> => {
     if (!services?.mattermostService || !isAuthenticated) return null;
 
     try {
-      let user: User;
-
-      // Utiliser refreshCurrentUser si disponible, sinon getCurrentUser
-      if (typeof services.mattermostService.refreshCurrentUser === "function") {
-        user = await services.mattermostService.refreshCurrentUser();
-      } else {
-        user = await services.mattermostService.getCurrentUser();
-      }
+      const user = await (typeof services.mattermostService
+        .refreshCurrentUser === "function"
+        ? services.mattermostService.refreshCurrentUser()
+        : services.mattermostService.getCurrentUser());
 
       setCurrentUser(user);
       return user;
@@ -236,24 +147,164 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     }
   }, [services, isAuthenticated]);
 
-  // Configurer le stockage local
+  // Authentication method with flexible input
+  const login = useCallback(
+    async (
+      credentialsOrUsername: LoginCredentials | string,
+      password?: string,
+    ): Promise<boolean> => {
+      // Normalize input to LoginCredentials
+      const credentials: LoginCredentials =
+        typeof credentialsOrUsername === "string"
+          ? { username: credentialsOrUsername, password }
+          : credentialsOrUsername;
+
+      // Validate service availability
+      if (!services?.mattermostService) {
+        onAuthError?.(new Error("Mattermost service not initialized"));
+        return false;
+      }
+
+      // Determine authentication mode
+      const authMode = determineAuthMode(credentials);
+
+      try {
+        let authResult;
+        switch (authMode) {
+          case "direct_username":
+            if (!credentials.username || !credentials.password) {
+              console.error("Username and password are required");
+              return false;
+            }
+            if (!services?.mattermostService?.authenticate) {
+              console.error(
+                "services.mattermostService.authenticate does not exists",
+              );
+              return false;
+            }
+            authResult = await services?.mattermostService?.authenticate(
+              credentials.username,
+              credentials.password,
+            );
+            break;
+
+          case "direct_token":
+            if (!credentials.token) {
+              console.error("Token is required");
+              return false;
+            }
+            // Validate token before using
+            const isValid = await validateToken(credentials.token);
+            if (!isValid) {
+              console.error("Invalid token");
+              return false;
+            }
+            authResult = { token: credentials.token };
+            break;
+
+          case "proxy":
+            if (!credentials.proxyUrl || !credentials.clientId) {
+              console.error("Proxy URL and Client ID are required");
+              return false;
+            }
+            // Implement proxy-specific authentication logic
+            authResult = { token: "proxy-token" }; // Placeholder
+            break;
+
+          default:
+            console.error("No valid authentication method found");
+            return false;
+        }
+
+        // Update authentication state
+        setToken(authResult.token);
+        setIsAuthenticated(true);
+
+        // Update configuration
+        setConfig(credentials);
+
+        // Store token if enabled
+        if (storeTokenLocally) {
+          localStorage.setItem(tokenStorageKey, authResult.token);
+        }
+
+        // Refresh user
+        const user = await refreshCurrentUser();
+
+        // Call success callback
+        if (user) {
+          onAuthSuccess?.(user);
+        }
+
+        return true;
+      } catch (error) {
+        // Handle authentication errors
+        const authError =
+          error instanceof Error ? error : new Error(String(error));
+
+        onAuthError?.(authError);
+
+        // Reset authentication state
+        setIsAuthenticated(false);
+        setToken(null);
+
+        return false;
+      }
+    },
+    [
+      services,
+      storeTokenLocally,
+      tokenStorageKey,
+      onAuthSuccess,
+      onAuthError,
+      determineAuthMode,
+      validateToken,
+      refreshCurrentUser,
+    ],
+  );
+
+  // Other methods remain similar to the previous implementation
+  const loginWithToken = useCallback(
+    async (newToken: string): Promise<boolean> => {
+      return login({ token: newToken });
+    },
+    [login],
+  );
+
+  const logout = useCallback((): void => {
+    // Clear token from local storage
+    if (storeTokenLocally) {
+      localStorage.removeItem(tokenStorageKey);
+    }
+
+    // Reset authentication state
+    setToken(null);
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setConfig({});
+  }, [storeTokenLocally, tokenStorageKey]);
+
   const storeTokenInLocalStorage = useCallback(
     (store: boolean): void => {
       setStoreTokenLocally(store);
 
-      // Si activé, stocker le token actuel
       if (store && token) {
         localStorage.setItem(tokenStorageKey, token);
-      }
-      // Si désactivé, supprimer le token
-      else if (!store) {
+      } else if (!store) {
         localStorage.removeItem(tokenStorageKey);
       }
     },
     [token, tokenStorageKey],
   );
 
-  // Effet pour charger le token depuis le stockage local au démarrage
+  const updateConfig = useCallback(
+    (newConfig: Partial<LoginCredentials>): void => {
+      setConfig((prev) => ({ ...prev, ...newConfig }));
+    },
+    [],
+  );
+
+  // Effect to load token from local storage on startup
   useEffect(() => {
     if (storeTokenLocally && !token) {
       const storedToken = localStorage.getItem(tokenStorageKey);
@@ -263,12 +314,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     }
   }, [storeTokenLocally, tokenStorageKey, token, loginWithToken]);
 
-  // Valeur du contexte
+  // Memoized context value
   const contextValue = useMemo<AuthContextType>(
     () => ({
       isAuthenticated,
       token,
       currentUser,
+      config,
       login,
       loginWithToken,
       logout,
@@ -276,12 +328,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       validateToken,
       storeTokenInLocalStorage,
       updateConfig,
-      config: configState,
     }),
     [
       isAuthenticated,
       token,
       currentUser,
+      config,
       login,
       loginWithToken,
       logout,
@@ -289,7 +341,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       validateToken,
       storeTokenInLocalStorage,
       updateConfig,
-      configState,
     ],
   );
 

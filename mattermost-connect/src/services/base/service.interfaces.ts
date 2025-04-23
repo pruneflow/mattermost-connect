@@ -320,6 +320,7 @@ export interface MattermostService
     WebSocketService,
     ReactionService,
     GifService {
+  token: boolean;
   /**
    * Mode de fonctionnement du service
    */
