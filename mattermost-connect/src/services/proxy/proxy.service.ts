@@ -148,7 +148,7 @@ export class ProxyService extends BaseService implements MattermostService {
   async authenticate(
     username: string,
     password: string,
-  ): Promise<{ token: string; serverUrl?: string }> {
+  ): Promise<{ token: string; serverUrl?: string; userId?: string }> {
     try {
       const result = await this.authManager.authenticate(username, password);
 
@@ -161,11 +161,18 @@ export class ProxyService extends BaseService implements MattermostService {
       try {
         const user = await this.fetchCurrentUser();
         this.setCurrentUser(user);
+
+        return {
+          token: result.token,
+          userId: this.userId || user.id, // Utiliser l'ID disponible
+        };
       } catch (userError) {
         console.warn("Could not fetch user after authentication:", userError);
+        return {
+          token: result.token,
+          userId: this.userId, // Renvoyer l'ID s'il est disponible
+        };
       }
-
-      return { token: result.token };
     } catch (error) {
       const typedError = this.errorHandler.handleHttpError(error);
       console.error("Proxy authentication error:", typedError);

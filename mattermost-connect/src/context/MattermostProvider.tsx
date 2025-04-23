@@ -4,6 +4,7 @@ import { createServiceContainer, ServiceContainer } from "../services";
 import { ProviderConfig } from "../types";
 
 // Import specialized context providers
+import { AuthProvider } from "./AuthContext";
 import { ConnectionProvider } from "./ConnectionContext";
 import { UserProvider } from "./UserContext";
 import { TeamProvider } from "./TeamContext";
@@ -17,6 +18,8 @@ import { MessageProvider } from "./MessageContext";
 export interface MattermostContextType {
   /** Service container with all specialized services */
   services: ServiceContainer | null;
+  mode: "direct" | "proxy" | "custom" | undefined;
+  hasCompleteConfig?: boolean;
 }
 
 // Create the context with a default value of null
@@ -34,10 +37,7 @@ export const useMattermost = (): MattermostContextType => {
     throw new Error("useMattermost must be used within a MattermostProvider");
   }
 
-  // Combine contexts for backwards compatibility
-  return {
-    ...mattermostContext,
-  };
+  return mattermostContext;
 };
 
 /**
@@ -46,6 +46,14 @@ export const useMattermost = (): MattermostContextType => {
 export interface MattermostProviderProps extends ProviderConfig {
   /** Child components */
   children: ReactNode;
+  /** Initial token for authentication */
+  initialToken?: string;
+  /** Store token in localStorage */
+  useLocalStorage?: boolean;
+  /** Authentication success callback */
+  onAuthSuccess?: (user: any) => void;
+  /** Authentication error callback */
+  onAuthError?: (error: Error) => void;
 }
 
 /**
@@ -69,31 +77,42 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   enableWebsocket = true,
   refreshInterval = 300000, // 5 minutes
 
+  // Auth options
+  initialToken,
+  useLocalStorage = false,
+  onAuthSuccess,
+  onAuthError,
+
   // Children
   children,
 }) => {
   console.debug("MattermostProvider");
-  // Determine the connection mode based on provided props
-  const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
+
+  const mode = useMemo<"direct" | "proxy" | "custom" | undefined>(() => {
     if (serviceProvider) return "custom";
     if (serverUrl && token) return "direct";
     if (proxyUrl && clientId) return "proxy";
-    return null;
+
+    // Nouveau: même si le mode ne peut pas être déterminé maintenant,
+    // on continue à créer les services avec une configuration partielle
+    if (serverUrl) return "direct"; // Mode direct en attente d'un token
+    if (proxyUrl) return "proxy"; // Mode proxy en attente de credentials
+
+    return;
   }, [serviceProvider, serverUrl, token, proxyUrl, clientId]);
 
   // Create service container based on configuration
   const services = useMemo<ServiceContainer | null>(() => {
-    if (!mode) return null;
-
+    // Même avec une configuration partielle, créer un service minimal
     try {
       return createServiceContainer({
         serverUrl,
-        token,
+        token: token || initialToken,
         proxyUrl,
         clientId,
         userId,
         serviceProvider,
-        enableWebsocket,
+        enableWebsocket: mode !== null && enableWebsocket,
         refreshInterval,
       });
     } catch (error) {
@@ -104,6 +123,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
     mode,
     serverUrl,
     token,
+    initialToken,
     proxyUrl,
     clientId,
     userId,
@@ -124,50 +144,37 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   const contextValue = useMemo<MattermostContextType>(
     () => ({
       services,
+      mode,
+      hasCompleteConfig: mode !== null,
     }),
-    [services],
+    [services, mode],
   );
-
-  // If no valid configuration is provided, render error state
-  if (!mode) {
-    return (
-      <MattermostContext.Provider value={contextValue}>
-        <div className="mattermost-connect-error">
-          <p>Invalid MattermostConnect configuration. You must provide:</p>
-          <ul>
-            <li>(serverUrl and token) OR</li>
-            <li>(proxyUrl and clientId) OR</li>
-            <li>serviceProvider</li>
-          </ul>
-        </div>
-      </MattermostContext.Provider>
-    );
-  }
 
   // Compose the context providers in the correct order of dependencies
   return (
     <MattermostContext.Provider value={contextValue}>
-      <ConnectionProvider
-        serverUrl={serverUrl}
-        token={token}
-        proxyUrl={proxyUrl}
-        clientId={clientId}
-        userId={userId}
-        enableWebsocket={enableWebsocket}
-        notificationHandler={handleWebSocketMessage}
-        mode={mode}
+      <AuthProvider
+        services={services}
+        initialToken={token || initialToken}
+        useLocalStorage={useLocalStorage}
+        onAuthSuccess={onAuthSuccess}
+        onAuthError={onAuthError}
       >
-        <UserProvider services={services} refreshInterval={refreshInterval}>
-          <TeamProvider services={services} refreshInterval={refreshInterval}>
-            <ChannelProvider
-              services={services}
-              refreshInterval={refreshInterval}
-            >
-              <MessageProvider services={services}>{children}</MessageProvider>
-            </ChannelProvider>
-          </TeamProvider>
-        </UserProvider>
-      </ConnectionProvider>
+        <ConnectionProvider mode={mode} enableWebsocket={enableWebsocket}>
+          <UserProvider services={services} refreshInterval={refreshInterval}>
+            <TeamProvider services={services} refreshInterval={refreshInterval}>
+              <ChannelProvider
+                services={services}
+                refreshInterval={refreshInterval}
+              >
+                <MessageProvider services={services}>
+                  {children}
+                </MessageProvider>
+              </ChannelProvider>
+            </TeamProvider>
+          </UserProvider>
+        </ConnectionProvider>
+      </AuthProvider>
     </MattermostContext.Provider>
   );
 };

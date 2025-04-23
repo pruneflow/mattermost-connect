@@ -161,7 +161,7 @@ export class DirectService extends BaseService implements MattermostService {
   async authenticate(
     username: string,
     password: string,
-  ): Promise<{ token: string; serverUrl?: string }> {
+  ): Promise<{ token: string; serverUrl?: string; userId?: string }> {
     try {
       const result = await this.authManager.authenticate(username, password);
 
@@ -169,14 +169,19 @@ export class DirectService extends BaseService implements MattermostService {
       try {
         const user = await this.fetchCurrentUser();
         this.setCurrentUser(user);
+
+        return {
+          token: result.token,
+          serverUrl: this.baseUrl,
+          userId: user.id,
+        };
       } catch (error) {
         console.warn("Could not fetch user after authentication:", error);
+        return {
+          token: result.token,
+          serverUrl: this.baseUrl,
+        };
       }
-
-      return {
-        token: result.token,
-        serverUrl: this.baseUrl,
-      };
     } catch (error) {
       const typedError = this.errorHandler.handleHttpError(error);
       console.error("Authentication error:", typedError);

@@ -22,12 +22,13 @@ export {
   useTeamContext,
   useMessageContext,
   useChannelContext,
+  useAuth,
 } from "./context";
 
 // ---------- Hooks Spécialisés ----------
 
 // Exporter les hooks pour interagir avec les canaux, équipes et utilisateurs
-export { useAuth, useFile, useRealtime } from "./hooks";
+export { useFile, useRealtime } from "./hooks";
 
 // ---------- Composants UI ----------
 
@@ -121,11 +122,8 @@ export type {
   WebSocketSetupOptions,
 } from "./types";
 
-// Exporter le composant d'authentification
-export { default as AuthenticationSystem } from "./components/auth/AuthenticationSystem";
-
 // Exporter les types des hooks
-export type { FileInfo, UploadingFile, AuthResult } from "./hooks";
+export type { FileInfo, UploadingFile } from "./hooks";
 
 // Export par défaut est le provider pour plus de commodité
 export { MattermostProvider as default } from "./context";

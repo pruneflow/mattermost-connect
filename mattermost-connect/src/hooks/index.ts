@@ -5,8 +5,6 @@
  */
 
 // Hooks spécifiques par domaine
-export { useAuth } from "./useAuth";
-export type { AuthResult } from "./useAuth";
 export { useFile } from "./useFile";
 export type { FileInfo, UploadingFile } from "./useFile";
 export { useRealtime } from "./useRealtime";

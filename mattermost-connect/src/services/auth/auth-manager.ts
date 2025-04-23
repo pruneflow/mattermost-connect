@@ -304,15 +304,20 @@ export class ProxyAuthManager implements AuthManager {
       const response = await this.httpClient.post<{
         token: string;
         user_id?: string;
+        refresh_token?: string;
+        expires_at?: number;
       }>("auth/login", {
         username,
         password,
       });
 
-      const { token, user_id } = response.data;
-
+      const { token, user_id, refresh_token, expires_at } = response.data;
       // Store the token
       this.tokenStorage.setToken(token);
+
+      if (refresh_token) {
+        this.tokenStorage.setRefreshToken(refresh_token);
+      }
 
       // Update user ID if provided
       if (user_id) {
@@ -322,6 +327,8 @@ export class ProxyAuthManager implements AuthManager {
       return {
         token,
         userId: user_id,
+        refreshToken: refresh_token,
+        expiresAt: expires_at,
       };
     } catch (error) {
       console.error("Authentication error:", error);

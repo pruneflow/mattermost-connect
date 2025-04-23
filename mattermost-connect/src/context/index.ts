@@ -12,6 +12,13 @@ export {
   type MattermostContextType,
 } from "./MattermostProvider";
 
+export {
+  AuthProvider,
+  useAuth,
+  AuthContext,
+  type AuthContextType,
+} from "./AuthContext";
+
 // Specialized context providers
 export {
   ConnectionProvider,
@@ -43,7 +50,6 @@ export {
   ChannelContext,
   type ChannelContextType,
   type ChannelProviderProps,
-  type GetMessagesOptions,
 } from "./ChannelContext";
 
 export {
@@ -52,6 +58,7 @@ export {
   MessageContext,
   type MessageContextType,
   type MessageProviderProps,
+  type GetMessagesOptions,
 } from "./MessageContext";
 
 // Legacy context exports for backward compatibility

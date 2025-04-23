@@ -12,6 +12,8 @@ import React, {
 import { WebSocketConnection, WebSocketSetupOptions } from "../types";
 import { setupWebsocket, releaseWebsocket } from "../services";
 import { WebSocketEventType } from "../services";
+import { useAuth } from "./AuthContext";
+import { useMattermost } from "./MattermostProvider";
 
 /**
  * Interface for the ConnectionContext
@@ -21,7 +23,6 @@ export interface ConnectionContextType {
   // Connection state
   isConnected: boolean;
   error: Error | null;
-  mode: "direct" | "proxy" | "custom" | null;
 
   socketState: number;
 
@@ -71,13 +72,6 @@ export function useConnection(): ConnectionContextType {
 export interface ConnectionProviderProps {
   children: ReactNode;
 
-  // Connection configuration
-  serverUrl?: string;
-  token?: string;
-  proxyUrl?: string;
-  clientId?: string;
-  userId?: string;
-
   // Options
   enableWebsocket?: boolean;
   notificationHandler?: (event: any) => void;
@@ -92,14 +86,9 @@ export interface ConnectionProviderProps {
  */
 export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
   children,
-  serverUrl,
-  token,
-  proxyUrl,
-  clientId,
-  userId,
   enableWebsocket = true,
   notificationHandler,
-  mode: initialMode = null,
+  mode,
 }) => {
   console.debug("ConnectionProvider");
   // State
@@ -107,34 +96,14 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [websocket, setWebsocket] = useState<WebSocketConnection | null>(null);
+  const { isAuthenticated, token } = useAuth();
+  const { services } = useMattermost();
 
   // Refs to avoid unnecessary re-renders
   const websocketRef = useRef<WebSocketConnection | null>(null);
-  const serverUrlRef = useRef<string | undefined>(serverUrl);
-  const tokenRef = useRef<string | undefined>(token);
-  const proxyUrlRef = useRef<string | undefined>(proxyUrl);
-  const clientIdRef = useRef<string | undefined>(clientId);
-  const userIdRef = useRef<string | undefined>(userId);
 
   // Ref for event listeners
   const eventListeners = useRef<Record<string, Set<(data: any) => void>>>({});
-
-  // Determine connection mode based on props
-  const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
-    if (initialMode) return initialMode;
-    if (serverUrl && token) return "direct";
-    if (proxyUrl && clientId) return "proxy";
-    return null;
-  }, [initialMode, serverUrl, token, proxyUrl, clientId]);
-
-  // Update refs when props change
-  useEffect(() => {
-    serverUrlRef.current = serverUrl;
-    tokenRef.current = token;
-    proxyUrlRef.current = proxyUrl;
-    clientIdRef.current = clientId;
-    userIdRef.current = userId;
-  }, [serverUrl, token, proxyUrl, clientId, userId]);
 
   /**
    * Initialize event listeners system
@@ -199,68 +168,36 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
    */
   const connect = useCallback(async () => {
     // Skip if websocket is disabled or already connecting/connected
-    if (!enableWebsocket || isConnecting || isConnected) {
+    if (!enableWebsocket || isConnecting || isConnected || !isAuthenticated) {
       return websocketRef.current;
-    }
-
-    // Determine WebSocket URL based on mode
-    let wsUrl: string;
-    let wsToken: string;
-
-    if (!mode) {
-      setError(new Error("Cannot connect: Invalid connection configuration"));
-      return null;
     }
 
     setIsConnecting(true);
     setError(null);
 
     try {
-      // Configure WebSocket based on mode
+      // Configurer l'URL WebSocket selon le mode
+      let wsUrl: string;
+      let wsToken: string;
+
       if (mode === "direct") {
-        if (!serverUrl || !token) {
-          console.debug("Direct mode requires serverUrl and token");
-          setIsConnecting(false);
-          return null;
+        if (!services?.mattermostService) {
+          console.error("Mattermost service not available");
+          return;
         }
 
-        wsUrl = serverUrl.replace(/^http/, "ws") + "/api/v4/websocket";
-        wsToken = token;
+        wsUrl = services.mattermostService.getWebsocketUrl();
+        wsToken = await services.mattermostService.getWebsocketToken();
       } else if (mode === "proxy") {
-        if (!proxyUrl || !clientId) {
-          console.debug("Proxy mode requires proxyUrl and clientId");
-          setIsConnecting(false);
-          return null;
+        if (!services?.mattermostService) {
+          console.error("Mattermost service not available");
+          return;
         }
 
-        wsUrl = proxyUrl.replace(/^http/, "ws") + "/websocket";
-
-        // For proxy mode, we need to get a WebSocket token from the server
-        try {
-          const response = await fetch(`${proxyUrl}/websocket/token`, {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Mattermost-Client-ID": clientId,
-              ...(userId ? { "X-Mattermost-User-ID": userId } : {}),
-            },
-          });
-
-          if (!response.ok) {
-            console.debug(`Failed to get WebSocket token: ${response.status}`);
-            setIsConnecting(false);
-            return null;
-          }
-
-          const data = await response.json();
-          wsToken = data.token;
-        } catch (tokenError) {
-          console.error("Error retrieving WebSocket token:", tokenError);
-          setIsConnecting(false);
-          return null;
-        }
+        wsUrl = services.mattermostService.getWebsocketUrl();
+        wsToken = await services.mattermostService.getWebsocketToken();
       } else {
-        // Custom mode - placeholder, would need implementation
+        // Custom mode
         console.debug("Custom WebSocket mode not implemented");
         setIsConnecting(false);
         return null;
@@ -288,6 +225,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
       // Create WebSocket connection
       const wsConnection = await setupWebsocket(wsOptions);
+
       // Update state and refs
       setWebsocket(wsConnection);
       websocketRef.current = wsConnection;
@@ -316,12 +254,10 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     enableWebsocket,
     isConnecting,
     isConnected,
+    isAuthenticated,
     mode,
-    serverUrl,
+    services,
     token,
-    proxyUrl,
-    clientId,
-    userId,
     processWebSocketEvent,
     notifyListeners,
   ]);
@@ -330,36 +266,42 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
    * Disconnect from WebSocket server
    */
   const disconnect = useCallback(() => {
-    if (websocketRef.current) {
-      console.debug("Closing WebSocket connection");
+    if (!websocketRef.current) return;
 
-      // Close connection
-      websocketRef.current.close();
+    console.debug("Closing WebSocket connection");
 
-      // Clean up WebSocket resources based on mode
-      if (mode === "direct" && serverUrlRef.current && tokenRef.current) {
-        const wsUrl =
-          serverUrlRef.current.replace(/^http/, "ws") + "/api/v4/websocket";
-        releaseWebsocket(wsUrl, tokenRef.current);
-      } else if (
-        mode === "proxy" &&
-        proxyUrlRef.current &&
-        clientIdRef.current
-      ) {
-        // For proxy mode, use the correct URL format
-        const wsUrl = proxyUrlRef.current.replace(/^http/, "ws") + "/websocket";
+    // Récupérer l'information nécessaire des services si disponible
+    let wsUrl: string | undefined;
+    let wsToken: string | undefined;
 
-        // Use a placeholder token if needed
-        const proxyToken = "proxy-token"; // This should be the actual token if available
-        releaseWebsocket(wsUrl, proxyToken);
+    if (services?.mattermostService) {
+      try {
+        // Obtenir l'URL WebSocket depuis le service
+        wsUrl = services.mattermostService.getWebsocketUrl();
+
+        wsToken = token || "placeholder-token";
+      } catch (error) {
+        console.warn("Could not retrieve WebSocket URL from service:", error);
       }
-
-      // Update state
-      setWebsocket(null);
-      websocketRef.current = null;
-      setIsConnected(false);
     }
-  }, [mode]);
+
+    // Fermer la connexion
+    websocketRef.current.close();
+
+    // Libérer les ressources selon le mode si URL et token sont disponibles
+    if (wsUrl && wsToken) {
+      releaseWebsocket(wsUrl, wsToken);
+    } else {
+      console.warn(
+        "Could not properly release WebSocket resources (missing URL or token)",
+      );
+    }
+
+    // Mettre à jour l'état
+    setWebsocket(null);
+    websocketRef.current = null;
+    setIsConnected(false);
+  }, [services, token]);
 
   /**
    * Force WebSocket reconnection
@@ -451,17 +393,25 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
   // Auto-connect when enabled and configuration changes
   useEffect(() => {
-    if (enableWebsocket && mode && !isConnected && !isConnecting) {
+    if (enableWebsocket && isAuthenticated && !isConnected && !isConnecting) {
       void connect();
+    } else if (!isAuthenticated && isConnected) {
+      disconnect();
     }
-  }, [enableWebsocket, mode, isConnected, isConnecting, connect, disconnect]);
+  }, [
+    enableWebsocket,
+    isAuthenticated,
+    isConnected,
+    isConnecting,
+    connect,
+    disconnect,
+  ]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo<ConnectionContextType>(
     () => ({
       // State
       isConnected,
-      mode,
       error,
       socketState: websocket ? websocket.getState() : WebSocket.CLOSED,
 

@@ -65,7 +65,7 @@ export interface AuthService {
   authenticate?: (
     username: string,
     password: string,
-  ) => Promise<{ token: string; serverUrl?: string }>;
+  ) => Promise<{ token: string; serverUrl?: string; userId?: string }>;
 
   /**
    * Valide un token existant
