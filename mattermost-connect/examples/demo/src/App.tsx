@@ -41,8 +41,7 @@ const MODES = {
 // Authentication UI component - uses the useAuth hook from MattermostConnect
 const AuthenticationUI: React.FC = () => {
   // Get context from MattermostConnect
-  const { login, isAuthenticating, error } = useAuth();
-  const { isServiceConfigured, updateServiceConfig, mode } = useMattermost();
+  const { updateCredentials, isAuthenticating, error } = useAuth();
 
   // Connection mode and configuration state
   const [connectionMode, setConnectionMode] = useState(MODES.MOCK);
@@ -62,97 +61,54 @@ const AuthenticationUI: React.FC = () => {
   // Handle form submission for authentication
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       switch (connectionMode) {
         case MODES.DIRECT:
-          // If service is not configured, update the configuration first
-          if (!isServiceConfigured || mode !== "direct") {
-            updateServiceConfig({
-              serverUrl,
-              // Don't set token here - it will be set by the login method
-              proxyUrl: undefined,
-              clientId: undefined,
-              userId: undefined,
-              serviceProvider: undefined,
-            });
-          }
-
-          if (useTokenAuth) {
-            // Token-based authentication
-            if (!token) {
-              throw new Error("Token is required");
-            }
-
-            // Login with token
-            await login(username, password, {
-              serverUrl,
-              token,
-            });
-          } else {
-            // Username/password authentication
-            if (!username || !password) {
-              throw new Error("Username and password are required");
-            }
-
-            // Login with credentials
-            await login(username, password, {
-              serverUrl,
-            });
-          }
+          updateCredentials({
+            serverUrl,
+            token,
+            proxyUrl: undefined,
+            clientId: undefined,
+            userId: undefined,
+            serviceProvider: undefined,
+            username,
+            password,
+          });
           break;
 
         case MODES.PROXY:
-          // If service is not configured, update the configuration first
-          if (!isServiceConfigured || mode !== "proxy") {
-            updateServiceConfig({
-              serverUrl: undefined,
-              token: undefined,
-              proxyUrl,
-              clientId,
-              userId,
-              serviceProvider: undefined,
-            });
-          }
-
-          // For proxy mode, we just need to make sure the configuration is updated
-          // The actual authentication is handled by the login method
-          await login(username, password, {
+          updateCredentials({
+            serverUrl: undefined,
+            token: undefined,
             proxyUrl,
             clientId,
             userId,
+            serviceProvider: undefined,
           });
           break;
 
         case MODES.MOCK:
-          // For mock mode, we need to configure the service provider
-          if (!isServiceConfigured || mode !== "custom") {
-            updateServiceConfig({
-              serverUrl: undefined,
-              token: undefined,
-              proxyUrl: undefined,
-              clientId: undefined,
-              userId: undefined,
-              serviceProvider: {
-                setupService: createMockService,
-                isConnected: true,
-                skipConnectionTest: true,
-                currentUser: {
-                  id: "user1",
-                  username: "johndoe",
-                  first_name: "John",
-                  last_name: "Doe",
-                  email: "john@example.com",
-                  roles: "system_user",
-                  update_at: Date.now(),
-                },
+          updateCredentials({
+            serverUrl: undefined,
+            token: undefined,
+            proxyUrl: undefined,
+            clientId: undefined,
+            userId: undefined,
+            serviceProvider: {
+              setupService: createMockService,
+              isConnected: true,
+              skipConnectionTest: true,
+              currentUser: {
+                id: "user1",
+                username: "johndoe",
+                first_name: "John",
+                last_name: "Doe",
+                email: "john@example.com",
+                roles: "system_user",
+                update_at: Date.now(),
               },
-            });
-          }
-
-          // For mock mode, we don't need actual authentication
-          // Just trigger login to update the auth state
-          await login("demo", "demo");
+            },
+          });
           break;
       }
     } catch (err) {

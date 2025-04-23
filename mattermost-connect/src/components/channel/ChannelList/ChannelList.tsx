@@ -1,11 +1,11 @@
 // src/components/channel/ChannelList/ChannelList.tsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  useChannelContext,
   useConnection,
   useMattermost,
   useUserContext,
-  useTeamContext,
+  withAuthentication,
+  useTeamState,
 } from "../../../context";
 import { Channel } from "../../../types";
 
@@ -37,6 +37,10 @@ import {
 
 // Channel Item Component
 import ChannelItem from "./ChannelItem";
+import {
+  useChannelLoading,
+  useChannelState,
+} from "../../../context/ChannelContext";
 
 /**
  * Props for the ChannelList component
@@ -101,15 +105,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const { services } = useMattermost();
   const { isConnected } = useConnection();
   const { currentUser, getUserDisplayName } = useUserContext();
-  const {
-    activeChannel,
-    setActiveChannel,
-    loadChannels,
-    channels,
-    isChannelsLoading,
-    channelsError,
-  } = useChannelContext();
-  const { activeTeam } = useTeamContext();
+  const { activeChannel, setActiveChannel } = useChannelState();
+  const { channels, loadChannels, isChannelsLoading, channelsError } =
+    useChannelLoading();
+  const { activeTeam } = useTeamState();
 
   // State for search query
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -483,4 +482,4 @@ const ChannelList: React.FC<ChannelListProps> = ({
   );
 };
 
-export default ChannelList;
+export default withAuthentication(ChannelList);

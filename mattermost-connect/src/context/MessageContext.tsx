@@ -11,7 +11,8 @@ import React, {
 import { Message } from "../types";
 import { assertServiceInitialized, ServiceContainer } from "../services";
 import { useUserContext } from "./UserContext";
-import { useChannelContext } from "./ChannelContext";
+import { useChannelState } from "./ChannelContext";
+import { useAuth } from "./AuthContext";
 
 /**
  * Options pour la pagination des messages
@@ -120,7 +121,8 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   console.debug("MessageProvider");
   // Récupération des contextes dépendants
   const { currentUser } = useUserContext();
-  const { activeChannel, navigateToChannel } = useChannelContext();
+  const { activeChannel, navigateToChannel } = useChannelState();
+  const { isAuthenticated } = useAuth();
 
   const activeChannelId = activeChannel?.id || null;
 
@@ -173,7 +175,8 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
       if (
         !targetChannelId ||
         !services?.mattermostService ||
-        isLoadingRef.current
+        isLoadingRef.current ||
+        !isAuthenticated
       ) {
         return [];
       }
@@ -217,7 +220,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         isLoadingRef.current = false;
       }
     },
-    [services, activeChannelId],
+    [services, activeChannelId, isAuthenticated],
   );
 
   /**
@@ -247,6 +250,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   const sendMessage = useCallback(
     async (message: string, fileIds?: string[]): Promise<Message | null> => {
       if (
+        !isAuthenticated ||
         !activeChannelId ||
         (!message.trim() && (!fileIds || fileIds.length === 0)) ||
         !services?.mattermostService
@@ -269,7 +273,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return null;
       }
     },
-    [services, activeChannelId, loadMessages],
+    [services, activeChannelId, loadMessages, isAuthenticated],
   );
 
   /**
@@ -282,6 +286,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
       fileIds?: string[],
     ): Promise<Message | null> => {
       if (
+        !isAuthenticated ||
         !activeChannelId ||
         !messageId ||
         (!message.trim() && (!fileIds || fileIds.length === 0)) ||
@@ -315,7 +320,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return null;
       }
     },
-    [services, activeChannelId, clearReply, threadMessages],
+    [services, activeChannelId, clearReply, threadMessages, isAuthenticated],
   );
 
   /**
@@ -324,6 +329,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   const editMessage = useCallback(
     async (messageId: string, newMessage: string): Promise<Message | null> => {
       if (
+        !isAuthenticated ||
         !messageId ||
         !newMessage.trim() ||
         !services?.mattermostService?.editMessage
@@ -373,7 +379,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return null;
       }
     },
-    [services, threadMessages],
+    [services, threadMessages, isAuthenticated],
   );
 
   /**
@@ -381,7 +387,11 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const deleteMessage = useCallback(
     async (messageId: string): Promise<boolean> => {
-      if (!messageId || !services?.mattermostService?.deleteMessage) {
+      if (
+        !messageId ||
+        !isAuthenticated ||
+        !services?.mattermostService?.deleteMessage
+      ) {
         return false;
       }
 
@@ -430,7 +440,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services, threadMessages, replyTo, clearReply],
+    [services, threadMessages, replyTo, clearReply, isAuthenticated],
   );
 
   /**
@@ -438,7 +448,12 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const addReaction = useCallback(
     async (messageId: string, emoji: string): Promise<boolean> => {
-      if (!messageId || !emoji || !services?.mattermostService) {
+      if (
+        !isAuthenticated ||
+        !messageId ||
+        !emoji ||
+        !services?.mattermostService
+      ) {
         return false;
       }
 
@@ -453,7 +468,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services],
+    [services, isAuthenticated],
   );
 
   /**
@@ -462,6 +477,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   const removeReaction = useCallback(
     async (messageId: string, emoji: string): Promise<boolean> => {
       if (
+        !isAuthenticated ||
         !messageId ||
         !emoji ||
         !services?.mattermostService ||
@@ -486,7 +502,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services, currentUser, activeChannelId],
+    [services, currentUser, activeChannelId, isAuthenticated],
   );
 
   /**
@@ -495,6 +511,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   const hasReacted = useCallback(
     async (messageId: string, emoji: string): Promise<boolean> => {
       if (
+        !isAuthenticated ||
         !messageId ||
         !emoji ||
         !services?.mattermostService ||
@@ -518,7 +535,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return false;
       }
     },
-    [services, currentUser, activeChannelId],
+    [services, currentUser, activeChannelId, isAuthenticated],
   );
 
   /**
@@ -526,7 +543,12 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const getThreadReplies = useCallback(
     async (rootMessageId: string): Promise<Message[]> => {
-      if (!rootMessageId || !services?.mattermostService || !activeChannelId) {
+      if (
+        !isAuthenticated ||
+        !rootMessageId ||
+        !services?.mattermostService ||
+        !activeChannelId
+      ) {
         return [];
       }
 
@@ -571,7 +593,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         }));
       }
     },
-    [services, activeChannelId, messages],
+    [services, activeChannelId, messages, isAuthenticated],
   );
 
   /**
@@ -589,7 +611,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const searchGifs = useCallback(
     async (query: string): Promise<any[]> => {
-      if (!query || !services?.mattermostService) {
+      if (!isAuthenticated || !query || !services?.mattermostService) {
         return [];
       }
 
@@ -603,7 +625,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
         return [];
       }
     },
-    [services],
+    [services, isAuthenticated],
   );
 
   /**
@@ -611,7 +633,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const getGifs = useCallback(
     async (category: string): Promise<any[]> => {
-      if (!category || !services?.mattermostService) {
+      if (!isAuthenticated || !category || !services?.mattermostService) {
         return [];
       }
 
@@ -642,7 +664,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const enrichMessageWithMetadata = useCallback(
     async (message: Message): Promise<Message> => {
-      if (!message || !services?.fileService) {
+      if (!isAuthenticated || !message || !services?.fileService) {
         return message;
       }
 
@@ -684,7 +706,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
 
       return enrichedMessage;
     },
-    [services],
+    [services, isAuthenticated],
   );
 
   /**
@@ -692,7 +714,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
    */
   const navigateToMessage = useCallback(
     async (channelId: string, messageId?: string): Promise<void> => {
-      if (!channelId || !services) return;
+      if (!isAuthenticated || !channelId || !services) return;
 
       try {
         // D'abord naviguer vers le canal
@@ -720,14 +742,14 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
 
   // Charger les messages quand le canal actif change
   React.useEffect(() => {
-    if (activeChannelId && !isMessagesLoading) {
+    if (isAuthenticated && activeChannelId && !isMessagesLoading) {
       void loadMessages(activeChannelId);
     }
-  }, [activeChannelId, isMessagesLoading, loadMessages]);
+  }, [activeChannelId, isMessagesLoading, loadMessages, isAuthenticated]);
 
   // Charger les emojis fréquents
   React.useEffect(() => {
-    if (!services?.mattermostService) return;
+    if (!services?.mattermostService || !isAuthenticated) return;
 
     const loadFrequentEmojis = async () => {
       try {

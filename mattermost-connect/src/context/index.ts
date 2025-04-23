@@ -17,6 +17,8 @@ export {
   useAuth,
   AuthContext,
   type AuthContextType,
+  useAuthenticatedContent,
+  withAuthentication,
 } from "./AuthContext";
 
 // Specialized context providers
@@ -39,17 +41,17 @@ export {
 export {
   TeamProvider,
   useTeamContext,
-  TeamContext,
-  type TeamContextType,
-  type TeamProviderProps,
+  useTeamLoading,
+  useTeamState,
+  useTeamUnread,
 } from "./TeamContext";
 
 export {
   ChannelProvider,
   useChannelContext,
-  ChannelContext,
-  type ChannelContextType,
-  type ChannelProviderProps,
+  useChannelState,
+  useChannelUnread,
+  useChannelLoading,
 } from "./ChannelContext";
 
 export {

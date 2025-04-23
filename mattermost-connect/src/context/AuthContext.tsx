@@ -7,30 +7,106 @@ import React, {
   useMemo,
   ReactNode,
   useEffect,
+  ComponentType,
 } from "react";
 import { useMattermost } from "./MattermostProvider";
-import { User } from "../types";
+import { ProviderConfig, User } from "../types";
 import { assertServiceInitialized } from "../services";
+import AuthenticationRequired from "../components/auth/AuthenticationRequired";
+import AuthSkeletonLoader from "../components/auth/AuthSkeletonLoader";
 
-// Define the authentication result type
-export interface AuthResult {
-  token: string;
-  serverUrl?: string;
+/**
+ * Higher-Order Component for Authentication Wrapper
+ * Handles authentication state and renders appropriate components
+ */
+export function withAuthentication<P extends object>(
+  WrappedComponent: ComponentType<P>,
+  options: {
+    /**
+     * Optional custom unauthenticated component
+     * Defaults to a standard login prompt if not provided
+     */
+    UnauthenticatedComponent?: ComponentType<{ onLogin: () => void }>;
+
+    /**
+     * Optional login handler
+     * Useful for custom login flows
+     */
+    onLogin?: () => void;
+  } = {},
+) {
+  const { UnauthenticatedComponent = AuthenticationRequired, onLogin } =
+    options;
+
+  return function AuthenticatedComponent(props: P) {
+    const { isAuthenticated, isAuthenticating } = useAuth();
+
+    // Custom login handler or default to standard login
+    const handleLogin =
+      onLogin ||
+      (() => {
+        console.log("Initiating login...");
+      });
+
+    // Authentication is still being determined
+    if (isAuthenticating) {
+      return <AuthSkeletonLoader />;
+    }
+
+    // User is not authenticated
+    if (!isAuthenticated) {
+      return <UnauthenticatedComponent onLogin={handleLogin} />;
+    }
+
+    // User is authenticated, render the wrapped component
+    return <WrappedComponent {...props} />;
+  };
 }
 
-// Define authentication configuration options
-export interface AuthConfig {
-  // Direct mode
-  serverUrl?: string;
-  token?: string;
+/**
+ * Hook for authentication-aware rendering
+ * Provides a more hook-based approach to authentication
+ */
+export function useAuthenticatedContent<T>(
+  AuthenticatedContent: ComponentType<T>,
+  options: {
+    UnauthenticatedComponent?: ComponentType<{ onLogin: () => void }>;
+    onLogin?: () => void;
+  } = {},
+) {
+  const { isAuthenticated, isAuthenticating } = useAuth();
 
-  // Proxy mode
-  proxyUrl?: string;
-  clientId?: string;
-  userId?: string;
+  const { UnauthenticatedComponent = AuthenticationRequired, onLogin } =
+    options;
 
-  // Other options
-  [key: string]: any;
+  // Authentication is still being determined
+  if (isAuthenticating) {
+    return {
+      Component: AuthSkeletonLoader,
+      props: {},
+    };
+  }
+
+  // User is not authenticated
+  if (!isAuthenticated) {
+    return {
+      Component: UnauthenticatedComponent,
+      props: {
+        onLogin: onLogin || (() => console.log("Login initiated")),
+      },
+    };
+  }
+
+  // User is authenticated
+  return {
+    Component: AuthenticatedContent,
+    props: {},
+  };
+}
+
+interface Credentials {
+  username: string;
+  password: string;
 }
 
 // Define the context type
@@ -41,23 +117,20 @@ export interface AuthContextType {
   error: Error | null;
   currentUser: User | null;
 
-  // Authentication methods
-  login: (
-    username: string,
-    password: string,
-    config?: AuthConfig,
-  ) => Promise<AuthResult | null>;
-  loginWithToken: (token: string, serverUrl?: string) => Promise<boolean>;
   logout: () => void;
   validateToken: (token: string) => Promise<boolean>;
 
   // Token storage methods
   getStoredToken: () => string | null;
   getStoredServerUrl: () => string | null;
+
+  updateCredentials: (
+    credentials: Partial<ProviderConfig> & Credentials,
+  ) => void;
 }
 
 // Create the context
-const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
  * Hook to use the auth context
@@ -91,12 +164,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   // Get Mattermost context data
   const { services, isServiceConfigured, updateServiceConfig, mode, config } =
     useMattermost();
-  console.debug("services", services?.mattermostService);
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [credentials, setCredentials] = useState<Credentials>({
+    username: "",
+    password: "",
+  });
+
+  // Method to update service configuration
+  const updateCredentials = useCallback(
+    (newCredentials: Partial<ProviderConfig> & Credentials) => {
+      console.debug("newCredentials", newCredentials);
+      const { username, password, ...rest } = newCredentials;
+      setCredentials({ username, password });
+      updateServiceConfig(rest);
+    },
+    [],
+  );
+  console.debug("services", services?.mattermostService);
 
   // Check for stored token on mount and when config changes
   useEffect(() => {
@@ -148,6 +236,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     config.token,
   ]);
 
+  useEffect(() => {
+    const login = async () => {
+      if (!services?.mattermostService?.authenticate) return;
+      const { username, password } = credentials;
+      if (config.serverUrl && !config.token && username && password) {
+        const result = await services?.mattermostService?.authenticate(
+          username,
+          password,
+        );
+        if (storeToken) {
+          localStorage.setItem(tokenStorageKey, result.token);
+          if (result.serverUrl) {
+            localStorage.setItem(serverStorageKey, result.serverUrl);
+          }
+        }
+
+        // Update service configuration with the token
+        updateServiceConfig({
+          token: result.token,
+        });
+
+        // Set authenticated state
+        setIsAuthenticated(true);
+      }
+    };
+    if (!isAuthenticated) {
+      void login();
+    }
+  }, [services, credentials, config, isAuthenticated]);
+
   // Check authentication status when services change
   useEffect(() => {
     // If we have services and a token, attempt to initialize authentication
@@ -183,216 +301,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   }, [services, config.token]);
 
   /**
-   * Login with username and password
-   * Optionally accepts additional configuration for first-time setup
-   */
-  const login = useCallback(
-    async (
-      username: string,
-      password: string,
-      authConfig?: AuthConfig,
-    ): Promise<AuthResult | null> => {
-      setIsAuthenticating(true);
-      setError(null);
-
-      try {
-        // If we have auth config and the service is not configured or mode doesn't match,
-        // update the service configuration first
-        if (authConfig) {
-          let shouldUpdateConfig = !isServiceConfigured;
-
-          // Check if we need to update based on mode change or different server URL
-          if (
-            authConfig.serverUrl &&
-            authConfig.serverUrl !== config.serverUrl
-          ) {
-            shouldUpdateConfig = true;
-          } else if (
-            authConfig.proxyUrl &&
-            authConfig.proxyUrl !== config.proxyUrl
-          ) {
-            shouldUpdateConfig = true;
-          } else if (authConfig.token && authConfig.token !== config.token) {
-            shouldUpdateConfig = true;
-          }
-
-          if (shouldUpdateConfig) {
-            console.log("Updating service configuration before login");
-            updateServiceConfig(authConfig);
-
-            // If token is already provided in config, no need to authenticate
-            if (authConfig.token) {
-              // Give the service time to initialize with the new config
-              await new Promise((resolve) => setTimeout(resolve, 5000));
-
-              // Once services are updated, try to get the current user
-              if (services?.mattermostService) {
-                try {
-                  const user =
-                    await services.mattermostService.getCurrentUser();
-                  setCurrentUser(user);
-                  setIsAuthenticated(true);
-
-                  // Store token if enabled
-                  if (storeToken && authConfig.token) {
-                    localStorage.setItem(tokenStorageKey, authConfig.token);
-                    if (authConfig.serverUrl) {
-                      localStorage.setItem(
-                        serverStorageKey,
-                        authConfig.serverUrl,
-                      );
-                    }
-                  }
-
-                  return {
-                    token: authConfig.token,
-                    serverUrl: authConfig.serverUrl,
-                  };
-                } catch (userError) {
-                  console.error("Error getting user with token:", userError);
-                  // Continue to normal authentication flow
-                }
-              }
-            }
-
-            // Wait for services to initialize with new config
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-          }
-        }
-
-        // Now that the configuration is updated, we can authenticate
-        if (!services?.mattermostService) {
-          throw new Error("Authentication service not available");
-        }
-
-        // Ensure service has authenticate method
-        if (!services.mattermostService.authenticate) {
-          throw new Error("Authentication method not available");
-        }
-
-        // Special case for mock mode - skip actual authentication
-        if (mode === "custom") {
-          // For mock mode, we don't need actual authentication
-          // Just set the authenticated state if we have a current user
-          if (services.mattermostService.getCurrentUser) {
-            const user = await services.mattermostService.getCurrentUser();
-            setCurrentUser(user);
-            setIsAuthenticated(true);
-            return { token: "mock-token" };
-          }
-        }
-
-        // For direct and proxy modes: authenticate with the service
-        const result = await services.mattermostService.authenticate(
-          username,
-          password,
-        );
-
-        // Store token if enabled
-        if (storeToken) {
-          localStorage.setItem(tokenStorageKey, result.token);
-          if (result.serverUrl) {
-            localStorage.setItem(serverStorageKey, result.serverUrl);
-          }
-        }
-
-        // Update service configuration with the token
-        updateServiceConfig({
-          token: result.token,
-        });
-
-        // Set authenticated state
-        setIsAuthenticated(true);
-
-        // Load user information
-        const user = await services.mattermostService.getCurrentUser();
-        setCurrentUser(user);
-
-        return result;
-      } catch (err) {
-        const errorObj = err instanceof Error ? err : new Error(String(err));
-        setError(errorObj);
-        return null;
-      } finally {
-        setIsAuthenticating(false);
-      }
-    },
-    [
-      services,
-      storeToken,
-      tokenStorageKey,
-      serverStorageKey,
-      updateServiceConfig,
-      isServiceConfigured,
-      config,
-      mode,
-    ],
-  );
-
-  /**
-   * Login with an existing token
-   */
-  const loginWithToken = useCallback(
-    async (token: string, serverUrl?: string): Promise<boolean> => {
-      if (!token) {
-        setError(new Error("Token is required"));
-        return false;
-      }
-
-      setIsAuthenticating(true);
-      setError(null);
-
-      try {
-        // Update service configuration with the token
-        const configUpdate: any = { token };
-        if (serverUrl) {
-          configUpdate.serverUrl = serverUrl;
-        }
-        updateServiceConfig(configUpdate);
-
-        // Store token if enabled
-        if (storeToken) {
-          localStorage.setItem(tokenStorageKey, token);
-          if (serverUrl) {
-            localStorage.setItem(serverStorageKey, serverUrl);
-          }
-        }
-
-        // Wait for services to initialize with new config
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // Verify token by getting current user
-        if (services?.mattermostService) {
-          try {
-            const user = await services.mattermostService.getCurrentUser();
-            setCurrentUser(user);
-            setIsAuthenticated(true);
-            return true;
-          } catch (error) {
-            console.error("Failed to get user with token:", error);
-            throw new Error("Invalid token");
-          }
-        }
-
-        return true;
-      } catch (err) {
-        const errorObj = err instanceof Error ? err : new Error(String(err));
-        setError(errorObj);
-        return false;
-      } finally {
-        setIsAuthenticating(false);
-      }
-    },
-    [
-      storeToken,
-      tokenStorageKey,
-      serverStorageKey,
-      updateServiceConfig,
-      services,
-    ],
-  );
-
-  /**
    * Validate a token against the server
    */
   const validateToken = useCallback(
@@ -422,9 +330,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
    */
   const logout = useCallback(() => {
     // Clear authentication state
+    setCredentials({ username: "", password: "" });
     setIsAuthenticated(false);
     setCurrentUser(null);
-
     // Remove stored tokens
     if (storeToken) {
       localStorage.removeItem(tokenStorageKey);
@@ -434,6 +342,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     // Reset service configuration
     updateServiceConfig({
       token: undefined,
+      userId: undefined,
     });
   }, [storeToken, tokenStorageKey, serverStorageKey, updateServiceConfig]);
 
@@ -460,24 +369,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       isAuthenticating,
       error,
       currentUser,
-      login,
-      loginWithToken,
       logout,
       validateToken,
       getStoredToken,
       getStoredServerUrl,
+      updateCredentials,
     }),
     [
       isAuthenticated,
       isAuthenticating,
       error,
       currentUser,
-      login,
-      loginWithToken,
       logout,
       validateToken,
       getStoredToken,
       getStoredServerUrl,
+      updateCredentials,
     ],
   );
 

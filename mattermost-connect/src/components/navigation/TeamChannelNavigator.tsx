@@ -7,7 +7,7 @@ import React, {
   useRef,
   useLayoutEffect,
 } from "react";
-import { useMattermost, useTeamContext } from "../../context";
+import { useMattermost, useTeamState, withAuthentication } from "../../context";
 import { Team } from "../../types";
 
 // Material-UI Components
@@ -79,7 +79,7 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
   channelListSx,
 }) => {
   const { services } = useMattermost();
-  const { activeTeam, setActiveTeam } = useTeamContext();
+  const { activeTeam, setActiveTeam } = useTeamState();
 
   // State
   const [teams, setTeams] = useState<Team[]>([]);
@@ -287,4 +287,4 @@ const TeamChannelNavigator: React.FC<TeamChannelNavigatorProps> = ({
   );
 };
 
-export default TeamChannelNavigator;
+export default withAuthentication(TeamChannelNavigator);

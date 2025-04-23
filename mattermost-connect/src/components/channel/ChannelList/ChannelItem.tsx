@@ -1,7 +1,7 @@
 // src/components/channel/ChannelList/ChannelItem.tsx
 import React from "react";
 import { Channel } from "../../../types";
-import { useChannelContext, useUserContext } from "../../../context";
+import { useUserContext } from "../../../context";
 
 // Material-UI Components
 import {
@@ -25,6 +25,7 @@ import {
   FiberManualRecord as StatusIcon,
   Edit as TypingIcon,
 } from "@mui/icons-material";
+import { useChannelUnread } from "../../../context/ChannelContext";
 
 /**
  * Props pour le composant ChannelItem
@@ -65,7 +66,7 @@ const ChannelItem: React.FC<ChannelItemProps> = ({
   iconSx,
 }) => {
   // Utiliser les nouvelles méthodes du MattermostProvider
-  const { getChannelUnreadState } = useChannelContext();
+  const { getChannelUnreadState } = useChannelUnread();
 
   const { getTypingUsersForChannel, getTypingIndicatorText } = useUserContext();
 

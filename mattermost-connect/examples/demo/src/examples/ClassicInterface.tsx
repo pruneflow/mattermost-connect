@@ -9,11 +9,11 @@ import {
   formatUserDisplayName,
   Notification,
   TeamChannelNavigator,
-  useChannelContext,
   useConnection,
   useMessageContext,
-  useTeamContext,
+  useTeamState,
   useUserContext,
+  useChannelState,
 } from "mattermost-connect";
 
 // Material-UI Components
@@ -45,8 +45,8 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { error } = useConnection();
-  const { activeTeam } = useTeamContext();
-  const { activeChannel } = useChannelContext();
+  const { activeTeam } = useTeamState();
+  const { activeChannel } = useChannelState();
   const { navigateToMessage } = useMessageContext();
   const { currentUser } = useUserContext();
 

@@ -3,7 +3,7 @@ import Message from "./Message";
 import React, { useCallback, useEffect, useRef } from "react";
 import { Box } from "@mui/material";
 import { Message as MessageType } from "../../../types";
-import { useUserContext } from "../../../context";
+import { useUserContext, withAuthentication } from "../../../context";
 
 interface MessageListProps {
   /** Liste des messages à afficher */
@@ -30,7 +30,7 @@ interface MessageListProps {
   autoScrollToBottom?: boolean;
 }
 
-export const MessageList: React.FC<MessageListProps> = ({
+const Messages: React.FC<MessageListProps> = ({
   messages,
   readOnly,
   currentUserId,
@@ -89,3 +89,5 @@ export const MessageList: React.FC<MessageListProps> = ({
     </Box>
   );
 };
+
+export const MessageList = withAuthentication(Messages);

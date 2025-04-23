@@ -1,6 +1,10 @@
 // src/components/ChannelViewer/message/Message.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useMattermost, useUserContext } from "../../../context";
+import {
+  useMattermost,
+  useUserContext,
+  withAuthentication,
+} from "../../../context";
 import {
   Box,
   Paper,
@@ -329,4 +333,4 @@ const Message: React.FC<MessageProps> = ({
   );
 };
 
-export default Message;
+export default withAuthentication(Message);

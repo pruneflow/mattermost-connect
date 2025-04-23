@@ -13,6 +13,7 @@ import { User } from "../types";
 import { ServiceContainer } from "../services";
 import { formatUserDisplayName } from "../utils";
 import { useConnection } from "./ConnectionContext";
+import { useAuth } from "./AuthContext";
 
 /**
  * Interface for the UserContext
@@ -65,7 +66,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({
 }) => {
   console.debug("UserProvider ");
   // Get connection state from ConnectionContext
-  const connection = useConnection();
+  const { isConnected } = useConnection();
+  const { isAuthenticated } = useAuth();
 
   // State for current user
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -92,50 +94,53 @@ export const UserProvider: React.FC<UserProviderProps> = ({
     }
 
     try {
-      const user = await services.mattermostService.getCurrentUser();
+      if (isAuthenticated) {
+        const user = await services.mattermostService.getCurrentUser();
 
-      // Update state and ref
-      setCurrentUser(user);
-      currentUserRef.current = user;
+        // Update state and ref
+        setCurrentUser(user);
+        currentUserRef.current = user;
 
-      // Update the user service with current user ID
-      if (services.userService && user.id) {
-        if (typeof services.userService.setCurrentUserId === "function") {
-          services.userService.setCurrentUserId(user.id);
+        // Update the user service with current user ID
+        if (services.userService && user.id) {
+          if (typeof services.userService.setCurrentUserId === "function") {
+            services.userService.setCurrentUserId(user.id);
+          }
+
+          // Add to known users
+          services.userService.addUser(user);
+          setKnownUsers((prev) => ({
+            ...prev,
+            [user.id]: user,
+          }));
         }
 
-        // Add to known users
-        services.userService.addUser(user);
-        setKnownUsers((prev) => ({
-          ...prev,
-          [user.id]: user,
-        }));
-      }
+        // Update notification service with current user ID
+        if (services.notificationService && user.id) {
+          services.notificationService.setCurrentUserId(user.id);
+        }
 
-      // Update notification service with current user ID
-      if (services.notificationService && user.id) {
-        services.notificationService.setCurrentUserId(user.id);
+        lastUserRefreshRef.current = Date.now();
+        return user;
       }
-
-      lastUserRefreshRef.current = Date.now();
-      return user;
+      return null;
     } catch (error) {
       console.error("Error loading current user:", error);
       return null;
     }
-  }, [services]);
+  }, [services, isAuthenticated]);
 
   /**
    * Refresh current user data
    */
   const refreshCurrentUser = useCallback(async (): Promise<User | null> => {
-    if (!services?.mattermostService) {
+    if (!services?.mattermostService || !isAuthenticated) {
       return null;
     }
 
     try {
       // Check if the service implements refreshCurrentUser
-      if (typeof services.mattermostService.refreshCurrentUser === "function") {
+      if (services.mattermostService.refreshCurrentUser) {
         const user = await services.mattermostService.refreshCurrentUser();
 
         // Only update if there were changes
@@ -163,14 +168,14 @@ export const UserProvider: React.FC<UserProviderProps> = ({
       console.error("Error refreshing current user:", error);
       return null;
     }
-  }, [services, loadCurrentUser]);
+  }, [services, loadCurrentUser, isAuthenticated]);
 
   /**
    * Get a user by ID (from cache or API)
    */
   const getUser = useCallback(
     async (userId: string): Promise<User | null> => {
-      if (!userId || !services?.userService) {
+      if (!userId || !services?.userService || !isAuthenticated) {
         return null;
       }
 
@@ -209,7 +214,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({
       pendingUserRequestsRef.current[userId] = userPromise;
       return userPromise;
     },
-    [services, knownUsers],
+    [services, knownUsers, isAuthenticated],
   );
 
   /**
@@ -276,40 +281,15 @@ export const UserProvider: React.FC<UserProviderProps> = ({
 
   // Load current user on init or when connection changes
   useEffect(() => {
-    if (connection.isConnected && services?.mattermostService && !currentUser) {
+    if (isAuthenticated && services?.mattermostService && !currentUser) {
       void loadCurrentUser();
     }
-  }, [connection.isConnected, services, currentUser, loadCurrentUser]);
-
-  // Set up periodic user refresh
-  useEffect(() => {
-    if (
-      !refreshInterval ||
-      !connection.isConnected ||
-      !services?.mattermostService
-    ) {
-      return;
-    }
-
-    const checkRefresh = () => {
-      const now = Date.now();
-      if (now - lastUserRefreshRef.current >= refreshInterval) {
-        void refreshCurrentUser();
-      }
-    };
-
-    // Check immediately
-    checkRefresh();
-
-    // Set up interval
-    const intervalId = setInterval(checkRefresh, refreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [connection.isConnected, services, refreshInterval, refreshCurrentUser]);
+  }, [isAuthenticated, services, currentUser, loadCurrentUser]);
 
   // Listen for typing events
   useEffect(() => {
-    if (!services?.notificationService) return;
+    if (!services?.notificationService || !isConnected || !isAuthenticated)
+      return;
 
     const handleTypingUpdated = (data: any) => {
       if (!data.channelId) return;
@@ -332,11 +312,11 @@ export const UserProvider: React.FC<UserProviderProps> = ({
       "typing_updated",
       handleTypingUpdated,
     );
-  }, [services]);
+  }, [services, isConnected, isAuthenticated]);
 
   // Sync with user service periodically
   useEffect(() => {
-    if (!services?.userService) return;
+    if (!services?.userService || !isAuthenticated) return;
 
     const syncKnownUsers = () => {
       if (typeof services.userService.getAllUsers === "function") {
@@ -363,7 +343,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({
     const intervalId = setInterval(syncKnownUsers, 30000);
 
     return () => clearInterval(intervalId);
-  }, [services, knownUsers]);
+  }, [services, knownUsers, isAuthenticated]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo<UserContextType>(

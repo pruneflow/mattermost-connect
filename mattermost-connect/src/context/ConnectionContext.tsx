@@ -13,6 +13,7 @@ import { WebSocketConnection, WebSocketSetupOptions } from "../types";
 import { setupWebsocket, releaseWebsocket } from "../services";
 import { WebSocketEventType } from "../services/notification/notification.service";
 import { useMattermost } from "./MattermostProvider";
+import { useAuth } from "./AuthContext";
 
 /**
  * Interface for the ConnectionContext
@@ -85,7 +86,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 }) => {
   // Get Mattermost context to access mode, config, and services
   const { mode, config, services } = useMattermost();
-
+  const { isAuthenticated } = useAuth();
   // State
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
@@ -449,24 +450,31 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       mode &&
       config.token &&
       !isConnected &&
-      !isConnecting
+      !isConnecting &&
+      isAuthenticated
     ) {
       void connect();
     }
-  }, [enableWebsocket, mode, config.token, isConnected, isConnecting, connect]);
+  }, [
+    enableWebsocket,
+    mode,
+    config.token,
+    isConnected,
+    isConnecting,
+    connect,
+    isAuthenticated,
+  ]);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, [disconnect]);
+    if (isConnected && !isAuthenticated) disconnect();
+  }, [isAuthenticated]);
 
   // Reconnect when relevant configuration changes
   useEffect(() => {
     // Only reconnect if we were previously connected and configuration changed
     if (
       isConnected &&
+      isAuthenticated &&
       (config.token !== websocketConfigRef.current.token ||
         config.serverUrl !== websocketConfigRef.current.serverUrl ||
         config.proxyUrl !== websocketConfigRef.current.proxyUrl ||
@@ -475,7 +483,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       console.debug("Connection configuration changed, reconnecting WebSocket");
       void reconnect();
     }
-  }, [config, isConnected, reconnect]);
+  }, [config, isConnected, reconnect, isAuthenticated]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo<ConnectionContextType>(

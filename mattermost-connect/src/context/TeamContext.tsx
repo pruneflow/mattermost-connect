@@ -1,4 +1,3 @@
-// src/context/TeamContext.tsx
 import React, {
   createContext,
   useContext,
@@ -12,19 +11,47 @@ import React, {
 import { Team } from "../types";
 import { ServiceContainer } from "../services";
 import { useConnection } from "./ConnectionContext";
+import { useAuth } from "./AuthContext";
 
-/**
- * Interface pour le TeamContext
- * Fournit uniquement les fonctionnalités liées aux équipes
- */
-export interface TeamContextType {
-  // État des équipes
+// 1. Team State Context
+interface TeamStateContextType {
   teams: Team[];
   activeTeam: Team | null;
+  setActiveTeam: (team: Team | null) => void;
+  switchTeam: (teamIdOrTeam: string | Team) => Promise<Team | null>;
+  getTeamById: (teamId: string) => Team | undefined;
+}
+
+const TeamStateContext = createContext<TeamStateContextType | null>(null);
+
+export const useTeamState = () => {
+  const context = useContext(TeamStateContext);
+  if (!context) {
+    throw new Error("useTeamState must be used within a TeamStateProvider");
+  }
+  return context;
+};
+
+// 2. Team Loading Context
+interface TeamLoadingContextType {
   isTeamsLoading: boolean;
   teamsError: Error | null;
+  loadTeams: () => Promise<Team[]>;
+  refreshInterval?: number;
+}
 
-  // Compteurs non-lus par équipe
+const TeamLoadingContext = createContext<TeamLoadingContextType | null>(null);
+
+export const useTeamLoading = () => {
+  const context = useContext(TeamLoadingContext);
+  if (!context) {
+    throw new Error("useTeamLoading must be used within a TeamLoadingProvider");
+  }
+  return context;
+};
+
+// 3. Team Unread Context
+interface TeamUnreadContextType {
   unreadCounts: Record<
     string,
     {
@@ -32,62 +59,35 @@ export interface TeamContextType {
       mentionCount: number;
     }
   >;
-
-  // Méthodes pour la gestion des équipes
-  loadTeams: () => Promise<Team[]>;
-  setActiveTeam: (team: Team | null) => void;
-  switchTeam: (teamId: string | Team) => Promise<Team | null>;
-  getTeamById: (teamId: string) => Team | undefined;
   getTeamUnreadCount: (teamId: string) => {
     messageCount: number;
     mentionCount: number;
   };
 }
 
-// Création du contexte avec une valeur par défaut null
-export const TeamContext = createContext<TeamContextType | null>(null);
+const TeamUnreadContext = createContext<TeamUnreadContextType | null>(null);
 
-/**
- * Hook personnalisé pour accéder au TeamContext
- * Lance une erreur s'il est utilisé en dehors d'un TeamProvider
- */
-export function useTeamContext(): TeamContextType {
-  const context = useContext(TeamContext);
+export const useTeamUnread = () => {
+  const context = useContext(TeamUnreadContext);
   if (!context) {
-    throw new Error("useTeamContext must be used within a TeamProvider");
+    throw new Error("useTeamUnread must be used within a TeamUnreadProvider");
   }
   return context;
-}
+};
 
-/**
- * Props pour le composant TeamProvider
- */
-export interface TeamProviderProps {
+// Combined Team Providers
+export const TeamProvider: React.FC<{
   children: ReactNode;
   services: ServiceContainer | null;
   refreshInterval?: number;
-}
-
-/**
- * Provider pour la gestion des équipes
- * Gère les équipes et leurs états
- */
-export const TeamProvider: React.FC<TeamProviderProps> = ({
-  children,
-  services,
-  refreshInterval = 0, // Pas de rafraîchissement auto par défaut
-}) => {
-  console.debug("TeamProvider ");
-  // Récupération du contexte de connexion
-  const connection = useConnection();
-
-  // État pour les équipes
+}> = ({ children, services, refreshInterval = 0 }) => {
+  const { isConnected } = useConnection();
+  const { isAuthenticated } = useAuth();
+  // State Management
   const [teams, setTeams] = useState<Team[]>([]);
   const [activeTeam, setActiveTeamState] = useState<Team | null>(null);
   const [isTeamsLoading, setIsTeamsLoading] = useState<boolean>(false);
   const [teamsError, setTeamsError] = useState<Error | null>(null);
-
-  // État pour les compteurs non-lus
   const [unreadCounts, setUnreadCounts] = useState<
     Record<
       string,
@@ -98,16 +98,62 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
     >
   >({});
 
-  // Références pour suivre l'état sans re-renders
+  // Refs for state tracking
   const activeTeamRef = useRef<Team | null>(null);
   const teamsRef = useRef<Team[]>([]);
   const lastTeamsFetchRef = useRef<number>(0);
 
-  /**
-   * Charge toutes les équipes disponibles
-   */
-  const loadTeams = useCallback(async (): Promise<Team[]> => {
-    if (!services?.mattermostService || !connection.isConnected) {
+  // Team State Methods
+  const setActiveTeam = useCallback((team: Team | null) => {
+    setActiveTeamState(team);
+    activeTeamRef.current = team;
+  }, []);
+
+  const getTeamById = useCallback((teamId: string): Team | undefined => {
+    return teamsRef.current.find((team) => team.id === teamId);
+  }, []);
+
+  const switchTeam = useCallback(
+    async (teamIdOrTeam: string | Team): Promise<Team | null> => {
+      if (!services?.mattermostService) {
+        return null;
+      }
+
+      const teamId =
+        typeof teamIdOrTeam === "string" ? teamIdOrTeam : teamIdOrTeam.id;
+
+      if (activeTeamRef.current?.id === teamId) {
+        return activeTeamRef.current;
+      }
+
+      try {
+        if (typeof teamIdOrTeam !== "string") {
+          setActiveTeam(teamIdOrTeam);
+          return teamIdOrTeam;
+        }
+
+        const existingTeam = teamsRef.current.find((t) => t.id === teamId);
+        if (existingTeam) {
+          setActiveTeam(existingTeam);
+          return existingTeam;
+        }
+        if (isAuthenticated) {
+          const team = await services.mattermostService.getTeam(teamId);
+          setActiveTeam(team);
+          return team;
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error switching to team ${teamId}:`, error);
+        return null;
+      }
+    },
+    [services, setActiveTeam],
+  );
+
+  // Team Loading Methods
+  const loadTeams = async (): Promise<Team[]> => {
+    if (!services?.mattermostService) {
       return [];
     }
 
@@ -115,16 +161,16 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
     setTeamsError(null);
 
     try {
-      const availableTeams = await services.mattermostService.getTeams();
+      if (isAuthenticated) {
+        const availableTeams = await services.mattermostService.getTeams();
 
-      // Mise à jour de l'état et de la référence
-      setTeams(availableTeams);
-      teamsRef.current = availableTeams;
+        setTeams(availableTeams);
+        teamsRef.current = availableTeams;
+        lastTeamsFetchRef.current = Date.now();
 
-      // Mise à jour du timestamp de dernière récupération
-      lastTeamsFetchRef.current = Date.now();
-
-      return availableTeams;
+        return availableTeams;
+      }
+      return [];
     } catch (error) {
       console.error("Error loading teams:", error);
       const typedError =
@@ -135,76 +181,11 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
     } finally {
       setIsTeamsLoading(false);
     }
-  }, [services, connection.isConnected]);
+  };
 
-  /**
-   * Définit l'équipe active
-   */
-  const setActiveTeam = useCallback((team: Team | null) => {
-    setActiveTeamState(team);
-    activeTeamRef.current = team;
-  }, []);
-
-  /**
-   * Change d'équipe active
-   */
-  const switchTeam = useCallback(
-    async (teamIdOrTeam: string | Team): Promise<Team | null> => {
-      if (!services?.mattermostService) {
-        return null;
-      }
-
-      // Déterminer l'ID d'équipe
-      const teamId =
-        typeof teamIdOrTeam === "string" ? teamIdOrTeam : teamIdOrTeam.id;
-
-      // Si déjà l'équipe active, pas besoin de changer
-      if (activeTeamRef.current?.id === teamId) {
-        return activeTeamRef.current;
-      }
-
-      try {
-        // Si un objet d'équipe est fourni, l'utiliser directement
-        if (typeof teamIdOrTeam !== "string") {
-          setActiveTeam(teamIdOrTeam);
-          return teamIdOrTeam;
-        }
-
-        // Chercher l'équipe dans les équipes déjà chargées
-        const existingTeam = teamsRef.current.find((t) => t.id === teamId);
-        if (existingTeam) {
-          setActiveTeam(existingTeam);
-          return existingTeam;
-        }
-
-        // Charger les détails de l'équipe depuis l'API
-        const team = await services.mattermostService.getTeam(teamId);
-        setActiveTeam(team);
-        return team;
-      } catch (error) {
-        console.error(`Error switching to team ${teamId}:`, error);
-        return null;
-      }
-    },
-    [services, setActiveTeam],
-  );
-
-  /**
-   * Récupère une équipe par son ID
-   */
-  const getTeamById = useCallback((teamId: string): Team | undefined => {
-    return teamsRef.current.find((team) => team.id === teamId);
-  }, []);
-
-  /**
-   * Initialise les compteurs non-lus pour les équipes
-   */
-  const initializeTeamsUnreadStates = useCallback(async (): Promise<void> => {
-    if (
-      !services?.mattermostService ||
-      !connection.isConnected ||
-      teamsRef.current.length === 0
-    ) {
+  // Team Unread Methods
+  const initializeTeamsUnreadStates = async (): Promise<void> => {
+    if (teamsRef.current.length === 0) {
       return;
     }
 
@@ -214,11 +195,8 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
         { messageCount: number; mentionCount: number }
       > = {};
 
-      // Récupérer les compteurs pour chaque équipe
       for (const team of teamsRef.current) {
-        if (
-          typeof services.mattermostService.getTeamUnreadCount === "function"
-        ) {
+        if (isAuthenticated && services?.mattermostService.getTeamUnreadCount) {
           try {
             const teamUnread =
               await services.mattermostService.getTeamUnreadCount(team.id);
@@ -236,16 +214,12 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
         }
       }
 
-      // Mettre à jour l'état avec les nouveaux compteurs
       setUnreadCounts(newUnreadCounts);
     } catch (error) {
       console.error("Error initializing teams unread states:", error);
     }
-  }, [services, connection.isConnected]);
+  };
 
-  /**
-   * Récupère le compteur non-lu pour une équipe
-   */
   const getTeamUnreadCount = useCallback(
     (teamId: string) => {
       return unreadCounts[teamId] || { messageCount: 0, mentionCount: 0 };
@@ -253,97 +227,83 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
     [unreadCounts],
   );
 
-  // Charger les équipes lors de la connexion initiale
+  // Side Effects
+  useEffect(() => {
+    if (isAuthenticated && services?.mattermostService) {
+      void loadTeams();
+    }
+  }, [isAuthenticated, services, loadTeams, initializeTeamsUnreadStates]);
+
   useEffect(() => {
     if (
-      connection.isConnected &&
-      services?.mattermostService &&
-      teams.length === 0
+      isAuthenticated &&
+      teams &&
+      teams.length > 0 &&
+      !isTeamsLoading &&
+      services?.mattermostService
     ) {
-      void loadTeams().then(() => {
-        void initializeTeamsUnreadStates();
-      });
+      void initializeTeamsUnreadStates();
     }
-  }, [
-    connection.isConnected,
-    services,
-    teams.length,
-    loadTeams,
-    initializeTeamsUnreadStates,
-  ]);
-
-  // Mettre à jour les références quand l'état change
-  useEffect(() => {
-    teamsRef.current = teams;
-  }, [teams]);
+  }, [services, teams, isTeamsLoading, isAuthenticated]);
 
   useEffect(() => {
-    activeTeamRef.current = activeTeam;
-  }, [activeTeam]);
+    if (!services?.notificationService || !isConnected || !isAuthenticated)
+      return;
 
-  // Mettre à jour les compteurs non-lus
-  useEffect(() => {
-    if (!services?.notificationService) return;
-
-    // Gestionnaire pour les mises à jour non-lues
     const handleUnreadUpdated = () => {
       void initializeTeamsUnreadStates();
     };
 
-    // S'abonner aux changements
     return services.notificationService.addEventListener(
       "unread_updated",
       handleUnreadUpdated,
     );
-  }, [services, initializeTeamsUnreadStates]);
+  }, [services, isConnected, isAuthenticated]);
 
-  // Configurer le rafraîchissement périodique si activé
-  useEffect(() => {
-    if (!refreshInterval || refreshInterval <= 0) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      void loadTeams().then(() => {
-        void initializeTeamsUnreadStates();
-      });
-    }, refreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [refreshInterval, loadTeams, initializeTeamsUnreadStates]);
-
-  // Mémoriser la valeur du contexte pour éviter les re-renders inutiles
-  const contextValue = useMemo<TeamContextType>(
+  // Context Values
+  const teamStateValue = useMemo(
     () => ({
-      // État
       teams,
       activeTeam,
-      isTeamsLoading,
-      teamsError,
-      unreadCounts,
-
-      // Méthodes
-      loadTeams,
       setActiveTeam,
       switchTeam,
       getTeamById,
+    }),
+    [teams, activeTeam, setActiveTeam, switchTeam, getTeamById],
+  );
+
+  const teamLoadingValue = useMemo(
+    () => ({
+      isTeamsLoading,
+      teamsError,
+      loadTeams,
+      refreshInterval,
+    }),
+    [isTeamsLoading, teamsError, loadTeams, refreshInterval],
+  );
+
+  const teamUnreadValue = useMemo(
+    () => ({
+      unreadCounts,
       getTeamUnreadCount,
     }),
-    [
-      teams,
-      activeTeam,
-      isTeamsLoading,
-      teamsError,
-      unreadCounts,
-      loadTeams,
-      setActiveTeam,
-      switchTeam,
-      getTeamById,
-      getTeamUnreadCount,
-    ],
+    [unreadCounts, getTeamUnreadCount],
   );
 
   return (
-    <TeamContext.Provider value={contextValue}>{children}</TeamContext.Provider>
+    <TeamStateContext.Provider value={teamStateValue}>
+      <TeamLoadingContext.Provider value={teamLoadingValue}>
+        <TeamUnreadContext.Provider value={teamUnreadValue}>
+          {children}
+        </TeamUnreadContext.Provider>
+      </TeamLoadingContext.Provider>
+    </TeamStateContext.Provider>
   );
 };
+
+// Convenience hook to get all team-related contexts
+export const useTeamContext = () => ({
+  state: useTeamState(),
+  loading: useTeamLoading(),
+  unread: useTeamUnread(),
+});

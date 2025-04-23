@@ -19,13 +19,6 @@ import { MessageProvider } from "./MessageContext";
 import { AuthProvider } from "./AuthContext";
 
 /**
- * Extended provider configuration with additional options
- */
-interface ExtendedProviderConfig extends ProviderConfig {
-  useLocalStorage?: boolean;
-}
-
-/**
  * Interface for the MattermostContext
  * Acts as a gateway to the specialized contexts and services
  */
@@ -37,10 +30,10 @@ export interface MattermostContextType {
   isServiceConfigured: boolean;
 
   /** Update service configuration */
-  updateServiceConfig: (config: Partial<ExtendedProviderConfig>) => void;
+  updateServiceConfig: (config: Partial<ProviderConfig>) => void;
 
   /** Current configuration */
-  config: ExtendedProviderConfig;
+  config: ProviderConfig;
 
   /** Current connection mode */
   mode: "direct" | "proxy" | "custom" | null;
@@ -114,7 +107,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   children,
 }) => {
   // State to store current configuration
-  const [config, setConfig] = useState<ExtendedProviderConfig>({
+  const [config, setConfig] = useState<ProviderConfig>({
     serverUrl,
     token,
     proxyUrl,
@@ -184,7 +177,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
 
   // Method to update service configuration
   const updateServiceConfig = useCallback(
-    (newConfig: Partial<ExtendedProviderConfig>) => {
+    (newConfig: Partial<ProviderConfig>) => {
       console.debug("newConfig", newConfig);
       setConfig((prevConfig) => ({
         ...prevConfig,

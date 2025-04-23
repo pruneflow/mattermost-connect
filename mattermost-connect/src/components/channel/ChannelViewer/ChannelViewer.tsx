@@ -13,6 +13,7 @@ import {
   useUserContext,
   useConnection,
   useMessageContext,
+  withAuthentication,
 } from "../../../context";
 import { Message as MessageType } from "../../../types";
 
@@ -29,6 +30,10 @@ import { ChannelEmptyState } from "./components/ChannelEmptyState";
 import { ChannelLoadMoreButton } from "./components/ChannelLoadMoreButton";
 import { MessageList } from "../../message/MessageViewer/MessageList";
 import { TypingIndicator } from "../../notification";
+import {
+  useChannelState,
+  useChannelUnread,
+} from "../../../context/ChannelContext";
 
 /**
  * Props for the ChannelViewer component
@@ -100,7 +105,8 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   const { services } = useMattermost();
   const { isConnected } = useConnection();
   const { currentUser } = useUserContext();
-  const { activeChannel, markAsRead, typingIndicator } = useChannelContext();
+  const { activeChannel } = useChannelState();
+  const { markAsRead, typingIndicator } = useChannelUnread();
 
   const {
     messages,
@@ -655,4 +661,4 @@ const ChannelViewer: React.FC<ChannelViewerProps> = ({
   );
 };
 
-export default ChannelViewer;
+export default withAuthentication(ChannelViewer);

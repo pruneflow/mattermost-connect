@@ -1,6 +1,11 @@
 // src/components/team/TeamSelector/TeamSelector.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useTeamContext } from "../../../context";
+import {
+  useTeamLoading,
+  useTeamState,
+  useTeamUnread,
+  withAuthentication,
+} from "../../../context";
 import { Team } from "../../../types";
 
 // Material-UI Components
@@ -93,15 +98,9 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   selectedTeamId,
 }) => {
   // Utilisation directe du contexte d'équipe
-  const {
-    teams,
-    activeTeam,
-    isTeamsLoading,
-    teamsError,
-    loadTeams,
-    setActiveTeam,
-    unreadCounts,
-  } = useTeamContext();
+  const { teams, activeTeam, setActiveTeam } = useTeamState();
+  const { isTeamsLoading, loadTeams, teamsError } = useTeamLoading();
+  const { unreadCounts } = useTeamUnread();
 
   // État local pour suivre si les équipes ont été chargées
   const [initialized, setInitialized] = useState(false);
@@ -344,4 +343,4 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
 };
 
 // Utiliser React.memo pour éviter les re-rendus inutiles
-export default React.memo(TeamSelector);
+export default withAuthentication(TeamSelector);

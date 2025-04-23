@@ -1,4 +1,3 @@
-// src/context/ChannelContext.tsx
 import React, {
   createContext,
   useContext,
@@ -12,49 +11,73 @@ import React, {
 import { Channel } from "../types";
 import { ServiceContainer } from "../services";
 import { useConnection } from "./ConnectionContext";
-import { useTeamContext } from "./TeamContext";
+import { useTeamState } from "./TeamContext";
 import { useUserContext } from "./UserContext";
+import { useAuth } from "./AuthContext";
 
-/**
- * Interface pour le ChannelContext
- * Fournit les fonctionnalités liées aux canaux uniquement
- */
-export interface ChannelContextType {
-  // État des canaux
+// 1. Channel State Context Interface
+interface ChannelStateContextType {
   activeChannel: Channel | null;
   isActiveChannelLoading: boolean;
   activeChannelError: Error | null;
+  setActiveChannel: (channel: Channel | null) => void;
+  loadChannel: (channelId: string) => Promise<Channel | null>;
+  navigateToChannel: (channelId: string) => Promise<void>;
+  getChannelById: (channelId: string, teamId?: string) => Channel | undefined;
+  getChannelByName: (
+    channelName: string,
+    teamId: string,
+  ) => Channel | undefined;
+}
 
-  // Canaux par équipe
+const ChannelStateContext = createContext<ChannelStateContextType | null>(null);
+
+export const useChannelState = () => {
+  const context = useContext(ChannelStateContext);
+  if (!context) {
+    throw new Error(
+      "useChannelState must be used within a ChannelStateProvider",
+    );
+  }
+  return context;
+};
+
+// 2. Channel Loading Context Interface
+interface ChannelLoadingContextType {
   channels: Record<string, Channel[]>;
   isChannelsLoading: Record<string, boolean>;
   channelsError: Record<string, Error | null>;
-
-  // État des non-lus
-  unreadState: {
-    msg_count: number;
-    mention_count: number;
-    lastMessageId?: string;
-    lastViewedAt?: number;
-  };
-
-  // État de frappe
-  typingIndicator: string;
-
-  // Méthodes pour les canaux
-  setActiveChannel: (channel: Channel | null) => void;
-  loadChannel: (channelId: string) => Promise<Channel | null>;
   loadChannels: (teamId: string, force?: boolean) => Promise<Channel[]>;
   getChannelsByTeam: (teamId: string) => Channel[];
   getChannelsByType: (
     teamId: string,
     type: "public" | "private" | "direct" | "group" | "favorite",
   ) => Channel[];
-  getChannelById: (channelId: string, teamId?: string) => Channel | undefined;
-  getChannelByName: (
-    channelName: string,
-    teamId: string,
-  ) => Channel | undefined;
+}
+
+const ChannelLoadingContext = createContext<ChannelLoadingContextType | null>(
+  null,
+);
+
+export const useChannelLoading = () => {
+  const context = useContext(ChannelLoadingContext);
+  if (!context) {
+    throw new Error(
+      "useChannelLoading must be used within a ChannelLoadingProvider",
+    );
+  }
+  return context;
+};
+
+// 3. Channel Unread Context Interface
+interface ChannelUnreadContextType {
+  unreadState: {
+    msg_count: number;
+    mention_count: number;
+    lastMessageId?: string;
+    lastViewedAt?: number;
+  };
+  typingIndicator: string;
   getChannelUnreadState: (channelId: string) => {
     msg_count: number;
     mention_count: number;
@@ -62,49 +85,34 @@ export interface ChannelContextType {
     lastViewedAt?: number;
   };
   markAsRead: (channelId?: string) => Promise<boolean>;
-
-  // Navigation
-  navigateToChannel: (channelId: string) => Promise<void>;
 }
 
-// Création du contexte avec une valeur par défaut null
-export const ChannelContext = createContext<ChannelContextType | null>(null);
+const ChannelUnreadContext = createContext<ChannelUnreadContextType | null>(
+  null,
+);
 
-/**
- * Hook personnalisé pour accéder au ChannelContext
- */
-export function useChannelContext(): ChannelContextType {
-  const context = useContext(ChannelContext);
+export const useChannelUnread = () => {
+  const context = useContext(ChannelUnreadContext);
   if (!context) {
-    throw new Error("useChannelContext must be used within a ChannelProvider");
+    throw new Error(
+      "useChannelUnread must be used within a ChannelUnreadProvider",
+    );
   }
   return context;
-}
+};
 
-/**
- * Props pour le ChannelProvider
- */
-export interface ChannelProviderProps {
+// Combined Channel Provider
+export const ChannelProvider: React.FC<{
   children: ReactNode;
   services: ServiceContainer | null;
   refreshInterval?: number;
-}
-
-/**
- * Provider pour la gestion des canaux
- */
-export const ChannelProvider: React.FC<ChannelProviderProps> = ({
-  children,
-  services,
-  refreshInterval = 0, // Pas de rafraîchissement automatique par défaut
-}) => {
-  console.debug("ChannelProvider ");
-  // Récupération des contextes dépendants
-  const connection = useConnection();
-  const { activeTeam } = useTeamContext();
+}> = ({ children, services, refreshInterval = 0 }) => {
+  const { isConnected } = useConnection();
+  const { isAuthenticated } = useAuth();
+  const { activeTeam } = useTeamState();
   const { getTypingUsersForChannel, getTypingIndicatorText } = useUserContext();
 
-  // État pour le canal actif
+  // State Management
   const [activeChannel, setActiveChannelState] = useState<Channel | null>(null);
   const [isActiveChannelLoading, setIsActiveChannelLoading] =
     useState<boolean>(false);
@@ -112,7 +120,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     null,
   );
 
-  // État pour les canaux par équipe
   const [channels, setChannels] = useState<Record<string, Channel[]>>({});
   const [isChannelsLoading, setIsChannelsLoading] = useState<
     Record<string, boolean>
@@ -121,44 +128,35 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     Record<string, Error | null>
   >({});
 
-  // Références pour suivre l'état sans re-renders
+  // Refs for state tracking
   const activeChannelRef = useRef<Channel | null>(null);
   const channelsRef = useRef<Record<string, Channel[]>>({});
   const lastChannelFetchRef = useRef<Record<string, number>>({});
   const isLoadingRef = useRef<boolean>(false);
 
-  /**
-   * Définit le canal actif avec mise à jour de la référence
-   */
+  // Channel State Methods
   const setActiveChannel = useCallback(
     (channel: Channel | null) => {
       setActiveChannelState(channel);
       activeChannelRef.current = channel;
 
-      // Définir le canal actif dans le service de notification
-      if (services?.notificationService && channel) {
-        services.notificationService.setCurrentChannelId(channel.id);
-      } else if (services?.notificationService && !channel) {
-        services.notificationService.setCurrentChannelId(null);
+      // Set active channel in notification service
+      if (services?.notificationService) {
+        channel
+          ? services.notificationService.setCurrentChannelId(channel.id)
+          : services.notificationService.setCurrentChannelId(null);
       }
     },
     [services],
   );
 
-  /**
-   * Charge les détails d'un canal par ID
-   */
   const loadChannel = useCallback(
     async (channelId: string): Promise<Channel | null> => {
-      if (
-        !channelId ||
-        !services?.mattermostService ||
-        !connection.isConnected
-      ) {
+      if (!channelId) {
         return null;
       }
 
-      // Vérifier si le canal est déjà chargé dans les canaux connus
+      // Check if channel is already loaded in known channels
       for (const teamChannels of Object.values(channelsRef.current)) {
         const existingChannel = teamChannels.find((c) => c.id === channelId);
         if (existingChannel) {
@@ -171,9 +169,15 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
       setActiveChannelError(null);
 
       try {
-        const channel = await services.mattermostService.getChannel(channelId);
-        setActiveChannel(channel);
-        return channel;
+        if (isAuthenticated) {
+          const channel =
+            await services?.mattermostService?.getChannel(channelId);
+          if (channel) {
+            setActiveChannel(channel);
+            return channel;
+          }
+        }
+        return null;
       } catch (error) {
         console.error(`Error loading channel ${channelId}:`, error);
         const typedError =
@@ -184,24 +188,97 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
         setIsActiveChannelLoading(false);
       }
     },
-    [services, connection.isConnected, setActiveChannel],
+    [services, setActiveChannel],
   );
 
-  /**
-   * Charge les canaux pour une équipe
-   */
+  const markAsRead = useCallback(
+    async (channelId?: string): Promise<boolean> => {
+      const targetChannelId = channelId || activeChannelRef.current?.id;
+      if (!targetChannelId) {
+        return false;
+      }
+
+      try {
+        // Call viewChannel method if available
+        if (isAuthenticated && services?.mattermostService.viewChannel) {
+          await services.mattermostService.viewChannel(targetChannelId);
+        }
+
+        // Reset unread state in notification service
+        if (
+          isConnected &&
+          services?.notificationService.resetChannelUnreadState
+        )
+          services.notificationService.resetChannelUnreadState(targetChannelId);
+        return true;
+      } catch (error) {
+        console.error(
+          `Error marking channel ${targetChannelId} as read:`,
+          error,
+        );
+        return false;
+      }
+    },
+    [services],
+  );
+
+  const navigateToChannel = useCallback(
+    async (channelId: string): Promise<void> => {
+      if (!channelId || !services) return;
+
+      try {
+        const channel = await loadChannel(channelId);
+        if (!channel) {
+          console.error(`Failed to load channel ${channelId}`);
+          return;
+        }
+
+        // Mark channel as read
+        await markAsRead(channelId);
+      } catch (error) {
+        console.error(`Error navigating to channel ${channelId}:`, error);
+      }
+    },
+    [services, loadChannel, markAsRead],
+  );
+
+  const getChannelById = useCallback(
+    (channelId: string, teamId?: string): Channel | undefined => {
+      if (teamId) {
+        return (channels[teamId] || []).find((c) => c.id === channelId);
+      }
+
+      // Search in all teams if no teamId provided
+      for (const teamChannels of Object.values(channels)) {
+        const channel = teamChannels.find((c) => c.id === channelId);
+        if (channel) return channel;
+      }
+
+      return undefined;
+    },
+    [channels],
+  );
+
+  const getChannelByName = useCallback(
+    (channelName: string, teamId: string): Channel | undefined => {
+      return (channels[teamId] || []).find((c) => c.name === channelName);
+    },
+    [channels],
+  );
+
+  // Channel Loading Methods
   const loadChannels = useCallback(
     async (teamId: string, force: boolean = false): Promise<Channel[]> => {
       if (!teamId || !services?.mattermostService) {
         return [];
       }
 
-      // Ignorer si déjà en cours de chargement pour cette équipe
+      // Ignore if already loading for this team
       if (isChannelsLoading[teamId] && !force) {
         return channels[teamId] || [];
       }
 
-      // Vérifier l'intervalle de rafraîchissement si pas forcé
+      // Check refresh interval if not forced
       if (!force && refreshInterval > 0 && channelsRef.current[teamId]) {
         const now = Date.now();
         const lastFetch = lastChannelFetchRef.current[teamId] || 0;
@@ -211,7 +288,7 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
         }
       }
 
-      // Mise à jour état de chargement
+      // Update loading state
       setIsChannelsLoading((prev) => ({ ...prev, [teamId]: true }));
       setChannelsError((prev) => ({ ...prev, [teamId]: null }));
 
@@ -219,7 +296,7 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
         const teamChannels =
           await services.mattermostService.getChannels(teamId);
 
-        // Mise à jour état et références
+        // Update state and references
         setChannels((prev) => ({ ...prev, [teamId]: teamChannels }));
         channelsRef.current = {
           ...channelsRef.current,
@@ -230,8 +307,8 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
           [teamId]: Date.now(),
         };
 
-        // Initialiser les états non-lus
-        void initializeChannelUnreadStates(teamId);
+        // Initialize unread states
+        await initializeChannelUnreadStates(teamId);
 
         return teamChannels;
       } catch (error) {
@@ -247,9 +324,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     [services, channels, isChannelsLoading, refreshInterval],
   );
 
-  /**
-   * Récupère tous les canaux pour une équipe
-   */
   const getChannelsByTeam = useCallback(
     (teamId: string): Channel[] => {
       return channels[teamId] || [];
@@ -257,9 +331,6 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     [channels],
   );
 
-  /**
-   * Récupère les canaux d'un type spécifique pour une équipe
-   */
   const getChannelsByType = useCallback(
     (
       teamId: string,
@@ -286,48 +357,10 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     [channels],
   );
 
-  /**
-   * Récupère un canal par ID
-   */
-  const getChannelById = useCallback(
-    (channelId: string, teamId?: string): Channel | undefined => {
-      if (teamId) {
-        return (channels[teamId] || []).find((c) => c.id === channelId);
-      }
-
-      // Rechercher dans toutes les équipes si pas de teamId fourni
-      for (const teamChannels of Object.values(channels)) {
-        const channel = teamChannels.find((c) => c.id === channelId);
-        if (channel) return channel;
-      }
-
-      return undefined;
-    },
-    [channels],
-  );
-
-  /**
-   * Récupère un canal par nom
-   */
-  const getChannelByName = useCallback(
-    (channelName: string, teamId: string): Channel | undefined => {
-      return (channels[teamId] || []).find((c) => c.name === channelName);
-    },
-    [channels],
-  );
-
-  /**
-   * Initialise l'état non-lu pour tous les canaux d'une équipe
-   */
+  // Channel Unread Methods
   const initializeChannelUnreadStates = useCallback(
     async (teamId: string): Promise<void> => {
-      if (
-        !teamId ||
-        !services?.mattermostService ||
-        !services.notificationService ||
-        !connection.isConnected ||
-        isLoadingRef.current
-      ) {
+      if (!teamId || isLoadingRef.current) {
         return;
       }
 
@@ -342,14 +375,14 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
 
           try {
             if (
-              typeof services.mattermostService.getChannelUnreadCount ===
-              "function"
+              isConnected &&
+              services?.mattermostService?.getChannelUnreadCount &&
+              services?.notificationService?.setChannelUnreadState
             ) {
               const unreadState =
-                await services.mattermostService.getChannelUnreadCount(
+                await services?.mattermostService?.getChannelUnreadCount(
                   channel.id,
                 );
-
               services.notificationService.setChannelUnreadState(channel.id, {
                 msg_count: unreadState.msg_count || 0,
                 mention_count: unreadState.mention_count || 0,
@@ -369,12 +402,9 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
         isLoadingRef.current = false;
       }
     },
-    [services, connection.isConnected, channels],
+    [services, isConnected, channels],
   );
 
-  /**
-   * Récupère l'état non-lu pour un canal
-   */
   const getChannelUnreadState = useCallback(
     (channelId: string) => {
       if (!services?.notificationService) {
@@ -385,81 +415,30 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     [services],
   );
 
-  /**
-   * Marque un canal comme lu
-   */
-  const markAsRead = useCallback(
-    async (channelId?: string): Promise<boolean> => {
-      const targetChannelId = channelId || activeChannelRef.current?.id;
-      if (
-        !targetChannelId ||
-        !services?.mattermostService ||
-        !services.notificationService
-      ) {
-        return false;
-      }
+  // Derive unread state and typing indicator
+  const unreadState = useMemo(() => {
+    if (!activeChannel || !services?.notificationService) {
+      return { msg_count: 0, mention_count: 0 };
+    }
+    return services.notificationService.getChannelUnreadState(activeChannel.id);
+  }, [activeChannel, services]);
 
-      try {
-        // Appeler la méthode viewChannel du service si disponible
-        if (typeof services.mattermostService.viewChannel === "function") {
-          await services.mattermostService.viewChannel(targetChannelId);
-        }
+  const typingIndicator = useMemo(() => {
+    if (!activeChannel || !services?.notificationService) return "";
 
-        // Réinitialiser l'état non-lu dans le service de notification
-        services.notificationService.resetChannelUnreadState(targetChannelId);
-        return true;
-      } catch (error) {
-        console.error(
-          `Error marking channel ${targetChannelId} as read:`,
-          error,
-        );
-        return false;
-      }
-    },
-    [services],
-  );
+    const typingUsers = getTypingUsersForChannel(activeChannel.id);
+    if (!typingUsers || typingUsers.length === 0) return "";
 
-  /**
-   * Naviguer vers un canal spécifique
-   */
-  const navigateToChannel = useCallback(
-    async (channelId: string): Promise<void> => {
-      if (!channelId || !services) return;
+    return getTypingIndicatorText(activeChannel.id);
+  }, [activeChannel, services]);
 
-      try {
-        // Charger le canal
-        const channel = await loadChannel(channelId);
-        if (!channel) {
-          console.error(`Failed to load channel ${channelId}`);
-          return;
-        }
-
-        // Marquer le canal comme lu
-        void markAsRead(channelId);
-      } catch (error) {
-        console.error(`Error navigating to channel ${channelId}:`, error);
-      }
-    },
-    [services, loadChannel, markAsRead],
-  );
-
-  // Charger les canaux quand l'équipe active change
+  // Side Effects
   useEffect(() => {
     if (activeTeam && !isChannelsLoading[activeTeam.id]) {
       void loadChannels(activeTeam.id);
     }
   }, [activeTeam, isChannelsLoading, loadChannels]);
 
-  // Mettre à jour les références quand l'état change
-  useEffect(() => {
-    activeChannelRef.current = activeChannel;
-  }, [activeChannel]);
-
-  useEffect(() => {
-    channelsRef.current = channels;
-  }, [channels]);
-
-  // Configurer le rafraîchissement périodique si activé
   useEffect(() => {
     if (!refreshInterval || refreshInterval <= 0 || !activeTeam) return;
 
@@ -470,74 +449,80 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
     return () => clearInterval(intervalId);
   }, [activeTeam, refreshInterval, loadChannels]);
 
-  // Récupérer l'état non-lu pour le canal actif
-  const unreadState = useMemo(() => {
-    if (!activeChannel || !services?.notificationService) {
-      return { msg_count: 0, mention_count: 0 };
-    }
-    return services.notificationService.getChannelUnreadState(activeChannel.id);
-  }, [activeChannel, services]);
-
-  // Récupérer l'indicateur de frappe pour le canal actif
-  const typingIndicator = useMemo(() => {
-    if (!activeChannel || !services?.notificationService) return "";
-
-    const typingUsers = getTypingUsersForChannel(activeChannel.id);
-    if (!typingUsers || typingUsers.length === 0) return "";
-
-    return getTypingIndicatorText(activeChannel.id);
-  }, [activeChannel, services]);
-
-  // Valeur du contexte
-  const contextValue = useMemo<ChannelContextType>(
+  // Context Values
+  const channelStateValue = useMemo<ChannelStateContextType>(
     () => ({
-      // État
       activeChannel,
       isActiveChannelLoading,
       activeChannelError,
-      channels,
-      isChannelsLoading,
-      channelsError,
-      unreadState,
-      typingIndicator,
-
-      // Méthodes
       setActiveChannel,
       loadChannel,
-      loadChannels,
-      getChannelsByTeam,
-      getChannelsByType,
+      navigateToChannel,
       getChannelById,
       getChannelByName,
-      getChannelUnreadState,
-      markAsRead,
-      navigateToChannel,
     }),
     [
       activeChannel,
       isActiveChannelLoading,
       activeChannelError,
-      channels,
-      isChannelsLoading,
-      channelsError,
-      unreadState,
-      typingIndicator,
       setActiveChannel,
       loadChannel,
-      loadChannels,
-      getChannelsByTeam,
-      getChannelsByType,
+      navigateToChannel,
       getChannelById,
       getChannelByName,
-      getChannelUnreadState,
-      markAsRead,
-      navigateToChannel,
     ],
   );
 
-  return (
-    <ChannelContext.Provider value={contextValue}>
-      {children}
-    </ChannelContext.Provider>
+  const channelLoadingValue = useMemo<ChannelLoadingContextType>(
+    () => ({
+      channels,
+      isChannelsLoading,
+      channelsError,
+      loadChannels,
+      getChannelsByTeam,
+      getChannelsByType,
+    }),
+    [
+      channels,
+      isChannelsLoading,
+      channelsError,
+      loadChannels,
+      getChannelsByTeam,
+      getChannelsByType,
+    ],
   );
+
+  const channelUnreadValue = useMemo<ChannelUnreadContextType>(
+    () => ({
+      unreadState,
+      typingIndicator,
+      getChannelUnreadState,
+      markAsRead,
+    }),
+    [unreadState, typingIndicator, getChannelUnreadState, markAsRead],
+  );
+
+  return (
+    <ChannelStateContext.Provider value={channelStateValue}>
+      <ChannelLoadingContext.Provider value={channelLoadingValue}>
+        <ChannelUnreadContext.Provider value={channelUnreadValue}>
+          {children}
+        </ChannelUnreadContext.Provider>
+      </ChannelLoadingContext.Provider>
+    </ChannelStateContext.Provider>
+  );
+};
+
+// Convenience hook to get all channel-related contexts
+export const useChannelContext = () => ({
+  state: useChannelState(),
+  loading: useChannelLoading(),
+  unread: useChannelUnread(),
+});
+
+// Re-export individual context hooks for convenience
+export type {
+  ChannelStateContextType,
+  ChannelLoadingContextType,
+  ChannelUnreadContextType,
 };
