@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState } from "react";
 // Material-UI Components
 import {
   Box,
@@ -13,123 +13,244 @@ import {
   Select,
   MenuItem,
   InputLabel,
+  FormControlLabel,
+  Switch,
+  Divider,
 } from "@mui/material";
 
 // Import examples
 import ClassicInterface from "./examples/ClassicInterface";
 
-// Imports from our library
+// Imports for MattermostConnect library
 import {
   MattermostProvider,
   MattermostThemeProvider,
+  useAuth,
   useConnection,
   useMattermost,
-  useAuth,
-  createServiceContainer,
 } from "mattermost-connect";
 import createMockService from "./mockService";
 
-// Connection modes configuration
+// Configuration for different connection modes
 const MODES = {
   DIRECT: "direct",
   PROXY: "proxy",
   MOCK: "mock",
 };
 
-// Interface for login credentials
-interface LoginFormState {
-  mode: string;
-  serverUrl: string;
-  username: string;
-  password: string;
-  token: string;
-  proxyUrl: string;
-  clientId: string;
-  userId: string;
-}
+// Authentication UI component - uses the useAuth hook from MattermostConnect
+const AuthenticationUI: React.FC = () => {
+  // Get context from MattermostConnect
+  const { login, isAuthenticating, error } = useAuth();
+  const { isServiceConfigured, updateServiceConfig, mode } = useMattermost();
 
-// Login form component
-const LoginForm: React.FC<{
-  onSubmit: (data: LoginFormState) => Promise<void>;
-  loading: boolean;
-  error: string | null;
-}> = ({ onSubmit, loading, error }) => {
-  // Form state
-  const [formState, setFormState] = useState<LoginFormState>({
-    mode: MODES.MOCK, // Default to MOCK mode for demo
-    serverUrl: "http://localhost:8065",
-    username: "",
-    password: "",
-    token: "",
-    proxyUrl: "",
-    clientId: "",
-    userId: "",
-  });
+  // Connection mode and configuration state
+  const [connectionMode, setConnectionMode] = useState(MODES.MOCK);
 
-  // Handle field changes
-  const handleChange =
-    (field: keyof LoginFormState) =>
-    (e: React.ChangeEvent<HTMLInputElement | { value: unknown }>) => {
-      setFormState((prev) => ({
-        ...prev,
-        [field]: e.target.value,
-      }));
-    };
+  // Direct mode fields
+  const [serverUrl, setServerUrl] = useState("http://localhost:8065");
+  const [useTokenAuth, setUseTokenAuth] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
 
-  // Handle form submission
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    await onSubmit(formState);
+  // Proxy mode fields
+  const [proxyUrl, setProxyUrl] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [userId, setUserId] = useState("");
+
+  // Handle form submission for authentication
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      switch (connectionMode) {
+        case MODES.DIRECT:
+          // If service is not configured, update the configuration first
+          if (!isServiceConfigured || mode !== "direct") {
+            updateServiceConfig({
+              serverUrl,
+              // Don't set token here - it will be set by the login method
+              proxyUrl: undefined,
+              clientId: undefined,
+              userId: undefined,
+              serviceProvider: undefined,
+            });
+          }
+
+          if (useTokenAuth) {
+            // Token-based authentication
+            if (!token) {
+              throw new Error("Token is required");
+            }
+
+            // Login with token
+            await login(username, password, {
+              serverUrl,
+              token,
+            });
+          } else {
+            // Username/password authentication
+            if (!username || !password) {
+              throw new Error("Username and password are required");
+            }
+
+            // Login with credentials
+            await login(username, password, {
+              serverUrl,
+            });
+          }
+          break;
+
+        case MODES.PROXY:
+          // If service is not configured, update the configuration first
+          if (!isServiceConfigured || mode !== "proxy") {
+            updateServiceConfig({
+              serverUrl: undefined,
+              token: undefined,
+              proxyUrl,
+              clientId,
+              userId,
+              serviceProvider: undefined,
+            });
+          }
+
+          // For proxy mode, we just need to make sure the configuration is updated
+          // The actual authentication is handled by the login method
+          await login(username, password, {
+            proxyUrl,
+            clientId,
+            userId,
+          });
+          break;
+
+        case MODES.MOCK:
+          // For mock mode, we need to configure the service provider
+          if (!isServiceConfigured || mode !== "custom") {
+            updateServiceConfig({
+              serverUrl: undefined,
+              token: undefined,
+              proxyUrl: undefined,
+              clientId: undefined,
+              userId: undefined,
+              serviceProvider: {
+                setupService: createMockService,
+                isConnected: true,
+                skipConnectionTest: true,
+                currentUser: {
+                  id: "user1",
+                  username: "johndoe",
+                  first_name: "John",
+                  last_name: "Doe",
+                  email: "john@example.com",
+                  roles: "system_user",
+                  update_at: Date.now(),
+                },
+              },
+            });
+          }
+
+          // For mock mode, we don't need actual authentication
+          // Just trigger login to update the auth state
+          await login("demo", "demo");
+          break;
+      }
+    } catch (err) {
+      console.error("Authentication error:", err);
+    }
   };
 
-  // Render mode-specific fields
+  // Determine the title based on the connection mode
+  const getTitle = () => {
+    switch (connectionMode) {
+      case MODES.DIRECT:
+        return "Connect to Mattermost";
+      case MODES.PROXY:
+        return "Proxy Authentication";
+      case MODES.MOCK:
+        return "Demo Mode";
+      default:
+        return "Authentication";
+    }
+  };
+
+  // In mock mode, authentication can be automatic
+  if (connectionMode === MODES.MOCK && isAuthenticating) {
+    return (
+      <Container maxWidth="xs">
+        <Paper elevation={3} sx={{ p: 3, mt: 8, textAlign: "center" }}>
+          <Typography variant="h5" gutterBottom>
+            {getTitle()}
+          </Typography>
+          <CircularProgress sx={{ my: 2 }} />
+          <Typography>Setting up demo environment...</Typography>
+        </Paper>
+      </Container>
+    );
+  }
+
+  // Render the appropriate form fields based on connection mode
   const renderModeSpecificFields = () => {
-    switch (formState.mode) {
+    switch (connectionMode) {
       case MODES.DIRECT:
         return (
           <>
             <TextField
               fullWidth
-              label="URL du serveur Mattermost"
+              label="Mattermost Server URL"
               variant="outlined"
               margin="normal"
-              value={formState.serverUrl}
-              onChange={handleChange("serverUrl")}
-              placeholder="https://mattermost.votreentreprise.com"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
+              placeholder="https://mattermost.example.com"
               required
             />
-            <TextField
-              fullWidth
-              label="Nom d'utilisateur"
-              variant="outlined"
-              margin="normal"
-              value={formState.username}
-              onChange={handleChange("username")}
-              required={!formState.token}
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useTokenAuth}
+                  onChange={(e) => setUseTokenAuth(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Use Personal Access Token"
+              sx={{ my: 1 }}
             />
-            <TextField
-              fullWidth
-              label="Mot de passe"
-              type="password"
-              variant="outlined"
-              margin="normal"
-              value={formState.password}
-              onChange={handleChange("password")}
-              required={!formState.token}
-            />
-            <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
-              OU
-            </Typography>
-            <TextField
-              fullWidth
-              label="Token d'accès personnel"
-              variant="outlined"
-              margin="normal"
-              value={formState.token}
-              onChange={handleChange("token")}
-              required={!formState.username || !formState.password}
-              helperText="Si un token est fourni, il sera utilisé à la place des identifiants"
-            />
+
+            {useTokenAuth ? (
+              <TextField
+                fullWidth
+                label="Personal Access Token"
+                variant="outlined"
+                margin="normal"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                required
+              />
+            ) : (
+              <>
+                <TextField
+                  fullWidth
+                  label="Username or Email"
+                  variant="outlined"
+                  margin="normal"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Password"
+                  type="password"
+                  variant="outlined"
+                  margin="normal"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </>
+            )}
           </>
         );
 
@@ -138,12 +259,12 @@ const LoginForm: React.FC<{
           <>
             <TextField
               fullWidth
-              label="URL du proxy Mattermost"
+              label="Proxy URL"
               variant="outlined"
               margin="normal"
-              value={formState.proxyUrl}
-              onChange={handleChange("proxyUrl")}
-              placeholder="https://proxy.votreentreprise.com"
+              value={proxyUrl}
+              onChange={(e) => setProxyUrl(e.target.value)}
+              placeholder="https://proxy.example.com"
               required
             />
             <TextField
@@ -151,26 +272,27 @@ const LoginForm: React.FC<{
               label="Client ID"
               variant="outlined"
               margin="normal"
-              value={formState.clientId}
-              onChange={handleChange("clientId")}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
               required
             />
             <TextField
               fullWidth
-              label="User ID (optionnel)"
+              label="User ID (optional)"
               variant="outlined"
               margin="normal"
-              value={formState.userId}
-              onChange={handleChange("userId")}
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
             />
           </>
         );
 
       case MODES.MOCK:
         return (
-          <Alert severity="info" sx={{ width: "100%", mt: 2 }}>
-            Le mode Démo utilise des données simulées pour tester l'interface
-            sans connexion à un serveur réel.
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Demo mode uses simulated data for testing without a real server
+            connection. No credentials required - just click "Login" to
+            continue.
           </Alert>
         );
 
@@ -181,39 +303,32 @@ const LoginForm: React.FC<{
 
   return (
     <Container maxWidth="xs">
-      <Paper
-        elevation={3}
-        sx={{
-          padding: 3,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          marginTop: 8,
-        }}
-      >
-        <Typography variant="h4" component="div">
-          Connexion à Mattermost
+      <Paper elevation={3} sx={{ p: 3, mt: 8 }}>
+        <Typography variant="h5" align="center" gutterBottom>
+          {getTitle()}
         </Typography>
 
         {error && (
-          <Alert severity="error" sx={{ width: "100%", mt: 2, mb: 2 }}>
-            {error}
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error.message}
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} style={{ width: "100%" }}>
-          <FormControl fullWidth margin="normal" variant="outlined">
-            <InputLabel>Mode de connexion</InputLabel>
+        <form onSubmit={handleSubmit}>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Connection Mode</InputLabel>
             <Select
-              value={formState.mode}
-              label="Mode de connexion"
-              onChange={(e) => handleChange("mode")(e)}
+              value={connectionMode}
+              label="Connection Mode"
+              onChange={(e) => setConnectionMode(e.target.value)}
             >
-              <MenuItem value={MODES.DIRECT}>Connexion Directe</MenuItem>
-              <MenuItem value={MODES.PROXY}>Connexion via Proxy</MenuItem>
-              <MenuItem value={MODES.MOCK}>Mode Démo</MenuItem>
+              <MenuItem value={MODES.DIRECT}>Direct Connection</MenuItem>
+              <MenuItem value={MODES.PROXY}>Proxy Connection</MenuItem>
+              <MenuItem value={MODES.MOCK}>Demo Mode</MenuItem>
             </Select>
           </FormControl>
+
+          <Divider sx={{ my: 2 }} />
 
           {renderModeSpecificFields()}
 
@@ -222,10 +337,14 @@ const LoginForm: React.FC<{
             fullWidth
             variant="contained"
             color="primary"
-            disabled={loading}
+            disabled={isAuthenticating}
             sx={{ mt: 3, mb: 2 }}
           >
-            {loading ? <CircularProgress size={24} /> : "Se connecter"}
+            {isAuthenticating ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              "Login"
+            )}
           </Button>
         </form>
       </Paper>
@@ -233,154 +352,45 @@ const LoginForm: React.FC<{
   );
 };
 
-// Footer showing connection info
-const ConnectionFooter: React.FC = () => {
+// The main application container - shown when authenticated
+const AuthenticatedApp: React.FC = () => {
+  const { logout } = useAuth();
+  const { isConnected } = useConnection();
   const { mode } = useMattermost();
 
-  return (
-    <Box
-      sx={{
-        p: 1,
-        borderTop: 1,
-        borderColor: "divider",
-        bgcolor: "background.paper",
-        display: "flex",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography variant="caption" component="div" color="text.secondary">
-        Mode: {mode === "custom" ? "Demo (Mock Data)" : mode || "Non configuré"}
-      </Typography>
+  // Wait for connection to be established
+  if (!isConnected) {
+    return (
+      <Container maxWidth="sm">
+        <Paper sx={{ p: 3, mt: 8, textAlign: "center" }}>
+          <CircularProgress sx={{ mb: 2 }} />
+          <Typography>Connecting to Mattermost server...</Typography>
+        </Paper>
+      </Container>
+    );
+  }
 
-      <Typography variant="caption" component="div" color="text.secondary">
-        MattermostConnect Demo v1.0.0
-      </Typography>
-    </Box>
-  );
+  return <ClassicInterface onLogout={logout} />;
 };
 
-// Main authenticated application component
-// This is where we use the useAuth hook to react to authentication state
-const AuthenticatedApp: React.FC = () => {
-  // Get authentication state and methods from the context
-  const { isAuthenticated, login, logout, currentUser } = useAuth();
-  const { mode, hasCompleteConfig } = useMattermost();
+// Content switcher based on authentication state
+const MattermostContent: React.FC = () => {
+  const { isAuthenticated } = useAuth();
 
-  // Local state for login form
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Handle login form submission
-  const handleLogin = async (formData: LoginFormState) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      let success = false;
-
-      // Handle different authentication methods based on form data
-      switch (formData.mode) {
-        case MODES.DIRECT:
-          if (formData.token) {
-            // Direct mode with token
-            success = await login({
-              mode: "direct",
-              token: formData.token,
-              serverUrl: formData.serverUrl,
-            });
-          } else if (formData.username && formData.password) {
-            // Direct mode with username/password
-            success = await login({
-              mode: "direct",
-              username: formData.username,
-              password: formData.password,
-              serverUrl: formData.serverUrl,
-            });
-          } else {
-            throw new Error(
-              "Veuillez fournir un token ou des identifiants de connexion",
-            );
-          }
-          break;
-
-        case MODES.PROXY:
-          if (!formData.proxyUrl || !formData.clientId) {
-            throw new Error("L'URL du proxy et l'ID client sont requis");
-          }
-
-          success = await login({
-            mode: "proxy",
-            proxyUrl: formData.proxyUrl,
-            clientId: formData.clientId,
-            userId: formData.userId || undefined,
-          });
-          break;
-
-        case MODES.MOCK:
-          // In mock mode, we just update the configuration and let the AuthProvider handle it
-          success = await login({
-            mode: "mock",
-          });
-          break;
-      }
-
-      if (!success) {
-        throw new Error("Échec de l'authentification");
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Une erreur est survenue lors de la connexion",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle logout
-  const handleLogout = () => {
-    logout();
-  };
-
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      {isAuthenticated ? (
-        // Authenticated UI
-        <>
-          <ClassicInterface onLogout={handleLogout} />
-          <ConnectionFooter />
-        </>
-      ) : (
-        // Login form when not authenticated
-        <>
-          <LoginForm onSubmit={handleLogin} loading={loading} error={error} />
-          <ConnectionFooter />
-        </>
-      )}
-    </Box>
-  );
+  return isAuthenticated ? <AuthenticatedApp /> : <AuthenticationUI />;
 };
 
-// The main application component
-// This just wraps everything in the providers and doesn't manage authentication state
+// Main application component
 const App: React.FC = () => {
   return (
     <MattermostThemeProvider>
       <MattermostProvider
-        // Initial configuration would go here
-        // For example:
-        // serverUrl="https://your-mattermost-server.com"
-        // token={localStorage.getItem("mattermost_token") || undefined}
+        // Default empty configuration - will be updated by AuthenticationUI
+        enableWebsocket={true}
+        refreshInterval={300000}
         useLocalStorage={true}
-        tokenStorageKey="mattermost_token"
-        onAuthSuccess={(user) =>
-          console.log("Authenticated as:", user.username)
-        }
-        onAuthError={(error) => console.error("Authentication error:", error)}
       >
-        <AuthenticatedApp />
+        <MattermostContent />
       </MattermostProvider>
     </MattermostThemeProvider>
   );

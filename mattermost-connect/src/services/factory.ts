@@ -102,7 +102,7 @@ function createMainService(config: ServiceConfig): MattermostService {
       userId: config.userId,
     });
   } else if (config.serverUrl) {
-    // Ajout cette condition pour permettre la création avec juste l'URL
+    console.debug("CreateDirectService");
     return createDirectService({
       serverUrl: config.serverUrl,
     });
@@ -122,65 +122,100 @@ function createMainService(config: ServiceConfig): MattermostService {
 export function createServiceContainer(
   config: ServiceConfig,
 ): ServiceContainer {
-  // Créer le service principal et le gestionnaire d'erreurs
+  console.debug("createServiceContainer");
+
+  // Create the main service
   const mattermostService = createMainService(config);
+  console.debug("MattermostService", mattermostService);
   const errorHandler = createErrorHandler();
 
-  // Extraire le client HTTP du service principal si disponible
-  // ou utiliser un client HTTP par défaut (implémentation à fournir)
+  // Extract HTTP client from the main service
   let httpClient: HttpClient;
   if ("httpClient" in mattermostService) {
     httpClient = (mattermostService as any).httpClient;
   } else {
-    // Utiliser l'HttpClient du service principal
-    // C'est un cas temporaire pendant la transition
     console.warn(
       "HttpClient not found in mattermostService, using legacy approach",
     );
     httpClient = mattermostService as unknown as HttpClient;
   }
 
-  // Créer un tokenProvider pour les services qui en ont besoin
-  const tokenProvider = () => {
-    if ("token" in mattermostService) {
-      return (mattermostService as any).token;
-    }
-    return null;
-  };
+  // Check if the main service already contains the specialized services
+  let teamService: TeamServiceInterface;
+  let channelService: ChannelServiceInterface;
+  let messageService: MessageServiceInterface;
+  let userService: UserServiceInterface;
+  let reactionService: ReactionServiceInterface;
+  let fileService: FileServiceInterface;
+  let notificationService: NotificationService;
 
-  // Créer la fonction fournissant l'URL de base
-  const baseUrl = mattermostService.getBaseUrl();
-  const mode = mattermostService.mode;
+  // Try to extract existing services from the main service first
+  if ("teamService" in mattermostService) {
+    teamService = (mattermostService as any).teamService;
+  } else {
+    // Only create if not already available
+    teamService = createTeamService(httpClient, errorHandler);
+  }
 
-  const teamService = createTeamService(httpClient, errorHandler);
-  const channelService = createChannelService(httpClient, errorHandler);
-  const messageService = createMessageService(httpClient, errorHandler);
-  const userService = createUserService(mattermostService);
+  if ("channelService" in mattermostService) {
+    channelService = (mattermostService as any).channelService;
+  } else {
+    channelService = createChannelService(httpClient, errorHandler);
+  }
 
-  // Avec le userId courant si disponible
+  if ("messageService" in mattermostService) {
+    messageService = (mattermostService as any).messageService;
+  } else {
+    messageService = createMessageService(httpClient, errorHandler);
+  }
+
+  if ("userService" in mattermostService) {
+    userService = (mattermostService as any).userService;
+  } else {
+    userService = createUserService(mattermostService);
+  }
+
+  if ("reactionService" in mattermostService) {
+    reactionService = (mattermostService as any).reactionService;
+  } else {
+    reactionService = createReactionService(httpClient, errorHandler);
+  }
+
+  if ("fileService" in mattermostService) {
+    fileService = (mattermostService as any).fileService;
+  } else {
+    // Create the file service with necessary context
+    const baseUrl = mattermostService.getBaseUrl();
+    const mode = mattermostService.mode;
+    const tokenProvider = () => {
+      if ("token" in mattermostService) {
+        return (mattermostService as any).token;
+      }
+      return null;
+    };
+
+    fileService = createFileService(
+      httpClient,
+      errorHandler,
+      baseUrl,
+      mode,
+      tokenProvider,
+    );
+  }
+
+  if ("notificationService" in mattermostService) {
+    notificationService = (mattermostService as any).notificationService;
+  } else {
+    notificationService = new NotificationService(mattermostService);
+  }
+
+  // Extract current user ID if available
   const currentUserId =
     "currentUser" in mattermostService && (mattermostService as any).currentUser
       ? (mattermostService as any).currentUser.id
       : null;
 
-  const reactionService = createReactionService(httpClient, errorHandler);
-  if (currentUserId && "setCurrentUserId" in reactionService) {
-    (reactionService as any).setCurrentUserId(currentUserId);
-  }
-
-  // Le service de fichiers nécessite plus de contexte
-  const fileService = createFileService(
-    httpClient,
-    errorHandler,
-    baseUrl,
-    mode,
-    tokenProvider,
-  );
-
-  // Le service de notification a besoin du service principal complet
-  const notificationService = new NotificationService(mattermostService);
-
-  // Si un utilisateur courant est disponible, le propager aux services
+  // Set current user ID on services that need it
   if (currentUserId) {
     if ("setCurrentUserId" in teamService) {
       (teamService as any).setCurrentUserId(currentUserId);
@@ -191,11 +226,10 @@ export function createServiceContainer(
     if ("setCurrentUserId" in reactionService) {
       (reactionService as any).setCurrentUserId(currentUserId);
     }
-    // Configurer l'ID utilisateur pour le service de notification
     notificationService.setCurrentUserId(currentUserId);
   }
 
-  // Assembler tous les services dans un conteneur
+  // Return the service container
   return {
     mattermostService,
     teamService,

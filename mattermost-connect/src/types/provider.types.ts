@@ -32,6 +32,7 @@ export interface ProviderOptions {
 
 export interface ProviderConfig extends ProviderOptions {
   // Direct mode props
+  useLocalStorage?: boolean;
   serverUrl?: string;
   token?: string;
 
