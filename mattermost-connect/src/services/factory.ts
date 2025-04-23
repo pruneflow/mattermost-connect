@@ -149,20 +149,12 @@ export function createServiceContainer(
   };
 
   // Créer la fonction fournissant l'URL de base
-  const getBaseUrl = () => mattermostService.getBaseUrl();
   const baseUrl = mattermostService.getBaseUrl();
   const mode = mattermostService.mode;
 
-  // Créer les services spécialisés
-  // Note: pendant la transition, nous créons des services qui pourraient déjà
-  // exister dans le service principal. Cette duplication temporaire sera
-  // éliminée une fois la transition terminée.
   const teamService = createTeamService(httpClient, errorHandler);
   const channelService = createChannelService(httpClient, errorHandler);
   const messageService = createMessageService(httpClient, errorHandler);
-
-  // Le service utilisateur a une dépendance vers le service principal
-  // Nous devrons peut-être adapter cette approche pendant la transition
   const userService = createUserService(mattermostService);
 
   // Avec le userId courant si disponible

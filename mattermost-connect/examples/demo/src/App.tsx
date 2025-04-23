@@ -22,7 +22,7 @@ import ClassicInterface from "./examples/ClassicInterface";
 import {
   MattermostProvider,
   MattermostThemeProvider,
-  useMattermost,
+  useConnection,
   createServiceContainer,
 } from "mattermost-connect";
 import createMockService from "./mockService";
@@ -281,7 +281,7 @@ const LoginForm: React.FC<{
 const ExamplesContainer: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
-  const { mode } = useMattermost();
+  const { mode } = useConnection();
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       {/* Example content */}

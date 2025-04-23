@@ -20,17 +20,12 @@ import { WebSocketEventType } from "../services";
 export interface ConnectionContextType {
   // Connection state
   isConnected: boolean;
-  isConnecting: boolean;
   error: Error | null;
   mode: "direct" | "proxy" | "custom" | null;
 
-  // WebSocket reference and state
-  websocket: WebSocketConnection | null;
   socketState: number;
 
   // Methods for connection management
-  connect: () => Promise<WebSocketConnection | null | undefined>;
-  disconnect: () => void;
   reconnect: () => Promise<boolean>;
   sendMessage: (action: string, data?: any) => boolean;
 
@@ -106,6 +101,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
   notificationHandler,
   mode: initialMode = null,
 }) => {
+  console.debug("ConnectionProvider");
   // State
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
@@ -292,7 +288,6 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
 
       // Create WebSocket connection
       const wsConnection = await setupWebsocket(wsOptions);
-      console.debug("webSocket", websocket);
       // Update state and refs
       setWebsocket(wsConnection);
       websocketRef.current = wsConnection;
@@ -466,15 +461,11 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
     () => ({
       // State
       isConnected,
-      isConnecting,
-      error,
       mode,
-      websocket,
+      error,
       socketState: websocket ? websocket.getState() : WebSocket.CLOSED,
 
       // Methods
-      connect,
-      disconnect,
       reconnect,
       sendMessage,
       addEventListener,
@@ -489,19 +480,7 @@ export const ConnectionProvider: React.FC<ConnectionProviderProps> = ({
       },
       EventType: WebSocketEventType,
     }),
-    [
-      isConnected,
-      isConnecting,
-      error,
-      mode,
-      websocket,
-      connect,
-      disconnect,
-      reconnect,
-      sendMessage,
-      addEventListener,
-      addEventListeners,
-    ],
+    [isConnected, error],
   );
 
   return (

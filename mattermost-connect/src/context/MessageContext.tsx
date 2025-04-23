@@ -117,6 +117,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({
   children,
   services,
 }) => {
+  console.debug("MessageProvider");
   // Récupération des contextes dépendants
   const { currentUser } = useUserContext();
   const { activeChannel, navigateToChannel } = useChannelContext();

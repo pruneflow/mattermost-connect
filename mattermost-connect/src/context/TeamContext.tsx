@@ -77,6 +77,7 @@ export const TeamProvider: React.FC<TeamProviderProps> = ({
   services,
   refreshInterval = 0, // Pas de rafraîchissement auto par défaut
 }) => {
+  console.debug("TeamProvider ");
   // Récupération du contexte de connexion
   const connection = useConnection();
 

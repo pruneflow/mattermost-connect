@@ -63,6 +63,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({
   services,
   refreshInterval = 300000, // 5 minutes
 }) => {
+  console.debug("UserProvider ");
   // Get connection state from ConnectionContext
   const connection = useConnection();
 

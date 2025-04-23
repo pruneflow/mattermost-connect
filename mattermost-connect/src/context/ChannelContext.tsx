@@ -98,6 +98,7 @@ export const ChannelProvider: React.FC<ChannelProviderProps> = ({
   services,
   refreshInterval = 0, // Pas de rafraîchissement automatique par défaut
 }) => {
+  console.debug("ChannelProvider ");
   // Récupération des contextes dépendants
   const connection = useConnection();
   const { activeTeam } = useTeamContext();

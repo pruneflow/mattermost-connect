@@ -1,10 +1,10 @@
 // src/context/MattermostProvider.tsx
 import React, { createContext, ReactNode, useContext, useMemo } from "react";
-import { createServiceContainer, ServiceContainer } from "../services/factory";
+import { createServiceContainer, ServiceContainer } from "../services";
 import { ProviderConfig } from "../types";
 
 // Import specialized context providers
-import { ConnectionProvider, useConnection } from "./ConnectionContext";
+import { ConnectionProvider } from "./ConnectionContext";
 import { UserProvider } from "./UserContext";
 import { TeamProvider } from "./TeamContext";
 import { ChannelProvider } from "./ChannelContext";
@@ -28,27 +28,15 @@ export const MattermostContext = createContext<MattermostContextType | null>(
  * Hook to use the MattermostContext
  * Throws an error if used outside of MattermostProvider
  */
-export const useMattermost = (): MattermostContextType & {
-  // Re-export key properties from ConnectionContext
-  // for backwards compatibility
-  mode: "direct" | "proxy" | "custom" | null;
-  isConnected: boolean;
-  error: Error | null;
-} => {
+export const useMattermost = (): MattermostContextType => {
   const mattermostContext = useContext(MattermostContext);
   if (!mattermostContext) {
     throw new Error("useMattermost must be used within a MattermostProvider");
   }
 
-  // Get connection context to re-export key properties
-  const connectionContext = useConnection();
-
   // Combine contexts for backwards compatibility
   return {
     ...mattermostContext,
-    mode: connectionContext.mode,
-    isConnected: connectionContext.isConnected,
-    error: connectionContext.error,
   };
 };
 
@@ -84,6 +72,7 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
   // Children
   children,
 }) => {
+  console.debug("MattermostProvider");
   // Determine the connection mode based on provided props
   const mode = useMemo<"direct" | "proxy" | "custom" | null>(() => {
     if (serviceProvider) return "custom";
