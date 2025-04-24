@@ -12,21 +12,18 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  MattermostProvider,
   MattermostDirectProvider,
   MattermostProxyProvider,
   useAuth,
-  useTeams,
-  useChannels,
   User,
 } from "mattermost-connect";
 
-// Demo UI Components
+// Composants de l'interface démo
 import ClassicInterface from "./components/ClassicInterface";
 import AuthenticationUI from "./components/AuthenticationUI";
 import createMockService from "./mockService";
 
-// Define the connection details type
+// Définir le type de détails de connexion
 interface ConnectionDetails {
   mode: "direct" | "proxy" | "demo";
   serverUrl?: string;
@@ -36,7 +33,7 @@ interface ConnectionDetails {
   user?: User;
 }
 
-// Define the theme
+// Définir le thème
 const theme = createTheme({
   palette: {
     primary: {
@@ -64,17 +61,17 @@ const theme = createTheme({
   },
 });
 
-// Create mock service for demo mode
+// Créer un service mock pour le mode démo
 const mockService = createMockService();
 
 /**
- * Initializing component for direct or proxy connection modes
- * This component handles the initial connection and authentication
+ * Composant d'application connectée pour les modes direct et proxy
+ * Ce composant gère la connexion initiale et l'authentification
  */
 const ConnectedApp: React.FC<{
   onLogout: () => void;
 }> = ({ onLogout }) => {
-  const { isAuthenticated, isAuthenticating, currentUser, error } = useAuth();
+  const { isAuthenticated, isAuthenticating, error, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -90,6 +87,12 @@ const ConnectedApp: React.FC<{
     }
   }, [error, onLogout]);
 
+  // Gérer la déconnexion
+  const handleLogout = () => {
+    logout();
+    onLogout();
+  };
+
   if (isLoading || isAuthenticating || !isAuthenticated) {
     return (
       <Box
@@ -102,25 +105,25 @@ const ConnectedApp: React.FC<{
       >
         <CircularProgress />
         <Typography component={"div"} variant="body1" sx={{ ml: 2 }}>
-          Check authentication...
+          Checking authentication...
         </Typography>
       </Box>
     );
   }
 
   // Si nous arrivons ici, c'est que l'authentification est complète et l'utilisateur est authentifié
-  return <ClassicInterface onLogout={onLogout} />;
+  return <ClassicInterface onLogout={handleLogout} />;
 };
 
 /**
- * Demo mode app that uses mock data
+ * Application en mode démo qui utilise des données simulées
  */
 const DemoApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
-  // Initialize with mock data
+  // Initialiser avec des données simulées
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Simulate loading time for demo mode
+    // Simuler un temps de chargement pour le mode démo
     const timer = setTimeout(() => {
       setIsReady(true);
     }, 1000);
@@ -147,7 +150,7 @@ const DemoApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 };
 
 function App() {
-  // State
+  // État
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +160,7 @@ function App() {
     },
   );
 
-  // Demo effect - simulate initial loading
+  // Effet démo - simuler le chargement initial
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
@@ -166,7 +169,7 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Handle successful authentication
+  // Gérer l'authentification réussie
   const handleAuthSuccess = (result: any) => {
     console.log("Authentication successful:", result);
     setAuthenticated(true);
@@ -180,25 +183,25 @@ function App() {
     });
   };
 
-  // Handle logout
+  // Gérer la déconnexion
   const handleLogout = () => {
     console.log("Logging out");
     setAuthenticated(false);
     setConnectionDetails({ mode: "demo" });
   };
 
-  // Handle errors
+  // Gérer les erreurs
   const handleError = (err: Error) => {
     console.error("Error:", err);
     setError(err.message);
   };
 
-  // Clear error
+  // Effacer l'erreur
   const handleErrorClose = () => {
     setError(null);
   };
 
-  // Render the appropriate provider based on connection details
+  // Rendre le fournisseur approprié en fonction des détails de connexion
   const renderProvider = () => {
     if (!authenticated) {
       return (
@@ -206,7 +209,7 @@ function App() {
       );
     }
 
-    // Based on the connection mode, render the appropriate provider
+    // En fonction du mode de connexion, rendre le fournisseur approprié
     switch (connectionDetails.mode) {
       case "direct":
         if (!connectionDetails.serverUrl || !connectionDetails.token) {
@@ -256,12 +259,12 @@ function App() {
 
       case "demo":
       default:
-        // For demo mode, we use mock data
+        // Pour le mode démo, nous utilisons des données simulées
         return <DemoApp onLogout={handleLogout} />;
     }
   };
 
-  // If loading, show a loading indicator
+  // Si chargement, afficher un indicateur de chargement
   if (loading) {
     return (
       <ThemeProvider theme={theme}>

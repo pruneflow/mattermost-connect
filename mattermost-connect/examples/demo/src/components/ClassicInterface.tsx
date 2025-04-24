@@ -18,7 +18,7 @@ import {
 
 import { Logout as LogoutIcon, Menu as MenuIcon } from "@mui/icons-material";
 
-// Import components from the mattermost-connect library
+// Importer les composants de la bibliothèque mattermost-connect
 import {
   ChannelHeader,
   ChannelList,
@@ -40,7 +40,7 @@ import {
 
 interface ClassicInterfaceProps {
   onLogout: () => void;
-  mockService?: any; // Optional mock service for demo mode
+  mockService?: any; // Service mock optionnel pour le mode démo
 }
 
 /**
@@ -57,10 +57,10 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-  // Authentication hooks
+  // Hooks d'authentification
   const { currentUser, isAuthenticated } = useAuth();
 
-  // Teams hooks
+  // Hooks d'équipes
   const {
     teams,
     activeTeam,
@@ -68,7 +68,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     isLoading: teamsLoading,
   } = useTeams();
 
-  // Channels hooks
+  // Hooks de canaux
   const {
     channels,
     activeChannel,
@@ -77,27 +77,27 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     isLoading: channelsLoading,
   } = useChannels(activeTeam?.id);
 
-  // WebSocket hooks for real-time updates
+  // Hooks WebSocket pour les mises à jour en temps réel
   const { isConnected: isWebSocketConnected, connect: connectWebSocket } =
     useWebSocket();
 
-  // Initialize WebSocket if we're using mock service
+  // Initialiser WebSocket si on utilise le service mock
   useEffect(() => {
     if (mockService && !isWebSocketConnected) {
-      // Set up mock WebSocket handlers
+      // Configurer les gestionnaires WebSocket mock
       mockService.connectWebSocket();
 
-      // Clean up on unmount
+      // Nettoyer lors du démontage
       return () => {
         mockService.disconnectWebSocket();
       };
     }
   }, [mockService, isWebSocketConnected]);
 
-  // Register WebSocket handlers for message updates
+  // Enregistrer les gestionnaires WebSocket pour les mises à jour de messages
   useWebSocketMessageEvents(
     (data) => {
-      // Refresh messages when we receive a message update
+      // Actualiser les messages lorsque nous recevons une mise à jour de message
       if (activeChannel && data.channel_id === activeChannel.id) {
         console.log("Message event received:", data);
       }
@@ -105,29 +105,29 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     [activeChannel?.id],
   );
 
-  // Register WebSocket handlers for channel updates
+  // Enregistrer les gestionnaires WebSocket pour les mises à jour de canaux
   useWebSocketChannelEvents((data) => {
     console.log("Channel event received:", data);
   }, []);
 
-  // Local state for UI
+  // État local pour l'interface utilisateur
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [threadOpen, setThreadOpen] = useState(false);
   const [currentThreadRootId, setCurrentThreadRootId] = useState<string | null>(
     null,
   );
 
-  // Toggle the navigation drawer (mobile only)
+  // Basculer le tiroir de navigation (mobile uniquement)
   const toggleDrawer = useCallback(() => {
     setDrawerOpen(!drawerOpen);
   }, [drawerOpen]);
 
-  // Close the drawer
+  // Fermer le tiroir
   const handleCloseDrawer = useCallback(() => {
     setDrawerOpen(false);
   }, []);
 
-  // Handle a team selection
+  // Gérer une sélection d'équipe
   const handleTeamSelect = useCallback(
     (team: Team) => {
       setActiveTeam(team);
@@ -136,7 +136,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     [setActiveTeam, handleCloseDrawer],
   );
 
-  // Handle a channel selection
+  // Gérer une sélection de canal
   const handleChannelSelect = useCallback(
     (channel: Channel) => {
       setActiveChannel(channel);
@@ -145,19 +145,19 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     [setActiveChannel, handleCloseDrawer],
   );
 
-  // Handle opening a thread
+  // Gérer l'ouverture d'un fil de discussion
   const handleOpenThread = useCallback((message: Message) => {
     setCurrentThreadRootId(message.id);
     setThreadOpen(true);
   }, []);
 
-  // Handle closing a thread
+  // Gérer la fermeture d'un fil de discussion
   const handleCloseThread = useCallback(() => {
     setThreadOpen(false);
     setCurrentThreadRootId(null);
   }, []);
 
-  // Show loading indicator while teams are loading
+  // Afficher un indicateur de chargement pendant le chargement des équipes
   if (teamsLoading) {
     return (
       <Box
@@ -177,7 +177,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     );
   }
 
-  // Display an error if not authenticated
+  // Afficher une erreur si non authentifié
   if (!isAuthenticated && !mockService) {
     return (
       <Container maxWidth="sm">
@@ -188,7 +188,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     );
   }
 
-  // Display a loading indicator while websocket is connecting (only for real connections)
+  // Afficher un indicateur de chargement pendant la connexion WebSocket (uniquement pour les connexions réelles)
   if (!mockService && activeTeam && !isWebSocketConnected) {
     return (
       <Box
@@ -208,7 +208,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     );
   }
 
-  // Mobile layout
+  // Layout mobile
   if (isMobile) {
     return (
       <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -225,7 +225,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
               <MenuIcon />
             </IconButton>
 
-            {/* User information */}
+            {/* Informations utilisateur */}
             {currentUser && (
               <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
                 <UserAvatar
@@ -241,14 +241,14 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
               </Box>
             )}
 
-            {/* Logout button */}
+            {/* Bouton de déconnexion */}
             <IconButton color="inherit" onClick={onLogout}>
               <LogoutIcon />
             </IconButton>
           </Toolbar>
         </AppBar>
 
-        {/* Mobile Navigation Drawer */}
+        {/* Tiroir de navigation mobile */}
         <Drawer
           anchor="left"
           open={drawerOpen}
@@ -266,14 +266,14 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
             </Typography>
           </Box>
 
-          {/* Teams List */}
+          {/* Liste des équipes */}
           <TeamList
             variant="list"
             density="compact"
             onTeamSelect={handleTeamSelect}
           />
 
-          {/* Channels List for active team */}
+          {/* Liste des canaux pour l'équipe active */}
           {activeTeam && (
             <ChannelList
               teamId={activeTeam.id}
@@ -285,7 +285,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
           )}
         </Drawer>
 
-        {/* Content Area */}
+        {/* Zone de contenu */}
         <Box
           sx={{
             flexGrow: 1,
@@ -296,7 +296,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
         >
           {activeChannel ? (
             <>
-              {/* Channel Header */}
+              {/* En-tête du canal */}
               <ChannelHeader
                 channelId={activeChannel.id}
                 size="small"
@@ -305,7 +305,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                 showLeave={true}
               />
 
-              {/* Thread View (if thread is open) */}
+              {/* Vue du fil de discussion (si le fil est ouvert) */}
               {threadOpen && currentThreadRootId ? (
                 <MessageThread
                   rootMessageId={currentThreadRootId}
@@ -332,7 +332,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                     />
                   </Box>
 
-                  {/* Message Input */}
+                  {/* Input de message */}
                   <MessageInput
                     channelId={activeChannel.id}
                     allowAttachments={true}
@@ -376,13 +376,13 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     );
   }
 
-  // Desktop layout
+  // Layout desktop
   return (
     <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Top App Bar */}
       <AppBar position="static">
         <Toolbar>
-          {/* User information */}
+          {/* Informations utilisateur */}
           {currentUser && (
             <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
               <UserAvatar
@@ -398,14 +398,14 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
             </Box>
           )}
 
-          {/* Logout button */}
+          {/* Bouton de déconnexion */}
           <Button color="inherit" onClick={onLogout} startIcon={<LogoutIcon />}>
             Logout
           </Button>
         </Toolbar>
       </AppBar>
 
-      {/* Teams Selector */}
+      {/* Sélecteur d'équipes */}
       <Paper
         elevation={0}
         sx={{
@@ -421,7 +421,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
         />
       </Paper>
 
-      {/* Main Content Grid */}
+      {/* Grille de contenu principal */}
       <Box
         sx={{
           display: "flex",
@@ -429,7 +429,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
           overflow: "hidden",
         }}
       >
-        {/* Channels Column */}
+        {/* Colonne des canaux */}
         <Box
           sx={{
             width: 280,
@@ -455,7 +455,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
           )}
         </Box>
 
-        {/* Messages Column */}
+        {/* Colonne des messages */}
         <Box
           sx={{
             flexGrow: 1,
@@ -466,7 +466,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
         >
           {activeChannel ? (
             <>
-              {/* Channel Header */}
+              {/* En-tête du canal */}
               <ChannelHeader
                 channelId={activeChannel.id}
                 size="medium"
@@ -475,7 +475,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                 showLeave={true}
               />
 
-              {/* Thread View (if thread is open) */}
+              {/* Vue du fil de discussion (si le fil est ouvert) */}
               {threadOpen && currentThreadRootId ? (
                 <MessageThread
                   rootMessageId={currentThreadRootId}
@@ -502,7 +502,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                     />
                   </Box>
 
-                  {/* Message Input */}
+                  {/* Input de message */}
                   <MessageInput
                     channelId={activeChannel.id}
                     allowAttachments={true}
