@@ -5,16 +5,22 @@
  */
 
 import { Middleware } from "./middleware";
+import * as SelectorUtils from "./selector-utils";
+
+// Re-export all selector utilities
+export * from "./selector-utils";
 
 // Types de base pour le store
 export type Action = {
   type: string;
   payload?: any;
+  meta?: any; // Added meta property to fix type errors
 };
 
 export type Reducer<S> = (state: S, action: Action) => S;
 
-export type Selector<S, R> = (state: S) => R;
+// We'll keep this type for compatibility, but we'll use the enhanced version from selector-utils.ts
+export type Selector<S, R> = (state: S, ...args: any[]) => R;
 
 export type Dispatch = (action: Action) => void;
 
@@ -182,33 +188,15 @@ export function createAction<P = void>(type: string) {
 
 /**
  * Crée un sélecteur mémoïsé pour optimiser les performances
+ * @deprecated Use the enhanced version from selector-utils.ts instead
  */
 export function createSelector<S, R1, Result>(
   selector1: Selector<S, R1>,
   resultFunc: (res1: R1) => Result,
 ): Selector<S, Result> {
-  let lastInput1: R1;
-  let lastResult: Result;
-  let hasRun = false;
-
-  return (state: S): Result => {
-    const input1 = selector1(state);
-
-    if (hasRun && input1 === lastInput1) {
-      return lastResult;
-    }
-
-    lastInput1 = input1;
-    lastResult = resultFunc(input1);
-    hasRun = true;
-
-    return lastResult;
-  };
+  // Use the enhanced implementation with a single selector for backward compatibility
+  return SelectorUtils.createSelector(selector1, resultFunc);
 }
-
-// Le sélecteur ci-dessus est simplifié. Pour des sélecteurs plus complexes
-// avec plusieurs entrées, il faudrait implémenter une logique similaire
-// mais avec plusieurs paramètres d'entrée.
 
 /**
  * Crée un sélecteur pour une slice d'état spécifique

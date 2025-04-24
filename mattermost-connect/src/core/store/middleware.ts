@@ -29,6 +29,9 @@ export const loggerMiddleware = <S>({
     if (process.env.NODE_ENV !== "production") {
       console.group(`Action: ${action.type}`);
       console.log("Action payload:", action.payload);
+      if (action.meta) {
+        console.log("Action meta:", action.meta);
+      }
       console.log("Previous state:", getState());
       const result = next(action);
       console.log("Next state:", getState());
@@ -140,6 +143,7 @@ export const createCacheMiddleware = <S>(
               data: cacheEntry.data,
               fromCache: true,
             },
+            meta: action.meta, // Préserver les métadonnées d'action
           };
 
           return dispatch(successAction);
@@ -279,6 +283,7 @@ export const createWebSocketMiddleware = <S>(
               dispatch({
                 type: "WS_CONNECTED",
                 payload: { url, protocols, timestamp: Date.now() },
+                meta: action.meta, // Préserver les métadonnées
               });
               if (options.onConnect) {
                 options.onConnect(socket!);
@@ -293,6 +298,7 @@ export const createWebSocketMiddleware = <S>(
               dispatch({
                 type: "WS_DISCONNECTED",
                 payload: { code: event.code, reason: event.reason },
+                meta: action.meta, // Préserver les métadonnées
               });
 
               // Tentative de reconnexion si activée
@@ -308,6 +314,7 @@ export const createWebSocketMiddleware = <S>(
                   dispatch({
                     type: connectType,
                     payload: { url, protocols, reconnect },
+                    meta: action.meta, // Préserver les métadonnées
                   });
                 }, delay);
               }
@@ -321,6 +328,10 @@ export const createWebSocketMiddleware = <S>(
                 dispatch({
                   type: messageType,
                   payload: message,
+                  meta: {
+                    ...action.meta, // Préserver les métadonnées originales
+                    websocket: true,
+                  },
                 });
 
                 // Appeler le callback personnalisé si fourni
@@ -336,14 +347,22 @@ export const createWebSocketMiddleware = <S>(
             };
 
             socket.onerror = (error) => {
-              dispatch({ type: "WS_ERROR", payload: { error } });
+              dispatch({
+                type: "WS_ERROR",
+                payload: { error },
+                meta: action.meta, // Préserver les métadonnées
+              });
               if (options.onError) {
                 options.onError(error);
               }
             };
           } catch (error) {
             console.error("WebSocket connection error:", error);
-            dispatch({ type: "WS_CONNECTION_FAILED", payload: { error } });
+            dispatch({
+              type: "WS_CONNECTION_FAILED",
+              payload: { error },
+              meta: action.meta, // Préserver les métadonnées
+            });
           }
 
           return next(action);
@@ -364,7 +383,10 @@ export const createWebSocketMiddleware = <S>(
 
             return next({
               ...action,
-              payload: { ...action.payload, intentional: true },
+              payload: {
+                ...action.payload,
+                intentional: true,
+              },
             });
           }
           return next(action);
@@ -375,7 +397,11 @@ export const createWebSocketMiddleware = <S>(
             console.error("WebSocket is not connected");
             return next({
               type: "WS_SEND_FAILED",
-              payload: { ...action.payload, error: "WebSocket not connected" },
+              payload: {
+                ...action.payload,
+                error: "WebSocket not connected",
+              },
+              meta: action.meta, // Préserver les métadonnées
             });
           }
 
@@ -397,7 +423,11 @@ export const createWebSocketMiddleware = <S>(
             console.error("Error sending WebSocket message:", error);
             return next({
               type: "WS_SEND_FAILED",
-              payload: { ...action.payload, error },
+              payload: {
+                ...action.payload,
+                error,
+              },
+              meta: action.meta, // Préserver les métadonnées
             });
           }
         }
@@ -428,6 +458,7 @@ export const createApiMiddleware = <S>(apiClient: any) => {
       dispatch({
         type: "API_REQUEST_START",
         payload: { endpoint, method, meta },
+        meta: action.meta, // Préserver les métadonnées
       });
 
       // Exécuter la requête API
@@ -437,7 +468,12 @@ export const createApiMiddleware = <S>(apiClient: any) => {
           // Dispatcher l'action de succès
           const successAction = {
             type: "API_REQUEST_SUCCESS",
-            payload: { data: response.data, meta, endpoint },
+            payload: {
+              data: response.data,
+              meta,
+              endpoint,
+            },
+            meta: action.meta, // Préserver les métadonnées
           };
 
           dispatch(successAction);
@@ -446,7 +482,12 @@ export const createApiMiddleware = <S>(apiClient: any) => {
           if (onSuccess) {
             dispatch({
               type: onSuccess,
-              payload: { data: response.data, meta, endpoint },
+              payload: {
+                data: response.data,
+                meta,
+                endpoint,
+              },
+              meta: action.meta, // Préserver les métadonnées
             });
           }
 
@@ -456,7 +497,12 @@ export const createApiMiddleware = <S>(apiClient: any) => {
           // Dispatcher l'action d'erreur
           const errorAction = {
             type: "API_REQUEST_ERROR",
-            payload: { error, meta, endpoint },
+            payload: {
+              error,
+              meta,
+              endpoint,
+            },
+            meta: action.meta, // Préserver les métadonnées
           };
 
           dispatch(errorAction);
@@ -465,7 +511,12 @@ export const createApiMiddleware = <S>(apiClient: any) => {
           if (onError) {
             dispatch({
               type: onError,
-              payload: { error, meta, endpoint },
+              payload: {
+                error,
+                meta,
+                endpoint,
+              },
+              meta: action.meta, // Préserver les métadonnées
             });
           }
 
@@ -547,14 +598,22 @@ export const createAuthMiddleware = <S>(
                 userId: localStorage.getItem(`${storageKey}_user_id`),
                 serverUrl: localStorage.getItem(`${storageKey}_server_url`),
               },
+              meta: action.meta, // Préserver les métadonnées
             });
           } else {
             // Dispatcher une action indiquant qu'aucun token n'a été trouvé
-            dispatch({ type: "AUTH_NO_TOKEN" });
+            dispatch({
+              type: "AUTH_NO_TOKEN",
+              meta: action.meta, // Préserver les métadonnées
+            });
           }
         } catch (error) {
           console.error("Error refreshing auth token:", error);
-          dispatch({ type: "AUTH_TOKEN_ERROR", payload: { error } });
+          dispatch({
+            type: "AUTH_TOKEN_ERROR",
+            payload: { error },
+            meta: action.meta, // Préserver les métadonnées
+          });
         }
       }
 
