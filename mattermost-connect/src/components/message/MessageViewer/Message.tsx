@@ -1,5 +1,11 @@
-// src/components/ChannelViewer/message/Message.tsx
-import React, { useState, useEffect, useRef, useMemo } from "react";
+// src/components/message/MessageViewer/Message.tsx
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   useMattermost,
   useUserContext,
@@ -22,37 +28,48 @@ import MessageActions from "./MessageActions";
 import MessageReactions from "./MessageReactions";
 import ReferencedMessage from "./ReferencedMessage";
 import { User, Message as MessageType } from "../../../types";
+import { useDebugRenders } from "../../../hooks";
 
 /**
  * A component that renders a single message in the channel view
  */
-const Message: React.FC<MessageProps> = ({
-  message,
-  isFromCurrentUser = false,
-  renderer,
-  showActions = true,
-  onReply,
-  onEdit,
-  onDelete,
-  className,
-  style,
-  sx,
-  bubbleSx,
-  authorSx,
-  contentSx,
-  actionsSx,
-  avatarSx,
-  highlight = false,
-}) => {
+const Message: React.FC<MessageProps> = (props) => {
+  useDebugRenders("Message", props);
+  const {
+    message,
+    isFromCurrentUser = false,
+    renderer,
+    showActions = true,
+    onReply,
+    onEdit,
+    onDelete,
+    className,
+    style,
+    sx,
+    bubbleSx,
+    authorSx,
+    contentSx,
+    actionsSx,
+    avatarSx,
+    highlight = false,
+    // Nouvelle prop pour éviter le fetch du message référencé
+    referencedMessageData = null,
+    // Nouvelle prop pour éviter le fetch de l'auteur du message référencé
+    referencedAuthorData = null,
+  } = props;
   const { services } = useMattermost();
   const { getUser, currentUser } = useUserContext();
   const [author, setAuthor] = useState<User | null>(null);
   const [formattedText, setFormattedText] = useState("");
   const [isHovered, setIsHovered] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Initialiser avec les données fournies en props si disponibles
   const [referencedMessage, setReferencedMessage] =
-    useState<MessageType | null>(null);
-  const [referencedAuthor, setReferencedAuthor] = useState<User | null>(null);
+    useState<MessageType | null>(referencedMessageData);
+  const [referencedAuthor, setReferencedAuthor] = useState<User | null>(
+    referencedAuthorData,
+  );
 
   const messageRef = useRef<HTMLDivElement>(null);
 
@@ -65,39 +82,50 @@ const Message: React.FC<MessageProps> = ({
   const mattermostService = services?.mattermostService;
 
   // Function to determine if the message is a reply
-  const isReplyMessage = (msg: MessageType): boolean => {
+  const isReplyMessage = useCallback((msg: MessageType): boolean => {
     // In Mattermost, replies have a root_id which is the ID of the parent message
     // Sometimes, the information can also be in props.quoted_message_id
     return !!msg.root_id || !!(msg.props && msg.props.quoted_message_id);
-  };
+  }, []);
 
   // Check if the message is a reply to another message
   useEffect(() => {
+    // Si les données sont déjà fournies, on n'a pas besoin de faire le fetch
+    if (referencedMessageData) {
+      return;
+    }
+
+    // Utilisation du drapeau isMounted pour éviter les mises à jour d'état après démontage
+    let isMounted = true;
+
     // Identifier le parent message ID
     const parentMessageId =
       message?.root_id || (message?.props && message?.props.quoted_message_id);
 
     if (parentMessageId) {
       const fetchReferencedMessage = async () => {
-        console.debug(
-          `fetchReferencedMessage for parentMessageId="${parentMessageId}" and messageId="${message?.id}" `,
-        );
         try {
           // First, try a direct call to retrieve the specific message
-          // This approach depends on the available API
           try {
             // Some API implementations allow retrieving a specific message
             if (typeof mattermostService?.getPost === "function") {
               const parentPost = await mattermostService?.getPost(
                 parentMessageId as string,
               );
-              setReferencedMessage(parentPost);
 
-              if (parentPost.user_id) {
-                // Utiliser getUser plutôt que mattermostService?.getUsers
-                const author = await getUser(parentPost.user_id);
-                if (author) {
-                  setReferencedAuthor(author);
+              // Vérifier si le composant est toujours monté avant de mettre à jour l'état
+              if (isMounted) {
+                setReferencedMessage(parentPost);
+
+                if (parentPost.user_id) {
+                  // Utiliser getUser plutôt que mattermostService?.getUsers
+                  const author = await getUser(parentPost.user_id);
+                  if (isMounted) {
+                    // Vérifier à nouveau car nouvelle opération asynchrone
+                    if (author) {
+                      setReferencedAuthor(author);
+                    }
+                  }
                 }
               }
               return;
@@ -117,7 +145,8 @@ const Message: React.FC<MessageProps> = ({
             },
           );
 
-          if (!response) return;
+          // Vérifier si composant toujours monté avant de continuer
+          if (!isMounted || !response) return;
 
           if (response.posts && response.posts[parentMessageId as string]) {
             setReferencedMessage(response.posts[parentMessageId as string]);
@@ -127,7 +156,7 @@ const Message: React.FC<MessageProps> = ({
               const author = await getUser(
                 response.posts[parentMessageId as string].user_id,
               );
-              if (author) {
+              if (isMounted && author) {
                 setReferencedAuthor(author);
               }
             }
@@ -143,47 +172,92 @@ const Message: React.FC<MessageProps> = ({
 
       void fetchReferencedMessage();
     }
-  }, []);
+
+    // Fonction de nettoyage qui change le drapeau
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    message?.root_id,
+    message?.props,
+    message.channel_id,
+    mattermostService,
+    getUser,
+    referencedMessageData,
+  ]);
 
   // Load author information
   useEffect(() => {
+    let isMounted = true;
+
     if (!message || !message.user_id) {
       setLoading(false);
-      return;
+      return () => {
+        isMounted = false;
+      };
     }
 
     const fetchAuthor = async () => {
       try {
         const user = await getUser(message.user_id);
-        setAuthor(user);
-        setLoading(false);
+        if (isMounted) {
+          setAuthor(user);
+          setLoading(false);
+        }
       } catch (err) {
         console.error("Error loading author info:", err);
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     void fetchAuthor();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [message?.user_id, getUser]);
 
   // Format message text
   useEffect(() => {
+    let isMounted = true;
+
     if (!message?.message) {
-      setFormattedText("");
-      return;
+      if (isMounted) {
+        setFormattedText("");
+      }
+      return () => {
+        isMounted = false;
+      };
     }
 
-    setFormattedText(formatMessageText(message.message));
-  }, []);
+    // Opération synchrone, mais par cohérence on maintient le pattern
+    const formatted = formatMessageText(message.message);
+    if (isMounted) {
+      setFormattedText(formatted);
+    }
 
+    return () => {
+      isMounted = false;
+    };
+  }, [message?.message]);
+
+  // Scroll to highlighted message
   useEffect(() => {
-    if (highlight && messageRef.current) {
+    let isMounted = true;
+
+    if (highlight && messageRef.current && isMounted) {
       // Faire défiler jusqu'au message si nécessaire
       messageRef.current.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [highlight]);
 
   // If a custom renderer is provided, use it

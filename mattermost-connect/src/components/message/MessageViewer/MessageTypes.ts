@@ -62,6 +62,11 @@ export interface MessageProps extends BaseMessageProps {
   avatarSx?: SxProps<Theme>;
   /** Whether to highlight this message (e.g., when it's new or from a notification) */
   highlight?: boolean;
+
+  referencedMessageData?: MessageType | null;
+
+  /** Auteur du message référencé pré-chargé */
+  referencedAuthorData?: User | null;
 }
 
 /**

@@ -1,5 +1,11 @@
 // examples/demo/src/examples/ClassicInterface.tsx
-import React, { useState, useCallback } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+} from "react";
 import {
   ChannelList,
   ChannelViewer,
@@ -49,6 +55,27 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const { activeChannel } = useChannelState();
   const { navigateToMessage } = useMessageContext();
   const { currentUser } = useUserContext();
+
+  const stableTeamId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeTeam?.id && stableTeamId.current !== activeTeam.id) {
+      console.debug("Updating stable team ID:", activeTeam.id);
+      stableTeamId.current = activeTeam.id;
+    }
+  }, [activeTeam?.id]);
+
+  const channelListProps = useMemo(() => {
+    if (!stableTeamId.current) return null;
+
+    return {
+      teamId: stableTeamId.current,
+      showSearch: true,
+      showPrivateChannels: true,
+      showDirectMessages: true,
+      groupByType: true,
+    };
+  }, [stableTeamId.current]);
 
   // État
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -212,6 +239,29 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   }
   console.debug("ClassicInterface");
   console.debug("activeTeam", activeTeam);
+
+  const channelList = useMemo(() => {
+    if (!activeTeam)
+      return (
+        <Box sx={{ p: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Sélectionnez une équipe pour voir les canaux
+          </Typography>
+        </Box>
+      );
+    if (activeTeam && channelListProps) {
+      return <ChannelList {...channelListProps} />;
+    }
+    return (
+      <ChannelList
+        teamId={activeTeam.id}
+        showSearch
+        showPrivateChannels
+        showDirectMessages
+        groupByType
+      />
+    );
+  }, [activeTeam?.id]);
   // Mise en page desktop avec deux colonnes
   return (
     <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -272,21 +322,7 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
             overflow: "auto",
           }}
         >
-          {activeTeam ? (
-            <ChannelList
-              teamId={activeTeam.id}
-              showSearch
-              showPrivateChannels
-              showDirectMessages
-              groupByType
-            />
-          ) : (
-            <Box sx={{ p: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                Sélectionnez une équipe pour voir les canaux
-              </Typography>
-            </Box>
-          )}
+          {channelList}
         </Box>
 
         {/* Zone des messages (colonne droite) */}

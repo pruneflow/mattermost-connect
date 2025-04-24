@@ -23,6 +23,7 @@ import TeamList from "./variants/TeamList";
 import TeamGrid from "./variants/TeamGrid";
 import TeamTabs from "./variants/TeamTabs";
 import TeamSidebar from "./variants/TeamSidebar";
+import { useDebugRenders } from "../../../hooks";
 
 /**
  * Type for the display variant of the TeamSelector
@@ -82,21 +83,23 @@ export interface TeamSelectorProps {
  * - tabs: Horizontal tabs
  * - sidebar: Vertical sidebar with icons
  */
-const TeamSelector: React.FC<TeamSelectorProps> = ({
-  onSelectTeam,
-  variant = "list",
-  showIcons = true,
-  showDescriptions = false,
-  showMemberCount = false,
-  useServerOrder = false,
-  maxNameLength = 0,
-  className,
-  style,
-  sx,
-  teamItemSx,
-  selectedTeamSx,
-  selectedTeamId,
-}) => {
+const TeamSelector: React.FC<TeamSelectorProps> = (props) => {
+  useDebugRenders("TeamSelector", props);
+  const {
+    onSelectTeam,
+    variant = "list",
+    showIcons = true,
+    showDescriptions = false,
+    showMemberCount = false,
+    useServerOrder = false,
+    maxNameLength = 0,
+    className,
+    style,
+    sx,
+    teamItemSx,
+    selectedTeamSx,
+    selectedTeamId,
+  } = props;
   // Utilisation directe du contexte d'équipe
   const { teams, activeTeam, setActiveTeam } = useTeamState();
   const { isTeamsLoading, loadTeams, teamsError } = useTeamLoading();

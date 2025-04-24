@@ -8,3 +8,4 @@
 export { useFile } from "./useFile";
 export type { FileInfo, UploadingFile } from "./useFile";
 export { useRealtime } from "./useRealtime";
+export * from "./useDebugRenders";

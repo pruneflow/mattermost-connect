@@ -1,11 +1,18 @@
 // src/components/channel/ChannelList/ChannelList.tsx
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   useConnection,
   useMattermost,
   useUserContext,
   withAuthentication,
   useTeamState,
+  useAuth,
 } from "../../../context";
 import { Channel } from "../../../types";
 
@@ -37,10 +44,8 @@ import {
 
 // Channel Item Component
 import ChannelItem from "./ChannelItem";
-import {
-  useChannelLoading,
-  useChannelState,
-} from "../../../context/ChannelContext";
+import { useChannelLoading, useChannelState } from "../../../context";
+import { useDebugRenders } from "../../../hooks";
 
 /**
  * Props for the ChannelList component
@@ -87,23 +92,26 @@ export interface ChannelListProps {
  * A component that displays a list of channels from a Mattermost team,
  * with filtering, search and grouping capabilities
  */
-const ChannelList: React.FC<ChannelListProps> = ({
-  teamId,
-  onSelectChannel,
-  showPrivateChannels = true,
-  showDirectMessages = true,
-  showSearch = true,
-  groupByType = true,
-  className,
-  style,
-  sx,
-  sectionHeaderSx,
-  searchSx,
-  channelsContainerSx,
-}) => {
+const ChannelList: React.FC<ChannelListProps> = (props) => {
+  useDebugRenders("ChannelList", props);
+  const {
+    teamId,
+    onSelectChannel,
+    showPrivateChannels = true,
+    showDirectMessages = true,
+    showSearch = true,
+    groupByType = true,
+    className,
+    style,
+    sx,
+    sectionHeaderSx,
+    searchSx,
+    channelsContainerSx,
+  } = props;
   const theme = useTheme();
   const { services } = useMattermost();
   const { isConnected } = useConnection();
+  const { isAuthenticated } = useAuth();
   const { currentUser, getUserDisplayName } = useUserContext();
   const { activeChannel, setActiveChannel } = useChannelState();
   const { channels, loadChannels, isChannelsLoading, channelsError } =
@@ -127,9 +135,39 @@ const ChannelList: React.FC<ChannelListProps> = ({
   // Determine the team ID to use (from props or context)
   const effectiveTeamId = teamId || activeTeam?.id;
 
+  const loadingInProgressRef = useRef<boolean>(false);
+
+  // 2. Référence pour suivre le dernier teamId chargé
+  const lastLoadedTeamIdRef = useRef<string | null>(null);
+
+  // 3. Référence pour le timestamp du dernier chargement
+  const lastLoadTimeRef = useRef<number>(0);
+
   // Load channels when teamId changes or component mounts
   useEffect(() => {
-    if (!isConnected || !effectiveTeamId) return;
+    if (!isConnected || !effectiveTeamId || !isAuthenticated) return;
+
+    if (loadingInProgressRef.current) {
+      console.debug(
+        `[ChannelList] Skip loading - already in progress for ${effectiveTeamId}`,
+      );
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      lastLoadedTeamIdRef.current === effectiveTeamId &&
+      now - lastLoadTimeRef.current < 5000 &&
+      channels[effectiveTeamId]?.length > 0
+    ) {
+      console.debug(
+        `[ChannelList] Skip loading - recently loaded for ${effectiveTeamId}`,
+      );
+      return;
+    }
+
+    // 5. Définir le verrouillage de chargement AVANT l'opération asynchrone
+    loadingInProgressRef.current = true;
 
     // Use the context method to load channels
     const fetchChannels = async () => {
@@ -138,7 +176,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
       try {
         // Use loadChannels from the context which handles setting activeChannel internally
         await loadChannels(effectiveTeamId);
-
         // Load user information for direct messages if there are any direct channels
         const teamChannels = channels[effectiveTeamId] || [];
         if (teamChannels.length > 0) {
@@ -160,13 +197,25 @@ const ChannelList: React.FC<ChannelListProps> = ({
         if (directChannels.length > 0) {
           await services?.userService?.loadDirectMessageUsers(directChannels);
         }
+        lastLoadedTeamIdRef.current = effectiveTeamId;
+        lastLoadTimeRef.current = Date.now();
       } catch (err) {
         console.error("Error loading channels:", err);
+      } finally {
+        loadingInProgressRef.current = false;
       }
     };
 
     void fetchChannels();
-  }, [isConnected, effectiveTeamId, loadChannels, channels]);
+  }, [
+    isConnected,
+    effectiveTeamId,
+    loadChannels,
+    channels,
+    activeChannel,
+    setActiveChannel,
+    services,
+  ]);
 
   // Toggle a section's expanded state
   const toggleSection = useCallback(

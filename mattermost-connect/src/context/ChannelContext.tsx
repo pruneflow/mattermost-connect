@@ -8,7 +8,7 @@ import React, {
   ReactNode,
   useRef,
 } from "react";
-import { Channel } from "../types";
+import { Channel, Team } from "../types";
 import { ServiceContainer } from "../services";
 import { useConnection } from "./ConnectionContext";
 import { useTeamState } from "./TeamContext";
@@ -137,6 +137,9 @@ export const ChannelProvider: React.FC<{
   // Channel State Methods
   const setActiveChannel = useCallback(
     (channel: Channel | null) => {
+      if (channel?.id === activeChannelRef.current?.id) {
+        return; // Ne rien faire si l'équipe active ne change pas réellement
+      }
       setActiveChannelState(channel);
       activeChannelRef.current = channel;
 
@@ -269,7 +272,7 @@ export const ChannelProvider: React.FC<{
   // Channel Loading Methods
   const loadChannels = useCallback(
     async (teamId: string, force: boolean = false): Promise<Channel[]> => {
-      if (!teamId || !services?.mattermostService) {
+      if (!teamId || !services?.mattermostService || !isAuthenticated) {
         return [];
       }
 
@@ -278,37 +281,47 @@ export const ChannelProvider: React.FC<{
         return channels[teamId] || [];
       }
 
-      // Check refresh interval if not forced
-      if (!force && refreshInterval > 0 && channelsRef.current[teamId]) {
-        const now = Date.now();
+      if (!force && channelsRef.current[teamId]?.length > 0) {
         const lastFetch = lastChannelFetchRef.current[teamId] || 0;
+        const now = Date.now();
 
-        if (now - lastFetch < refreshInterval) {
-          return channelsRef.current[teamId] || [];
+        // Utiliser le cache si moins de 30 secondes se sont écoulées
+        if (now - lastFetch < 30000) {
+          console.debug(`[ChannelContext] Using cached channels for ${teamId}`);
+          return channelsRef.current[teamId];
         }
       }
-
-      // Update loading state
       setIsChannelsLoading((prev) => ({ ...prev, [teamId]: true }));
-      setChannelsError((prev) => ({ ...prev, [teamId]: null }));
 
       try {
         const teamChannels =
           await services.mattermostService.getChannels(teamId);
+        const existingChannels = channelsRef.current[teamId] || [];
+        const hasChanged =
+          JSON.stringify(teamChannels) !== JSON.stringify(existingChannels);
 
-        // Update state and references
-        setChannels((prev) => ({ ...prev, [teamId]: teamChannels }));
-        channelsRef.current = {
-          ...channelsRef.current,
-          [teamId]: teamChannels,
-        };
-        lastChannelFetchRef.current = {
-          ...lastChannelFetchRef.current,
-          [teamId]: Date.now(),
-        };
+        if (hasChanged || force) {
+          // Mettre à jour l'état et les références en une seule fois
+          setChannels((prev) => {
+            const newState = { ...prev, [teamId]: teamChannels };
+            // Mettre à jour la référence également
+            channelsRef.current = {
+              ...channelsRef.current,
+              [teamId]: teamChannels,
+            };
+            return newState;
+          });
 
-        // Initialize unread states
-        await initializeChannelUnreadStates(teamId);
+          // Enregistrer le timestamp
+          lastChannelFetchRef.current = {
+            ...lastChannelFetchRef.current,
+            [teamId]: Date.now(),
+          };
+        } else {
+          console.debug(
+            `[ChannelContext] Channel data unchanged for ${teamId}`,
+          );
+        }
 
         return teamChannels;
       } catch (error) {
@@ -432,12 +445,24 @@ export const ChannelProvider: React.FC<{
     return getTypingIndicatorText(activeChannel.id);
   }, [activeChannel, services]);
 
-  // Side Effects
   useEffect(() => {
     if (activeTeam && !isChannelsLoading[activeTeam.id]) {
-      void loadChannels(activeTeam.id);
+      // Vérifier si les canaux sont déjà chargés
+      if (channels[activeTeam.id]?.length > 0) {
+        // Éviter le rechargement si déjà chargé récemment (30 secondes)
+        const lastFetchTime = lastChannelFetchRef.current[activeTeam.id] || 0;
+        const now = Date.now();
+        if (now - lastFetchTime < 30000) {
+          return;
+        }
+      }
+      // Charger les canaux avec un délai pour éviter les cascades
+      const timeoutId = setTimeout(() => {
+        void loadChannels(activeTeam.id);
+      }, 50);
+      return () => clearTimeout(timeoutId);
     }
-  }, [activeTeam, isChannelsLoading, loadChannels]);
+  }, [activeTeam, isChannelsLoading, loadChannels, channels]);
 
   useEffect(() => {
     if (!refreshInterval || refreshInterval <= 0 || !activeTeam) return;

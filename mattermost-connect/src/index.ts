@@ -34,7 +34,7 @@ export {
 // ---------- Hooks Spécialisés ----------
 
 // Exporter les hooks pour interagir avec les canaux, équipes et utilisateurs
-export { useFile, useRealtime } from "./hooks";
+export { useFile, useRealtime, useDebugRenders } from "./hooks";
 
 // ---------- Composants UI ----------
 

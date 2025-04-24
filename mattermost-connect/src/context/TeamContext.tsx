@@ -12,6 +12,7 @@ import { Team } from "../types";
 import { ServiceContainer } from "../services";
 import { useConnection } from "./ConnectionContext";
 import { useAuth } from "./AuthContext";
+import { useChannelLoading } from "./ChannelContext";
 
 // 1. Team State Context
 interface TeamStateContextType {
@@ -31,6 +32,56 @@ export const useTeamState = () => {
   }
   return context;
 };
+
+/**
+ * Hook personnalisé qui combine la gestion d'équipe et de canaux
+ * Évite les problèmes de dépendances circulaires entre contextes
+ */
+export function useTeamWithChannels(teamId?: string) {
+  const { getTeamById, activeTeam } = useTeamState();
+  const { loadChannels, channels, isChannelsLoading, channelsError } =
+    useChannelLoading();
+
+  // Déterminer l'ID d'équipe à utiliser
+  const effectiveTeamId = teamId || activeTeam?.id;
+
+  // Récupérer l'équipe et ses canaux
+  const team = effectiveTeamId ? getTeamById(effectiveTeamId) : activeTeam;
+  const teamChannels = effectiveTeamId ? channels[effectiveTeamId] || [] : [];
+  const isLoading = effectiveTeamId
+    ? isChannelsLoading[effectiveTeamId]
+    : false;
+  const error = effectiveTeamId ? channelsError[effectiveTeamId] : null;
+
+  // Fonction pour charger les canaux avec vérification d'optimisation
+  const loadTeamChannels = useCallback(() => {
+    if (!effectiveTeamId) return Promise.resolve([]);
+
+    // Éviter les chargements multiples rapprochés
+    if (isLoading) return Promise.resolve(teamChannels);
+
+    return loadChannels(effectiveTeamId);
+  }, [effectiveTeamId, isLoading, loadChannels, teamChannels]);
+
+  // Charger les canaux au montage et quand l'équipe change
+  useEffect(() => {
+    if (
+      effectiveTeamId &&
+      !isLoading &&
+      (!teamChannels || teamChannels.length === 0)
+    ) {
+      void loadTeamChannels();
+    }
+  }, [effectiveTeamId, isLoading, teamChannels.length, loadTeamChannels]);
+
+  return {
+    team,
+    channels: teamChannels,
+    isLoading,
+    error,
+    loadChannels: loadTeamChannels,
+  };
+}
 
 // 2. Team Loading Context
 interface TeamLoadingContextType {
@@ -105,6 +156,15 @@ export const TeamProvider: React.FC<{
 
   // Team State Methods
   const setActiveTeam = useCallback((team: Team | null) => {
+    // Comparer profondément avec l'état actuel pour éviter les mises à jour inutiles
+    if (
+      team === activeTeamRef.current ||
+      (team && activeTeamRef.current && team.id === activeTeamRef.current.id)
+    ) {
+      console.debug("Team already active, skipping update:", team?.id);
+      return;
+    }
+
     setActiveTeamState(team);
     activeTeamRef.current = team;
   }, []);
@@ -153,6 +213,10 @@ export const TeamProvider: React.FC<{
 
   // Team Loading Methods
   const loadTeams = async (): Promise<Team[]> => {
+    if (isTeamsLoading) {
+      console.debug("Skipping duplicate team load - already in progress");
+      return teamsRef.current;
+    }
     if (!services?.mattermostService) {
       return [];
     }
@@ -162,11 +226,26 @@ export const TeamProvider: React.FC<{
 
     try {
       if (isAuthenticated) {
-        const availableTeams = await services.mattermostService.getTeams();
+        if (teamsRef.current.length > 0) {
+          const now = Date.now();
+          const lastFetch = lastTeamsFetchRef.current || 0;
 
-        setTeams(availableTeams);
-        teamsRef.current = availableTeams;
-        lastTeamsFetchRef.current = Date.now();
+          // N'actualise que si une durée significative s'est écoulée (30 sec)
+          if (now - lastFetch < 30000) {
+            console.debug("Using cached teams data - last fetch was recent");
+            return teamsRef.current;
+          }
+        }
+        const availableTeams = await services.mattermostService.getTeams();
+        if (
+          JSON.stringify(availableTeams) !== JSON.stringify(teamsRef.current)
+        ) {
+          setTeams(availableTeams);
+          teamsRef.current = availableTeams;
+          lastTeamsFetchRef.current = Date.now();
+        } else {
+          console.debug("Teams unchanged - skipping state update");
+        }
 
         return availableTeams;
       }
