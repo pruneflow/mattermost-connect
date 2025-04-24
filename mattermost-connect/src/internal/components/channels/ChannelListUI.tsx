@@ -2,7 +2,7 @@
 /**
  * Component that displays a list of channels
  */
-import React from "react";
+import React, { useMemo } from "react";
 import {
   List,
   Box,
@@ -87,8 +87,17 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
     }
   };
 
+  // Find the active channel's index in tabs mode for proper tab selection
+  const activeTabIndex = useMemo(() => {
+    if (variant === "tabs" && activeId && items) {
+      const index = items.findIndex((channel) => channel.id === activeId);
+      return index >= 0 ? index : 0;
+    }
+    return 0;
+  }, [activeId, items, variant]);
+
   // Group channels by type if needed
-  const groupedChannels = React.useMemo(() => {
+  const groupedChannels = useMemo(() => {
     if (!groupByType) {
       return { all: items };
     }
@@ -300,25 +309,39 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
           id={id}
         >
           <Paper square elevation={0}>
+            {/* Fixed: using numeric index value for Tabs instead of channel ID */}
             <Tabs
-              value={activeId || false}
+              value={activeTabIndex}
               variant="scrollable"
               scrollButtons="auto"
               textColor="primary"
               indicatorColor="primary"
             >
-              {items.map((channel) => (
-                <ChannelItemUI
+              {items.map((channel, index) => (
+                <Tab
                   key={channel.id}
-                  item={channel}
-                  isActive={channel.id === activeId}
-                  variant="tabs"
-                  unreadCount={unreadCounts[channel.id]?.messageCount || 0}
-                  mentionCount={unreadCounts[channel.id]?.mentionCount || 0}
-                  isFavorite={favoriteChannels.has(channel.id)}
-                  isMuted={mutedChannels.has(channel.id)}
-                  displayNames={displayNamesByChannel[channel.id]}
-                  onClick={handleChannelClick}
+                  label={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      {/* Reusing channel item UI content but simplified for tab */}
+                      <ChannelItemUI
+                        item={channel}
+                        isActive={channel.id === activeId}
+                        variant="tabs"
+                        unreadCount={
+                          unreadCounts[channel.id]?.messageCount || 0
+                        }
+                        mentionCount={
+                          unreadCounts[channel.id]?.mentionCount || 0
+                        }
+                        isFavorite={favoriteChannels.has(channel.id)}
+                        isMuted={mutedChannels.has(channel.id)}
+                        displayNames={displayNamesByChannel[channel.id]}
+                        onClick={() => handleChannelClick(channel)}
+                      />
+                    </Box>
+                  }
+                  // Use index as value instead of channel.id
+                  value={index}
                 />
               ))}
 
@@ -328,6 +351,8 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
                   iconPosition="start"
                   label="New"
                   onClick={handleCreateChannel}
+                  // Value should be at the end of the array
+                  value={items.length}
                 />
               )}
             </Tabs>

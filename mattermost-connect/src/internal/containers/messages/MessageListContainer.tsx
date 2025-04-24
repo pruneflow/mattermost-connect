@@ -82,10 +82,17 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
   // Get current user
   const { currentUser } = useAuthStore();
 
-  // Get typing state from message store
-  const typingUsers = useMessageStore(
-    (state) => state.typingUsers[channelId] || [],
-  );
+  // FIXED: Safely handle typing users by maintaining a local state
+  // This helps avoid the "e3.typingUsers is undefined" error
+  const [typingUsersState, setTypingUsersState] = useState<string[]>([]);
+
+  // Get typing state from message store, with a safety check
+  useEffect(() => {
+    // Safely get typing users from store
+    const messageStore = useMessageStore.getState();
+    const typingUsers = messageStore.typingUsers?.[channelId] || [];
+    setTypingUsersState(typingUsers);
+  }, [channelId, useMessageStore]);
 
   // State for whether message is being sent
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -110,9 +117,23 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
   useWebSocketTypingEvents(
     channelId,
     (data) => {
-      // This is just a way to show the notification - the actual typing state
-      // is managed by the message store/hooks
-      console.log(`User ${data.user_id} is typing...`);
+      // Update typing users in our local state
+      setTypingUsersState((prevUsers) => {
+        // Add user if not already there
+        if (!prevUsers.includes(data.user_id)) {
+          const newUsers = [...prevUsers, data.user_id];
+
+          // Auto-remove after 5 seconds (typical typing indicator lifetime)
+          setTimeout(() => {
+            setTypingUsersState((users) =>
+              users.filter((id) => id !== data.user_id),
+            );
+          }, 5000);
+
+          return newUsers;
+        }
+        return prevUsers;
+      });
     },
     [channelId],
   );
@@ -133,7 +154,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
 
   // Map pinned message IDs to a set for easy lookup
   const pinnedMessageIdsSet = React.useMemo(() => {
-    return new Set<string>(pinnedMessages.map((m: { id: any }) => m.id));
+    return new Set<string>((pinnedMessages || []).map((m: any) => m.id));
   }, [pinnedMessages]);
 
   // Build user display names map
@@ -146,8 +167,15 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
       }
     });
 
+    // Also add typing users to ensure their names are available
+    typingUsersState.forEach((userId) => {
+      if (!displayNames[userId]) {
+        displayNames[userId] = getUserDisplayName(userId);
+      }
+    });
+
     return displayNames;
-  }, [messages, getUserDisplayName]);
+  }, [messages, typingUsersState, getUserDisplayName]);
 
   // Build user image URLs map (simplified - would need to get actual URLs)
   const userImageUrls = React.useMemo(() => {
@@ -175,7 +203,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     });
 
     return statuses;
-  }, [messages, getUserStatus]);
+  }, [messages]);
 
   // Handle loading more past messages
   const handleLoadMorePast = useCallback(() => {
@@ -312,7 +340,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
 
   // Render edit form
   const renderEditForm = useCallback(
-    (_message: Message) => {
+    (message: Message) => {
       return (
         <MessageInputUI
           initialValue={editFormMessage}
@@ -364,7 +392,8 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
           onAddReaction={handleAddReaction}
           onReactionClick={handleReactionClick}
           renderEditForm={renderEditForm}
-          typingUserIds={typingUsers}
+          // FIXED: Use the safely managed typingUsersState instead of direct store access
+          typingUserIds={typingUsersState}
           sx={{ height: "100%" }}
         />
       </Box>
