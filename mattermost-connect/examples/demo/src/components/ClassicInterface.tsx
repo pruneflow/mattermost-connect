@@ -1,5 +1,5 @@
-// examples/demo/src/examples/ClassicInterface.tsx
-import React, { useState, useCallback } from "react";
+// examples/demo/src/components/ClassicInterface.tsx
+import React, { useState, useCallback, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -18,7 +18,7 @@ import {
 
 import { Logout as LogoutIcon, Menu as MenuIcon } from "@mui/icons-material";
 
-// Import components from the new mattermost-connect library
+// Import components from the mattermost-connect library
 import {
   ChannelHeader,
   ChannelList,
@@ -33,8 +33,15 @@ import {
   useWebSocket,
   useWebSocketMessageEvents,
   useWebSocketChannelEvents,
+  Channel,
   Team,
+  Message,
 } from "mattermost-connect";
+
+interface ClassicInterfaceProps {
+  onLogout: () => void;
+  mockService?: any; // Optional mock service for demo mode
+}
 
 /**
  * Interface Mattermost classique avec notifications et mises à jour en temps réel
@@ -43,7 +50,10 @@ import {
  * - Desktop: Layout en grille avec équipes en haut, canaux à gauche et messages à droite
  * - Mobile: App bar + tiroir latéral pour navigation + zone de contenu pour messages
  */
-const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
+const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
+  onLogout,
+  mockService,
+}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -51,20 +61,44 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   const { currentUser, isAuthenticated } = useAuth();
 
   // Teams hooks
-  const { activeTeam, setActiveTeam } = useTeams();
+  const {
+    teams,
+    activeTeam,
+    setActiveTeam,
+    isLoading: teamsLoading,
+  } = useTeams();
 
   // Channels hooks
-  const { activeChannel } = useChannels(activeTeam?.id);
+  const {
+    channels,
+    activeChannel,
+    setActiveChannel,
+    publicChannels,
+    isLoading: channelsLoading,
+  } = useChannels(activeTeam?.id);
 
   // WebSocket hooks for real-time updates
-  const { isConnected: isWebSocketConnected } = useWebSocket();
+  const { isConnected: isWebSocketConnected, connect: connectWebSocket } =
+    useWebSocket();
+
+  // Initialize WebSocket if we're using mock service
+  useEffect(() => {
+    if (mockService && !isWebSocketConnected) {
+      // Set up mock WebSocket handlers
+      mockService.connectWebSocket();
+
+      // Clean up on unmount
+      return () => {
+        mockService.disconnectWebSocket();
+      };
+    }
+  }, [mockService, isWebSocketConnected]);
 
   // Register WebSocket handlers for message updates
   useWebSocketMessageEvents(
     (data) => {
       // Refresh messages when we receive a message update
       if (activeChannel && data.channel_id === activeChannel.id) {
-        // In a real implementation, you would handle the message update here
         console.log("Message event received:", data);
       }
     },
@@ -95,7 +129,7 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
 
   // Handle a team selection
   const handleTeamSelect = useCallback(
-    (team: Team | null) => {
+    (team: Team) => {
       setActiveTeam(team);
       handleCloseDrawer();
     },
@@ -103,11 +137,19 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
   );
 
   // Handle a channel selection
-  const handleChannelSelect = useCallback(() => {
-    // In the actual implementation, this would be handled by the ChannelList component
-    // and the activeChannel would be updated automatically
-    handleCloseDrawer();
-  }, [handleCloseDrawer]);
+  const handleChannelSelect = useCallback(
+    (channel: Channel) => {
+      setActiveChannel(channel);
+      handleCloseDrawer();
+    },
+    [setActiveChannel, handleCloseDrawer],
+  );
+
+  // Handle opening a thread
+  const handleOpenThread = useCallback((message: Message) => {
+    setCurrentThreadRootId(message.id);
+    setThreadOpen(true);
+  }, []);
 
   // Handle closing a thread
   const handleCloseThread = useCallback(() => {
@@ -115,8 +157,28 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
     setCurrentThreadRootId(null);
   }, []);
 
+  // Show loading indicator while teams are loading
+  if (teamsLoading) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+        }}
+      >
+        <CircularProgress />
+        <Typography variant="body1" sx={{ mt: 2 }}>
+          Loading teams...
+        </Typography>
+      </Box>
+    );
+  }
+
   // Display an error if not authenticated
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !mockService) {
     return (
       <Container maxWidth="sm">
         <Alert severity="error" sx={{ m: 2 }}>
@@ -126,8 +188,8 @@ const ClassicInterface = ({ onLogout }: { onLogout: () => void }) => {
     );
   }
 
-  // Display a loading indicator while websocket is connecting
-  if (activeTeam && !isWebSocketConnected) {
+  // Display a loading indicator while websocket is connecting (only for real connections)
+  if (!mockService && activeTeam && !isWebSocketConnected) {
     return (
       <Box
         sx={{

@@ -1,249 +1,162 @@
-// mockService.ts - Service mock pour démontrer l'utilisation des composants sans serveur réel
+// examples/demo/src/mockService.ts
+import { DemoMockData } from "./mockData";
 
-// Création d'identifiants uniques
-const generateId = () => Math.random().toString(36).substring(2, 15);
+/**
+ * Simulates a WebSocket connection and event handling
+ */
+class MockWebSocketService {
+  private handlers: Map<string, Set<(data: any) => void>> = new Map();
+  private isConnected: boolean = false;
+  private intervalId: number | null = null;
 
-// Types de base
-interface User {
-  id: string;
-  username: string;
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  roles?: string;
-  update_at: number;
+  /**
+   * Connect to the mock WebSocket server
+   */
+  connect() {
+    this.isConnected = true;
+    console.log("Mock WebSocket connected");
+
+    // Simulate occasional message events
+    this.intervalId = window.setInterval(() => {
+      if (Math.random() > 0.8) {
+        this.simulateMessageEvent();
+      }
+    }, 30000) as unknown as number;
+
+    return true;
+  }
+
+  /**
+   * Disconnect from the mock WebSocket server
+   */
+  disconnect() {
+    this.isConnected = false;
+    if (this.intervalId !== null) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    console.log("Mock WebSocket disconnected");
+  }
+
+  /**
+   * Add a message handler for a specific event type
+   * @param eventType Event type to listen for
+   * @param handler Handler function
+   * @returns Function to remove the handler
+   */
+  addHandler(eventType: string, handler: (data: any) => void) {
+    if (!this.handlers.has(eventType)) {
+      this.handlers.set(eventType, new Set());
+    }
+    this.handlers.get(eventType)?.add(handler);
+
+    return () => {
+      const handlersForType = this.handlers.get(eventType);
+      if (handlersForType) {
+        handlersForType.delete(handler);
+        if (handlersForType.size === 0) {
+          this.handlers.delete(eventType);
+        }
+      }
+    };
+  }
+
+  /**
+   * Simulate a random message event
+   */
+  private simulateMessageEvent() {
+    // Get random channel and user
+    const channels = DemoMockData.channels;
+    const users = DemoMockData.users;
+    const channel = channels[Math.floor(Math.random() * channels.length)];
+    const user = users[Math.floor(Math.random() * users.length)];
+
+    // Create a fake message
+    const messageId = `auto_msg_${Date.now()}`;
+    const message = {
+      id: messageId,
+      user_id: user.id,
+      channel_id: channel.id,
+      message: `Random message from ${user.first_name} at ${new Date().toLocaleTimeString()}`,
+      create_at: Date.now(),
+      update_at: Date.now(),
+    };
+
+    // Add to mock data
+    DemoMockData.messages.push(message);
+
+    // Notify handlers
+    this.notifyHandlers("posted", {
+      event: "posted",
+      data: {
+        post: message,
+        channel_id: channel.id,
+      },
+    });
+  }
+
+  /**
+   * Notify all handlers of an event
+   * @param eventType Event type
+   * @param data Event data
+   */
+  private notifyHandlers(eventType: string, data: any) {
+    const handlersForType = this.handlers.get(eventType);
+    if (handlersForType) {
+      handlersForType.forEach((handler) => {
+        try {
+          handler(data);
+        } catch (error) {
+          console.error(`Error in WebSocket handler for ${eventType}:`, error);
+        }
+      });
+    }
+
+    // Also notify generic * handlers
+    const allHandlers = this.handlers.get("*");
+    if (allHandlers) {
+      allHandlers.forEach((handler) => {
+        try {
+          handler(data);
+        } catch (error) {
+          console.error(`Error in WebSocket handler for *:`, error);
+        }
+      });
+    }
+  }
+
+  /**
+   * Check if the WebSocket is connected
+   */
+  isSocketConnected() {
+    return this.isConnected;
+  }
 }
 
-interface Team {
-  id: string;
-  name: string;
-  display_name: string;
-  description?: string;
-  type?: "O" | "I";
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-}
-
-interface Channel {
-  id: string;
-  team_id: string;
-  name: string;
-  display_name: string;
-  type: "O" | "P" | "D" | "G";
-  header?: string;
-  purpose?: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-}
-
-interface Message {
-  id: string;
-  user_id: string;
-  channel_id: string;
-  message: string;
-  create_at: number;
-  update_at: number;
-  delete_at?: number;
-  root_id?: string;
-  file_ids?: string[];
-  has_reactions?: boolean;
-}
-
-// Créer le service mock qui simule les données et les opérations de Mattermost
+/**
+ * Create a mock service for the MattermostConnect library
+ * This simulates the backend API and WebSocket connections
+ */
 const createMockService = () => {
-  // Données simulées
-  const data = {
-    users: [
-      {
-        id: "user1",
-        username: "johndoe",
-        first_name: "John",
-        last_name: "Doe",
-        email: "john@example.com",
-        roles: "system_user",
-        update_at: Date.now(),
-      },
-      {
-        id: "user2",
-        username: "janesmith",
-        first_name: "Jane",
-        last_name: "Smith",
-        email: "jane@example.com",
-        roles: "system_user",
-        update_at: Date.now(),
-      },
-      {
-        id: "user3",
-        username: "mikebrown",
-        first_name: "Mike",
-        last_name: "Brown",
-        email: "mike@example.com",
-        roles: "system_user",
-        update_at: Date.now(),
-      },
-    ] as User[],
+  // Create a mock WebSocket service
+  const mockWsService = new MockWebSocketService();
 
-    teams: [
-      {
-        id: "team1",
-        name: "engineering",
-        display_name: "Engineering",
-        description: "Team for engineering discussions",
-        type: "O",
-        create_at: Date.now() - 1000000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-      {
-        id: "team2",
-        name: "marketing",
-        display_name: "Marketing",
-        description: "Team for marketing discussions",
-        type: "O",
-        create_at: Date.now() - 900000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-    ] as Team[],
+  // Helper: Generate a unique ID
+  const generateId = () => Math.random().toString(36).substring(2, 15);
 
-    channels: [
-      {
-        id: "channel1",
-        team_id: "team1",
-        name: "general",
-        display_name: "General",
-        type: "O",
-        header: "Welcome to the Engineering Team!",
-        purpose: "General discussions for the engineering team",
-        create_at: Date.now() - 900000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-      {
-        id: "channel2",
-        team_id: "team1",
-        name: "random",
-        display_name: "Random",
-        type: "O",
-        header: "Random discussions",
-        purpose: "Share interesting things",
-        create_at: Date.now() - 800000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-      {
-        id: "channel3",
-        team_id: "team1",
-        name: "development",
-        display_name: "Development",
-        type: "P",
-        header: "Development discussions",
-        purpose: "Technical discussions",
-        create_at: Date.now() - 700000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-      {
-        id: "channel4",
-        team_id: "team2",
-        name: "general",
-        display_name: "General",
-        type: "O",
-        header: "Welcome to the Marketing Team!",
-        purpose: "General discussions for the marketing team",
-        create_at: Date.now() - 600000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-      {
-        id: "dm1",
-        team_id: "team1",
-        name: "user1__user2",
-        display_name: "Jane Smith",
-        type: "D",
-        create_at: Date.now() - 500000,
-        update_at: Date.now(),
-        delete_at: 0,
-      },
-    ] as Channel[],
-
-    messages: [
-      {
-        id: "msg1",
-        user_id: "user2",
-        channel_id: "channel1",
-        message: "Welcome to the Engineering team!",
-        create_at: Date.now() - 800000,
-        update_at: Date.now() - 800000,
-      },
-      {
-        id: "msg2",
-        user_id: "user1",
-        channel_id: "channel1",
-        message: "Thanks! Excited to be here.",
-        create_at: Date.now() - 790000,
-        update_at: Date.now() - 790000,
-      },
-      {
-        id: "msg3",
-        user_id: "user3",
-        channel_id: "channel1",
-        message: "Let's start planning our next sprint!",
-        create_at: Date.now() - 780000,
-        update_at: Date.now() - 780000,
-      },
-      {
-        id: "msg4",
-        user_id: "user1",
-        channel_id: "channel2",
-        message:
-          "Check out this interesting article: https://example.com/tech-news",
-        create_at: Date.now() - 770000,
-        update_at: Date.now() - 770000,
-      },
-      {
-        id: "msg5",
-        user_id: "user2",
-        channel_id: "channel2",
-        message: "Thanks for sharing!",
-        create_at: Date.now() - 760000,
-        update_at: Date.now() - 760000,
-      },
-      {
-        id: "msg6",
-        user_id: "user1",
-        channel_id: "dm1",
-        message: "Hi Jane, do you have a minute to discuss the project?",
-        create_at: Date.now() - 750000,
-        update_at: Date.now() - 750000,
-      },
-      {
-        id: "msg7",
-        user_id: "user2",
-        channel_id: "dm1",
-        message: "Sure, I'm available now. What's on your mind?",
-        create_at: Date.now() - 740000,
-        update_at: Date.now() - 740000,
-      },
-    ] as Message[],
-  };
-
-  // Simuler les fonctions de l'API Mattermost
   return {
-    // Utilisateurs
+    // Users
     getCurrentUser: async () => {
-      return data.users[0];
+      return DemoMockData.currentUser;
     },
     getUser: async (userId: string) => {
-      return data.users.find((user) => user.id === userId) || null;
+      return DemoMockData.users.find((user) => user.id === userId) || null;
     },
     getUsers: async () => {
-      return data.users;
+      return DemoMockData.users;
     },
     getUserStatus: async (userId: string) => {
-      // Simuler des statuts en ligne aléatoires
+      // Simulate random status
       const statuses = ["online", "away", "dnd", "offline"];
       return {
         user_id: userId,
@@ -251,100 +164,132 @@ const createMockService = () => {
       };
     },
 
-    // Équipes
+    // Teams
     getTeams: async () => {
-      return data.teams;
+      return DemoMockData.teams;
     },
     getTeam: async (teamId: string) => {
-      return data.teams.find((team) => team.id === teamId) || null;
+      return DemoMockData.teams.find((team) => team.id === teamId) || null;
+    },
+    createTeam: async (teamData: any) => {
+      const newTeam = {
+        id: generateId(),
+        ...teamData,
+        create_at: Date.now(),
+        update_at: Date.now(),
+        delete_at: 0,
+      };
+      DemoMockData.teams.push(newTeam);
+      return newTeam;
     },
 
-    // Canaux
+    // Channels
     getChannels: async (teamId: string) => {
-      return data.channels.filter((channel) => channel.team_id === teamId);
+      return DemoMockData.channels.filter(
+        (channel) => channel.team_id === teamId,
+      );
     },
     getChannel: async (channelId: string) => {
-      return data.channels.find((channel) => channel.id === channelId) || null;
+      return (
+        DemoMockData.channels.find((channel) => channel.id === channelId) ||
+        null
+      );
+    },
+    createChannel: async (channelData: any) => {
+      const newChannel = {
+        id: generateId(),
+        ...channelData,
+        create_at: Date.now(),
+        update_at: Date.now(),
+        delete_at: 0,
+      };
+      DemoMockData.channels.push(newChannel);
+      return newChannel;
     },
 
     // Messages
     getMessages: async (channelId: string) => {
-      return data.messages.filter((msg) => msg.channel_id === channelId);
+      return DemoMockData.messages.filter(
+        (msg) => msg.channel_id === channelId,
+      );
     },
     getThreadMessages: async (rootId: string) => {
-      return data.messages.filter((msg) => msg.root_id === rootId);
+      return DemoMockData.messages.filter((msg) => msg.root_id === rootId);
     },
     sendMessage: async (
       channelId: string,
-      message: string,
+      messageText: string,
       rootId?: string,
     ) => {
       const newMessage = {
         id: generateId(),
-        user_id: "user1", // Current user
+        user_id: DemoMockData.currentUser.id,
         channel_id: channelId,
-        message: message,
+        message: messageText,
         create_at: Date.now(),
         update_at: Date.now(),
         root_id: rootId,
       };
-      data.messages.push(newMessage);
+      DemoMockData.messages.push(newMessage);
+
+      // Simulate WebSocket event
+      setTimeout(() => {
+        mockWsService.addHandler("posted", (data) => data);
+      }, 100);
+
       return newMessage;
     },
-    editMessage: async (messageId: string, message: string) => {
-      const index = data.messages.findIndex((msg) => msg.id === messageId);
+    editMessage: async (messageId: string, messageText: string) => {
+      const index = DemoMockData.messages.findIndex(
+        (msg) => msg.id === messageId,
+      );
       if (index !== -1) {
-        data.messages[index].message = message;
-        data.messages[index].update_at = Date.now();
-        return data.messages[index];
+        const updatedMessage = {
+          ...DemoMockData.messages[index],
+          message: messageText,
+          update_at: Date.now(),
+        };
+        DemoMockData.messages[index] = updatedMessage;
+
+        // Simulate WebSocket event
+        setTimeout(() => {
+          mockWsService.addHandler("post_edited", (data) => data);
+        }, 100);
+
+        return updatedMessage;
       }
       throw new Error("Message not found");
     },
     deleteMessage: async (messageId: string) => {
-      const index = data.messages.findIndex((msg) => msg.id === messageId);
+      const index = DemoMockData.messages.findIndex(
+        (msg) => msg.id === messageId,
+      );
       if (index !== -1) {
-        data.messages.splice(index, 1);
-        return true;
+        const deletedMessage = DemoMockData.messages[index];
+        DemoMockData.messages.splice(index, 1);
+
+        // Simulate WebSocket event
+        setTimeout(() => {
+          mockWsService.addHandler("post_deleted", (data) => data);
+        }, 100);
+
+        return deletedMessage;
       }
-      return false;
+      throw new Error("Message not found");
     },
 
-    // Simulation WebSocket
-    connectWebSocket: async () => {
-      console.log("WebSocket connected (mock)");
-      return true;
+    // WebSocket simulation
+    connectWebSocket: () => {
+      return mockWsService.connect();
     },
     disconnectWebSocket: () => {
-      console.log("WebSocket disconnected (mock)");
+      mockWsService.disconnect();
     },
-    addMessageHandler: (handler: (msg: any) => void) => {
-      // Simuler l'arrivée occasionnelle de nouveaux messages
-      const interval = setInterval(() => {
-        if (Math.random() > 0.9) {
-          const channelId =
-            data.channels[Math.floor(Math.random() * data.channels.length)].id;
-          const userId =
-            data.users[Math.floor(Math.random() * data.users.length)].id;
-          const newMessage = {
-            id: generateId(),
-            user_id: userId,
-            channel_id: channelId,
-            message: `Random message from mock service at ${new Date().toLocaleTimeString()}`,
-            create_at: Date.now(),
-            update_at: Date.now(),
-          };
-          data.messages.push(newMessage);
-          handler({
-            event: "posted",
-            data: {
-              post: newMessage,
-            },
-          });
-        }
-      }, 30000); // Toutes les 30 secondes
-
-      // Fonction de nettoyage
-      return () => clearInterval(interval);
+    addMessageHandler: (eventType: string, handler: (data: any) => void) => {
+      return mockWsService.addHandler(eventType, handler);
+    },
+    isWebSocketConnected: () => {
+      return mockWsService.isSocketConnected();
     },
   };
 };

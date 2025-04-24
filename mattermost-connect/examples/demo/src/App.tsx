@@ -1,3 +1,4 @@
+// examples/demo/src/App.tsx
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -6,27 +7,24 @@ import {
   ThemeProvider,
   createTheme,
   CircularProgress,
-  Paper,
-  Typography,
   Snackbar,
   Alert,
+  Typography,
 } from "@mui/material";
 import {
   MattermostProvider,
   MattermostDirectProvider,
   MattermostProxyProvider,
-  Login,
-  DirectLogin,
-  ProxyLogin,
-  DemoLogin,
+  useAuth,
+  useTeams,
+  useChannels,
   User,
 } from "mattermost-connect";
 
 // Demo UI Components
 import ClassicInterface from "./components/ClassicInterface";
 import AuthenticationUI from "./components/AuthenticationUI";
-import CompactInterface from "./components/CompactInterface";
-import { DemoMockData } from "./mockData";
+import createMockService from "./mockService";
 
 // Define the connection details type
 interface ConnectionDetails {
@@ -66,13 +64,92 @@ const theme = createTheme({
   },
 });
 
+// Create mock service for demo mode
+const mockService = createMockService();
+
+/**
+ * Initializing component for direct or proxy connection modes
+ * This component handles the initial connection and authentication
+ */
+const ConnectedApp: React.FC<{
+  onLogout: () => void;
+}> = ({ onLogout }) => {
+  const { isAuthenticated, isAuthenticating, currentUser, error } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isAuthenticating || isAuthenticated) {
+      setIsLoading(false);
+    }
+  }, [isAuthenticating, isAuthenticated]);
+
+  useEffect(() => {
+    if (error) {
+      console.error("Authentication error:", error);
+      onLogout();
+    }
+  }, [error, onLogout]);
+
+  if (isLoading || isAuthenticating || !isAuthenticated) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+        }}
+      >
+        <CircularProgress />
+        <Typography component={"div"} variant="body1" sx={{ ml: 2 }}>
+          Check authentication...
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Si nous arrivons ici, c'est que l'authentification est complète et l'utilisateur est authentifié
+  return <ClassicInterface onLogout={onLogout} />;
+};
+
+/**
+ * Demo mode app that uses mock data
+ */
+const DemoApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+  // Initialize with mock data
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Simulate loading time for demo mode
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!isReady) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return <ClassicInterface onLogout={onLogout} mockService={mockService} />;
+};
+
 function App() {
   // State
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [interfaceType, setInterfaceType] = useState<"classic" | "compact">(
-    "classic",
-  );
   const [error, setError] = useState<string | null>(null);
   const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>(
     {
@@ -80,7 +157,7 @@ function App() {
     },
   );
 
-  // Demo effect - simulate loading
+  // Demo effect - simulate initial loading
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
@@ -110,11 +187,6 @@ function App() {
     setConnectionDetails({ mode: "demo" });
   };
 
-  // Handle interface type change
-  const handleInterfaceChange = (type: "classic" | "compact") => {
-    setInterfaceType(type);
-  };
-
   // Handle errors
   const handleError = (err: Error) => {
     console.error("Error:", err);
@@ -142,25 +214,18 @@ function App() {
           handleLogout();
           return null;
         }
+
         return (
           <MattermostDirectProvider
             serverUrl={connectionDetails.serverUrl}
             token={connectionDetails.token}
-            onAuthError={() => handleLogout()}
+            enableWebSocket={true}
+            onAuthError={(err) => {
+              handleError(err);
+              handleLogout();
+            }}
           >
-            {interfaceType === "classic" ? (
-              <ClassicInterface
-                onLogout={handleLogout}
-                onInterfaceChange={handleInterfaceChange}
-                user={connectionDetails.user}
-              />
-            ) : (
-              <CompactInterface
-                onLogout={handleLogout}
-                onInterfaceChange={handleInterfaceChange}
-                user={connectionDetails.user}
-              />
-            )}
+            <ConnectedApp onLogout={handleLogout} />
           </MattermostDirectProvider>
         );
 
@@ -179,46 +244,20 @@ function App() {
             proxyUrl={connectionDetails.proxyUrl}
             clientId={connectionDetails.clientId}
             token={connectionDetails.token}
-            onAuthError={() => handleLogout()}
+            enableWebSocket={true}
+            onAuthError={(err) => {
+              handleError(err);
+              handleLogout();
+            }}
           >
-            {interfaceType === "classic" ? (
-              <ClassicInterface
-                onLogout={handleLogout}
-                onInterfaceChange={handleInterfaceChange}
-                user={connectionDetails.user}
-              />
-            ) : (
-              <CompactInterface
-                onLogout={handleLogout}
-                onInterfaceChange={handleInterfaceChange}
-                user={connectionDetails.user}
-              />
-            )}
+            <ConnectedApp onLogout={handleLogout} />
           </MattermostProxyProvider>
         );
 
       case "demo":
       default:
-        // For demo mode, we use mock data and a regular MattermostProvider
-        return (
-          <MattermostProvider onAuthError={() => handleLogout()}>
-            {interfaceType === "classic" ? (
-              <ClassicInterface
-                onLogout={handleLogout}
-                onInterfaceChange={handleInterfaceChange}
-                user={DemoMockData.currentUser}
-                useMockData={true}
-              />
-            ) : (
-              <CompactInterface
-                onLogout={handleLogout}
-                onInterfaceChange={handleInterfaceChange}
-                user={DemoMockData.currentUser}
-                useMockData={true}
-              />
-            )}
-          </MattermostProvider>
-        );
+        // For demo mode, we use mock data
+        return <DemoApp onLogout={handleLogout} />;
     }
   };
 
