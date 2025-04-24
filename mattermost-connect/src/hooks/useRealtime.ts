@@ -1,264 +1,189 @@
 // src/hooks/useRealtime.ts
-import { useState, useEffect, useCallback } from "react";
-import { useConnection } from "../context";
+/**
+ * Hook pour la gestion des événements en temps réel
+ */
+import { useCallback, useEffect, useRef } from "react";
+import { useWebSocket } from "./useWebSocket";
+import { getServices } from "../core/services";
+import { useAuth } from "./useAuth";
+import { useStoreDispatch } from "./useStoreDispatch";
 import {
-  WebSocketEventType,
-  WebSocketEvent,
-} from "../services/notification/notification.service";
+  receiveNewMessage,
+  receiveEditedMessage,
+  receiveDeletedMessage,
+} from "../core/store/slices/messages.slice";
+import { updateTypingUsers } from "../core/store/slices/channels.slice";
+import { setUserStatus } from "../core/store/slices/users.slice";
 
-/**
- * Event types that can be listened to
- */
-type EventType = WebSocketEventType | string;
+export function useRealtime(): void {
+  const { webSocketService } = getServices();
+  const { isConnected, connect, disconnect, addMessageHandler } =
+    useWebSocket(webSocketService);
+  const { isAuthenticated, currentUser } = useAuth();
+  const dispatch = useStoreDispatch();
 
-/**
- * Event handler function
- */
-type EventHandler = (data: any) => void;
+  // Stocker les états des saisies
+  const typingTimeoutsRef = useRef<
+    Record<string, Record<string, NodeJS.Timeout>>
+  >({});
+  const typingUsersRef = useRef<Record<string, Record<string, number>>>({});
 
-/**
- * Options for the useRealtime hook
- */
-interface UseRealtimeOptions {
-  /**
-   * If true, events will be buffered during disconnections
-   * and replayed on reconnection
-   */
-  bufferEvents?: boolean;
+  // Effet pour gérer la connexion/déconnexion WebSocket
+  useEffect(() => {
+    if (isAuthenticated && currentUser && !isConnected) {
+      // Construire l'URL WebSocket
+      const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v4/websocket`;
 
-  /** Maximum size of the event buffer */
-  maxBufferSize?: number;
-
-  /** Callback called when connected to WebSocket */
-  onConnect?: () => void;
-
-  /** Callback called when disconnected from WebSocket */
-  onDisconnect?: (event: CloseEvent) => void;
-
-  /** Callback called on WebSocket error */
-  onError?: (error: Event) => void;
-
-  /** List of events to listen to by default */
-  events?: EventType[];
-}
-
-/**
- * Return state for the useRealtime hook
- */
-interface UseRealtimeState {
-  /** Indicates if WebSocket is connected */
-  isConnected: boolean;
-
-  /** Indicates if a connection is being established */
-  isConnecting: boolean;
-
-  /** Error if any */
-  error: Error | null;
-
-  /** Reconnection attempt count */
-  reconnectAttempt: number;
-
-  /** Raw WebSocket state (0-3: CONNECTING, OPEN, CLOSING, CLOSED) */
-  socketState: number;
-
-  /** Number of events in the reconnection buffer */
-  bufferedEventsCount: number;
-
-  /** Last received event */
-  lastEvent: WebSocketEvent | null;
-}
-
-/**
- * Custom hook for managing WebSocket connections and realtime events
- * This version is backward compatible but leverages the new ConnectionContext
- *
- * @param options Configuration options
- * @returns State and functions for managing realtime events
- */
-export function useRealtime(options: UseRealtimeOptions = {}) {
-  // Options with default values
-  const {
-    bufferEvents = true,
-    maxBufferSize = 200,
-    onConnect,
-    onDisconnect,
-    onError,
-    events = [],
-  } = options;
-
-  // Use the connection context
-  const connection = useConnection();
-
-  // Local states
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const [lastEvent, setLastEvent] = useState<WebSocketEvent | null>(null);
-  const [bufferedEvents, setBufferedEvents] = useState<WebSocketEvent[]>([]);
-
-  // Event handler registration
-  const addEventListener = useCallback(
-    (eventType: EventType, handler: EventHandler): (() => void) => {
-      return connection.addEventListener(eventType, handler);
-    },
-    [connection],
-  );
-
-  // Register multiple event handlers at once
-  const addEventListeners = useCallback(
-    (eventMap: Record<EventType, EventHandler>): (() => void) => {
-      return connection.addEventListeners(eventMap);
-    },
-    [connection],
-  );
-
-  // Buffer an event for later replay
-  const bufferEvent = useCallback(
-    (event: WebSocketEvent) => {
-      if (!bufferEvents) return;
-
-      setBufferedEvents((prev) => {
-        // Add event to buffer
-        const newBuffer = [...prev, event];
-
-        // Limit buffer size
-        if (newBuffer.length > maxBufferSize) {
-          return newBuffer.slice(newBuffer.length - maxBufferSize);
-        }
-
-        return newBuffer;
-      });
-    },
-    [bufferEvents, maxBufferSize],
-  );
-
-  // Replay buffered events
-  const replayBufferedEvents = useCallback(() => {
-    if (!bufferEvents || bufferedEvents.length === 0) return;
-
-    console.log(`Replaying ${bufferedEvents.length} buffered events`);
-
-    // Dispatch events in order
-    bufferedEvents.forEach((event) => {
-      // In a real implementation, this would dispatch to event handlers
-      setLastEvent(event);
-    });
-
-    // Clear buffer after replay
-    setBufferedEvents([]);
-  }, [bufferEvents, bufferedEvents]);
-
-  // Send a custom message via WebSocket
-  const sendMessage = useCallback(
-    (action: string, data?: any): boolean => {
-      return connection.sendMessage(action, data);
-    },
-    [connection],
-  );
-
-  // Force WebSocket reconnection
-  const reconnect = useCallback(async (): Promise<boolean> => {
-    setReconnectAttempt((prev) => prev + 1);
-    const success = await connection.reconnect();
-
-    if (success && bufferEvents) {
-      // Replay buffered events after reconnection
-      setTimeout(() => {
-        replayBufferedEvents();
-      }, 500);
+      // Se connecter avec le token
+      connect(wsUrl, localStorage.getItem("mattermost_token") || "");
+    } else if (!isAuthenticated && isConnected) {
+      disconnect();
     }
 
-    return success;
-  }, [connection, bufferEvents, replayBufferedEvents]);
-
-  // Handle connection and disconnection events
-  useEffect(() => {
-    if (connection.isConnected) {
-      if (onConnect) onConnect();
-
-      // Replay buffered events when connected
-      if (bufferEvents && bufferedEvents.length > 0) {
-        setTimeout(() => {
-          replayBufferedEvents();
-        }, 500);
+    return () => {
+      if (isConnected) {
+        disconnect();
       }
-    }
-  }, [
-    connection.isConnected,
-    onConnect,
-    bufferEvents,
-    bufferedEvents.length,
-    replayBufferedEvents,
-  ]);
+    };
+  }, [isAuthenticated, currentUser, isConnected, connect, disconnect]);
 
-  // Register event handlers for errors and disconnections
+  // Gérer les événements de message
   useEffect(() => {
-    // These would normally be registered with the WebSocket connection
-    // In this refactored version, we're assuming ConnectionContext handles this internally
+    if (!isConnected) return;
 
-    // For backward compatibility, we'll handle the onError and onDisconnect callbacks
-    if (connection.error && onError) {
-      onError(new Event("error")); // Simplified
-    }
-
-    if (
-      !connection.isConnected &&
-      onDisconnect &&
-      connection.socketState === WebSocket.CLOSED
-    ) {
-      onDisconnect(new CloseEvent("close")); // Simplified
-    }
-  }, [
-    connection.error,
-    connection.isConnected,
-    connection.socketState,
-    onError,
-    onDisconnect,
-  ]);
-
-  // Register default event listeners
-  useEffect(() => {
-    if (events.length === 0 || !connection.isConnected) return;
-
-    // Create a map of event handlers
-    const eventHandlers: Record<string, EventHandler> = {};
-
-    events.forEach((eventType) => {
-      eventHandlers[eventType] = (data: any) => {
-        const event = { event: eventType, data } as WebSocketEvent;
-        setLastEvent(event);
-
-        if (!connection.isConnected && bufferEvents) {
-          bufferEvent(event);
+    // Gestionnaire pour les nouveaux messages
+    const handleNewPost = (data: any) => {
+      try {
+        const post = JSON.parse(data.post);
+        // Ignorer les messages envoyés par l'utilisateur courant
+        if (post.user_id !== currentUser?.id) {
+          dispatch(receiveNewMessage({ message: post }));
         }
-      };
-    });
+      } catch (error) {
+        console.error("Error processing new message:", error);
+      }
+    };
 
-    // Register all handlers at once
-    const cleanup = connection.addEventListeners(eventHandlers);
+    // Gestionnaire pour les messages édités
+    const handleEditedPost = (data: any) => {
+      try {
+        const post = JSON.parse(data.post);
+        dispatch(receiveEditedMessage({ message: post }));
+      } catch (error) {
+        console.error("Error processing edited message:", error);
+      }
+    };
 
-    return cleanup;
-  }, [events, connection.isConnected, connection, bufferEvents, bufferEvent]);
+    // Gestionnaire pour les messages supprimés
+    const handleDeletedPost = (data: any) => {
+      try {
+        const post = JSON.parse(data.post);
+        dispatch(
+          receiveDeletedMessage({
+            messageId: post.id,
+            channelId: post.channel_id,
+          }),
+        );
+      } catch (error) {
+        console.error("Error processing deleted message:", error);
+      }
+    };
 
-  // Return the combined state and functions
-  return {
-    // State
-    isConnected: connection.isConnected,
-    isConnecting: connection.isConnecting,
-    error: connection.error,
-    reconnectAttempt,
-    socketState: connection.socketState,
-    bufferedEventsCount: bufferedEvents.length,
-    lastEvent,
+    // Gestionnaire pour les changements de statut
+    const handleStatusChange = (data: any) => {
+      if (data.user_id && data.status) {
+        dispatch(
+          setUserStatus({
+            userId: data.user_id,
+            status: data.status,
+          }),
+        );
+      }
+    };
 
-    // Functions
-    addEventListener,
-    addEventListeners,
-    sendMessage,
-    reconnect,
+    // Gestionnaire pour les événements de saisie
+    const handleTyping = (data: any) => {
+      if (!data.user_id || data.user_id === currentUser?.id) return;
 
-    // Constants
-    WebSocketState: connection.WebSocketState,
-    EventType: connection.EventType,
-  };
+      const channelId = data.channel_id;
+      const userId = data.user_id;
+
+      // Initialiser les structures si nécessaire
+      if (!typingUsersRef.current[channelId]) {
+        typingUsersRef.current[channelId] = {};
+      }
+
+      if (!typingTimeoutsRef.current[channelId]) {
+        typingTimeoutsRef.current[channelId] = {};
+      }
+
+      // Effacer le timeout existant si présent
+      if (typingTimeoutsRef.current[channelId][userId]) {
+        clearTimeout(typingTimeoutsRef.current[channelId][userId]);
+      }
+
+      // Enregistrer l'horodatage de la dernière activité de frappe
+      typingUsersRef.current[channelId][userId] = Date.now();
+
+      // Mettre à jour les utilisateurs en train de taper
+      dispatch(
+        updateTypingUsers({
+          channelId,
+          userIds: Object.keys(typingUsersRef.current[channelId]),
+        }),
+      );
+
+      // Définir un nouveau timeout pour supprimer l'utilisateur après 5 secondes
+      typingTimeoutsRef.current[channelId][userId] = setTimeout(() => {
+        if (typingUsersRef.current[channelId]) {
+          delete typingUsersRef.current[channelId][userId];
+
+          dispatch(
+            updateTypingUsers({
+              channelId,
+              userIds: Object.keys(typingUsersRef.current[channelId]),
+            }),
+          );
+
+          // Nettoyer si plus personne ne tape
+          if (Object.keys(typingUsersRef.current[channelId]).length === 0) {
+            delete typingUsersRef.current[channelId];
+            delete typingTimeoutsRef.current[channelId];
+          }
+        }
+      }, 5000);
+    };
+
+    // S'abonner aux événements WebSocket
+    const unsubscribeNewPost = addMessageHandler("posted", handleNewPost);
+    const unsubscribeEditedPost = addMessageHandler(
+      "post_edited",
+      handleEditedPost,
+    );
+    const unsubscribeDeletedPost = addMessageHandler(
+      "post_deleted",
+      handleDeletedPost,
+    );
+    const unsubscribeStatusChange = addMessageHandler(
+      "status_change",
+      handleStatusChange,
+    );
+    const unsubscribeTyping = addMessageHandler("typing", handleTyping);
+
+    // Se désabonner lors du démontage
+    return () => {
+      unsubscribeNewPost();
+      unsubscribeEditedPost();
+      unsubscribeDeletedPost();
+      unsubscribeStatusChange();
+      unsubscribeTyping();
+
+      // Nettoyer les timeouts
+      Object.values(typingTimeoutsRef.current).forEach((channelTimeouts) => {
+        Object.values(channelTimeouts).forEach((timeout) => {
+          clearTimeout(timeout);
+        });
+      });
+    };
+  }, [isConnected, addMessageHandler, dispatch, currentUser]);
 }
-
-export default useRealtime;
