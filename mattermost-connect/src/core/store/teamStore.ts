@@ -8,6 +8,7 @@ import { create } from "zustand";
  * Team interface
  */
 export interface Team {
+  create_at: string;
   id: string;
   name: string;
   display_name: string;

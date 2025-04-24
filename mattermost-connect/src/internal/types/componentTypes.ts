@@ -223,6 +223,8 @@ export interface FileUploadProps extends BaseComponentProps {
   onUploadComplete?: (fileIds: string[]) => void;
   /** Callback when a file upload fails */
   onUploadError?: (error: Error) => void;
+  /** Function to handle file upload */
+  onUpload?: (files: File[]) => Promise<string[] | void>;
 }
 
 /**

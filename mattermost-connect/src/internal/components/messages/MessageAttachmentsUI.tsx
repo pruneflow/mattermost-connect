@@ -142,10 +142,7 @@ const MessageAttachmentsUI: React.FC<MessageAttachmentsUIProps> = ({
       <Grid container spacing={1}>
         {attachments.map((attachment) => (
           <Grid
-            item
-            xs={12}
-            sm={compact ? 12 : 6}
-            md={compact ? 12 : 4}
+            size={{ xs: 12, sm: compact ? 12 : 6, md: compact ? 12 : 4 }}
             key={attachment.id}
           >
             <Paper

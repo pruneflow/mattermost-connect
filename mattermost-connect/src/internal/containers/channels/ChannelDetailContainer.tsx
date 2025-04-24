@@ -7,7 +7,7 @@ import { useChannel } from "../../../hooks/useChannels";
 import { BaseComponentProps } from "../../types/componentTypes";
 import ChannelDetailUI from "../../components/channels/ChannelDetailUI";
 import { ConfirmDialog } from "../../components/common";
-import { useUserStore } from "../../../core/store/userStore";
+import { getUserStatus, useUserStore } from "../../../core/store/userStore";
 
 export interface ChannelDetailContainerProps extends BaseComponentProps {
   /** Channel ID to display */
@@ -56,7 +56,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
   } = useChannel(channelId);
 
   // Get user store for user data
-  const { getUserById, getUserDisplayName, getUserStatus } = useUserStore();
+  const { getUserById, getUserDisplayName } = useUserStore();
 
   // Determine if the channel is a favorite (placeholder - would come from preferences)
   const isFavorite = channel?.is_favorite || false;
@@ -77,7 +77,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
 
     const previewMembers = members.slice(0, memberPreviewCount);
 
-    return previewMembers.map((member) => {
+    return previewMembers.map((member: { user_id: string }) => {
       const user = getUserById(member.user_id);
       const displayName = user ? getUserDisplayName(user.id) : "Unknown User";
       const status = user ? getUserStatus(user.id) : "offline";

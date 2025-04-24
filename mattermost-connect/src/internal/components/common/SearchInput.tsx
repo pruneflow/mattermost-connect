@@ -6,7 +6,7 @@ import React, { useEffect, useState } from "react";
 import { TextField, InputAdornment, IconButton, Fade } from "@mui/material";
 import { Search as SearchIcon, Clear as ClearIcon } from "@mui/icons-material";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { debounce } from "../../utils/helpers";
+import { debounce } from "../../utils/helper";
 
 export interface SearchInputProps extends BaseComponentProps {
   /** Placeholder text */

@@ -10,7 +10,7 @@ export interface EmptyStateProps extends BaseComponentProps {
   /** Icon to display */
   icon?: ReactNode;
   /** Title text */
-  title: string;
+  title: React.ReactNode;
   /** Description text */
   description?: string;
   /** Action button text */

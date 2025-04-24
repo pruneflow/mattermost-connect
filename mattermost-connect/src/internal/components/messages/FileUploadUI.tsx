@@ -28,6 +28,7 @@ const FileUploadUI: React.FC<FileUploadProps> = ({
   isLoading = false,
   onFilesSelected,
   onUploadStart,
+  onUpload,
   onUploadComplete,
   onUploadError,
   className,
@@ -130,7 +131,11 @@ const FileUploadUI: React.FC<FileUploadProps> = ({
 
   // Handle upload start
   const handleUpload = () => {
-    if (onUploadStart) {
+    if (!selectedFiles.length) return;
+
+    if (onUpload) {
+      onUpload(selectedFiles);
+    } else if (onUploadStart) {
       onUploadStart();
     }
   };

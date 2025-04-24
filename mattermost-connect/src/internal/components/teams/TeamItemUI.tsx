@@ -19,10 +19,10 @@ import {
   Tab,
 } from "@mui/material";
 import { MoreVert as MoreIcon } from "@mui/icons-material";
-import { Team } from "../../../index";
+import { stringToColor, Team } from "../../../index";
 import { ItemComponentProps } from "../../types/componentTypes";
 import { UnreadBadge } from "../common";
-import { getInitials, stringToColor } from "../../utils/helpers";
+import { getInitials } from "../../utils/helper";
 
 export interface TeamItemUIProps extends ItemComponentProps<Team> {
   /** Display variant */

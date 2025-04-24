@@ -29,11 +29,12 @@ import {
   ContentCopy as CopyIcon,
   Flag as ReportIcon,
 } from "@mui/icons-material";
-import { Message, MessageAttachment } from "../../../index";
+import { Message } from "../../../index";
 import { ItemComponentProps } from "../../types/componentTypes";
-import { UserAvatar, RelativeTime, Markdown } from "../common";
+import { RelativeTime, Markdown } from "../common";
 import MessageReactionsUI from "./MessageReactionsUI";
 import MessageAttachmentsUI from "./MessageAttachmentsUI";
+import UserAvatar from "../../../components/users/UserAvatar";
 
 export interface MessageItemUIProps extends ItemComponentProps<Message> {
   /** User display name */

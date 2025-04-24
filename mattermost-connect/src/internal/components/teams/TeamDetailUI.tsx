@@ -5,17 +5,14 @@
 import React from "react";
 import {
   Box,
-  Paper,
   Typography,
   Divider,
   Chip,
   Button,
-  IconButton,
   Card,
   CardContent,
   CardActions,
   Avatar,
-  Link,
   Grid,
 } from "@mui/material";
 import {
@@ -25,9 +22,9 @@ import {
   People as PeopleIcon,
   Settings as SettingsIcon,
 } from "@mui/icons-material";
-import { Team } from "../../../index";
+import { stringToColor, Team } from "../../../index";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { getInitials, stringToColor } from "../../utils/helpers";
+import { getInitials } from "../../utils/helper";
 
 export interface TeamDetailUIProps extends BaseComponentProps {
   /** Team data */
@@ -149,7 +146,7 @@ const TeamDetailUI: React.FC<TeamDetailUIProps> = ({
         {isExpanded && (
           <>
             <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Typography
                   variant="subtitle2"
                   color="text.secondary"
@@ -164,7 +161,7 @@ const TeamDetailUI: React.FC<TeamDetailUIProps> = ({
                 />
               </Grid>
 
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Typography
                   variant="subtitle2"
                   color="text.secondary"

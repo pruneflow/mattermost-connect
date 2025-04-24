@@ -1,925 +1,350 @@
-// examples/demo/src/mockService.ts
-import {
-  MattermostService,
-  User,
-  Team,
-  Channel,
-  Message,
-  UserStatus,
-  MessagesResponse,
-  GetMessagesOptions,
-  GetUsersOptions,
-} from "mattermost-connect";
+// mockService.ts - Service mock pour démontrer l'utilisation des composants sans serveur réel
 
-// Délai simulé pour imiter les temps de réponse du réseau (en ms)
-const SIMULATED_DELAY = 300;
+// Création d'identifiants uniques
+const generateId = () => Math.random().toString(36).substring(2, 15);
 
-// Fonction utilitaire pour simuler un délai réseau
-const delay = (ms: number): Promise<void> => {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-};
+// Types de base
+interface User {
+  id: string;
+  username: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  roles?: string;
+  update_at: number;
+}
 
-// Données fictives pour la démonstration
-const mockData = {
-  currentUser: {
-    id: "user1",
-    username: "johndoe",
-    first_name: "John",
-    last_name: "Doe",
-    email: "john@example.com",
-    roles: "system_user",
-    update_at: Date.now(),
-  } as User,
+interface Team {
+  id: string;
+  name: string;
+  display_name: string;
+  description?: string;
+  type?: "O" | "I";
+  create_at: number;
+  update_at: number;
+  delete_at: number;
+}
 
-  teams: [
-    {
-      id: "team1",
-      name: "engineering",
-      display_name: "Engineering Team",
-      description: "Team for developers and engineers",
-      member_count: 12,
-    },
-    {
-      id: "team2",
-      name: "marketing",
-      display_name: "Marketing Team",
-      description: "Team for marketing and communications",
-      member_count: 8,
-    },
-    {
-      id: "team3",
-      name: "product",
-      display_name: "Product Management",
-      description: "Team for product managers and designers",
-      member_count: 5,
-    },
-    {
-      id: "team4",
-      name: "support",
-      display_name: "Customer Support",
-      description: "Team for customer success and support",
-      member_count: 15,
-    },
-    {
-      id: "team5",
-      name: "sales",
-      display_name: "Sales Team",
-      description: "Team for sales representatives and account managers",
-      member_count: 10,
-    },
-    {
-      id: "team6",
-      name: "executive",
-      display_name: "Executive Team",
-      description: "Team for company leadership",
-      member_count: 4,
-    },
-  ] as Team[],
+interface Channel {
+  id: string;
+  team_id: string;
+  name: string;
+  display_name: string;
+  type: "O" | "P" | "D" | "G";
+  header?: string;
+  purpose?: string;
+  create_at: number;
+  update_at: number;
+  delete_at: number;
+}
 
-  channels: {
-    team1: [
+interface Message {
+  id: string;
+  user_id: string;
+  channel_id: string;
+  message: string;
+  create_at: number;
+  update_at: number;
+  delete_at?: number;
+  root_id?: string;
+  file_ids?: string[];
+  has_reactions?: boolean;
+}
+
+// Créer le service mock qui simule les données et les opérations de Mattermost
+const createMockService = () => {
+  // Données simulées
+  const data = {
+    users: [
+      {
+        id: "user1",
+        username: "johndoe",
+        first_name: "John",
+        last_name: "Doe",
+        email: "john@example.com",
+        roles: "system_user",
+        update_at: Date.now(),
+      },
+      {
+        id: "user2",
+        username: "janesmith",
+        first_name: "Jane",
+        last_name: "Smith",
+        email: "jane@example.com",
+        roles: "system_user",
+        update_at: Date.now(),
+      },
+      {
+        id: "user3",
+        username: "mikebrown",
+        first_name: "Mike",
+        last_name: "Brown",
+        email: "mike@example.com",
+        roles: "system_user",
+        update_at: Date.now(),
+      },
+    ] as User[],
+
+    teams: [
+      {
+        id: "team1",
+        name: "engineering",
+        display_name: "Engineering",
+        description: "Team for engineering discussions",
+        type: "O",
+        create_at: Date.now() - 1000000,
+        update_at: Date.now(),
+        delete_at: 0,
+      },
+      {
+        id: "team2",
+        name: "marketing",
+        display_name: "Marketing",
+        description: "Team for marketing discussions",
+        type: "O",
+        create_at: Date.now() - 900000,
+        update_at: Date.now(),
+        delete_at: 0,
+      },
+    ] as Team[],
+
+    channels: [
       {
         id: "channel1",
         team_id: "team1",
         name: "general",
         display_name: "General",
-        type: "O" as const,
-        header: "General discussion channel",
-        purpose: "General team discussions",
-        create_at: Date.now() - 30 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 30 * 24 * 60 * 60 * 1000,
+        type: "O",
+        header: "Welcome to the Engineering Team!",
+        purpose: "General discussions for the engineering team",
+        create_at: Date.now() - 900000,
+        update_at: Date.now(),
         delete_at: 0,
       },
       {
         id: "channel2",
         team_id: "team1",
-        name: "development",
-        display_name: "Development",
-        type: "O" as const,
-        header: "Development discussions and updates",
-        purpose: "Technical discussions",
-        create_at: Date.now() - 20 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 20 * 24 * 60 * 60 * 1000,
+        name: "random",
+        display_name: "Random",
+        type: "O",
+        header: "Random discussions",
+        purpose: "Share interesting things",
+        create_at: Date.now() - 800000,
+        update_at: Date.now(),
         delete_at: 0,
       },
       {
         id: "channel3",
         team_id: "team1",
-        name: "private-channel",
-        display_name: "Private Channel",
-        type: "P" as const,
-        header: "Private channel for the team",
-        purpose: "Confidential discussions",
-        create_at: Date.now() - 15 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 15 * 24 * 60 * 60 * 1000,
+        name: "development",
+        display_name: "Development",
+        type: "P",
+        header: "Development discussions",
+        purpose: "Technical discussions",
+        create_at: Date.now() - 700000,
+        update_at: Date.now(),
         delete_at: 0,
       },
-    ],
-    team2: [
       {
         id: "channel4",
         team_id: "team2",
         name: "general",
         display_name: "General",
-        type: "O" as const,
-        header: "General marketing channel",
-        purpose: "General marketing discussions",
-        create_at: Date.now() - 25 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 25 * 24 * 60 * 60 * 1000,
+        type: "O",
+        header: "Welcome to the Marketing Team!",
+        purpose: "General discussions for the marketing team",
+        create_at: Date.now() - 600000,
+        update_at: Date.now(),
         delete_at: 0,
       },
       {
-        id: "channel5",
-        team_id: "team2",
-        name: "campaigns",
-        display_name: "Campaigns",
-        type: "O" as const,
-        header: "Marketing campaign organization",
-        purpose: "Campaign planning",
-        create_at: Date.now() - 18 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 18 * 24 * 60 * 60 * 1000,
+        id: "dm1",
+        team_id: "team1",
+        name: "user1__user2",
+        display_name: "Jane Smith",
+        type: "D",
+        create_at: Date.now() - 500000,
+        update_at: Date.now(),
         delete_at: 0,
       },
-    ],
-    team3: [
-      {
-        id: "channel6",
-        team_id: "team3",
-        name: "general",
-        display_name: "General",
-        type: "O" as const,
-        header: "General product channel",
-        purpose: "Product team discussions",
-        create_at: Date.now() - 28 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 28 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-      {
-        id: "channel7",
-        team_id: "team3",
-        name: "roadmap",
-        display_name: "Product Roadmap",
-        type: "O" as const,
-        header: "Product roadmap planning",
-        purpose: "Discussions about future product features",
-        create_at: Date.now() - 14 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 14 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-    ],
-    team4: [
-      {
-        id: "channel8",
-        team_id: "team4",
-        name: "general",
-        display_name: "General",
-        type: "O" as const,
-        header: "Support team general channel",
-        purpose: "General support discussions",
-        create_at: Date.now() - 22 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 22 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-      {
-        id: "channel9",
-        team_id: "team4",
-        name: "cases",
-        display_name: "Support Cases",
-        type: "O" as const,
-        header: "Support case discussions",
-        purpose: "Discussing open support cases",
-        create_at: Date.now() - 12 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 12 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-    ],
-    team5: [
-      {
-        id: "channel10",
-        team_id: "team5",
-        name: "general",
-        display_name: "General",
-        type: "O" as const,
-        header: "Sales team general channel",
-        purpose: "General sales discussions",
-        create_at: Date.now() - 20 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 20 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-      {
-        id: "channel11",
-        team_id: "team5",
-        name: "deals",
-        display_name: "Deals Pipeline",
-        type: "O" as const,
-        header: "Sales pipeline discussions",
-        purpose: "Tracking and discussing active deals",
-        create_at: Date.now() - 10 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 10 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-    ],
-    team6: [
-      {
-        id: "channel12",
-        team_id: "team6",
-        name: "general",
-        display_name: "General",
-        type: "O" as const,
-        header: "Executive team general channel",
-        purpose: "General executive discussions",
-        create_at: Date.now() - 15 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 15 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-      {
-        id: "channel13",
-        team_id: "team6",
-        name: "strategy",
-        display_name: "Strategic Planning",
-        type: "P" as const,
-        header: "Confidential strategic discussions",
-        purpose: "Planning the company's strategic direction",
-        create_at: Date.now() - 7 * 24 * 60 * 60 * 1000,
-        update_at: Date.now() - 7 * 24 * 60 * 60 * 1000,
-        delete_at: 0,
-      },
-    ],
-  },
+    ] as Channel[],
 
-  users: [
-    {
-      id: "user1",
-      username: "johndoe",
-      first_name: "John",
-      last_name: "Doe",
-      email: "john@example.com",
-      roles: "system_user",
-      update_at: Date.now(),
-    },
-    {
-      id: "user2",
-      username: "janedoe",
-      first_name: "Jane",
-      last_name: "Doe",
-      email: "jane@example.com",
-      roles: "system_user",
-      update_at: Date.now(),
-    },
-    {
-      id: "user3",
-      username: "bobsmith",
-      first_name: "Bob",
-      last_name: "Smith",
-      email: "bob@example.com",
-      roles: "system_user",
-      update_at: Date.now(),
-    },
-    {
-      id: "user4",
-      username: "sarahparker",
-      first_name: "Sarah",
-      last_name: "Parker",
-      email: "sarah@example.com",
-      roles: "system_user",
-      update_at: Date.now(),
-    },
-    {
-      id: "user5",
-      username: "mikejones",
-      first_name: "Mike",
-      last_name: "Jones",
-      email: "mike@example.com",
-      roles: "system_user",
-      update_at: Date.now(),
-    },
-  ] as User[],
-
-  messages: {
-    channel1: [
+    messages: [
       {
-        id: "post1",
-        user_id: "user1",
-        channel_id: "channel1",
-        message: "Hello everyone! How are you doing today?",
-        create_at: Date.now() - 3600000, // 1 hour ago
-        update_at: Date.now() - 3600000,
-        delete_at: 0,
-      },
-      {
-        id: "post2",
+        id: "msg1",
         user_id: "user2",
         channel_id: "channel1",
-        message: "Hi John! Doing well here, how about you?",
-        create_at: Date.now() - 3500000, // 58 minutes ago
-        update_at: Date.now() - 3500000,
-        delete_at: 0,
+        message: "Welcome to the Engineering team!",
+        create_at: Date.now() - 800000,
+        update_at: Date.now() - 800000,
       },
       {
-        id: "post3",
+        id: "msg2",
         user_id: "user1",
         channel_id: "channel1",
-        message:
-          "Great, thanks! I have a question about the **Alpha** project - has anyone updated the documentation?",
-        create_at: Date.now() - 3400000, // 56 minutes ago
-        update_at: Date.now() - 3400000,
-        delete_at: 0,
+        message: "Thanks! Excited to be here.",
+        create_at: Date.now() - 790000,
+        update_at: Date.now() - 790000,
       },
       {
-        id: "post4",
+        id: "msg3",
         user_id: "user3",
         channel_id: "channel1",
-        message:
-          "I started updating the documentation yesterday. Here's the link: [Alpha Documentation](https://example.com/docs/alpha)",
-        create_at: Date.now() - 1800000, // 30 minutes ago
-        update_at: Date.now() - 1800000,
-        delete_at: 0,
+        message: "Let's start planning our next sprint!",
+        create_at: Date.now() - 780000,
+        update_at: Date.now() - 780000,
       },
-    ],
-    channel2: [
       {
-        id: "post5",
+        id: "msg4",
         user_id: "user1",
         channel_id: "channel2",
         message:
-          "Here's some JavaScript code to solve this problem:\n```javascript\nfunction solution(input) {\n  return input.filter(x => x > 0).map(x => x * 2);\n}\n```",
-        create_at: Date.now() - 7200000, // 2 hours ago
-        update_at: Date.now() - 7200000,
-        delete_at: 0,
+          "Check out this interesting article: https://example.com/tech-news",
+        create_at: Date.now() - 770000,
+        update_at: Date.now() - 770000,
       },
       {
-        id: "post6",
-        user_id: "user3",
+        id: "msg5",
+        user_id: "user2",
         channel_id: "channel2",
-        message:
-          "Thanks for the solution, but I think we can optimize it further.",
-        create_at: Date.now() - 5400000, // 1.5 hours ago
-        update_at: Date.now() - 5400000,
-        delete_at: 0,
+        message: "Thanks for sharing!",
+        create_at: Date.now() - 760000,
+        update_at: Date.now() - 760000,
       },
-    ],
-    channel3: [
       {
-        id: "post7",
+        id: "msg6",
+        user_id: "user1",
+        channel_id: "dm1",
+        message: "Hi Jane, do you have a minute to discuss the project?",
+        create_at: Date.now() - 750000,
+        update_at: Date.now() - 750000,
+      },
+      {
+        id: "msg7",
         user_id: "user2",
-        channel_id: "channel3",
-        message:
-          "Reminder: The confidential meeting is scheduled for tomorrow at 2pm.",
-        create_at: Date.now() - 86400000, // 1 day ago
-        update_at: Date.now() - 86400000,
-        delete_at: 0,
+        channel_id: "dm1",
+        message: "Sure, I'm available now. What's on your mind?",
+        create_at: Date.now() - 740000,
+        update_at: Date.now() - 740000,
       },
-    ],
-    channel4: [],
-    channel5: [
-      {
-        id: "post8",
-        user_id: "user2",
-        channel_id: "channel5",
-        message:
-          "The new campaign will be launched next week. Is everyone ready?",
-        create_at: Date.now() - 172800000, // 2 days ago
-        update_at: Date.now() - 172800000,
-        delete_at: 0,
-      },
-    ],
-    channel6: [
-      {
-        id: "post9",
-        user_id: "user1",
-        channel_id: "channel6",
-        message: "Welcome to the Product Team channel!",
-        create_at: Date.now() - 259200000, // 3 days ago
-        update_at: Date.now() - 259200000,
-        delete_at: 0,
-      },
-    ],
-    channel7: [
-      {
-        id: "post10",
-        user_id: "user3",
-        channel_id: "channel7",
-        message: "Here's the latest roadmap draft for Q3.",
-        create_at: Date.now() - 345600000, // 4 days ago
-        update_at: Date.now() - 345600000,
-        delete_at: 0,
-      },
-    ],
-    channel8: [
-      {
-        id: "post11",
-        user_id: "user2",
-        channel_id: "channel8",
-        message:
-          "New support procedures are now in effect. Please review the documentation.",
-        create_at: Date.now() - 432000000, // 5 days ago
-        update_at: Date.now() - 432000000,
-        delete_at: 0,
-      },
-    ],
-    channel9: [],
-    channel10: [
-      {
-        id: "post12",
-        user_id: "user1",
-        channel_id: "channel10",
-        message:
-          "Congratulations to the team for hitting 120% of our quarterly target!",
-        create_at: Date.now() - 518400000, // 6 days ago
-        update_at: Date.now() - 518400000,
-        delete_at: 0,
-      },
-    ],
-    channel11: [],
-    channel12: [
-      {
-        id: "post13",
-        user_id: "user1",
-        channel_id: "channel12",
-        message:
-          "Please prepare your quarterly reports by the end of next week.",
-        create_at: Date.now() - 604800000, // 7 days ago
-        update_at: Date.now() - 604800000,
-        delete_at: 0,
-      },
-    ],
-    channel13: [
-      {
-        id: "post14",
-        user_id: "user1",
-        channel_id: "channel13",
-        message:
-          "Our next strategic planning session will be on Monday at 10 AM.",
-        create_at: Date.now() - 691200000, // 8 days ago
-        update_at: Date.now() - 691200000,
-        delete_at: 0,
-      },
-    ],
-  },
+    ] as Message[],
+  };
 
-  // Variable pour générer des IDs uniques pour les nouveaux messages
-  nextPostId: 100,
-};
-
-/**
- * Creates a mock service for demonstration purposes
- * @returns A MattermostService implementation using mock data
- */
-const createMockService = (): MattermostService => {
-  // Copie les données pour pouvoir les modifier sans affecter l'original
-  let teams = [...mockData.teams];
-  let channels = JSON.parse(JSON.stringify(mockData.channels));
-  let users = [...mockData.users];
-  let messages = JSON.parse(JSON.stringify(mockData.messages));
-  let nextPostId = mockData.nextPostId;
-  // Cache pour l'utilisateur courant
-  let _currentUser: User | null = { ...mockData.currentUser };
-
-  // Pour le mode "custom", on définit explicitement ce mode
-  const mode: "direct" | "proxy" | "custom" = "custom";
-
+  // Simuler les fonctions de l'API Mattermost
   return {
-    // Mode de service (important pour le traitement interne)
-    mode,
-
-    // User information
-    getCurrentUser: async (): Promise<User> => {
-      await delay(SIMULATED_DELAY);
-      return { ..._currentUser! };
+    // Utilisateurs
+    getCurrentUser: async () => {
+      return data.users[0];
     },
-
-    // Cette méthode est importante pour l'exemple de caching
-    refreshCurrentUser: async (): Promise<User> => {
-      await delay(SIMULATED_DELAY);
-      // Simuler un rafraîchissement en mettant à jour le timestamp
-      _currentUser = {
-        ..._currentUser!,
-        update_at: Date.now(),
-      };
-      return { ..._currentUser };
+    getUser: async (userId: string) => {
+      return data.users.find((user) => user.id === userId) || null;
     },
-
-    // Pour le support du caching
-    getBaseUrl: (): string => {
-      return "https://mock.mattermost.com";
+    getUsers: async () => {
+      return data.users;
     },
-
-    // Teams management
-    getTeams: async (): Promise<Team[]> => {
-      console.log("Mock getTeams appelé - retournant", teams.length, "équipes");
-      await delay(SIMULATED_DELAY);
-
-      // S'assurer que teams est bien défini et non vide
-      if (!teams || teams.length === 0) {
-        // Si teams est vide pour une raison quelconque, retournons des données par défaut
-        console.warn(
-          "Données d'équipes vides, utilisation des données par défaut",
-        );
-        return [...mockData.teams];
-      }
-
-      return [...teams];
-    },
-
-    getTeam: async (teamId: string): Promise<Team> => {
-      await delay(SIMULATED_DELAY);
-      const team = teams.find((t) => t.id === teamId);
-      if (!team) {
-        throw new Error(`Team not found: ${teamId}`);
-      }
-      return { ...team };
-    },
-
-    // Channels management
-    getChannels: async (teamId: string): Promise<Channel[]> => {
-      await delay(SIMULATED_DELAY);
-      const teamChannels = channels[teamId] || [];
-      return [...teamChannels];
-    },
-
-    getChannel: async (channelId: string): Promise<Channel> => {
-      await delay(SIMULATED_DELAY);
-      let foundChannel: Channel | null = null;
-
-      // Search for the channel in all teams
-      Object.values(channels).forEach((teamChannels: Channel[]) => {
-        const channel = teamChannels.find((c) => c.id === channelId);
-        if (channel) {
-          foundChannel = channel;
-        }
-      });
-
-      if (!foundChannel) {
-        throw new Error(`Channel not found: ${channelId}`);
-      }
-      return { ...foundChannel };
-    },
-
-    // Support de la fonctionnalité de comptage des non-lus
-    getChannelUnreadCount: async (
-      channelId: string,
-    ): Promise<{ msg_count: number; mention_count: number }> => {
-      await delay(SIMULATED_DELAY);
+    getUserStatus: async (userId: string) => {
+      // Simuler des statuts en ligne aléatoires
+      const statuses = ["online", "away", "dnd", "offline"];
       return {
-        msg_count: Math.floor(Math.random() * 10),
-        mention_count: Math.floor(Math.random() * 3),
+        user_id: userId,
+        status: statuses[Math.floor(Math.random() * statuses.length)],
       };
     },
 
-    // Support de marquer comme vu
-    viewChannel: async (channelId: string): Promise<{ status: "OK" }> => {
-      await delay(SIMULATED_DELAY);
-      return { status: "OK" };
+    // Équipes
+    getTeams: async () => {
+      return data.teams;
+    },
+    getTeam: async (teamId: string) => {
+      return data.teams.find((team) => team.id === teamId) || null;
     },
 
-    // Support des non-lus par équipe
-    getTeamUnreadCount: async (
-      teamId: string,
-    ): Promise<{ msg_count: number; mention_count: number }> => {
-      await delay(SIMULATED_DELAY);
-      return {
-        msg_count: Math.floor(Math.random() * 15),
-        mention_count: Math.floor(Math.random() * 5),
-      };
+    // Canaux
+    getChannels: async (teamId: string) => {
+      return data.channels.filter((channel) => channel.team_id === teamId);
+    },
+    getChannel: async (channelId: string) => {
+      return data.channels.find((channel) => channel.id === channelId) || null;
     },
 
-    editMessage: async (messageId: string, newMessage: string) => {
-      // Simuler la modification d'un message
-      console.log(
-        `Mock: Message ${messageId} modifié avec le texte:`,
-        newMessage,
-      );
-
-      await delay(SIMULATED_DELAY);
-
-      // Trouver le message dans les données
-      let foundMessage: Message | null = null;
-      let foundChannelId: string | null = null;
-
-      // Rechercher dans tous les canaux
-      Object.entries(messages).forEach(([channelId, msgs]) => {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg) {
-          foundMessage = msg;
-          foundChannelId = channelId;
-        }
-      });
-
-      if (!foundMessage || !foundChannelId) {
-        throw new Error(`Message ${messageId} not found`);
-      }
-
-      // Mettre à jour le message
-      foundMessage.message = newMessage;
-      foundMessage.update_at = Date.now();
-
-      return {
-        ...foundMessage,
-      };
+    // Messages
+    getMessages: async (channelId: string) => {
+      return data.messages.filter((msg) => msg.channel_id === channelId);
     },
-
-    deleteMessage: async (messageId: string) => {
-      await delay(SIMULATED_DELAY);
-
-      // Simuler la suppression d'un message
-      console.log(`Mock: Message ${messageId} supprimé`);
-
-      // Parcourir tous les canaux pour trouver et "supprimer" le message
-      let deleted = false;
-      Object.keys(messages).forEach((channelId) => {
-        const index = messages[channelId].findIndex(
-          (msg) => msg.id === messageId,
-        );
-        if (index !== -1) {
-          // Dans un système réel, on marquerait simplement delete_at
-          // Ici, on le supprime complètement pour simuler
-          messages[channelId].splice(index, 1);
-          deleted = true;
-        }
-      });
-
-      return { success: deleted };
+    getThreadMessages: async (rootId: string) => {
+      return data.messages.filter((msg) => msg.root_id === rootId);
     },
-
-    replyToMessage: async (
-      channelId: string,
-      messageId: string,
-      responseMessage: string,
-      fileIds?: string[],
-    ) => {
-      await delay(SIMULATED_DELAY);
-
-      // Vérifier si le canal existe
-      if (!messages[channelId]) {
-        messages[channelId] = [];
-      }
-
-      // Générer un nouvel ID pour la réponse
-      const newId = `post-reply-${nextPostId++}`;
-
-      // Créer le message de réponse
-      const replyMessage: Message = {
-        id: newId,
-        user_id: _currentUser!.id,
-        channel_id: channelId,
-        message: responseMessage,
-        create_at: Date.now(),
-        update_at: Date.now(),
-        delete_at: 0,
-        root_id: messageId,
-        props: {
-          quoted_message_id: messageId,
-        },
-        file_ids: fileIds || [],
-      };
-
-      // Ajouter la réponse aux messages du canal
-      messages[channelId].push(replyMessage);
-
-      return replyMessage;
-    },
-
-    // Messages management
-    getChannelMessages: async (
-      channelId: string,
-      options: GetMessagesOptions = {},
-    ): Promise<MessagesResponse> => {
-      await delay(SIMULATED_DELAY);
-
-      // Get channel messages or empty array if none
-      const channelMessages = messages[channelId] || [];
-
-      // Sort messages by creation date (oldest first)
-      const sortedMessages = [...channelMessages].sort(
-        (a, b) => a.create_at - b.create_at,
-      );
-
-      // Handle pagination
-      const { page = 0, perPage = 60, before, after } = options;
-
-      let filteredMessages = sortedMessages;
-
-      // Filter by "before" message ID
-      if (before) {
-        const beforeIndex = filteredMessages.findIndex(
-          (msg) => msg.id === before,
-        );
-        if (beforeIndex !== -1) {
-          filteredMessages = filteredMessages.slice(0, beforeIndex);
-        }
-      }
-
-      // Filter by "after" message ID
-      if (after) {
-        const afterIndex = filteredMessages.findIndex(
-          (msg) => msg.id === after,
-        );
-        if (afterIndex !== -1) {
-          filteredMessages = filteredMessages.slice(afterIndex + 1);
-        }
-      }
-
-      // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const pagedMessages = filteredMessages.slice(start, end);
-
-      // Convert array to object with ID as key (Mattermost format)
-      const postsObject: Record<string, Message> = {};
-      pagedMessages.forEach((message) => {
-        postsObject[message.id] = { ...message };
-      });
-
-      return {
-        posts: postsObject,
-        order: pagedMessages.map((m) => m.id),
-        next_post_id: "",
-        prev_post_id: "",
-      };
-    },
-
-    postMessage: async (
+    sendMessage: async (
       channelId: string,
       message: string,
-      fileIds?: string[],
-    ): Promise<Message> => {
-      await delay(SIMULATED_DELAY);
-
-      // Create a new message ID
-      const postId = `post${nextPostId++}`;
-
-      // Create the message
-      const newMessage: Message = {
-        id: postId,
-        user_id: _currentUser!.id,
+      rootId?: string,
+    ) => {
+      const newMessage = {
+        id: generateId(),
+        user_id: "user1", // Current user
         channel_id: channelId,
-        message,
+        message: message,
         create_at: Date.now(),
         update_at: Date.now(),
-        delete_at: 0,
-        file_ids: fileIds || [],
+        root_id: rootId,
       };
-
-      // Add to the list of messages for this channel
-      if (!messages[channelId]) {
-        messages[channelId] = [];
+      data.messages.push(newMessage);
+      return newMessage;
+    },
+    editMessage: async (messageId: string, message: string) => {
+      const index = data.messages.findIndex((msg) => msg.id === messageId);
+      if (index !== -1) {
+        data.messages[index].message = message;
+        data.messages[index].update_at = Date.now();
+        return data.messages[index];
       }
-
-      messages[channelId].push(newMessage);
-
-      return { ...newMessage };
+      throw new Error("Message not found");
     },
-
-    // Users management
-    getUsers: async (options: GetUsersOptions = {}): Promise<User[]> => {
-      await delay(SIMULATED_DELAY);
-
-      if (options.ids && options.ids.length > 0) {
-        return users.filter((user) => options.ids?.includes(user.id));
+    deleteMessage: async (messageId: string) => {
+      const index = data.messages.findIndex((msg) => msg.id === messageId);
+      if (index !== -1) {
+        data.messages.splice(index, 1);
+        return true;
       }
-
-      return [...users];
+      return false;
     },
 
-    getUserStatus: async (userId: string): Promise<UserStatus> => {
-      await delay(SIMULATED_DELAY);
-      return { user_id: userId, status: "online" };
+    // Simulation WebSocket
+    connectWebSocket: async () => {
+      console.log("WebSocket connected (mock)");
+      return true;
     },
-
-    // WebSocket utilities
-    getWebsocketUrl: (): string => {
-      return "ws://mock-websocket-url";
+    disconnectWebSocket: () => {
+      console.log("WebSocket disconnected (mock)");
     },
-
-    getWebsocketToken: async (): Promise<string> => {
-      await delay(SIMULATED_DELAY);
-      return "mock-websocket-token";
-    },
-
-    // File uploads
-    uploadFiles: async (formData: FormData): Promise<any> => {
-      await delay(SIMULATED_DELAY * 2); // Longer delay to simulate upload
-
-      // Extract the files from FormData
-      const files: File[] = [];
-      if (formData.getAll("files")) {
-        formData.getAll("files").forEach((file) => {
-          if (file instanceof File) {
-            files.push(file);
-          }
-        });
-      }
-
-      return {
-        file_infos: files.map((file, index) => ({
-          id: `file${Date.now()}-${index}`,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        })),
-      };
-    },
-
-    // Emoji et réactions
-    getFrequentEmojis: async (): Promise<string[]> => {
-      await delay(SIMULATED_DELAY);
-      return ["👍", "❤️", "😂", "🎉", "🔥", "👏", "✅", "🙏"];
-    },
-
-    addReaction: async (messageId: string, emoji: string): Promise<any> => {
-      await delay(SIMULATED_DELAY);
-      console.log(`Mock: Réaction ${emoji} ajoutée au message ${messageId}`);
-      return { success: true };
-    },
-
-    removeReaction: async (
-      channelId: string,
-      messageId: string,
-      emoji: string,
-    ): Promise<any> => {
-      await delay(SIMULATED_DELAY);
-      console.log(`Mock: Réaction ${emoji} supprimée du message ${messageId}`);
-      return { success: true };
-    },
-
-    hasReacted: async (
-      channelId: string,
-      messageId: string,
-      emoji: string,
-    ): Promise<boolean> => {
-      await delay(SIMULATED_DELAY);
-      // Retourne aléatoirement vrai ou faux pour simuler
-      return Math.random() > 0.5;
-    },
-
-    // GIFs
-    searchGifs: async (query: string): Promise<any[]> => {
-      await delay(SIMULATED_DELAY);
-      return Array(5)
-        .fill(null)
-        .map((_, i) => ({
-          id: `gif-${query}-${i}`,
-          preview: `https://via.placeholder.com/150?text=GIF+${query}+${i}`,
-          title: `GIF ${query} ${i}`,
-          url: `https://via.placeholder.com/300?text=GIF+${query}+${i}`,
-        }));
-    },
-
-    getGifs: async (category: string): Promise<any[]> => {
-      await delay(SIMULATED_DELAY);
-      return Array(5)
-        .fill(null)
-        .map((_, i) => ({
-          id: `gif-${category}-${i}`,
-          preview: `https://via.placeholder.com/150?text=GIF+${category}+${i}`,
-          title: `GIF ${category} ${i}`,
-          url: `https://via.placeholder.com/300?text=GIF+${category}+${i}`,
-        }));
-    },
-
-    // Méthode pour la récupération de posts spécifiques
-    getPost: async (messageId: string): Promise<Message> => {
-      await delay(SIMULATED_DELAY);
-
-      let foundMessage: Message | null = null;
-
-      // Rechercher dans tous les canaux
-      Object.values(messages).forEach((channelMessages) => {
-        const message = channelMessages.find((m) => m.id === messageId);
-        if (message) {
-          foundMessage = { ...message };
+    addMessageHandler: (handler: (msg: any) => void) => {
+      // Simuler l'arrivée occasionnelle de nouveaux messages
+      const interval = setInterval(() => {
+        if (Math.random() > 0.9) {
+          const channelId =
+            data.channels[Math.floor(Math.random() * data.channels.length)].id;
+          const userId =
+            data.users[Math.floor(Math.random() * data.users.length)].id;
+          const newMessage = {
+            id: generateId(),
+            user_id: userId,
+            channel_id: channelId,
+            message: `Random message from mock service at ${new Date().toLocaleTimeString()}`,
+            create_at: Date.now(),
+            update_at: Date.now(),
+          };
+          data.messages.push(newMessage);
+          handler({
+            event: "posted",
+            data: {
+              post: newMessage,
+            },
+          });
         }
-      });
+      }, 30000); // Toutes les 30 secondes
 
-      if (!foundMessage) {
-        throw new Error(`Message with ID ${messageId} not found`);
-      }
-
-      return foundMessage;
-    },
-
-    // Support pour l'authentification (mode direct)
-    authenticate: async (
-      username: string,
-      password: string,
-    ): Promise<{ token: string; serverUrl?: string }> => {
-      await delay(SIMULATED_DELAY);
-
-      // Simuler une connexion réussie si le nom d'utilisateur commence par "user" ou est "admin"
-      if (username.startsWith("user") || username === "admin") {
-        return {
-          token: `mock-token-${Date.now()}`,
-          serverUrl: "https://mock.mattermost.com",
-        };
-      }
-
-      throw new Error("Invalid username or password");
-    },
-
-    validateToken: async (token: string): Promise<boolean> => {
-      await delay(SIMULATED_DELAY);
-      // Simuler une validation de token réussie si le token commence par "mock-token"
-      return token.startsWith("mock-token");
+      // Fonction de nettoyage
+      return () => clearInterval(interval);
     },
   };
 };

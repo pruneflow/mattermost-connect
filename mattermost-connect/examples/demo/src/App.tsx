@@ -1,355 +1,269 @@
-import React, { useState } from "react";
-// Material-UI Components
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Container,
-  Typography,
-  Button,
-  TextField,
-  Paper,
-  FormControl,
-  Alert,
+  CssBaseline,
+  ThemeProvider,
+  createTheme,
   CircularProgress,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControlLabel,
-  Switch,
-  Divider,
+  Paper,
+  Typography,
+  Snackbar,
+  Alert,
 } from "@mui/material";
-
-// Import examples
-import ClassicInterface from "./examples/ClassicInterface";
-
-// Imports for MattermostConnect library
 import {
   MattermostProvider,
-  MattermostThemeProvider,
-  useAuth,
-  useConnection,
-  useMattermost,
+  MattermostDirectProvider,
+  MattermostProxyProvider,
+  Login,
+  DirectLogin,
+  ProxyLogin,
+  DemoLogin,
+  User,
 } from "mattermost-connect";
-import createMockService from "./mockService";
 
-// Configuration for different connection modes
-const MODES = {
-  DIRECT: "direct",
-  PROXY: "proxy",
-  MOCK: "mock",
-};
+// Demo UI Components
+import ClassicInterface from "./components/ClassicInterface";
+import AuthenticationUI from "./components/AuthenticationUI";
+import CompactInterface from "./components/CompactInterface";
+import { DemoMockData } from "./mockData";
 
-// Authentication UI component - uses the useAuth hook from MattermostConnect
-const AuthenticationUI: React.FC = () => {
-  // Get context from MattermostConnect
-  const { updateCredentials, isAuthenticating, error } = useAuth();
+// Define the connection details type
+interface ConnectionDetails {
+  mode: "direct" | "proxy" | "demo";
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  token?: string;
+  user?: User;
+}
 
-  // Connection mode and configuration state
-  const [connectionMode, setConnectionMode] = useState(MODES.MOCK);
+// Define the theme
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: "#0058CC",
+    },
+    secondary: {
+      main: "#4A154B",
+    },
+    background: {
+      default: "#f5f5f5",
+    },
+  },
+  typography: {
+    fontFamily: '"Open Sans", "Helvetica", "Arial", sans-serif',
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: "none",
+          borderRadius: 4,
+        },
+      },
+    },
+  },
+});
 
-  // Direct mode fields
-  const [serverUrl, setServerUrl] = useState("http://localhost:8065");
-  const [useTokenAuth, setUseTokenAuth] = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
+function App() {
+  // State
+  const [authenticated, setAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [interfaceType, setInterfaceType] = useState<"classic" | "compact">(
+    "classic",
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>(
+    {
+      mode: "demo",
+    },
+  );
 
-  // Proxy mode fields
-  const [proxyUrl, setProxyUrl] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [userId, setUserId] = useState("");
+  // Demo effect - simulate loading
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1000);
 
-  // Handle form submission for authentication
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      switch (connectionMode) {
-        case MODES.DIRECT:
-          updateCredentials({
-            serverUrl,
-            token,
-            proxyUrl: undefined,
-            clientId: undefined,
-            userId: undefined,
-            serviceProvider: undefined,
-            username,
-            password,
-          });
-          break;
+    return () => clearTimeout(timer);
+  }, []);
 
-        case MODES.PROXY:
-          updateCredentials({
-            serverUrl: undefined,
-            token: undefined,
-            proxyUrl,
-            clientId,
-            userId,
-            serviceProvider: undefined,
-          });
-          break;
-
-        case MODES.MOCK:
-          updateCredentials({
-            serverUrl: undefined,
-            token: undefined,
-            proxyUrl: undefined,
-            clientId: undefined,
-            userId: undefined,
-            serviceProvider: {
-              setupService: createMockService,
-              isConnected: true,
-              skipConnectionTest: true,
-              currentUser: {
-                id: "user1",
-                username: "johndoe",
-                first_name: "John",
-                last_name: "Doe",
-                email: "john@example.com",
-                roles: "system_user",
-                update_at: Date.now(),
-              },
-            },
-          });
-          break;
-      }
-    } catch (err) {
-      console.error("Authentication error:", err);
-    }
+  // Handle successful authentication
+  const handleAuthSuccess = (result: any) => {
+    console.log("Authentication successful:", result);
+    setAuthenticated(true);
+    setConnectionDetails({
+      mode: result.mode,
+      serverUrl: result.serverUrl,
+      proxyUrl: result.proxyUrl,
+      clientId: result.clientId,
+      token: result.token,
+      user: result.user,
+    });
   };
 
-  // Determine the title based on the connection mode
-  const getTitle = () => {
-    switch (connectionMode) {
-      case MODES.DIRECT:
-        return "Connect to Mattermost";
-      case MODES.PROXY:
-        return "Proxy Authentication";
-      case MODES.MOCK:
-        return "Demo Mode";
-      default:
-        return "Authentication";
-    }
+  // Handle logout
+  const handleLogout = () => {
+    console.log("Logging out");
+    setAuthenticated(false);
+    setConnectionDetails({ mode: "demo" });
   };
 
-  // In mock mode, authentication can be automatic
-  if (connectionMode === MODES.MOCK && isAuthenticating) {
-    return (
-      <Container maxWidth="xs">
-        <Paper elevation={3} sx={{ p: 3, mt: 8, textAlign: "center" }}>
-          <Typography variant="h5" gutterBottom>
-            {getTitle()}
-          </Typography>
-          <CircularProgress sx={{ my: 2 }} />
-          <Typography>Setting up demo environment...</Typography>
-        </Paper>
-      </Container>
-    );
-  }
+  // Handle interface type change
+  const handleInterfaceChange = (type: "classic" | "compact") => {
+    setInterfaceType(type);
+  };
 
-  // Render the appropriate form fields based on connection mode
-  const renderModeSpecificFields = () => {
-    switch (connectionMode) {
-      case MODES.DIRECT:
+  // Handle errors
+  const handleError = (err: Error) => {
+    console.error("Error:", err);
+    setError(err.message);
+  };
+
+  // Clear error
+  const handleErrorClose = () => {
+    setError(null);
+  };
+
+  // Render the appropriate provider based on connection details
+  const renderProvider = () => {
+    if (!authenticated) {
+      return (
+        <AuthenticationUI onSuccess={handleAuthSuccess} onError={handleError} />
+      );
+    }
+
+    // Based on the connection mode, render the appropriate provider
+    switch (connectionDetails.mode) {
+      case "direct":
+        if (!connectionDetails.serverUrl || !connectionDetails.token) {
+          console.error("Missing serverUrl or token for direct mode");
+          handleLogout();
+          return null;
+        }
         return (
-          <>
-            <TextField
-              fullWidth
-              label="Mattermost Server URL"
-              variant="outlined"
-              margin="normal"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-              placeholder="https://mattermost.example.com"
-              required
-            />
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={useTokenAuth}
-                  onChange={(e) => setUseTokenAuth(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="Use Personal Access Token"
-              sx={{ my: 1 }}
-            />
-
-            {useTokenAuth ? (
-              <TextField
-                fullWidth
-                label="Personal Access Token"
-                variant="outlined"
-                margin="normal"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                required
+          <MattermostDirectProvider
+            serverUrl={connectionDetails.serverUrl}
+            token={connectionDetails.token}
+            onAuthError={() => handleLogout()}
+          >
+            {interfaceType === "classic" ? (
+              <ClassicInterface
+                onLogout={handleLogout}
+                onInterfaceChange={handleInterfaceChange}
+                user={connectionDetails.user}
               />
             ) : (
-              <>
-                <TextField
-                  fullWidth
-                  label="Username or Email"
-                  variant="outlined"
-                  margin="normal"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Password"
-                  type="password"
-                  variant="outlined"
-                  margin="normal"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </>
+              <CompactInterface
+                onLogout={handleLogout}
+                onInterfaceChange={handleInterfaceChange}
+                user={connectionDetails.user}
+              />
             )}
-          </>
+          </MattermostDirectProvider>
         );
 
-      case MODES.PROXY:
+      case "proxy":
+        if (
+          !connectionDetails.proxyUrl ||
+          !connectionDetails.clientId ||
+          !connectionDetails.token
+        ) {
+          console.error("Missing proxyUrl, clientId or token for proxy mode");
+          handleLogout();
+          return null;
+        }
         return (
-          <>
-            <TextField
-              fullWidth
-              label="Proxy URL"
-              variant="outlined"
-              margin="normal"
-              value={proxyUrl}
-              onChange={(e) => setProxyUrl(e.target.value)}
-              placeholder="https://proxy.example.com"
-              required
-            />
-            <TextField
-              fullWidth
-              label="Client ID"
-              variant="outlined"
-              margin="normal"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              required
-            />
-            <TextField
-              fullWidth
-              label="User ID (optional)"
-              variant="outlined"
-              margin="normal"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-            />
-          </>
+          <MattermostProxyProvider
+            proxyUrl={connectionDetails.proxyUrl}
+            clientId={connectionDetails.clientId}
+            token={connectionDetails.token}
+            onAuthError={() => handleLogout()}
+          >
+            {interfaceType === "classic" ? (
+              <ClassicInterface
+                onLogout={handleLogout}
+                onInterfaceChange={handleInterfaceChange}
+                user={connectionDetails.user}
+              />
+            ) : (
+              <CompactInterface
+                onLogout={handleLogout}
+                onInterfaceChange={handleInterfaceChange}
+                user={connectionDetails.user}
+              />
+            )}
+          </MattermostProxyProvider>
         );
 
-      case MODES.MOCK:
-        return (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            Demo mode uses simulated data for testing without a real server
-            connection. No credentials required - just click "Login" to
-            continue.
-          </Alert>
-        );
-
+      case "demo":
       default:
-        return null;
+        // For demo mode, we use mock data and a regular MattermostProvider
+        return (
+          <MattermostProvider onAuthError={() => handleLogout()}>
+            {interfaceType === "classic" ? (
+              <ClassicInterface
+                onLogout={handleLogout}
+                onInterfaceChange={handleInterfaceChange}
+                user={DemoMockData.currentUser}
+                useMockData={true}
+              />
+            ) : (
+              <CompactInterface
+                onLogout={handleLogout}
+                onInterfaceChange={handleInterfaceChange}
+                user={DemoMockData.currentUser}
+                useMockData={true}
+              />
+            )}
+          </MattermostProvider>
+        );
     }
   };
 
-  return (
-    <Container maxWidth="xs">
-      <Paper elevation={3} sx={{ p: 3, mt: 8 }}>
-        <Typography variant="h5" align="center" gutterBottom>
-          {getTitle()}
-        </Typography>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error.message}
-          </Alert>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Connection Mode</InputLabel>
-            <Select
-              value={connectionMode}
-              label="Connection Mode"
-              onChange={(e) => setConnectionMode(e.target.value)}
-            >
-              <MenuItem value={MODES.DIRECT}>Direct Connection</MenuItem>
-              <MenuItem value={MODES.PROXY}>Proxy Connection</MenuItem>
-              <MenuItem value={MODES.MOCK}>Demo Mode</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Divider sx={{ my: 2 }} />
-
-          {renderModeSpecificFields()}
-
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            color="primary"
-            disabled={isAuthenticating}
-            sx={{ mt: 3, mb: 2 }}
-          >
-            {isAuthenticating ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              "Login"
-            )}
-          </Button>
-        </form>
-      </Paper>
-    </Container>
-  );
-};
-
-// The main application container - shown when authenticated
-const AuthenticatedApp: React.FC = () => {
-  const { logout } = useAuth();
-  const { isConnected } = useConnection();
-  const { mode } = useMattermost();
-
-  // Wait for connection to be established
-  if (!isConnected) {
+  // If loading, show a loading indicator
+  if (loading) {
     return (
-      <Container maxWidth="sm">
-        <Paper sx={{ p: 3, mt: 8, textAlign: "center" }}>
-          <CircularProgress sx={{ mb: 2 }} />
-          <Typography>Connecting to Mattermost server...</Typography>
-        </Paper>
-      </Container>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: "background.default",
+          }}
+        >
+          <CircularProgress size={60} thickness={4} />
+        </Box>
+      </ThemeProvider>
     );
   }
 
-  return <ClassicInterface onLogout={logout} />;
-};
-
-// Content switcher based on authentication state
-const MattermostContent: React.FC = () => {
-  const { isAuthenticated } = useAuth();
-
-  return isAuthenticated ? <AuthenticatedApp /> : <AuthenticationUI />;
-};
-
-// Main application component
-const App: React.FC = () => {
   return (
-    <MattermostThemeProvider>
-      <MattermostProvider
-        // Default empty configuration - will be updated by AuthenticationUI
-        enableWebsocket={true}
-        refreshInterval={300000}
-        useLocalStorage={true}
-      >
-        <MattermostContent />
-      </MattermostProvider>
-    </MattermostThemeProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Container maxWidth={false} disableGutters sx={{ minHeight: "100vh" }}>
+        {renderProvider()}
+        <Snackbar
+          open={!!error}
+          autoHideDuration={6000}
+          onClose={handleErrorClose}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            onClose={handleErrorClose}
+            severity="error"
+            sx={{ width: "100%" }}
+          >
+            {error}
+          </Alert>
+        </Snackbar>
+      </Container>
+    </ThemeProvider>
   );
-};
+}
 
 export default App;

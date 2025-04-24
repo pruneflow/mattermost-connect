@@ -2,10 +2,9 @@
 /**
  * Component for uploading files
  */
-import React, { useState, useCallback } from "react";
+import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
-import FileUploadUI from "../../internal/components/messages/FileUploadUI";
-import { useMessages } from "../../hooks/useMessages";
+import FileUploadContainer from "../../internal/containers/messages/FileUploadContainer";
 
 export interface FileUploadProps {
   /** Channel ID to upload files to */
@@ -65,89 +64,8 @@ export interface FileUploadProps {
  * />
  * ```
  */
-const FileUpload: React.FC<FileUploadProps> = ({
-  channelId,
-  maxFiles = 10,
-  maxSize = 50 * 1024 * 1024, // 50MB
-  accept = "*",
-  onFilesSelected,
-  onUploadStart,
-  onUploadComplete,
-  onUploadError,
-  className,
-  sx,
-  id,
-}) => {
-  // Get upload function from messages hook
-  const { uploadFiles, isUploading } = useMessages(channelId);
-
-  // State for tracking uploading state
-  const [isUploadingState, setIsUploadingState] = useState(false);
-
-  // Handle file selection
-  const handleFilesSelected = useCallback(
-    (files: File[]) => {
-      if (onFilesSelected) {
-        onFilesSelected(files);
-      }
-    },
-    [onFilesSelected],
-  );
-
-  // Handle upload start
-  const handleUploadStart = useCallback(() => {
-    setIsUploadingState(true);
-
-    if (onUploadStart) {
-      onUploadStart();
-    }
-  }, [onUploadStart]);
-
-  // Handle file upload
-  const handleUpload = useCallback(
-    async (files: File[]) => {
-      if (!files.length) return;
-
-      setIsUploadingState(true);
-
-      try {
-        if (onUploadStart) {
-          onUploadStart();
-        }
-
-        const fileIds = await uploadFiles(files);
-
-        if (onUploadComplete) {
-          onUploadComplete(fileIds);
-        }
-      } catch (error) {
-        console.error("Error uploading files:", error);
-
-        if (onUploadError) {
-          onUploadError(error as Error);
-        }
-      } finally {
-        setIsUploadingState(false);
-      }
-    },
-    [uploadFiles, onUploadStart, onUploadComplete, onUploadError],
-  );
-
-  return (
-    <FileUploadUI
-      maxFiles={maxFiles}
-      maxSize={maxSize}
-      accept={accept}
-      isLoading={isUploadingState || isUploading}
-      onFilesSelected={handleFilesSelected}
-      onUploadStart={handleUploadStart}
-      onUploadComplete={onUploadComplete}
-      onUploadError={onUploadError}
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
+const FileUpload: React.FC<FileUploadProps> = (props) => {
+  return <FileUploadContainer {...props} />;
 };
 
 export default FileUpload;

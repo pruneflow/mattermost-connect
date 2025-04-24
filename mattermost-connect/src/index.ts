@@ -65,3 +65,6 @@ export { queryClient } from "./core/api/queryClient";
 
 // Export React Query helpers for custom queries
 export { QUERY_KEYS, invalidateQueries } from "./core/api/queryClient";
+
+// Export all components
+export * from "./components"; // Assurez-vous que cette ligne existe

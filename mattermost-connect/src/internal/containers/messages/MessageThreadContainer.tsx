@@ -9,7 +9,7 @@ import { BaseComponentProps } from "../../types/componentTypes";
 import MessageItemUI from "../../components/messages/MessageItemUI";
 import MessageInputUI from "../../components/messages/MessageInputUI";
 import { Message } from "../../../index";
-import { useUserStore } from "../../../core/store/userStore";
+import { getUserStatus, useUserStore } from "../../../core/store/userStore";
 import { useAuthStore } from "../../../core/store/authStore";
 import { useTypingIndicator } from "../../../hooks/useWebSocket";
 
@@ -46,7 +46,6 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = ({
   maxFileSize = 50 * 1024 * 1024, // 50MB
   emojiPickerComponent,
   onReplySent,
-  onClose,
   className,
   sx,
   id,
@@ -54,11 +53,7 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = ({
   // Get thread data and functions from hook
   const {
     threadMessages,
-    isLoading,
-    isReplying,
     isEditing,
-    error,
-    refreshThreadMessages,
     replyToThread,
     editThreadMessage,
     deleteThreadMessage,
@@ -66,7 +61,7 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = ({
   } = useThread(rootMessageId, channelId);
 
   // Get user store for display names and status
-  const { getUserById, getUserDisplayName, getUserStatus } = useUserStore();
+  const { getUserById, getUserDisplayName } = useUserStore();
 
   // Get current user
   const { currentUser } = useAuthStore();
@@ -228,7 +223,7 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = ({
 
   // Render edit form
   const renderEditForm = useCallback(
-    (message: Message) => {
+    (_message: Message) => {
       return (
         <MessageInputUI
           initialValue={editFormMessage}

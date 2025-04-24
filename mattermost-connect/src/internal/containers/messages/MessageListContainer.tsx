@@ -13,7 +13,7 @@ import { BaseComponentProps } from "../../types/componentTypes";
 import MessageListUI from "../../components/messages/MessageListUI";
 import MessageInputUI from "../../components/messages/MessageInputUI";
 import { Message } from "../../../index";
-import { useUserStore } from "../../../core/store/userStore";
+import { getUserStatus, useUserStore } from "../../../core/store/userStore";
 import { useMessageStore } from "../../../core/store/messageStore";
 import { useAuthStore } from "../../../core/store/authStore";
 
@@ -63,7 +63,6 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     replyToMessage,
     editingMessageId,
     isLoading,
-    isSending,
     isEditing,
     error,
     refreshMessages,
@@ -73,13 +72,12 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     pinMessage,
     unpinMessage,
     uploadFiles,
-    setHighlightedMessage,
     setReplyToMessage,
     setEditingMessage,
   } = useMessages(channelId);
 
   // Get user store for display names and status
-  const { getUserById, getUserDisplayName, getUserStatus } = useUserStore();
+  const { getUserById, getUserDisplayName } = useUserStore();
 
   // Get current user
   const { currentUser } = useAuthStore();
@@ -88,9 +86,6 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
   const typingUsers = useMessageStore(
     (state) => state.typingUsers[channelId] || [],
   );
-
-  // State for uploaded files
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   // State for whether message is being sent
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -138,7 +133,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
 
   // Map pinned message IDs to a set for easy lookup
   const pinnedMessageIdsSet = React.useMemo(() => {
-    return new Set(pinnedMessages.map((m) => m.id));
+    return new Set<string>(pinnedMessages.map((m: { id: any }) => m.id));
   }, [pinnedMessages]);
 
   // Build user display names map
@@ -267,9 +262,6 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
         // Send the message
         const sentMessage = await sendMessage(text, fileIds);
 
-        // Clear files
-        setUploadedFiles([]);
-
         if (onMessageSent) {
           onMessageSent(sentMessage);
         }
@@ -281,11 +273,6 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     },
     [sendMessage, uploadFiles, isSendingMessage, onMessageSent],
   );
-
-  // Handle file upload
-  const handleFileUpload = useCallback((files: File[]) => {
-    setUploadedFiles(files);
-  }, []);
 
   // Handle edit save
   const handleEditSave = useCallback(
@@ -325,7 +312,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
 
   // Render edit form
   const renderEditForm = useCallback(
-    (message: Message) => {
+    (_message: Message) => {
       return (
         <MessageInputUI
           initialValue={editFormMessage}

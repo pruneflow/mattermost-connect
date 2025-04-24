@@ -38,7 +38,7 @@ import {
 } from "@mui/icons-material";
 import { Channel } from "../../../index";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { UserAvatar } from "../common";
+import UserAvatar from "../../../components/users/UserAvatar";
 
 export interface ChannelDetailUIProps extends BaseComponentProps {
   /** Channel data */
@@ -167,7 +167,7 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
         <Divider sx={{ mb: 2 }} />
 
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Channel Type
             </Typography>
@@ -179,7 +179,7 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
             />
           </Grid>
 
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Channel Name
             </Typography>
@@ -194,7 +194,7 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
           </Grid>
 
           {(channel.purpose || channel.header) && (
-            <Grid item xs={12}>
+            <Grid size={{ xs: 12 }}>
               {channel.purpose && (
                 <>
                   <Typography
@@ -227,14 +227,14 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
             </Grid>
           )}
 
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Created
             </Typography>
             <Typography variant="body2">{getCreatedDate()}</Typography>
           </Grid>
 
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Messages
             </Typography>
@@ -242,7 +242,7 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
           </Grid>
 
           {memberCount > 0 && (
-            <Grid item xs={12}>
+            <Grid size={{ xs: 12 }}>
               <Box
                 sx={{
                   display: "flex",

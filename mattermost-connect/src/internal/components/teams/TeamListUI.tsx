@@ -9,16 +9,15 @@ import {
   Grid,
   Tabs,
   Paper,
-  Typography,
   Button,
-  Divider,
   CircularProgress,
+  Tab,
 } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../index";
 import { ListComponentProps } from "../../types/componentTypes";
 import TeamItemUI from "./TeamItemUI";
-import { EmptyState, SearchInput } from "../common";
+import { EmptyState, IconButton, SearchInput, Tooltip } from "../common";
 
 export interface TeamListUIProps extends ListComponentProps<Team> {
   /** Unread counts by team ID */
@@ -218,7 +217,7 @@ const TeamListUI: React.FC<TeamListUIProps> = ({
 
           <Grid container spacing={2}>
             {items.map((team) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={team.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={team.id}>
                 <TeamItemUI
                   item={team}
                   isActive={team.id === activeId}
@@ -232,7 +231,7 @@ const TeamListUI: React.FC<TeamListUIProps> = ({
             ))}
 
             {allowCreate && (
-              <Grid item xs={12} sm={6} md={4} lg={3}>
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
                 <Box
                   sx={{
                     height: "100%",

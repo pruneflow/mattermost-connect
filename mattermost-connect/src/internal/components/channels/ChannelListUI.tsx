@@ -9,16 +9,12 @@ import {
   Grid,
   Tabs,
   Paper,
-  Typography,
   Button,
-  Divider,
   CircularProgress,
-  IconButton,
-  Tooltip,
   Tab,
 } from "@mui/material";
-import { Add as AddIcon, FilterList as FilterIcon } from "@mui/icons-material";
-import { Channel, ChannelGroupType } from "../../../index";
+import { Add as AddIcon } from "@mui/icons-material";
+import { Channel } from "../../../index";
 import { ListComponentProps } from "../../types/componentTypes";
 import ChannelItemUI from "./ChannelItemUI";
 import { EmptyState, SearchInput, SectionHeader } from "../common";
@@ -164,7 +160,7 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
   if (!items || items.length === 0) {
     return (
       <EmptyState
-        title={emptyMessage}
+        title={emptyMessage || "No items found"}
         description="Join or create a channel to get started"
         actionText={allowCreate ? "Create Channel" : undefined}
         onAction={allowCreate ? handleCreateChannel : undefined}
@@ -374,11 +370,7 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
                     <Grid container spacing={2}>
                       {channels.map((channel) => (
                         <Grid
-                          item
-                          xs={12}
-                          sm={6}
-                          md={4}
-                          lg={3}
+                          size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
                           key={channel.id}
                         >
                           <ChannelItemUI
@@ -407,7 +399,7 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
           ) : (
             <Grid container spacing={2}>
               {items.map((channel) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={channel.id}>
+                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={channel.id}>
                   <ChannelItemUI
                     item={channel}
                     isActive={channel.id === activeId}

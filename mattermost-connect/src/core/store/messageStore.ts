@@ -59,7 +59,8 @@ export interface Message {
  * Messages state
  */
 export interface MessageState {
-  // State
+  /** Typing users by channel ID */
+  typingUsers: Record<string, string[]>;
   /** Messages by channel ID */
   messagesByChannel: Record<string, Message[]>;
   /** Thread messages by root message ID */

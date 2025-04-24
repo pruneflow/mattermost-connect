@@ -5,9 +5,9 @@
 import React from "react";
 import { Avatar, Badge, Box } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { UserStatus } from "../../../index";
+import { stringToColor, UserStatus } from "../../../index";
 import UserStatusIndicator from "./UserStatusIndicatorUI";
-import { getInitials, stringToColor } from "../../utils/helpers";
+import { getInitials } from "../../utils/helper";
 
 export interface UserAvatarUIProps extends BaseComponentProps {
   /** User's display name */
