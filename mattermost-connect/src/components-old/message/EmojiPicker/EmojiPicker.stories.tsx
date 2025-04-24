@@ -1,7 +1,7 @@
 // src/components/message/EmojiPicker/EmojiPicker.stories.tsx
 import type { Decorator, Meta, StoryObj } from "@storybook/react";
 import React, { useState } from "react";
-import EmojiPicker from "../../../components/message/EmojiPicker/EmojiPicker";
+import EmojiPicker from "../../.././components-old/message/EmojiPicker/EmojiPicker";
 import { Box, Typography, Paper } from "@mui/material";
 import { MattermostProvider } from "../../../context";
 import { EMOJI_CATEGORIES, GIF_CATEGORIES } from "../../../utils";
