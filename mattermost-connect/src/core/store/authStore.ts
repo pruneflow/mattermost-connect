@@ -23,7 +23,7 @@ export interface AuthState {
   /** Error that occurred during authentication */
   error: Error | null;
   /** Server URL (for direct mode) */
-  serverUrl?: string;
+  serverUrl?: string | null;
 
   // Actions
   /** Initializes authentication from stored token */
