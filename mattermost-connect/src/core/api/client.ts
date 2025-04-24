@@ -1,59 +1,97 @@
 // src/core/api/client.ts
 /**
- * Client API centralisé pour toutes les communications avec le serveur Mattermost
- * Supporte les modes direct et proxy avec une interface unifiée
+ * API client for Mattermost communication
+ * Supports both direct and proxy modes with centralized configuration
  */
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+export type ApiMode = "direct" | "proxy";
 
-interface RequestOptions {
+/**
+ * Options for API requests
+ */
+export interface RequestOptions {
+  /** HTTP method to use */
   method?: HttpMethod;
+  /** Request body */
   body?: any;
+  /** Custom headers */
   headers?: Record<string, string>;
+  /** Whether authentication is required (default: true) */
   requireAuth?: boolean;
+  /** Request timeout in milliseconds */
   timeout?: number;
 }
 
-interface ApiResponse<T = any> {
+/**
+ * Structured API response
+ */
+export interface ApiResponse<T = any> {
+  /** Response data */
   data: T;
+  /** HTTP status code */
   status: number;
+  /** HTTP status text */
   statusText: string;
+  /** Response headers */
   headers: Record<string, string>;
 }
 
-type ApiMode = "direct" | "proxy" | "custom";
-
-interface ApiClientConfig {
-  // Mode direct
-  serverUrl?: string;
-  token?: string;
-
-  // Mode proxy
-  proxyUrl?: string;
-  clientId?: string;
-  userId?: string;
-
-  // Général
-  mode?: ApiMode;
-  tokenProvider?: () => string | null | undefined;
-  onError?: (error: any) => void;
-  defaultHeaders?: Record<string, string>;
+/**
+ * API Error type
+ */
+export interface ApiError extends Error {
+  status?: number;
+  data?: any;
+  request?: {
+    url: string;
+    method: string;
+  };
 }
 
-export class ApiClient {
-  private baseUrl: string;
-  private defaultHeaders: Record<string, string>;
-  private tokenProvider?: () => string | null | undefined;
+/**
+ * Configuration options for the API client
+ */
+export interface ApiClientConfig {
+  /** Mode of operation (direct or proxy) */
+  mode?: ApiMode;
+  /** Mattermost server URL (for direct mode) */
+  serverUrl?: string;
+  /** Authentication token */
+  token?: string;
+  /** Proxy URL (for proxy mode) */
+  proxyUrl?: string;
+  /** Client ID for proxy mode */
+  clientId?: string;
+  /** User ID for proxy mode */
+  userId?: string;
+  /** Default headers to include with all requests */
+  defaultHeaders?: Record<string, string>;
+  /** Callback for error handling */
+  onError?: (error: any) => void;
+}
+
+/**
+ * API client for making requests to Mattermost API
+ * Supports both direct communication with Mattermost server and
+ * communication via a proxy service
+ */
+class ApiClient {
+  private baseUrl: string = "";
+  private defaultHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   private token?: string;
-  private mode: ApiMode;
+  private mode: ApiMode = "direct";
   private onError?: (error: any) => void;
   private userId?: string;
   private clientId?: string;
 
   /**
-   * Crée une nouvelle instance du client API
+   * Configures the API client with the provided options
+   * @param config Configuration options
    */
-  constructor(config: ApiClientConfig) {
+  public configure(config: ApiClientConfig): void {
     this.mode = config.mode || "direct";
 
     if (this.mode === "direct" && !config.serverUrl) {
@@ -64,32 +102,29 @@ export class ApiClient {
       throw new Error("proxyUrl and clientId are required for proxy mode");
     }
 
-    // Configurer l'URL de base selon le mode
+    // Configure base URL based on mode
     this.baseUrl =
       this.mode === "direct"
         ? `${config.serverUrl}/api/v4`
         : config.proxyUrl || "";
 
-    // Normaliser l'URL (supprimer le slash final si présent)
+    // Normalize base URL (remove trailing slash)
     this.baseUrl = this.baseUrl.endsWith("/")
       ? this.baseUrl.slice(0, -1)
       : this.baseUrl;
 
-    // Configurer le fournisseur de token
-    if (config.tokenProvider) {
-      this.tokenProvider = config.tokenProvider;
-    } else if (config.token) {
+    // Configure token if provided
+    if (config.token) {
       this.token = config.token;
-      this.tokenProvider = () => this.token;
     }
 
-    // Configurer les en-têtes par défaut
+    // Configure default headers
     this.defaultHeaders = {
       "Content-Type": "application/json",
       ...config.defaultHeaders,
     };
 
-    // En mode proxy, ajouter les en-têtes spécifiques
+    // Configure proxy-specific headers
     if (this.mode === "proxy") {
       this.clientId = config.clientId;
       this.userId = config.userId;
@@ -107,7 +142,47 @@ export class ApiClient {
   }
 
   /**
-   * Construire l'URL complète pour une requête
+   * Sets the authentication token
+   * @param token Authentication token
+   */
+  public setToken(token: string | null): void {
+    this.token = token || undefined;
+  }
+
+  /**
+   * Sets the user ID (for proxy mode)
+   * @param userId User ID
+   */
+  public setUserId(userId: string | null): void {
+    this.userId = userId || undefined;
+
+    if (this.userId && this.mode === "proxy") {
+      this.defaultHeaders["X-Mattermost-User-ID"] = this.userId;
+    } else {
+      delete this.defaultHeaders["X-Mattermost-User-ID"];
+    }
+  }
+
+  /**
+   * Gets the current base URL
+   * @returns The base URL
+   */
+  public getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * Gets the current API mode
+   * @returns The API mode
+   */
+  public getMode(): ApiMode {
+    return this.mode;
+  }
+
+  /**
+   * Constructs the full URL for a request
+   * @param path API endpoint path
+   * @returns Full URL
    */
   private getFullUrl(path: string): string {
     const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
@@ -115,28 +190,74 @@ export class ApiClient {
   }
 
   /**
-   * Ajouter l'en-tête d'authentification si nécessaire
+   * Adds authentication header if necessary
+   * @param headers Current headers
+   * @returns Headers with authentication if needed
    */
   private addAuthHeader(
     headers: Record<string, string>,
   ): Record<string, string> {
-    if (!this.tokenProvider) {
-      return headers;
-    }
-
-    const token = this.tokenProvider();
-    if (!token) {
+    if (!this.token) {
       return headers;
     }
 
     return {
       ...headers,
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${this.token}`,
     };
   }
 
   /**
-   * Méthode principale pour les requêtes HTTP
+   * Extracts headers from a response into a plain object
+   * @param response Fetch response
+   * @returns Headers as a plain object
+   */
+  private extractHeaders(response: Response): Record<string, string> {
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    return headers;
+  }
+
+  /**
+   * Handles error responses
+   * @param response Fetch response
+   * @returns Processed API error
+   */
+  private async handleErrorResponse(
+    response: Response,
+    url: string,
+    method: string,
+  ): Promise<ApiError> {
+    let errorData: any = {};
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      // Continue with default error if parsing fails
+    }
+
+    const errorMessage =
+      errorData.message ||
+      `HTTP Error: ${response.status} ${response.statusText}`;
+    const error = new Error(errorMessage) as ApiError;
+
+    error.status = response.status;
+    error.data = errorData;
+    error.request = { url, method };
+
+    if (this.onError) {
+      this.onError(error);
+    }
+
+    return error;
+  }
+
+  /**
+   * Makes an HTTP request to the API
+   * @param path API endpoint path
+   * @param options Request options
+   * @returns Promise resolving to an API response
    */
   public async request<T = any>(
     path: string,
@@ -147,23 +268,23 @@ export class ApiClient {
       body,
       headers = {},
       requireAuth = true,
-      timeout = 30000, // Timeout par défaut: 30 secondes
+      timeout = 30000, // 30 seconds default timeout
     } = options;
 
     const fullUrl = this.getFullUrl(path);
 
-    // Combiner les en-têtes
+    // Combine headers
     let requestHeaders = {
       ...this.defaultHeaders,
       ...headers,
     };
 
-    // Ajouter l'en-tête d'authentification si nécessaire
+    // Add auth header if required
     if (requireAuth) {
       requestHeaders = this.addAuthHeader(requestHeaders);
     }
 
-    // Préparer les options de la requête
+    // Prepare request options
     const requestOptions: RequestInit = {
       method,
       headers: requestHeaders,
@@ -175,7 +296,7 @@ export class ApiClient {
             : undefined,
     };
 
-    // Gérer le timeout
+    // Handle timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     requestOptions.signal = controller.signal;
@@ -183,42 +304,16 @@ export class ApiClient {
     try {
       const response = await fetch(fullUrl, requestOptions);
 
-      // Construire un objet Map pour les en-têtes
-      const responseHeaders: Record<string, string> = {};
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
-
-      // Gérer les erreurs HTTP
+      // Handle HTTP errors
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error("Authentication failure: Session invalid or expired");
         }
 
-        let errorData: any = {};
-        try {
-          errorData = await response.json();
-        } catch (e) {
-          // Si le parsing échoue, continuer avec l'erreur par défaut
-        }
-
-        const errorMessage =
-          errorData.message ||
-          `HTTP Error: ${response.status} ${response.statusText}`;
-        const error = new Error(errorMessage);
-        Object.assign(error, {
-          status: response.status,
-          data: errorData,
-        });
-
-        if (this.onError) {
-          this.onError(error);
-        }
-
-        throw error;
+        throw await this.handleErrorResponse(response, fullUrl, method);
       }
 
-      // Parser les données de la réponse
+      // Parse response data
       let data: any;
       if (response.status === 204) {
         // No content
@@ -236,7 +331,7 @@ export class ApiClient {
         data,
         status: response.status,
         statusText: response.statusText,
-        headers: responseHeaders,
+        headers: this.extractHeaders(response),
       };
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -257,7 +352,10 @@ export class ApiClient {
   }
 
   /**
-   * Effectue une requête GET
+   * Makes a GET request
+   * @param path API endpoint path
+   * @param options Request options
+   * @returns Promise resolving to an API response
    */
   public async get<T = any>(
     path: string,
@@ -267,7 +365,11 @@ export class ApiClient {
   }
 
   /**
-   * Effectue une requête POST
+   * Makes a POST request
+   * @param path API endpoint path
+   * @param body Request body
+   * @param options Request options
+   * @returns Promise resolving to an API response
    */
   public async post<T = any>(
     path: string,
@@ -278,7 +380,11 @@ export class ApiClient {
   }
 
   /**
-   * Effectue une requête PUT
+   * Makes a PUT request
+   * @param path API endpoint path
+   * @param body Request body
+   * @param options Request options
+   * @returns Promise resolving to an API response
    */
   public async put<T = any>(
     path: string,
@@ -289,7 +395,10 @@ export class ApiClient {
   }
 
   /**
-   * Effectue une requête DELETE
+   * Makes a DELETE request
+   * @param path API endpoint path
+   * @param options Request options
+   * @returns Promise resolving to an API response
    */
   public async delete<T = any>(
     path: string,
@@ -299,7 +408,10 @@ export class ApiClient {
   }
 
   /**
-   * Méthode spéciale pour uploader des fichiers
+   * Uploads files
+   * @param formData Form data containing files
+   * @param path API endpoint path
+   * @returns Promise resolving to an API response
    */
   public async uploadFiles(
     formData: FormData,
@@ -309,16 +421,15 @@ export class ApiClient {
 
     let headers: Record<string, string> = {};
 
-    // En mode direct, ajouter l'en-tête d'authentification
+    // Direct mode: add auth header
     if (this.mode === "direct") {
-      const token = this.tokenProvider ? this.tokenProvider() : null;
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
+      if (this.token) {
+        headers["Authorization"] = `Bearer ${this.token}`;
       } else {
         throw new Error("Authentication token required for file upload");
       }
     }
-    // En mode proxy, ajouter les en-têtes spécifiques
+    // Proxy mode: add proxy headers
     else if (this.mode === "proxy") {
       if (this.clientId) {
         headers["X-Mattermost-Client-ID"] = this.clientId;
@@ -336,25 +447,16 @@ export class ApiClient {
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-          error.message || `File upload error: ${response.status}`,
-        );
+        throw await this.handleErrorResponse(response, fullUrl, "POST");
       }
 
       const data = await response.json();
-
-      // Construire un objet Map pour les en-têtes
-      const responseHeaders: Record<string, string> = {};
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
 
       return {
         data,
         status: response.status,
         statusText: response.statusText,
-        headers: responseHeaders,
+        headers: this.extractHeaders(response),
       };
     } catch (error) {
       if (this.onError) {
@@ -363,45 +465,9 @@ export class ApiClient {
       throw error;
     }
   }
-
-  /**
-   * Met à jour le token d'authentification
-   */
-  public setToken(token: string | null): void {
-    this.token = token || undefined;
-  }
-
-  /**
-   * Met à jour l'ID utilisateur (pour le mode proxy)
-   */
-  public setUserId(userId: string | null): void {
-    this.userId = userId || undefined;
-
-    if (this.userId && this.mode === "proxy") {
-      this.defaultHeaders["X-Mattermost-User-ID"] = this.userId;
-    } else {
-      delete this.defaultHeaders["X-Mattermost-User-ID"];
-    }
-  }
-
-  /**
-   * Récupère l'URL de base du serveur/proxy
-   */
-  public getBaseUrl(): string {
-    return this.baseUrl;
-  }
-
-  /**
-   * Récupère le mode du client API
-   */
-  public getMode(): ApiMode {
-    return this.mode;
-  }
 }
 
 /**
- * Crée un client API adapté à la configuration fournie
+ * Singleton instance of the API client
  */
-export function createApiClient(config: ApiClientConfig): ApiClient {
-  return new ApiClient(config);
-}
+export const apiClient = new ApiClient();

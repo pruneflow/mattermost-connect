@@ -1,15 +1,60 @@
-// src/core/services/ws.service.ts
+// src/core/services/wsService.ts
 /**
- * Service WebSocket pour la gestion des connexions en temps réel
- * Gère la connexion, la déconnexion et les messages WebSocket
+ * WebSocket service for real-time communication with Mattermost
  */
 
-import { Store } from "../store/store";
+/**
+ * Type for WebSocket message handlers
+ */
+export type MessageHandler = (data: any) => void;
 
-type MessageHandler = (data: any) => void;
+/**
+ * WebSocket connection options
+ */
+export interface WebSocketOptions {
+  /** Callback invoked when connection opens */
+  onOpen?: () => void;
+  /** Callback invoked when connection closes */
+  onClose?: (event: CloseEvent) => void;
+  /** Callback invoked when an error occurs */
+  onError?: (event: Event) => void;
+  /** Interval in ms for sending ping messages */
+  pingInterval?: number;
+}
 
-export class WebSocketService {
-  private store: Store<any>;
+/**
+ * Standard Mattermost WebSocket event types
+ */
+export enum WebSocketEventType {
+  POSTED = "posted",
+  POST_EDITED = "post_edited",
+  POST_DELETED = "post_deleted",
+  CHANNEL_VIEWED = "channel_viewed",
+  CHANNEL_CREATED = "channel_created",
+  CHANNEL_UPDATED = "channel_updated",
+  CHANNEL_DELETED = "channel_deleted",
+  CHANNEL_MEMBER_UPDATED = "channel_member_updated",
+  USER_ADDED = "user_added",
+  USER_REMOVED = "user_removed",
+  USER_UPDATED = "user_updated",
+  USER_ROLE_UPDATED = "user_role_updated",
+  STATUS_CHANGE = "status_change",
+  TYPING = "typing",
+  ADDED_TO_TEAM = "added_to_team",
+  LEAVE_TEAM = "leave_team",
+  UPDATE_TEAM = "update_team",
+  DELETE_TEAM = "delete_team",
+  REACTION_ADDED = "reaction_added",
+  REACTION_REMOVED = "reaction_removed",
+  PREFERENCES_CHANGED = "preferences_changed",
+  ALL = "*",
+}
+
+/**
+ * WebSocket service for real-time communication with Mattermost
+ * Manages connection, authentication, reconnection, and message handling
+ */
+class WebSocketService {
   private socket: WebSocket | null = null;
   private isConnecting: boolean = false;
   private isConnected: boolean = false;
@@ -19,35 +64,24 @@ export class WebSocketService {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private sequence: number = 1;
-
-  constructor(store: Store<any>) {
-    this.store = store;
-  }
+  private handlerCount: number = 0;
 
   /**
-   * Connecte au serveur WebSocket
+   * Connects to the WebSocket server
+   * @param url WebSocket server URL
+   * @param token Authentication token
+   * @param options Connection options
    */
   public async connect(
     url: string,
     token: string,
-    options: {
-      onOpen?: () => void;
-      onClose?: (event: CloseEvent) => void;
-      onError?: (event: Event) => void;
-      pingInterval?: number;
-    } = {},
+    options: WebSocketOptions = {},
   ): Promise<void> {
     if (this.isConnected || this.isConnecting) {
       return;
     }
 
     this.isConnecting = true;
-
-    // Dispatch de l'action de connexion en cours
-    this.store.dispatch({
-      type: "WS_CONNECTING",
-      payload: { url },
-    });
 
     try {
       this.socket = new WebSocket(url);
@@ -57,16 +91,10 @@ export class WebSocketService {
         this.isConnecting = false;
         this.reconnectAttempts = 0;
 
-        // Dispatch de l'action de connexion établie
-        this.store.dispatch({
-          type: "WS_CONNECTED",
-          payload: { url, timestamp: Date.now() },
-        });
-
-        // Envoyer le challenge d'authentification
+        // Send authentication challenge
         this.sendAuthChallenge(token);
 
-        // Configurer le ping
+        // Set up ping interval
         if (options.pingInterval) {
           this.startPingInterval(options.pingInterval);
         }
@@ -80,16 +108,10 @@ export class WebSocketService {
         this.isConnected = false;
         this.isConnecting = false;
 
-        // Nettoyer les ressources
+        // Clean up resources
         this.cleanup();
 
-        // Dispatch de l'action de déconnexion
-        this.store.dispatch({
-          type: "WS_DISCONNECTED",
-          payload: { code: event.code, reason: event.reason },
-        });
-
-        // Tenter une reconnexion si ce n'est pas une fermeture intentionnelle
+        // Try to reconnect unless connection was intentionally closed
         if (
           event.code !== 1000 &&
           this.reconnectAttempts < this.maxReconnectAttempts
@@ -103,12 +125,6 @@ export class WebSocketService {
       };
 
       this.socket.onerror = (event) => {
-        // Dispatch de l'action d'erreur
-        this.store.dispatch({
-          type: "WS_ERROR",
-          payload: { error: event },
-        });
-
         if (options.onError) {
           options.onError(event);
         }
@@ -118,20 +134,14 @@ export class WebSocketService {
         try {
           const message = JSON.parse(event.data);
 
-          // Dispatch de l'action de message reçu
-          this.store.dispatch({
-            type: "WS_MESSAGE_RECEIVED",
-            payload: { message },
-          });
-
-          // Traiter les différents types de messages
+          // Process different types of messages
           const eventType = message.event || "unknown";
 
-          // Notifier les handlers enregistrés pour ce type d'événement
+          // Notify handlers registered for this event type
           this.notifyHandlers(eventType, message.data || message);
 
-          // Notifier les handlers génériques (pour tous les messages)
-          this.notifyHandlers("*", message);
+          // Notify generic handlers (for all messages)
+          this.notifyHandlers(WebSocketEventType.ALL, message);
         } catch (error) {
           console.error("Error processing WebSocket message:", error);
         }
@@ -139,21 +149,47 @@ export class WebSocketService {
     } catch (error) {
       this.isConnecting = false;
 
-      // Dispatch de l'action d'erreur de connexion
-      this.store.dispatch({
-        type: "WS_CONNECTION_ERROR",
-        payload: { error },
-      });
-
-      // Tenter une reconnexion
+      // Try to reconnect
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect(url, token, options);
       }
+
+      throw error;
     }
   }
 
   /**
-   * Envoie le challenge d'authentification au serveur
+   * Disconnects from the WebSocket server
+   * @param code Close code
+   * @param reason Reason for closing
+   */
+  public disconnect(
+    code: number = 1000,
+    reason: string = "User initiated",
+  ): void {
+    if (!this.socket) {
+      return;
+    }
+
+    // Clean up resources
+    this.cleanup();
+
+    // Close the connection
+    if (
+      this.socket.readyState === WebSocket.OPEN ||
+      this.socket.readyState === WebSocket.CONNECTING
+    ) {
+      this.socket.close(code, reason);
+    }
+
+    this.socket = null;
+    this.isConnected = false;
+    this.isConnecting = false;
+  }
+
+  /**
+   * Sends the authentication challenge to the server
+   * @param token Authentication token
    */
   private sendAuthChallenge(token: string): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -172,7 +208,8 @@ export class WebSocketService {
   }
 
   /**
-   * Démarre l'intervalle de ping
+   * Starts the ping interval to keep the connection alive
+   * @param interval Ping interval in milliseconds
    */
   private startPingInterval(interval: number = 30000): void {
     this.stopPingInterval();
@@ -189,7 +226,7 @@ export class WebSocketService {
   }
 
   /**
-   * Arrête l'intervalle de ping
+   * Stops the ping interval
    */
   private stopPingInterval(): void {
     if (this.pingInterval !== null) {
@@ -199,9 +236,16 @@ export class WebSocketService {
   }
 
   /**
-   * Planifie une tentative de reconnexion
+   * Schedules a reconnection attempt
+   * @param url WebSocket server URL
+   * @param token Authentication token
+   * @param options Connection options
    */
-  private scheduleReconnect(url: string, token: string, options: any): void {
+  private scheduleReconnect(
+    url: string,
+    token: string,
+    options: WebSocketOptions,
+  ): void {
     if (this.reconnectTimeout !== null) {
       clearTimeout(this.reconnectTimeout);
     }
@@ -209,52 +253,13 @@ export class WebSocketService {
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
 
-    // Dispatch de l'action de reconnexion programmée
-    this.store.dispatch({
-      type: "WS_RECONNECT_SCHEDULED",
-      payload: { delay, attempt: this.reconnectAttempts },
-    });
-
     this.reconnectTimeout = window.setTimeout(() => {
       this.connect(url, token, options);
     }, delay);
   }
 
   /**
-   * Déconnecte du serveur WebSocket
-   */
-  public disconnect(
-    code: number = 1000,
-    reason: string = "User initiated",
-  ): void {
-    if (!this.socket) {
-      return;
-    }
-
-    // Nettoyer les ressources
-    this.cleanup();
-
-    // Fermer la connexion
-    if (
-      this.socket.readyState === WebSocket.OPEN ||
-      this.socket.readyState === WebSocket.CONNECTING
-    ) {
-      this.socket.close(code, reason);
-    }
-
-    this.socket = null;
-    this.isConnected = false;
-    this.isConnecting = false;
-
-    // Dispatch de l'action de déconnexion
-    this.store.dispatch({
-      type: "WS_DISCONNECTED",
-      payload: { code, reason, intentional: true },
-    });
-  }
-
-  /**
-   * Nettoie les ressources
+   * Cleans up resources
    */
   private cleanup(): void {
     this.stopPingInterval();
@@ -266,7 +271,9 @@ export class WebSocketService {
   }
 
   /**
-   * Envoie un message au serveur WebSocket
+   * Sends a message to the server
+   * @param message Message to send
+   * @returns Whether the message was sent successfully
    */
   public send(message: any): boolean {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -274,7 +281,7 @@ export class WebSocketService {
     }
 
     try {
-      // Si message n'est pas une chaîne, le convertir en JSON
+      // Convert to JSON string if not already a string
       const data =
         typeof message === "string"
           ? message
@@ -292,7 +299,10 @@ export class WebSocketService {
   }
 
   /**
-   * Ajoute un handler pour un type d'événement
+   * Adds a handler for a specific event type
+   * @param eventType Event type to handle
+   * @param handler Handler function
+   * @returns Function to remove the handler
    */
   public addMessageHandler(
     eventType: string,
@@ -302,13 +312,22 @@ export class WebSocketService {
       this.messageHandlers.set(eventType, new Set());
     }
 
-    this.messageHandlers.get(eventType)!.add(handler);
+    const handlers = this.messageHandlers.get(eventType)!;
+    handlers.add(handler);
 
-    // Renvoie une fonction pour supprimer le handler
+    // Increment handler count
+    this.handlerCount++;
+
+    // Return a function to remove the handler
     return () => {
       const handlers = this.messageHandlers.get(eventType);
       if (handlers) {
         handlers.delete(handler);
+
+        // Decrement handler count
+        this.handlerCount--;
+
+        // Clean up the set if it's empty
         if (handlers.size === 0) {
           this.messageHandlers.delete(eventType);
         }
@@ -317,7 +336,9 @@ export class WebSocketService {
   }
 
   /**
-   * Notifie tous les handlers enregistrés pour un type d'événement
+   * Notifies all handlers registered for an event type
+   * @param eventType Event type
+   * @param data Event data
    */
   private notifyHandlers(eventType: string, data: any): void {
     const handlers = this.messageHandlers.get(eventType);
@@ -333,7 +354,8 @@ export class WebSocketService {
   }
 
   /**
-   * Vérifie si le WebSocket est connecté
+   * Checks if the WebSocket is connected
+   * @returns Whether the WebSocket is connected
    */
   public isSocketConnected(): boolean {
     return (
@@ -344,16 +366,32 @@ export class WebSocketService {
   }
 
   /**
-   * Récupère l'état actuel du WebSocket
+   * Gets the current state of the WebSocket
+   * @returns WebSocket ready state
    */
   public getState(): number {
     return this.socket ? this.socket.readyState : WebSocket.CLOSED;
   }
 
   /**
-   * Force une reconnexion
+   * Gets the number of registered handlers
+   * @returns Number of handlers
    */
-  public forceReconnect(url: string, token: string, options: any = {}): void {
+  public getHandlerCount(): number {
+    return this.handlerCount;
+  }
+
+  /**
+   * Forces a reconnection
+   * @param url WebSocket server URL
+   * @param token Authentication token
+   * @param options Connection options
+   */
+  public forceReconnect(
+    url: string,
+    token: string,
+    options: WebSocketOptions = {},
+  ): void {
     if (this.socket) {
       this.disconnect(1000, "Reconnection requested");
     }
@@ -362,3 +400,8 @@ export class WebSocketService {
     this.connect(url, token, options);
   }
 }
+
+/**
+ * Singleton instance of the WebSocket service
+ */
+export const wsService = new WebSocketService();

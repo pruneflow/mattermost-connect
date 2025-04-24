@@ -1,112 +1,108 @@
-// src/hooks/useAuth.ts
+// src/hooks/useAuth.tsx
 /**
- * Hook optimisé pour la gestion de l'authentification
+ * Hook for authentication functionality
  */
 import { useCallback } from "react";
-import { useStoreSelector } from "./useStoreSelector";
-import { useStoreDispatch } from "./useStoreDispatch";
-import { getServices } from "../core/services";
+import { useAuthStore } from "../core/store/authStore";
 import {
-  loginUser,
-  logoutUser,
-  initializeAuth,
-} from "../core/store/thunks/auth.thunks";
-import { selectAuthStateForHook } from "../core/store/selectors/auth.selectors";
-import { User } from "../core/types/users.types";
-import { LoginParams } from "../core/types/auth.types";
+  useCurrentUserQuery,
+  useLoginMutation,
+  useLogoutMutation,
+} from "../core/api/queries/authQueries";
+import { User } from "../core/services/authService";
 
 /**
- * Interface de retour pour le hook useAuth
+ * Login parameters
  */
-interface UseAuthReturnType {
-  /** Indique si l'utilisateur est authentifié */
-  isAuthenticated: boolean;
-
-  /** Indique si une authentification est en cours */
-  isAuthenticating: boolean;
-
-  /** Utilisateur connecté */
-  currentUser: User | null;
-
-  /** Erreur d'authentification le cas échéant */
-  error: Error | null;
-
-  /** Fonction pour se connecter */
-  login: (params: LoginParams) => Promise<any>;
-
-  /** Fonction pour se déconnecter */
-  logout: () => void;
-
-  /** Fonction pour initialiser l'authentification */
-  initialize: () => Promise<boolean>;
+export interface LoginParams {
+  /** Username or email */
+  username: string;
+  /** Password */
+  password: string;
+  /** Server URL (for direct mode) */
+  serverUrl?: string;
 }
 
 /**
- * Hook pour la gestion de l'authentification
- *
- * @returns Interface avec l'état d'authentification et les fonctions associées
- *
- * @example
- * ```tsx
- * function LoginForm() {
- *   const { login, isAuthenticating, error } = useAuth();
- *   const [username, setUsername] = useState('');
- *   const [password, setPassword] = useState('');
- *
- *   const handleSubmit = async (e: React.FormEvent) => {
- *     e.preventDefault();
- *     try {
- *       await login({ username, password });
- *     } catch (err) {
- *       // Gérer l'erreur
- *     }
- *   };
- *
- *   return (
- *     <form onSubmit={handleSubmit}>
- *
- *       {error && <div className="error">{error.message}</div>}
- *       <button type="submit" disabled={isAuthenticating}>
- *         {isAuthenticating ? 'Connexion...' : 'Se connecter'}
- *       </button>
- *     </form>
- *   );
- * }
- *
+ * Hook that provides authentication functionality
+ * @returns Authentication state and actions
  */
-export function useAuth(): UseAuthReturnType {
-  const dispatch = useStoreDispatch();
-  const { authService } = getServices();
+export function useAuth() {
+  // Get state from store
+  const { isAuthenticated, isAuthenticating, currentUser, error, serverUrl } =
+    useAuthStore();
 
-  // Sélectionner les données d'auth du store avec un sélecteur optimisé
-  const { isAuthenticated, isAuthenticating, currentUser, error } =
-    useStoreSelector(selectAuthStateForHook);
+  // Get mutations
+  const loginMutation = useLoginMutation();
+  const logoutMutation = useLogoutMutation();
 
-  // Action pour initialiser l'auth (vérifier le token stocké)
-  const initialize = useCallback(async () => {
-    return dispatch(initializeAuth(authService));
-  }, [dispatch, authService]);
+  // Get current user query
+  const currentUserQuery = useCurrentUserQuery();
 
-  // Action pour le login
+  /**
+   * Login with username and password
+   * @param params Login parameters
+   * @returns Promise resolving to the logged in user
+   */
   const login = useCallback(
-    async (params: LoginParams) => {
-      return dispatch(loginUser(authService, params.username, params.password));
+    async (params: LoginParams): Promise<User> => {
+      return loginMutation.mutateAsync({
+        username: params.username,
+        password: params.password,
+        serverUrl: params.serverUrl,
+      });
     },
-    [dispatch, authService],
+    [loginMutation],
   );
 
-  // Action pour le logout
+  /**
+   * Logout the current user
+   */
   const logout = useCallback(() => {
-    dispatch(logoutUser(authService));
-  }, [dispatch, authService]);
+    logoutMutation.mutate();
+  }, [logoutMutation]);
+
+  /**
+   * Refresh the current user
+   * @returns Promise resolving to the refreshed user
+   */
+  const refreshCurrentUser = useCallback(async () => {
+    if (!isAuthenticated) return null;
+    return currentUserQuery.refetch().then((result) => result.data || null);
+  }, [isAuthenticated, currentUserQuery]);
 
   return {
+    // State
     isAuthenticated,
-    isAuthenticating,
+    isAuthenticating: isAuthenticating || loginMutation.isPending,
     currentUser,
-    error,
+    error: error || loginMutation.error,
+    serverUrl,
+
+    // Status indicators
+    isLoggingIn: loginMutation.isPending,
+    isLoggingOut: logoutMutation.isPending,
+    isRefreshing: currentUserQuery.isRefetching,
+
+    // Actions
     login,
     logout,
-    initialize,
+    refreshCurrentUser,
   };
+}
+
+/**
+ * Hook that requires authentication
+ * @param redirectUrl URL to redirect to if not authenticated
+ * @returns Authentication state and actions
+ */
+export function useRequireAuth(redirectUrl: string = "/login") {
+  const { isAuthenticated, isAuthenticating } = useAuth();
+
+  // If we're in a browser environment, redirect if not authenticated
+  if (typeof window !== "undefined" && !isAuthenticated && !isAuthenticating) {
+    window.location.href = redirectUrl;
+  }
+
+  return useAuth();
 }
