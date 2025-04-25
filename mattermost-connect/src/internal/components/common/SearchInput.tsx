@@ -1,110 +1,168 @@
 // src/internal/components/common/SearchInput.tsx
 /**
- * A reusable search input component
+ * A reusable search input component with debounce functionality
  */
-import React, { useEffect, useState } from "react";
-import { TextField, InputAdornment, IconButton, Fade } from "@mui/material";
-import { Search as SearchIcon, Clear as ClearIcon } from "@mui/icons-material";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Box,
+  IconButton,
+  InputBase,
+  InputAdornment,
+  Tooltip,
+  SxProps,
+  Theme,
+} from "@mui/material";
+import {
+  Search as SearchIcon,
+  Clear as ClearIcon,
+  FilterList as FilterIcon,
+} from "@mui/icons-material";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { debounce } from "../../utils/helper";
 
 export interface SearchInputProps extends BaseComponentProps {
+  /** Current search value */
+  value: string;
+  /** Callback when search value changes */
+  onSearch: (value: string) => void;
   /** Placeholder text */
   placeholder?: string;
-  /** Initial value */
-  value?: string;
-  /** Callback when search value changes */
-  onSearch?: (value: string) => void;
-  /** Debounce delay in milliseconds */
-  debounceMs?: number;
+  /** Whether to show the filter button */
+  showFilter?: boolean;
   /** Whether the input is disabled */
   disabled?: boolean;
+  /** Callback when filter button is clicked */
+  onFilterClick?: () => void;
+  /** Debounce delay in milliseconds */
+  debounceMs?: number;
   /** Whether the input is full width */
   fullWidth?: boolean;
-  /** Input variant */
-  variant?: "outlined" | "filled" | "standard";
   /** Size of the input */
   size?: "small" | "medium";
 }
 
+/**
+ * Search input component with debounce functionality
+ */
 const SearchInput: React.FC<SearchInputProps> = ({
-  placeholder = "Search",
-  value: initialValue = "",
+  value,
   onSearch,
-  debounceMs = 300,
+  placeholder = "Search...",
+  showFilter = false,
   disabled = false,
+  onFilterClick,
+  debounceMs = 300,
   fullWidth = false,
-  variant = "outlined",
-  size = "small",
+  size = "medium",
   className,
   sx,
   id,
 }) => {
-  const [value, setValue] = useState(initialValue);
+  // Local state for input value
+  const [inputValue, setInputValue] = useState(value);
 
-  // Debounced search callback
-  const debouncedSearch = React.useMemo(
-    () =>
-      debounce((searchTerm: string) => {
-        if (onSearch) {
-          onSearch(searchTerm);
-        }
-      }, debounceMs),
+  // Ref for debounce timer
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Update input value when prop changes
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  // Handle input change with debounce
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setInputValue(newValue);
+
+      // Clear previous timer
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+
+      // Set new timer
+      debounceTimer.current = setTimeout(() => {
+        onSearch(newValue);
+      }, debounceMs);
+    },
     [onSearch, debounceMs],
   );
 
-  // Handle external value changes
+  // Clear timer on unmount
   useEffect(() => {
-    setValue(initialValue);
-  }, [initialValue]);
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
-  // Handle input change
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = event.target.value;
-    setValue(newValue);
-    debouncedSearch(newValue);
-  };
-
-  // Handle clear button click
-  const handleClear = () => {
-    setValue("");
-    if (onSearch) {
-      onSearch("");
-    }
-  };
+  // Clear search
+  const handleClear = useCallback(() => {
+    setInputValue("");
+    onSearch("");
+  }, [onSearch]);
 
   return (
-    <TextField
-      className={className}
-      sx={sx}
-      id={id}
-      value={value}
+    <InputBase
+      value={inputValue}
       onChange={handleChange}
       placeholder={placeholder}
-      variant={variant}
-      size={size}
-      fullWidth={fullWidth}
       disabled={disabled}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <SearchIcon color="action" />
-          </InputAdornment>
-        ),
-        endAdornment: (
-          <InputAdornment position="end">
-            <Fade in={!!value}>
+      fullWidth={fullWidth}
+      className={className}
+      id={id}
+      startAdornment={
+        <InputAdornment position="start">
+          <SearchIcon fontSize="small" sx={{ color: "text.secondary" }} />
+        </InputAdornment>
+      }
+      endAdornment={
+        <Box display="flex" alignItems="center">
+          {inputValue && (
+            <Tooltip title="Clear search">
               <IconButton
                 size="small"
-                aria-label="clear search"
                 onClick={handleClear}
-                edge="end"
+                sx={{ p: 0.5 }}
+                disabled={disabled}
               >
                 <ClearIcon fontSize="small" />
               </IconButton>
-            </Fade>
-          </InputAdornment>
-        ),
+            </Tooltip>
+          )}
+
+          {showFilter && (
+            <Tooltip title="Filter">
+              <IconButton
+                size="small"
+                onClick={onFilterClick}
+                sx={{ ml: 0.5, p: 0.5 }}
+                disabled={disabled}
+              >
+                <FilterIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      }
+      sx={{
+        px: 1.5,
+        py: 0.75,
+        bgcolor: "action.hover",
+        borderRadius: 2,
+        transition: (theme) =>
+          theme.transitions.create(["background-color", "box-shadow"]),
+        "&:hover": {
+          bgcolor: "action.selected",
+        },
+        "&.Mui-focused": {
+          bgcolor: "background.paper",
+          boxShadow: (theme) => theme.shadows[1],
+        },
+        ...(size === "small" && {
+          py: 0.5,
+        }),
+        ...sx,
       }}
     />
   );
