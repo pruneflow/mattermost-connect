@@ -11,8 +11,6 @@ import {
   ListItemText,
   Divider,
   Typography,
-  TextField,
-  InputAdornment,
   IconButton,
   Box,
   Collapse,
@@ -21,7 +19,6 @@ import {
   Paper,
   Tooltip,
 } from "@mui/material";
-import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -32,6 +29,7 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import { Channel } from "../../../index";
 import ChannelAvatarUI from "./ChannelAvatarUI";
 import { ListComponentProps } from "../../types/componentTypes";
+import SearchInput from "../common/SearchInput";
 import {
   isDirectChannel,
   isGroupChannel,
@@ -387,20 +385,12 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
 
     return (
       <Box sx={{ p: 1, mb: 1 }}>
-        <TextField
+        <SearchInput
+          value={searchTerm}
+          onSearch={(value) => onSearchChange && onSearchChange(value)}
+          placeholder="Search channels"
           fullWidth
           size="small"
-          placeholder="Search channels"
-          value={searchTerm}
-          onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-          sx={{ mb: 1 }}
         />
       </Box>
     );
@@ -436,32 +426,159 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
     );
   };
 
-  // Render loading state
-  if (isLoading && items.length === 0) {
+  // Common header for all views - includes search and create button
+  const renderHeader = () => {
+    return (
+      <>
+        {renderSearch()}
+        {renderCreateButton()}
+
+        {/* User loading indicator */}
+        {isLoadingUsers && loadingUserIds > 0 && (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              p: 1,
+              mb: 1,
+            }}
+          >
+            <CircularProgress size={16} sx={{ mr: 1 }} />
+            <Typography variant="caption" color="text.secondary">
+              Loading {loadingUserIds} user{loadingUserIds !== 1 ? "s" : ""}
+              ...
+            </Typography>
+          </Box>
+        )}
+      </>
+    );
+  };
+
+  // Render the channel list content - this eliminates duplication
+  const renderChannelList = () => {
+    return (
+      <List disablePadding>
+        {groupByType ? (
+          <>
+            {/* Favorites section */}
+            {showFavorites && groupedChannels.favorites.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Favorites",
+                  groupedChannels.favorites.length,
+                  "favorites",
+                )}
+                <Collapse in={expanded.favorites}>
+                  {groupedChannels.favorites.map(renderChannelItem)}
+                </Collapse>
+                <Divider sx={{ my: 1 }} />
+              </>
+            )}
+
+            {/* Public channels section */}
+            {groupedChannels.public.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Public Channels",
+                  groupedChannels.public.length,
+                  "public",
+                )}
+                <Collapse in={expanded.public}>
+                  {groupedChannels.public.map(renderChannelItem)}
+                </Collapse>
+                <Divider sx={{ my: 1 }} />
+              </>
+            )}
+
+            {/* Private channels section */}
+            {groupedChannels.private.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Private Channels",
+                  groupedChannels.private.length,
+                  "private",
+                )}
+                <Collapse in={expanded.private}>
+                  {groupedChannels.private.map(renderChannelItem)}
+                </Collapse>
+                <Divider sx={{ my: 1 }} />
+              </>
+            )}
+
+            {/* Direct messages section */}
+            {groupedChannels.direct.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Direct Messages",
+                  groupedChannels.direct.length,
+                  "direct",
+                )}
+                <Collapse in={expanded.direct}>
+                  {groupedChannels.direct.map(renderChannelItem)}
+                </Collapse>
+                <Divider sx={{ my: 1 }} />
+              </>
+            )}
+
+            {/* Group messages section */}
+            {groupedChannels.group.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Group Messages",
+                  groupedChannels.group.length,
+                  "group",
+                )}
+                <Collapse in={expanded.group}>
+                  {groupedChannels.group.map(renderChannelItem)}
+                </Collapse>
+              </>
+            )}
+          </>
+        ) : (
+          // Flat list, no grouping
+          items.map(renderChannelItem)
+        )}
+      </List>
+    );
+  };
+
+  // Render empty state content
+  const renderEmptyContent = () => {
     return (
       <Box
         sx={{
           display: "flex",
           flexDirection: "column",
-          width: "100%",
-          p: 2,
-          ...sx,
+          justifyContent: "center",
+          alignItems: "center",
+          flex: 1,
+          p: 3,
         }}
-        className={className}
-        id={id}
       >
-        {showSearch && (
-          <Box sx={{ mb: 2 }}>
-            <Box
-              sx={{
-                height: 40,
-                bgcolor: "rgba(0, 0, 0, 0.1)",
-                borderRadius: 1,
-              }}
-            />
-          </Box>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          align="center"
+          sx={{ mb: 2 }}
+        >
+          {emptyMessage}
+        </Typography>
+        {allowCreate && !renderCreateButton() && (
+          <Tooltip title="Create Channel">
+            <IconButton onClick={onCreateChannel} color="primary">
+              <AddIcon />
+            </IconButton>
+          </Tooltip>
         )}
+      </Box>
+    );
+  };
 
+  // Render loading skeleton content
+  const renderLoadingContent = () => {
+    return (
+      <>
         <Box sx={{ mb: 2 }}>
           <Box
             sx={{
@@ -472,52 +589,28 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
             }}
           />
         </Box>
-
         {Array.from({ length: 7 }).map((_, index) => renderSkeletonItem(index))}
-      </Box>
+      </>
     );
+  };
+
+  // Determine container and content based on state
+  let container: React.ReactNode;
+  let content: React.ReactNode;
+
+  // Set content based on loading and item states
+  if (isLoading && items.length === 0) {
+    content = renderLoadingContent();
+  } else if (items.length === 0) {
+    content = renderEmptyContent();
+  } else {
+    content = renderChannelList();
   }
 
-  // Render empty state
-  if (items.length === 0) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100%",
-          p: 3,
-          ...sx,
-        }}
-        className={className}
-        id={id}
-      >
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          align="center"
-          sx={{ mb: 2 }}
-        >
-          {emptyMessage}
-        </Typography>
-        {allowCreate && (
-          <Tooltip title="Create Channel">
-            <IconButton onClick={onCreateChannel} color="primary">
-              <AddIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-      </Box>
-    );
-  }
-
-  // Handle different variants (simplified)
+  // Determine the container based on variant
   switch (variant) {
     case "sidebar":
-      // Render a more compact version
-      return (
+      container = (
         <Paper
           elevation={0}
           className={className}
@@ -528,117 +621,14 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
           }}
           id={id}
         >
-          {renderSearch()}
-          {renderCreateButton()}
-
-          {/* User loading indicator */}
-          {isLoadingUsers && loadingUserIds > 0 && (
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                p: 1,
-                mb: 1,
-              }}
-            >
-              <CircularProgress size={16} sx={{ mr: 1 }} />
-              <Typography variant="caption" color="text.secondary">
-                Loading {loadingUserIds} user{loadingUserIds !== 1 ? "s" : ""}
-                ...
-              </Typography>
-            </Box>
-          )}
-
-          <List disablePadding>
-            {groupByType ? (
-              <>
-                {/* Favorites section */}
-                {showFavorites && groupedChannels.favorites.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Favorites",
-                      groupedChannels.favorites.length,
-                      "favorites",
-                    )}
-                    <Collapse in={expanded.favorites}>
-                      {groupedChannels.favorites.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Public channels section */}
-                {groupedChannels.public.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Public Channels",
-                      groupedChannels.public.length,
-                      "public",
-                    )}
-                    <Collapse in={expanded.public}>
-                      {groupedChannels.public.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Private channels section */}
-                {groupedChannels.private.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Private Channels",
-                      groupedChannels.private.length,
-                      "private",
-                    )}
-                    <Collapse in={expanded.private}>
-                      {groupedChannels.private.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Direct messages section */}
-                {groupedChannels.direct.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Direct Messages",
-                      groupedChannels.direct.length,
-                      "direct",
-                    )}
-                    <Collapse in={expanded.direct}>
-                      {groupedChannels.direct.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Group messages section */}
-                {groupedChannels.group.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Group Messages",
-                      groupedChannels.group.length,
-                      "group",
-                    )}
-                    <Collapse in={expanded.group}>
-                      {groupedChannels.group.map(renderChannelItem)}
-                    </Collapse>
-                  </>
-                )}
-              </>
-            ) : (
-              // Flat list, no grouping
-              items.map(renderChannelItem)
-            )}
-          </List>
+          {renderHeader()}
+          {content}
         </Paper>
       );
-
+      break;
     case "list":
     default:
-      // Default list view
-      return (
+      container = (
         <Box
           className={className}
           sx={{
@@ -647,113 +637,14 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
           }}
           id={id}
         >
-          {renderSearch()}
-          {renderCreateButton()}
-
-          {/* User loading indicator */}
-          {isLoadingUsers && loadingUserIds > 0 && (
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                p: 1,
-                mb: 1,
-              }}
-            >
-              <CircularProgress size={16} sx={{ mr: 1 }} />
-              <Typography variant="caption" color="text.secondary">
-                Loading {loadingUserIds} user{loadingUserIds !== 1 ? "s" : ""}
-                ...
-              </Typography>
-            </Box>
-          )}
-
-          <List disablePadding>
-            {groupByType ? (
-              <>
-                {/* Favorites section */}
-                {showFavorites && groupedChannels.favorites.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Favorites",
-                      groupedChannels.favorites.length,
-                      "favorites",
-                    )}
-                    <Collapse in={expanded.favorites}>
-                      {groupedChannels.favorites.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Public channels section */}
-                {groupedChannels.public.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Public Channels",
-                      groupedChannels.public.length,
-                      "public",
-                    )}
-                    <Collapse in={expanded.public}>
-                      {groupedChannels.public.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Private channels section */}
-                {groupedChannels.private.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Private Channels",
-                      groupedChannels.private.length,
-                      "private",
-                    )}
-                    <Collapse in={expanded.private}>
-                      {groupedChannels.private.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Direct messages section */}
-                {groupedChannels.direct.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Direct Messages",
-                      groupedChannels.direct.length,
-                      "direct",
-                    )}
-                    <Collapse in={expanded.direct}>
-                      {groupedChannels.direct.map(renderChannelItem)}
-                    </Collapse>
-                    <Divider sx={{ my: 1 }} />
-                  </>
-                )}
-
-                {/* Group messages section */}
-                {groupedChannels.group.length > 0 && (
-                  <>
-                    {renderSectionHeader(
-                      "Group Messages",
-                      groupedChannels.group.length,
-                      "group",
-                    )}
-                    <Collapse in={expanded.group}>
-                      {groupedChannels.group.map(renderChannelItem)}
-                    </Collapse>
-                  </>
-                )}
-              </>
-            ) : (
-              // Flat list, no grouping
-              items.map(renderChannelItem)
-            )}
-          </List>
+          {renderHeader()}
+          {content}
         </Box>
       );
+      break;
   }
+
+  return container;
 };
 
 export default ChannelListUI;

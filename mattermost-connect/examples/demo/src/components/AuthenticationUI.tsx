@@ -158,7 +158,7 @@ const AuthenticationUI: React.FC<AuthenticationProps> = ({
   // État
   const [activeTab, setActiveTab] = useState<number>(0);
   const [authMode, setAuthMode] = useState<AuthMode>("direct");
-  const [serverUrl, setServerUrl] = useState<string>("");
+  const [serverUrl, setServerUrl] = useState<string>("http://localhost:8065");
   const [username, setUsername] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [proxyUrl, setProxyUrl] = useState<string>("");
