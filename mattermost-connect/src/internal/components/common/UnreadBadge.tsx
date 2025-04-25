@@ -1,7 +1,3 @@
-// src/internal/components/common/UnreadBadge.tsx
-/**
- * A reusable badge component for unread counts
- */
 import React from "react";
 import { Badge, BadgeProps, styled } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
