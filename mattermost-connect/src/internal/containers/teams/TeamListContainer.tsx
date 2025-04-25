@@ -99,15 +99,13 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
 
   // Format unread counts for UI
   const unreadCountsForUI = useMemo(() => {
-    const result: Record<
-      string,
-      { messageCount: number; mentionCount: number }
-    > = {};
+    const result: Record<string, { msg_count: number; mention_count: number }> =
+      {};
 
     teams.forEach((team) => {
       result[team.id] = {
-        messageCount: teamUnreadCounts[team.id]?.messageCount || 0,
-        mentionCount: teamUnreadCounts[team.id]?.mentionCount || 0,
+        msg_count: teamUnreadCounts[team.id]?.msg_count || 0,
+        mention_count: teamUnreadCounts[team.id]?.mention_count || 0,
       };
     });
 

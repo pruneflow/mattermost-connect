@@ -7,7 +7,7 @@ import TeamSelector from "./components/TeamSelector";
 
 export interface TeamListUIProps extends ListComponentProps<Team> {
   /** Unread counts by team ID */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
   /** Whether to allow creating new teams */
   allowCreate?: boolean;
   /** Whether to show a search input */

@@ -40,7 +40,7 @@ export interface ChannelItemUIProps extends ItemComponentProps<Channel> {
   /** Unread message count */
   unreadCount?: number;
   /** Unread mention count */
-  mentionCount?: number;
+  mention_count?: number;
   /** Whether the channel is a favorite */
   isFavorite?: boolean;
   /** Whether to show favorite toggle */
@@ -62,7 +62,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
   isLoading = false,
   variant = "list",
   unreadCount = 0,
-  mentionCount = 0,
+  mention_count = 0,
   isFavorite = false,
   showFavoriteToggle = false,
   isMuted = false,
@@ -200,10 +200,10 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                 }),
               }}
             />
-            {(unreadCount > 0 || mentionCount > 0) && (
+            {(unreadCount > 0 || mention_count > 0) && (
               <UnreadBadge
                 count={unreadCount}
-                mentionCount={mentionCount}
+                mention_count={mention_count}
                 showZero={false}
                 mentionPriority={true}
                 size="small"
@@ -223,7 +223,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
               </Box>
               <UnreadBadge
                 count={unreadCount}
-                mentionCount={mentionCount}
+                mention_count={mention_count}
                 showZero={false}
                 mentionPriority={true}
               >
@@ -326,11 +326,11 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                   {item.purpose}
                 </Typography>
               )}
-              {(unreadCount > 0 || mentionCount > 0) && (
+              {(unreadCount > 0 || mention_count > 0) && (
                 <Box sx={{ mt: 1 }}>
                   <UnreadBadge
                     count={unreadCount}
-                    mentionCount={mentionCount}
+                    mention_count={mention_count}
                     showZero={false}
                     mentionPriority={true}
                   />
@@ -390,7 +390,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
             <ListItemIcon>
               <UnreadBadge
                 count={unreadCount}
-                mentionCount={mentionCount}
+                mention_count={mention_count}
                 showZero={false}
                 mentionPriority={true}
               >

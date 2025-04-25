@@ -21,7 +21,7 @@ export interface TeamItemSidebarProps extends TeamItemProps {
   /** Show member count */
   showMemberCount?: boolean;
   /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
 }
 
 /**
@@ -42,15 +42,15 @@ const TeamItemSidebar: React.FC<TeamItemSidebarProps> = ({
   const hasMessages =
     unreadCounts &&
     unreadCounts[team.id] &&
-    unreadCounts[team.id].messageCount > 0;
+    unreadCounts[team.id].msg_count > 0;
   const hasMentions =
     unreadCounts &&
     unreadCounts[team.id] &&
-    unreadCounts[team.id].mentionCount > 0;
+    unreadCounts[team.id].mention_count > 0;
 
   // Get the mention count if any
-  const mentionCount =
-    hasMentions && unreadCounts ? unreadCounts[team.id].mentionCount : 0;
+  const mention_count =
+    hasMentions && unreadCounts ? unreadCounts[team.id].mention_count : 0;
 
   return (
     <BaseTeamItem
@@ -113,7 +113,7 @@ const TeamItemSidebar: React.FC<TeamItemSidebarProps> = ({
               {team.display_name}
               {hasMentions && (
                 <span style={{ color: "#ff4444", marginLeft: "8px" }}>
-                  ({mentionCount} mentions)
+                  ({mention_count} mentions)
                 </span>
               )}
             </Typography>
@@ -172,7 +172,7 @@ const TeamItemSidebar: React.FC<TeamItemSidebarProps> = ({
           <TeamAvatar
             team={team}
             size="medium"
-            mentionCount={mentionCount}
+            mention_count={mention_count}
             showMentionBadge={hasMentions}
           />
         </IconButton>

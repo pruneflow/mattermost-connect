@@ -244,8 +244,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = (props) => {
 
     Object.entries(unreadCounts).forEach(([teamId, counts]) => {
       result[teamId] = {
-        msg_count: counts.messageCount,
-        mention_count: counts.mentionCount,
+        msg_count: counts.msg_count,
+        mention_count: counts.mention_count,
       };
     });
 

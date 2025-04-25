@@ -10,7 +10,7 @@ export interface UnreadBadgeProps extends BaseComponentProps {
   /** Number of unread items */
   count?: number;
   /** Number of mentions */
-  mentionCount?: number;
+  mention_count?: number;
   /** Whether the badge should be shown if count is 0 */
   showZero?: boolean;
   /** Maximum number to display before showing '+' */
@@ -48,7 +48,7 @@ const CountBadge = styled(Badge)(({ theme }) => ({
  */
 const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   count = 0,
-  mentionCount = 0,
+  mention_count = 0,
   showZero = false,
   max = 99,
   color = "primary",
@@ -60,7 +60,7 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   id,
 }) => {
   // Determine which count to show based on priority
-  const showMention = mentionCount > 0;
+  const showMention = mention_count > 0;
   const showCount = (count > 0 || showZero) && !showMention;
 
   // Don't render any badge if there's nothing to show
@@ -83,7 +83,7 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   if (showMention && mentionPriority) {
     return (
       <MentionBadge
-        badgeContent={mentionCount > max ? `${max}+` : mentionCount}
+        badgeContent={mention_count > max ? `${max}+` : mention_count}
         color="error"
         max={max}
         className={className}

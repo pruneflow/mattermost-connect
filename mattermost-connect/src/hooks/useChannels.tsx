@@ -154,7 +154,7 @@ export function useChannels(teamId: string | undefined) {
     favoriteChannelSet: unreadData.favoriteChannels,
     teamUnreads: teamId
       ? teamUnreadCounts[teamId]
-      : { messageCount: 0, mentionCount: 0 },
+      : { msg_count: 0, mention_count: 0 },
 
     // Actions
     setActiveChannel,
@@ -327,7 +327,7 @@ export function useChannel(channelId: string | undefined) {
    * Gets the unread count data for this channel
    */
   const unreadCount = useMemo(() => {
-    if (!channelId) return { messageCount: 0, mentionCount: 0 };
+    if (!channelId) return { msg_count: 0, mention_count: 0 };
     return getChannelUnreadCount(channelId);
   }, [channelId, getChannelUnreadCount]);
 

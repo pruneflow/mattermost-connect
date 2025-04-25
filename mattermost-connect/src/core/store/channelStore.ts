@@ -30,9 +30,9 @@ export interface Channel {
  */
 export interface ChannelUnreadCount {
   /** Number of unread messages */
-  messageCount: number;
+  msg_count: number;
   /** Number of unread mentions */
-  mentionCount: number;
+  mention_count: number;
   /** ID of the last message in the channel */
   lastMessageId?: string;
   /** Timestamp when the channel was last viewed */
@@ -102,8 +102,8 @@ const initialState: ChannelState = {
  * Default unread count
  */
 const DEFAULT_UNREAD_COUNT: ChannelUnreadCount = {
-  messageCount: 0,
-  mentionCount: 0,
+  msg_count: 0,
+  mention_count: 0,
   isMuted: false,
 };
 
@@ -227,16 +227,16 @@ export const useChannelStore = create(
       /**
        * Updates the unread count for a channel
        * @param channelId Channel ID
-       * @param messageCount Number of unread messages
-       * @param mentionCount Number of unread mentions
+       * @param msg_count Number of unread messages
+       * @param mention_count Number of unread mentions
        * @param lastMessageId ID of the last message
        * @param lastViewedAt Time when the channel was last viewed
        * @param totalMessageCount Total message count for the channel
        */
       updateUnreadCount: (
         channelId: string,
-        messageCount: number,
-        mentionCount: number,
+        msg_count: number,
+        mention_count: number,
         lastMessageId?: string,
         lastViewedAt?: number,
         totalMessageCount?: number,
@@ -251,8 +251,8 @@ export const useChannelStore = create(
               ...get().unreadCounts,
               [channelId]: {
                 ...existingUnread,
-                messageCount,
-                mentionCount,
+                msg_count,
+                mention_count,
                 lastMessageId: lastMessageId || existingUnread.lastMessageId,
                 lastViewedAt: lastViewedAt || existingUnread.lastViewedAt,
                 totalMessageCount:
@@ -312,13 +312,13 @@ export const useChannelStore = create(
               ...get().unreadCounts,
               [channelId]: {
                 ...existingUnread,
-                messageCount: Math.max(
+                msg_count: Math.max(
                   0,
-                  existingUnread.messageCount + messageIncrement,
+                  existingUnread.msg_count + messageIncrement,
                 ),
-                mentionCount: Math.max(
+                mention_count: Math.max(
                   0,
-                  existingUnread.mentionCount + mentionIncrement,
+                  existingUnread.mention_count + mentionIncrement,
                 ),
                 lastMessageId: messageId || existingUnread.lastMessageId,
               },
@@ -343,8 +343,8 @@ export const useChannelStore = create(
               ...get().unreadCounts,
               [channelId]: {
                 ...existingUnread,
-                messageCount: 0,
-                mentionCount: 0,
+                msg_count: 0,
+                mention_count: 0,
                 lastViewedAt: Date.now(),
               },
             },
@@ -369,8 +369,8 @@ export const useChannelStore = create(
             updatedUnreadCounts[channel.id] || DEFAULT_UNREAD_COUNT;
           updatedUnreadCounts[channel.id] = {
             ...existingUnread,
-            messageCount: 0,
-            mentionCount: 0,
+            msg_count: 0,
+            mention_count: 0,
             lastViewedAt: now,
           };
         });
@@ -554,7 +554,7 @@ export const isChannelMuted = (channelId: string): boolean => {
  */
 export const getTeamUnreadCounts = (
   teamId: string,
-): { messageCount: number; mentionCount: number } => {
+): { msg_count: number; mention_count: number } => {
   const state = useChannelStore.getState();
   const teamChannels = state.channelsByTeam[teamId] || [];
 
@@ -567,15 +567,15 @@ export const getTeamUnreadCounts = (
     const unreadCount = state.unreadCounts[channel.id] || DEFAULT_UNREAD_COUNT;
 
     if (!unreadCount.isMuted) {
-      totalMessages += unreadCount.messageCount || 0;
-      totalMentions += unreadCount.mentionCount || 0;
+      totalMessages += unreadCount.msg_count || 0;
+      totalMentions += unreadCount.mention_count || 0;
     } else {
       // For muted channels, only count mentions
-      totalMentions += unreadCount.mentionCount || 0;
+      totalMentions += unreadCount.mention_count || 0;
     }
   }
 
-  return { messageCount: totalMessages, mentionCount: totalMentions };
+  return { msg_count: totalMessages, mention_count: totalMentions };
 };
 
 /**
@@ -583,8 +583,8 @@ export const getTeamUnreadCounts = (
  * @returns Object containing total message and mention counts
  */
 export const getTotalUnreadCounts = (): {
-  messageCount: number;
-  mentionCount: number;
+  msg_count: number;
+  mention_count: number;
 } => {
   const state = useChannelStore.getState();
   let totalMessages = 0;
@@ -596,9 +596,9 @@ export const getTotalUnreadCounts = (): {
   // Then calculate totals for each team
   for (const teamId of teamIds) {
     const teamCounts = getTeamUnreadCounts(teamId);
-    totalMessages += teamCounts.messageCount;
-    totalMentions += teamCounts.mentionCount;
+    totalMessages += teamCounts.msg_count;
+    totalMentions += teamCounts.mention_count;
   }
 
-  return { messageCount: totalMessages, mentionCount: totalMentions };
+  return { msg_count: totalMessages, mention_count: totalMentions };
 };

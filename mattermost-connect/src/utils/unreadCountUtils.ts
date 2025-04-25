@@ -84,8 +84,8 @@ export function calculateUnreadCounts(
   currentUserId: string,
   lastViewedAt: number,
 ): ChannelUnreadCount {
-  let messageCount = 0;
-  let mentionCount = 0;
+  let msg_count = 0;
+  let mention_count = 0;
   let lastMessageId: string | undefined;
 
   // Process messages in reverse order (newest first)
@@ -103,11 +103,11 @@ export function calculateUnreadCounts(
     }
 
     // Count as unread
-    messageCount++;
+    msg_count++;
 
     // Check for mentions
     if (messageContainsMention(message, currentUserId)) {
-      mentionCount++;
+      mention_count++;
     }
 
     // Track last message ID
@@ -117,8 +117,8 @@ export function calculateUnreadCounts(
   }
 
   return {
-    messageCount,
-    mentionCount,
+    msg_count,
+    mention_count,
     lastMessageId,
     lastViewedAt,
   };
@@ -135,7 +135,7 @@ export function shouldShowUnreadIndicator(
   isMuted: boolean = false,
 ): boolean {
   // Always show if there are mentions, even in muted channels
-  if (unreadCount.mentionCount > 0) {
+  if (unreadCount.mention_count > 0) {
     return true;
   }
 
@@ -145,7 +145,7 @@ export function shouldShowUnreadIndicator(
   }
 
   // Otherwise, show if there are unread messages
-  return unreadCount.messageCount > 0;
+  return unreadCount.msg_count > 0;
 }
 
 /**
@@ -180,7 +180,7 @@ export function getUnreadBadgeColor(
 export function calculateTotalUnreads(
   channelUnreadCounts: Record<string, ChannelUnreadCount>,
   mutedChannelIds: Set<string> = new Set(),
-): { messageCount: number; mentionCount: number } {
+): { msg_count: number; mention_count: number } {
   let totalMessages = 0;
   let totalMentions = 0;
 
@@ -188,17 +188,17 @@ export function calculateTotalUnreads(
     const isMuted = mutedChannelIds.has(channelId) || !!counts.isMuted;
 
     // Always count mentions
-    totalMentions += counts.mentionCount;
+    totalMentions += counts.mention_count;
 
     // Only count messages for non-muted channels
     if (!isMuted) {
-      totalMessages += counts.messageCount;
+      totalMessages += counts.msg_count;
     }
   });
 
   return {
-    messageCount: totalMessages,
-    mentionCount: totalMentions,
+    msg_count: totalMessages,
+    mention_count: totalMentions,
   };
 }
 

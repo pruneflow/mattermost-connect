@@ -13,7 +13,7 @@ export interface BaseTeamItemProps extends TeamItemProps {
   /** Maximum name length before truncation */
   maxNameLength?: number;
   /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
   /** Children to render (item content) */
   children?: React.ReactNode;
 }
@@ -39,9 +39,9 @@ const BaseTeamItem: React.FC<BaseTeamItemProps> = ({
   const hasMentions = hasUnreadMentions(team, unreadCounts);
 
   // Get the mention count if any
-  const mentionCount =
+  const mention_count =
     hasMentions && unreadCounts && unreadCounts[team.id]
-      ? unreadCounts[team.id].mentionCount
+      ? unreadCounts[team.id].mention_count
       : 0;
 
   // Handle team click

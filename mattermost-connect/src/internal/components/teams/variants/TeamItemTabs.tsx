@@ -23,7 +23,7 @@ export interface TeamItemTabsProps extends BaseComponentProps {
   /** Maximum name length before truncating */
   maxNameLength?: number;
   /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
 }
 
 /**
@@ -48,7 +48,7 @@ const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
   const unreadState =
     unreadCounts && unreadCounts[team.id]
       ? unreadCounts[team.id]
-      : { messageCount: 0, mentionCount: 0 };
+      : { msg_count: 0, mention_count: 0 };
 
   const handleClick = () => {
     if (onClick) {
@@ -68,8 +68,8 @@ const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
       {showIcon && <TeamAvatar team={team} size={24} />}
 
       <UnreadBadge
-        count={unreadState.messageCount}
-        mentionCount={unreadState.mentionCount}
+        count={unreadState.msg_count}
+        mention_count={unreadState.mention_count}
         showZero={false}
         mentionPriority={true}
       >
@@ -99,9 +99,8 @@ const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
         minHeight: 48,
         py: 1,
         px: 2,
-        fontWeight: isActive ? 600 : unreadState.messageCount ? 600 : 400,
-        color:
-          unreadState.messageCount && !isActive ? "text.primary" : undefined,
+        fontWeight: isActive ? 600 : unreadState.msg_count ? 600 : 400,
+        color: unreadState.msg_count && !isActive ? "text.primary" : undefined,
         "&.Mui-selected": {
           color: "primary.main",
         },

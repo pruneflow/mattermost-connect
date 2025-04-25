@@ -25,7 +25,7 @@ export interface TeamItemListProps extends TeamItemProps {
   /** Maximum name length before truncating */
   maxNameLength?: number;
   /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
 }
 
 /**
@@ -76,14 +76,14 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
             <TeamAvatar
               team={team}
               size="small"
-              mentionCount={
+              mention_count={
                 unreadCounts && unreadCounts[team.id]
-                  ? unreadCounts[team.id].mentionCount
+                  ? unreadCounts[team.id].mention_count
                   : 0
               }
               showMentionBadge={
                 unreadCounts && unreadCounts[team.id]
-                  ? unreadCounts[team.id].mentionCount > 0
+                  ? unreadCounts[team.id].mention_count > 0
                   : false
               }
             />
@@ -108,7 +108,7 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
                 ? 600
                 : unreadCounts &&
                     unreadCounts[team.id] &&
-                    unreadCounts[team.id].messageCount > 0
+                    unreadCounts[team.id].msg_count > 0
                   ? 600
                   : 400
             }
@@ -139,8 +139,8 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
           !(
             unreadCounts &&
             unreadCounts[team.id] &&
-            (unreadCounts[team.id].messageCount > 0 ||
-              unreadCounts[team.id].mentionCount > 0)
+            (unreadCounts[team.id].msg_count > 0 ||
+              unreadCounts[team.id].mention_count > 0)
           ) && (
             <Badge
               badgeContent={team.member_count}
@@ -156,9 +156,9 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
         {unreadCounts && unreadCounts[team.id] && (
           <>
             {/* Mentions badge */}
-            {unreadCounts[team.id].mentionCount > 0 && (
+            {unreadCounts[team.id].mention_count > 0 && (
               <Badge
-                badgeContent={unreadCounts[team.id].mentionCount}
+                badgeContent={unreadCounts[team.id].mention_count}
                 color="error"
                 max={99}
                 sx={{ ml: 0.5 }}
@@ -166,8 +166,8 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
             )}
 
             {/* Unread message indicator */}
-            {unreadCounts[team.id].messageCount > 0 &&
-              unreadCounts[team.id].mentionCount === 0 && (
+            {unreadCounts[team.id].msg_count > 0 &&
+              unreadCounts[team.id].mention_count === 0 && (
                 <Badge variant="dot" color="primary" sx={{ ml: 0.5 }} />
               )}
           </>

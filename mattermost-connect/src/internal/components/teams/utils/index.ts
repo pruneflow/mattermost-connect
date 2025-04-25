@@ -46,10 +46,10 @@ export const getTeamInitials = (team: Team): string => {
  */
 export const hasUnreadMessages = (
   team: Team,
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>,
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>,
 ): boolean => {
   if (!unreadCounts || !unreadCounts[team.id]) return false;
-  return unreadCounts[team.id].messageCount > 0;
+  return unreadCounts[team.id].msg_count > 0;
 };
 
 /**
@@ -61,10 +61,10 @@ export const hasUnreadMessages = (
  */
 export const hasUnreadMentions = (
   team: Team,
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>,
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>,
 ): boolean => {
   if (!unreadCounts || !unreadCounts[team.id]) return false;
-  return unreadCounts[team.id].mentionCount > 0;
+  return unreadCounts[team.id].mention_count > 0;
 };
 
 /**
@@ -76,10 +76,10 @@ export const hasUnreadMentions = (
  */
 export const getTeamUnreadCounts = (
   team: Team,
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>,
-): { messageCount: number; mentionCount: number } => {
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>,
+): { msg_count: number; mention_count: number } => {
   if (!unreadCounts || !unreadCounts[team.id]) {
-    return { messageCount: 0, mentionCount: 0 };
+    return { msg_count: 0, mention_count: 0 };
   }
   return unreadCounts[team.id];
 };

@@ -37,7 +37,7 @@ import {
 
 export interface ChannelListUIProps extends ListComponentProps<Channel> {
   /** Unread counts by channel ID */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
   /** Whether to allow creating new channels */
   allowCreate?: boolean;
   /** Whether to show a search input */
@@ -205,11 +205,11 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
 
     // Get unread counts
     const unread = unreadCounts[channel.id] || {
-      messageCount: 0,
-      mentionCount: 0,
+      msg_count: 0,
+      mention_count: 0,
     };
-    const hasUnread = unread.messageCount > 0;
-    const hasMention = unread.mentionCount > 0;
+    const hasUnread = unread.msg_count > 0;
+    const hasMention = unread.mention_count > 0;
 
     // Get display name (especially for direct messages)
     const displayNames = displayNamesByChannel[channel.id];
@@ -289,7 +289,7 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
           {/* Badge for unread mentions */}
           {hasMention && (
             <Badge
-              badgeContent={unread.mentionCount}
+              badgeContent={unread.mention_count}
               color="error"
               sx={{ mr: 1 }}
             />

@@ -213,7 +213,7 @@ export function useTeam(teamId: string | undefined) {
    * Gets unread counts for this team
    */
   const unreadCounts = useMemo(() => {
-    if (!teamId) return { messageCount: 0, mentionCount: 0 };
+    if (!teamId) return { msg_count: 0, mention_count: 0 };
     return getUnreadCountsByTeam(teamId);
   }, [teamId, getUnreadCountsByTeam]);
 

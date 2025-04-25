@@ -22,8 +22,8 @@ export interface Team {
  * Team unread count interface
  */
 export interface TeamUnreadCount {
-  messageCount: number;
-  mentionCount: number;
+  msg_count: number;
+  mention_count: number;
 }
 
 /**
@@ -56,8 +56,8 @@ export interface TeamState {
   /** Updates the unread count for a team */
   updateUnreadCount: (
     teamId: string,
-    messageCount: number,
-    mentionCount: number,
+    msg_count: number,
+    mention_count: number,
   ) => void;
   /** Gets a team by ID */
   getTeamById: (teamId: string | null | undefined) => Team | null;
@@ -69,8 +69,8 @@ export interface TeamState {
  * Initial unread count state
  */
 const DEFAULT_UNREAD_COUNT: TeamUnreadCount = {
-  messageCount: 0,
-  mentionCount: 0,
+  msg_count: 0,
+  mention_count: 0,
 };
 
 /**
@@ -131,20 +131,20 @@ export const useTeamStore = create<TeamState>()((set, get) => ({
   /**
    * Updates the unread count for a team
    * @param teamId Team ID
-   * @param messageCount Number of unread messages
-   * @param mentionCount Number of unread mentions
+   * @param msg_count Number of unread messages
+   * @param mention_count Number of unread mentions
    */
   updateUnreadCount: (
     teamId: string,
-    messageCount: number,
-    mentionCount: number,
+    msg_count: number,
+    mention_count: number,
   ) => {
     set((state) => ({
       unreadCounts: {
         ...state.unreadCounts,
         [teamId]: {
-          messageCount,
-          mentionCount,
+          msg_count,
+          mention_count,
         },
       },
     }));
@@ -189,16 +189,16 @@ export const getTeamUnreadCount = (teamId: string): TeamUnreadCount => {
  * @returns Total unread count
  */
 export const getTotalUnreadCount = (): {
-  messageCount: number;
-  mentionCount: number;
+  msg_count: number;
+  mention_count: number;
 } => {
   const unreadCounts = useTeamStore.getState().unreadCounts;
 
   return Object.values(unreadCounts).reduce(
     (total, count) => ({
-      messageCount: total.messageCount + count.messageCount,
-      mentionCount: total.mentionCount + count.mentionCount,
+      msg_count: total.msg_count + count.msg_count,
+      mention_count: total.mention_count + count.mention_count,
     }),
-    { messageCount: 0, mentionCount: 0 },
+    { msg_count: 0, mention_count: 0 },
   );
 };

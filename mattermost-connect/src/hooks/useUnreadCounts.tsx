@@ -11,7 +11,8 @@ import {
 } from "../core/store/channelStore";
 import { Channel } from "../core/store/channelStore";
 import {
-  useTotalUnreadCountsQuery,
+  useChannelUnreadCountQuery,
+  useTeamUnreadCountQuery,
   useSyncChannelUnreadCountMutation,
 } from "../core/api/queries/unreadCountQueries";
 import {
@@ -36,9 +37,8 @@ export function useUnreadCounts() {
     setChannelMuted,
   } = useChannelStore();
 
-  // Get total unread counts from the API
-  const { data: totalUnreadCountsData, isLoading: isLoadingTotalCounts } =
-    useTotalUnreadCountsQuery();
+  // Get current user
+  const { currentUser } = useAuthStore();
 
   // Get mutations
   const viewChannelMutation = useViewChannelMutation();
@@ -55,8 +55,8 @@ export function useUnreadCounts() {
     (channelId: string): ChannelUnreadCount => {
       return (
         unreadCounts[channelId] || {
-          messageCount: 0,
-          mentionCount: 0,
+          msg_count: 0,
+          mention_count: 0,
           isMuted: false,
         }
       );
@@ -74,18 +74,13 @@ export function useUnreadCounts() {
   }, []);
 
   /**
-   * Gets total unread counts across all teams and channels
+   * Gets total unread counts across all teams
    * @returns Object with message and mention counts
    */
   const getAllUnreadCounts = useCallback(() => {
-    // If we have data from the API, prefer that for accuracy
-    if (totalUnreadCountsData) {
-      return totalUnreadCountsData;
-    }
-
-    // Otherwise fall back to local state
+    // Calculate from local state
     return getTotalUnreadCounts();
-  }, [totalUnreadCountsData]);
+  }, []);
 
   /**
    * Gets unread counts for all channels in a team
@@ -177,7 +172,7 @@ export function useUnreadCounts() {
    */
   const hasUnreadsInTeam = useCallback((teamId: string): boolean => {
     const counts = getTeamUnreadCounts(teamId);
-    return counts.messageCount > 0 || counts.mentionCount > 0;
+    return counts.msg_count > 0 || counts.mention_count > 0;
   }, []);
 
   /**
@@ -187,7 +182,7 @@ export function useUnreadCounts() {
    */
   const hasMentionsInTeam = useCallback((teamId: string): boolean => {
     const counts = getTeamUnreadCounts(teamId);
-    return counts.mentionCount > 0;
+    return counts.mention_count > 0;
   }, []);
 
   /**
@@ -195,10 +190,8 @@ export function useUnreadCounts() {
    * @returns Record of team IDs to unread counts
    */
   const getTeamUnreadCountsMap = useMemo(() => {
-    const result: Record<
-      string,
-      { messageCount: number; mentionCount: number }
-    > = {};
+    const result: Record<string, { msg_count: number; mention_count: number }> =
+      {};
 
     Object.keys(channelsByTeam).forEach((teamId) => {
       result[teamId] = getTeamUnreadCounts(teamId);
@@ -215,7 +208,7 @@ export function useUnreadCounts() {
   const hasUnreadsInChannel = useCallback(
     (channelId: string): boolean => {
       const counts = getChannelUnreadCount(channelId);
-      return counts.messageCount > 0 || counts.mentionCount > 0;
+      return counts.msg_count > 0 || counts.mention_count > 0;
     },
     [getChannelUnreadCount],
   );
@@ -228,7 +221,7 @@ export function useUnreadCounts() {
   const hasMentionsInChannel = useCallback(
     (channelId: string): boolean => {
       const counts = getChannelUnreadCount(channelId);
-      return counts.mentionCount > 0;
+      return counts.mention_count > 0;
     },
     [getChannelUnreadCount],
   );
@@ -249,7 +242,6 @@ export function useUnreadCounts() {
   return {
     // State
     unreadCounts,
-    isLoadingTotalCounts,
     totalUnreadCounts: getAllUnreadCounts(),
     teamUnreadCounts: getTeamUnreadCountsMap,
 
@@ -289,20 +281,24 @@ export function useChannelUnreadCount(channelId: string | undefined) {
     isChannelMuted,
   } = useUnreadCounts();
 
-  // Get unread count for this channel
+  // Get unread count data from API for this specific channel
+  const { data: apiUnreadCount, isLoading } =
+    useChannelUnreadCountQuery(channelId);
+
+  // Get unread count for this channel from local state
   const unreadCount = useMemo(() => {
-    if (!channelId) return { messageCount: 0, mentionCount: 0, isMuted: false };
+    if (!channelId) return { msg_count: 0, mention_count: 0, isMuted: false };
     return getChannelUnreadCount(channelId);
   }, [channelId, getChannelUnreadCount]);
 
   // Check if channel has unreads or mentions
   const hasUnreads = useMemo(() => {
-    return unreadCount.messageCount > 0;
-  }, [unreadCount.messageCount]);
+    return unreadCount.msg_count > 0;
+  }, [unreadCount.msg_count]);
 
   const hasMentions = useMemo(() => {
-    return unreadCount.mentionCount > 0;
-  }, [unreadCount.mentionCount]);
+    return unreadCount.mention_count > 0;
+  }, [unreadCount.mention_count]);
 
   // Check if channel is muted
   const muted = useMemo(() => {
@@ -332,6 +328,7 @@ export function useChannelUnreadCount(channelId: string | undefined) {
     muted,
     markAsRead,
     toggleMuted,
+    isLoading,
   };
 }
 
@@ -348,11 +345,20 @@ export function useTeamUnreadCount(teamId: string | undefined) {
     hasMentionsInTeam,
   } = useUnreadCounts();
 
-  // Get unread counts for this team
+  // Get unread count data from API for this team
+  const { data: apiUnreadCount, isLoading } = useTeamUnreadCountQuery(teamId);
+
+  // Get unread counts for this team from local state
   const unreadCount = useMemo(() => {
-    if (!teamId) return { messageCount: 0, mentionCount: 0 };
+    if (!teamId) return { msg_count: 0, mention_count: 0 };
+
+    // Prefer API data if available, otherwise use local state
+    if (apiUnreadCount) {
+      return apiUnreadCount;
+    }
+
     return getUnreadCountsByTeam(teamId);
-  }, [teamId, getUnreadCountsByTeam]);
+  }, [teamId, getUnreadCountsByTeam, apiUnreadCount]);
 
   // Check if team has unreads or mentions
   const hasUnreads = useMemo(() => {
@@ -376,5 +382,6 @@ export function useTeamUnreadCount(teamId: string | undefined) {
     hasUnreads,
     hasMentions,
     markAllAsRead,
+    isLoading,
   };
 }

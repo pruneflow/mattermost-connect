@@ -86,9 +86,9 @@ export const QUERY_KEYS = {
   unread: {
     total: ["unread", "total"],
     byTeam: (teamId: string) => ["unread", "byTeam", teamId],
+    byChannel: (channelId: string) => ["unread", "byChannel", channelId],
   },
 };
-
 /**
  * Utility for invalidating related queries when data changes
  */
@@ -139,6 +139,9 @@ export const invalidateQueries = {
     queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.channels.unreadCount(channelId),
     });
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.unread.byChannel(channelId),
+    });
   },
 
   /**
@@ -147,6 +150,10 @@ export const invalidateQueries = {
   channelUnreadCount: (channelId: string) => {
     queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+    });
+
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.unread.byChannel(channelId),
     });
 
     // Get the channel to find its team
@@ -175,7 +182,7 @@ export const invalidateQueries = {
   allUnreadCounts: () => {
     queryClient.invalidateQueries({ queryKey: ["channelUnreadCount"] });
     queryClient.invalidateQueries({ queryKey: ["channelUnreadCounts"] });
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unread.total });
+    queryClient.invalidateQueries({ queryKey: ["unread"] });
   },
 
   /**

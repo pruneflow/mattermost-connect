@@ -34,7 +34,7 @@ export interface TeamDisplayProps {
  */
 export interface TeamUnreadIndicatorProps {
   /** Unread counts by team ID */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
 }
 
 /**

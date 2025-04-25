@@ -102,7 +102,7 @@ export interface BadgeData {
   /** Count of unread items */
   count: number;
   /** Count of mentions */
-  mentionCount: number;
+  mention_count: number;
 }
 
 /**

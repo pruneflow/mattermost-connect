@@ -86,7 +86,11 @@ export function useUnreadWebSocketEvents() {
         // Get the active channel - don't increment if this is the active channel
         const activeChannel = useChannelStore.getState().activeChannel;
         if (activeChannel && activeChannel.id === channelId) {
-          // Even though we don't increment, we still need to mark the message as processed
+          // If this is the active channel, we'll mark it as read immediately
+          // This simulates the behavior of the Mattermost client
+          setTimeout(() => {
+            markAsRead(channelId);
+          }, 2000); // Small delay to ensure message is processed
           return;
         }
 
@@ -96,11 +100,57 @@ export function useUnreadWebSocketEvents() {
           1, // Increment message count by 1
           mentionsUser ? 1 : 0, // Increment mention count if mentioned
           messageId, // Message ID for tracking
-          mentionsUser, // Flag that user is mentioned for specific handling
         );
 
-        // Invalidate related queries
-        invalidateQueries.channelUnreadCount(channelId);
+        // Invalidate related queries to ensure UI updates
+        setTimeout(() => {
+          invalidateQueries.channelUnreadCount(channelId);
+
+          // Also invalidate team-level counts
+          const channel = useChannelStore.getState().getChannelById(channelId);
+          if (channel?.team_id) {
+            invalidateQueries.channel(channelId);
+          }
+        }, 100);
+      },
+
+      // Message edited
+      [WebSocketEventType.POST_EDITED]: (data) => {
+        const { post, channel_id: channelId } = data;
+
+        if (!post || !channelId || !currentUser) return;
+
+        // Parse the post data
+        const postData = typeof post === "string" ? JSON.parse(post) : post;
+
+        // Only process mentions
+        // Check if the edit added a mention to the current user
+        const mentionsUser =
+          postData.props &&
+          postData.props.mentions &&
+          Array.isArray(postData.props.mentions) &&
+          postData.props.mentions.includes(currentUser.id);
+
+        if (mentionsUser) {
+          // Get the current unread state for this channel
+          const channelUnread = useChannelStore.getState().unreadCounts[
+            channelId
+          ] || {
+            msg_count: 0,
+            mention_count: 0,
+          };
+
+          // If we're already counting this as unread, just make sure the mention is counted
+          if (
+            channelUnread.msg_count > 0 &&
+            channelUnread.mention_count === 0
+          ) {
+            incrementUnreadCount(channelId, 0, 1, postData.id); // Just add a mention
+          }
+
+          // Invalidate queries to refresh UI
+          invalidateQueries.channelUnreadCount(channelId);
+        }
       },
 
       // Channel viewed
@@ -129,15 +179,21 @@ export function useUnreadWebSocketEvents() {
         }
       },
 
-      // Handle when a post is edited (update may affect mentions)
-      [WebSocketEventType.POST_EDITED]: (data) => {
-        const { post, channel_id: channelId } = data;
+      // Team marked as read
+      ["team_marked_read"]: (data) => {
+        const { team_id: teamId, user_id: userId } = data;
 
-        if (!post || !channelId) return;
+        if (!currentUser || !teamId) return;
 
-        // We don't automatically update unread counts for edits
-        // But we do invalidate the cache to ensure accurate data on next fetch
-        invalidateQueries.channelMessages(channelId);
+        // Only process for current user
+        if (userId === currentUser.id) {
+          // Mark all channels in this team as read
+          const { markAllAsRead } = useChannelStore.getState();
+          markAllAsRead(teamId);
+
+          // Invalidate team unread counts
+          invalidateQueries.allUnreadCounts();
+        }
       },
 
       // Handle when a post is deleted (may affect unread counts)
@@ -149,6 +205,7 @@ export function useUnreadWebSocketEvents() {
         // We don't automatically update unread counts for deletions
         // But we do invalidate the cache to ensure accurate data on next fetch
         invalidateQueries.channelMessages(channelId);
+        invalidateQueries.channelUnreadCount(channelId);
       },
     },
     [currentUser, incrementUnreadCount, markAsRead, addProcessedMessageId],

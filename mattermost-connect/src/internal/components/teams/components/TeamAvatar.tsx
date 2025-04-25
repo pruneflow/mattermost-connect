@@ -12,7 +12,7 @@ export interface TeamAvatarProps extends BaseComponentProps {
   /** Size of the avatar */
   size?: "small" | "medium" | "large" | number;
   /** Number of unread mentions */
-  mentionCount?: number;
+  mention_count?: number;
   /** Whether to display the mention badge */
   showMentionBadge?: boolean;
   /** Maximum number to display on badge */
@@ -25,7 +25,7 @@ export interface TeamAvatarProps extends BaseComponentProps {
 const TeamAvatar: React.FC<TeamAvatarProps> = ({
   team,
   size = "medium",
-  mentionCount = 0,
+  mention_count = 0,
   showMentionBadge = false,
   badgeMax = 99,
   className,
@@ -68,7 +68,7 @@ const TeamAvatar: React.FC<TeamAvatarProps> = ({
   );
 
   // If we don't need to show the mention badge, just return the avatar
-  if (!showMentionBadge || mentionCount <= 0) {
+  if (!showMentionBadge || mention_count <= 0) {
     return avatar;
   }
 
@@ -76,7 +76,7 @@ const TeamAvatar: React.FC<TeamAvatarProps> = ({
   return (
     <Badge
       overlap="circular"
-      badgeContent={mentionCount}
+      badgeContent={mention_count}
       color="error"
       max={badgeMax}
       anchorOrigin={{

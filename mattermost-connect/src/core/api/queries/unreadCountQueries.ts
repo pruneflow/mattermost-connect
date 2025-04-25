@@ -71,7 +71,7 @@ export const useUnreadMessageHistoryQuery = (
 
       // Process the messages
       const messages: Message[] = [];
-      let mentionCount = 0;
+      let mention_count = 0;
 
       response.data.order.forEach((postId) => {
         const message = response.data.posts[postId];
@@ -89,24 +89,24 @@ export const useUnreadMessageHistoryQuery = (
           Array.isArray(message.props.mentions) &&
           message.props.mentions.includes(currentUser.id)
         ) {
-          mentionCount++;
+          mention_count++;
         }
       });
 
       // Calculate unread count - excluding the current user's messages
-      const messageCount = messages.filter(
+      const msg_count = messages.filter(
         (msg) => currentUser && msg.user_id !== currentUser.id,
       ).length;
 
       // Update the channel unread count in store
-      if (messageCount > 0 || mentionCount > 0) {
-        incrementUnreadCount(params.channelId, messageCount, mentionCount);
+      if (msg_count > 0 || mention_count > 0) {
+        incrementUnreadCount(params.channelId, msg_count, mention_count);
       }
 
       return {
         messages,
-        messageCount,
-        mentionCount,
+        msg_count,
+        mention_count,
         hasMore: response.data.next_post_id !== "",
       };
     },
@@ -114,36 +114,6 @@ export const useUnreadMessageHistoryQuery = (
     enabled: !!params?.channelId && !!params?.sinceTimestamp,
     // Cache data for a short time
     staleTime: 30 * 1000, // 30 seconds
-  });
-};
-
-/**
- * Fetches total unread counts for all channels (different from per-channel counts)
- * This makes a more efficient API call to get unread counts across all teams/channels
- */
-export const useTotalUnreadCountsQuery = () => {
-  const queryClient = useQueryClient();
-
-  return useQuery({
-    queryKey: ["totalUnreadCounts"],
-    queryFn: async () => {
-      // Fetch total unread counts across all channels
-      const response = await apiClient.get<{
-        message_count: number;
-        mention_count: number;
-      }>("users/me/counts");
-
-      // Get data
-      const { message_count, mention_count } = response.data;
-
-      return {
-        messageCount: message_count,
-        mentionCount: mention_count,
-      };
-    },
-    // Refetch every 30 seconds or when window gains focus
-    staleTime: 30 * 1000, // 30 seconds
-    refetchOnWindowFocus: true,
   });
 };
 
@@ -187,7 +157,7 @@ export const useChannelUnreadMessagesQuery = (
 
       // Process messages
       const messages: Message[] = [];
-      let mentionCount = 0;
+      let mention_count = 0;
 
       response.data.order.forEach((postId) => {
         const message = response.data.posts[postId];
@@ -207,7 +177,7 @@ export const useChannelUnreadMessagesQuery = (
           Array.isArray(message.props.mentions) &&
           message.props.mentions.includes(currentUser.id)
         ) {
-          mentionCount++;
+          mention_count++;
         }
       });
 
@@ -216,7 +186,7 @@ export const useChannelUnreadMessagesQuery = (
         incrementUnreadCount(
           channelId,
           messages.length,
-          mentionCount,
+          mention_count,
           // Use the most recent message ID if available
           messages.length > 0 ? messages[0].id : undefined,
         );
@@ -224,13 +194,132 @@ export const useChannelUnreadMessagesQuery = (
 
       return {
         messages,
-        messageCount: messages.length,
-        mentionCount,
+        msg_count: messages.length,
+        mention_count,
       };
     },
     enabled: !!channelId,
     // Don't cache for too long
     staleTime: 15 * 1000, // 15 seconds
+  });
+};
+
+/**
+ * Fetches unread count for a specific channel using the correct Mattermost API
+ * @param channelId Channel ID
+ * @returns Query hook for the channel's unread count
+ */
+export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
+  const { updateUnreadCount } = useChannelStore();
+  const { currentUser } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  return useQuery({
+    queryKey: channelId
+      ? QUERY_KEYS.channels.unreadCount(channelId)
+      : ["channelUnreadCount", "undefined"],
+    queryFn: async () => {
+      if (!channelId || !currentUser) {
+        throw new Error("Channel ID and current user are required");
+      }
+
+      // Use the correct Mattermost API endpoint
+      const response = await apiClient.get<{
+        msg_count: number;
+        mention_count: number;
+        last_viewed_at: number;
+        last_update_at: number;
+      }>(`users/${currentUser.id}/channels/${channelId}/unread`);
+
+      // Map response to our internal ChannelUnreadCount format
+      const unreadData: ChannelUnreadCount = {
+        msg_count: response.data.msg_count,
+        mention_count: response.data.mention_count,
+        lastViewedAt: response.data.last_viewed_at,
+      };
+
+      // Get the channel for totalMessageCount
+      let totalMsgCount: number | undefined;
+      try {
+        const channel = useChannelStore.getState().getChannelById(channelId);
+        totalMsgCount = channel?.total_msg_count;
+
+        // Update the unreadCount in the store
+        updateUnreadCount(
+          channelId,
+          unreadData.msg_count,
+          unreadData.mention_count,
+          undefined, // last message ID (not available from this API)
+          unreadData.lastViewedAt,
+          totalMsgCount,
+        );
+      } catch (error) {
+        console.error(
+          `Error updating unread count for channel ${channelId}:`,
+          error,
+        );
+      }
+
+      return unreadData;
+    },
+    // Don't run query if channelId is not provided
+    enabled: !!channelId && !!currentUser,
+    // Cache data for 30 seconds
+    staleTime: 30 * 1000,
+  });
+};
+
+/**
+ * Fetches unread counts for a team using the correct Mattermost API
+ * @param teamId Team ID
+ * @returns Query hook for the team's unread counts
+ */
+export const useTeamUnreadCountQuery = (teamId: string | undefined) => {
+  const { updateUnreadCount } = useChannelStore();
+  const { currentUser } = useAuthStore();
+
+  return useQuery({
+    queryKey: teamId
+      ? QUERY_KEYS.unread.byTeam(teamId)
+      : ["teamUnreadCount", "undefined"],
+    queryFn: async () => {
+      if (!teamId || !currentUser) {
+        throw new Error("Team ID and current user are required");
+      }
+
+      // Use the correct Mattermost API endpoint
+      const response = await apiClient.get<{
+        msg_count: number;
+        mention_count: number;
+        mention_count_by_channel?: Record<string, number>;
+        msg_count_by_channel?: Record<string, number>;
+      }>(`users/${currentUser.id}/teams/${teamId}/unread`);
+
+      // If we have per-channel breakdowns, update each channel's unread counts
+      if (
+        response.data.mention_count_by_channel &&
+        response.data.msg_count_by_channel
+      ) {
+        Object.entries(response.data.msg_count_by_channel).forEach(
+          ([channelId, msgCount]) => {
+            const mention_count =
+              response.data.mention_count_by_channel?.[channelId] || 0;
+
+            // Update the store with per-channel data
+            updateUnreadCount(channelId, msgCount, mention_count);
+          },
+        );
+      }
+
+      return {
+        msg_count: response.data.msg_count,
+        mention_count: response.data.mention_count,
+      };
+    },
+    // Don't run query if teamId is not provided
+    enabled: !!teamId && !!currentUser,
+    // Cache data for 30 seconds
+    staleTime: 30 * 1000,
   });
 };
 
@@ -267,6 +356,7 @@ export const useAcknowledgeNewMessageMutation = () => {
 export const useSyncChannelUnreadCountMutation = () => {
   const queryClient = useQueryClient();
   const { updateUnreadCount } = useChannelStore();
+  const { currentUser } = useAuthStore();
 
   return useMutation({
     mutationFn: async ({
@@ -276,23 +366,36 @@ export const useSyncChannelUnreadCountMutation = () => {
       channelId: string;
       sinceTimestamp: number;
     }) => {
-      // Fetch unread count from API
-      const unreadResponse = await apiClient.get<ChannelUnreadCount>(
-        `users/me/channels/${channelId}/unread`,
-      );
+      if (!currentUser) {
+        throw new Error("Current user is required");
+      }
+
+      // Fetch unread count from API using the correct endpoint
+      const unreadResponse = await apiClient.get<{
+        msg_count: number;
+        mention_count: number;
+        last_viewed_at: number;
+      }>(`users/${currentUser.id}/channels/${channelId}/unread`);
+
+      // Map to our internal format
+      const unreadData: ChannelUnreadCount = {
+        msg_count: unreadResponse.data.msg_count,
+        mention_count: unreadResponse.data.mention_count,
+        lastViewedAt: unreadResponse.data.last_viewed_at,
+      };
 
       return {
         channelId,
-        unreadData: unreadResponse.data,
+        unreadData,
       };
     },
     onSuccess: ({ channelId, unreadData }) => {
       // Update store with latest data from server
       updateUnreadCount(
         channelId,
-        unreadData.messageCount,
-        unreadData.mentionCount,
-        unreadData.lastMessageId,
+        unreadData.msg_count,
+        unreadData.mention_count,
+        undefined, // last message ID
         unreadData.lastViewedAt,
       );
 

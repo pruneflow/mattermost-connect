@@ -29,7 +29,7 @@ export interface TeamItemGridProps extends TeamItemProps {
   /** Maximum name length before truncating */
   maxNameLength?: number;
   /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
+  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
 }
 
 /**
@@ -52,15 +52,15 @@ const TeamItemGrid: React.FC<TeamItemGridProps> = ({
   const hasMessages =
     unreadCounts &&
     unreadCounts[team.id] &&
-    unreadCounts[team.id].messageCount > 0;
+    unreadCounts[team.id].msg_count > 0;
   const hasMentions =
     unreadCounts &&
     unreadCounts[team.id] &&
-    unreadCounts[team.id].mentionCount > 0;
+    unreadCounts[team.id].mention_count > 0;
 
   // Get the mention count if any
-  const mentionCount =
-    hasMentions && unreadCounts ? unreadCounts[team.id].mentionCount : 0;
+  const mention_count =
+    hasMentions && unreadCounts ? unreadCounts[team.id].mention_count : 0;
 
   return (
     <BaseTeamItem
@@ -109,7 +109,7 @@ const TeamItemGrid: React.FC<TeamItemGridProps> = ({
                 <TeamAvatar
                   team={team}
                   size="large"
-                  mentionCount={mentionCount}
+                  mention_count={mention_count}
                   showMentionBadge={hasMentions}
                   sx={{ mx: "auto" }}
                 />

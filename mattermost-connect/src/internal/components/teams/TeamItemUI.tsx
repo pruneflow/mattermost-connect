@@ -30,7 +30,7 @@ export interface TeamItemUIProps extends ItemComponentProps<Team> {
   /** Unread message count */
   unreadCount?: number;
   /** Unread mention count */
-  mentionCount?: number;
+  mention_count?: number;
   /** Whether the item is a compact version */
   compact?: boolean;
 }
@@ -42,7 +42,7 @@ const TeamItemUI: React.FC<TeamItemUIProps> = ({
   isLoading = false,
   variant = "list",
   unreadCount = 0,
-  mentionCount = 0,
+  mention_count = 0,
   compact = false,
   onClick,
   onAction,
@@ -95,7 +95,7 @@ const TeamItemUI: React.FC<TeamItemUIProps> = ({
             >
               <UnreadBadge
                 count={unreadCount}
-                mentionCount={mentionCount}
+                mention_count={mention_count}
                 showZero={false}
                 mentionPriority={true}
               >
@@ -120,7 +120,7 @@ const TeamItemUI: React.FC<TeamItemUIProps> = ({
           label={
             <UnreadBadge
               count={unreadCount}
-              mentionCount={mentionCount}
+              mention_count={mention_count}
               showZero={false}
               mentionPriority={true}
             >
@@ -171,7 +171,7 @@ const TeamItemUI: React.FC<TeamItemUIProps> = ({
               >
                 <UnreadBadge
                   count={unreadCount}
-                  mentionCount={mentionCount}
+                  mention_count={mention_count}
                   showZero={false}
                   mentionPriority={true}
                 >
@@ -248,7 +248,7 @@ const TeamItemUI: React.FC<TeamItemUIProps> = ({
             <ListItemIcon>
               <UnreadBadge
                 count={unreadCount}
-                mentionCount={mentionCount}
+                mention_count={mention_count}
                 showZero={false}
                 mentionPriority={true}
               >
