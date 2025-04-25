@@ -30,10 +30,6 @@ export {
   useWebSocketEvent,
   useWebSocketEvents,
   useWebSocketMessageEvents,
-  useWebSocketReactionEvents,
-  useWebSocketChannelEvents,
-  useWebSocketUserEvents,
-  useWebSocketTeamEvents,
   useWebSocketTypingEvents,
   useTypingIndicator,
 } from "./hooks/useWebSocket";

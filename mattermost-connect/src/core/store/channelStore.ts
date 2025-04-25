@@ -75,6 +75,10 @@ interface ChannelState {
   mutedChannels: Set<string>;
   /** Last processed message IDs to avoid duplicates */
   processedMessageIds: Set<string>;
+  /** Marks a channel as read (clears unread counts) */
+  markAsRead: (channelId: string) => void;
+  /** Adds a processed message ID to avoid duplicates */
+  addProcessedMessageId: (messageId: string) => void;
 }
 
 /**
@@ -90,6 +94,8 @@ const initialState: ChannelState = {
   typingUsers: {},
   mutedChannels: new Set<string>(),
   processedMessageIds: new Set<string>(),
+  markAsRead: () => {},
+  addProcessedMessageId: () => {},
 };
 
 /**

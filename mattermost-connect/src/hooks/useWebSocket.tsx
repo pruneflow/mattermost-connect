@@ -12,9 +12,32 @@ import { WebSocketEventType } from "../core/services/wsService";
 import { useAuthStore } from "../core/store/authStore";
 import { useChannelStore } from "../core/store/channelStore";
 import { invalidateQueries } from "../core/api/queryClient";
+import { debounce } from "../utils/mattermostUtils";
 
-// Import uniquement ce qui est nécessaire pour cette partie de la fonctionnalité
-// Le reste du hook useWebSocket est conservé tel quel et n'est pas modifié ici
+/**
+ * Hook for general WebSocket functionality
+ * Provides connection state and methods to interact with the WebSocket connection
+ *
+ * @returns Object with WebSocket state and methods
+ */
+export function useWebSocket() {
+  // Get state and methods from the WebSocket store
+  const wsStore = useWsStore();
+
+  return {
+    // Connection state
+    isConnected: wsStore.isConnected,
+    isConnecting: wsStore.isConnecting,
+    url: wsStore.url,
+    error: wsStore.error,
+    reconnectAttempts: wsStore.reconnectAttempts,
+
+    // Connection methods
+    connect: wsStore.connect,
+    disconnect: wsStore.disconnect,
+    sendMessage: wsStore.sendMessage,
+  };
+}
 
 /**
  * Hook for handling unread-related WebSocket events
@@ -172,4 +195,88 @@ export function useWebSocketEvents(
       unregister();
     };
   }, [...deps]);
+}
+
+/**
+ * Hook for handling message-related WebSocket events (new messages, edits, deletes)
+ * @param handler Callback function for message events
+ * @param deps Dependencies for the hook
+ */
+export function useWebSocketMessageEvents(
+  handler: (data: any) => void,
+  deps: any[] = [],
+) {
+  useEffect(() => {
+    // Register handlers for message events
+    return registerWsHandlers({
+      [WebSocketEventType.POSTED]: handler,
+      [WebSocketEventType.POST_EDITED]: handler,
+      [WebSocketEventType.POST_DELETED]: handler,
+    });
+  }, deps);
+}
+
+/**
+ * Hook for handling typing indicator WebSocket events
+ * @param channelId Channel ID to listen for typing events
+ * @param handler Callback function for typing events
+ * @param deps Dependencies for the hook
+ */
+export function useWebSocketTypingEvents(
+  channelId: string,
+  handler: (data: any) => void,
+  deps: any[] = [],
+) {
+  useEffect(() => {
+    if (!channelId) return;
+
+    // Register handler for typing events
+    return registerWsHandler(WebSocketEventType.TYPING, (data) => {
+      if (data.channel_id === channelId) {
+        handler(data);
+      }
+    });
+  }, [channelId, ...deps]);
+}
+
+/**
+ * Hook that provides a function to send typing indicator events
+ * @param channelId Channel ID where typing is occurring
+ * @returns Function to call when user is typing
+ */
+export function useTypingIndicator(channelId: string | undefined) {
+  // Access the WebSocket store to get connection state and message sending function
+  const { isConnected, sendMessage } = useWsStore();
+
+  // Get current user information
+  const { currentUser } = useAuthStore();
+
+  // Create a debounced function to avoid sending too many events
+  const debouncedSendTyping = useCallback(
+    debounce((rootId?: string) => {
+      // Only send if we have necessary data and an active connection
+      if (!channelId || !currentUser || !isConnected) {
+        return;
+      }
+
+      // Send the typing event through WebSocket
+      sendMessage({
+        action: "user_typing",
+        data: {
+          channel_id: channelId,
+          parent_id: rootId || "", // For thread replies
+          user_id: currentUser.id,
+        },
+      });
+    }, 1000), // Debounce for 1 second (don't send events too frequently)
+    [channelId, currentUser, isConnected, sendMessage],
+  );
+
+  // Return a function that components can call when user is typing
+  return useCallback(
+    (rootId?: string) => {
+      debouncedSendTyping(rootId);
+    },
+    [debouncedSendTyping],
+  );
 }

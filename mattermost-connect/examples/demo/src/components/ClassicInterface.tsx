@@ -32,7 +32,6 @@ import {
   useTeams,
   useWebSocket,
   useWebSocketMessageEvents,
-  useWebSocketChannelEvents,
   Channel,
   Team,
   Message,
@@ -104,11 +103,6 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
     },
     [activeChannel?.id],
   );
-
-  // Enregistrer les gestionnaires WebSocket pour les mises à jour de canaux
-  useWebSocketChannelEvents((data) => {
-    console.log("Channel event received:", data);
-  }, []);
 
   // État local pour l'interface utilisateur
   const [drawerOpen, setDrawerOpen] = useState(false);
