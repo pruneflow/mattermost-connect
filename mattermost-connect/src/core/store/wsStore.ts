@@ -22,6 +22,10 @@ export interface WebSocketState {
   reconnectAttempts: number;
   /** Time of last successful connection */
   lastConnectedAt: number | null;
+  /** Time of last disconnection */
+  lastDisconnectedAt: number | null;
+  /** Whether we've had a successful connection that later disconnected */
+  hasBeenDisconnected: boolean;
 
   // Actions
   /** Connects to the WebSocket server */
@@ -38,6 +42,8 @@ export interface WebSocketState {
   setError: (error: Error | null) => void;
   /** Sets the reconnect attempts */
   setReconnectAttempts: (attempts: number) => void;
+  /** Resets the disconnected state after recovery */
+  resetDisconnectedState: () => void;
 }
 
 /**
@@ -51,6 +57,8 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
   error: null,
   reconnectAttempts: 0,
   lastConnectedAt: null,
+  lastDisconnectedAt: null,
+  hasBeenDisconnected: false,
 
   /**
    * Connects to the WebSocket server
@@ -63,16 +71,32 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
     try {
       await wsService.connect(url, token, {
         onOpen: () => {
+          const now = Date.now();
+          const wasDisconnected = get().hasBeenDisconnected;
+
           set({
             isConnected: true,
             isConnecting: false,
             reconnectAttempts: 0,
-            lastConnectedAt: Date.now(),
+            lastConnectedAt: now,
             error: null,
           });
+
+          // If this is a reconnect, we'll leave hasBeenDisconnected true
+          // so the app can detect this reconnection and refresh data if needed
+          if (!wasDisconnected) {
+            set({ hasBeenDisconnected: false });
+          }
         },
         onClose: (event) => {
-          set({ isConnected: false, isConnecting: false });
+          const now = Date.now();
+
+          set({
+            isConnected: false,
+            isConnecting: false,
+            lastDisconnectedAt: now,
+            hasBeenDisconnected: true,
+          });
 
           // Only increment reconnect attempts for unexpected closes
           if (event.code !== 1000) {
@@ -85,6 +109,8 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
           set({
             error: new Error("WebSocket connection error"),
             isConnecting: false,
+            lastDisconnectedAt: Date.now(),
+            hasBeenDisconnected: true,
           });
         },
         pingInterval: 30000,
@@ -93,6 +119,8 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
       set({
         error: error as Error,
         isConnecting: false,
+        lastDisconnectedAt: Date.now(),
+        hasBeenDisconnected: true,
       });
 
       // Increment reconnect attempts
@@ -112,6 +140,8 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
     set({
       isConnected: false,
       isConnecting: false,
+      lastDisconnectedAt: Date.now(),
+      hasBeenDisconnected: true,
     });
   },
 
@@ -129,9 +159,12 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
    * @param isConnected Whether the WebSocket is connected
    */
   setConnected: (isConnected: boolean) => {
+    const now = Date.now();
     set({
       isConnected,
-      lastConnectedAt: isConnected ? Date.now() : get().lastConnectedAt,
+      lastConnectedAt: isConnected ? now : get().lastConnectedAt,
+      lastDisconnectedAt: !isConnected ? now : get().lastDisconnectedAt,
+      hasBeenDisconnected: !isConnected ? true : get().hasBeenDisconnected,
     });
   },
 
@@ -157,6 +190,14 @@ export const useWsStore = create<WebSocketState>()((set, get) => ({
    */
   setReconnectAttempts: (attempts: number) => {
     set({ reconnectAttempts: attempts });
+  },
+
+  /**
+   * Resets the disconnected state after recovery
+   * Used when the application has handled reconnection-related data refreshes
+   */
+  resetDisconnectedState: () => {
+    set({ hasBeenDisconnected: false });
   },
 }));
 

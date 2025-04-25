@@ -2,7 +2,7 @@
 /**
  * Hooks for WebSocket functionality, focused on unread count management
  */
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   registerWsHandler,
   registerWsHandlers,
@@ -24,6 +24,36 @@ export function useWebSocket() {
   // Get state and methods from the WebSocket store
   const wsStore = useWsStore();
 
+  // Track WebSocket connection status
+  const connectionStatusRef = useRef({
+    lastConnectedAt: Date.now(),
+    hasDisconnected: false,
+  });
+
+  // Monitor WebSocket connection status
+  useEffect(() => {
+    // If we've connected after a disconnection, we may need to refresh data
+    if (wsStore.isConnected && connectionStatusRef.current.hasDisconnected) {
+      // Reset the disconnection flag
+      connectionStatusRef.current.hasDisconnected = false;
+      // Todo: Add logic to refresh critical data if needed
+    }
+
+    // If we've disconnected, mark the disconnect state
+    if (
+      !wsStore.isConnected &&
+      !wsStore.isConnecting &&
+      connectionStatusRef.current.lastConnectedAt > 0
+    ) {
+      connectionStatusRef.current.hasDisconnected = true;
+    }
+
+    // Update last connected time if connected
+    if (wsStore.isConnected) {
+      connectionStatusRef.current.lastConnectedAt = Date.now();
+    }
+  }, [wsStore.isConnected, wsStore.isConnecting]);
+
   return {
     // Connection state
     isConnected: wsStore.isConnected,
@@ -31,6 +61,7 @@ export function useWebSocket() {
     url: wsStore.url,
     error: wsStore.error,
     reconnectAttempts: wsStore.reconnectAttempts,
+    connectionStatus: connectionStatusRef.current,
 
     // Connection methods
     connect: wsStore.connect,
@@ -102,16 +133,7 @@ export function useUnreadWebSocketEvents() {
           messageId, // Message ID for tracking
         );
 
-        // Invalidate related queries to ensure UI updates
-        setTimeout(() => {
-          invalidateQueries.channelUnreadCount(channelId);
-
-          // Also invalidate team-level counts
-          const channel = useChannelStore.getState().getChannelById(channelId);
-          if (channel?.team_id) {
-            invalidateQueries.channel(channelId);
-          }
-        }, 100);
+        // No need to invalidate queries since we updated the store directly
       },
 
       // Message edited
@@ -147,9 +169,6 @@ export function useUnreadWebSocketEvents() {
           ) {
             incrementUnreadCount(channelId, 0, 1, postData.id); // Just add a mention
           }
-
-          // Invalidate queries to refresh UI
-          invalidateQueries.channelUnreadCount(channelId);
         }
       },
 
@@ -162,7 +181,6 @@ export function useUnreadWebSocketEvents() {
         // Only process for current user
         if (userId === currentUser.id && channelId) {
           markAsRead(channelId);
-          invalidateQueries.channelUnreadCount(channelId);
         }
       },
 
@@ -175,7 +193,6 @@ export function useUnreadWebSocketEvents() {
         // Only process for current user
         if (userId === currentUser.id && channelId) {
           markAsRead(channelId);
-          invalidateQueries.channelUnreadCount(channelId);
         }
       },
 
@@ -190,26 +207,26 @@ export function useUnreadWebSocketEvents() {
           // Mark all channels in this team as read
           const { markAllAsRead } = useChannelStore.getState();
           markAllAsRead(teamId);
-
-          // Invalidate team unread counts
-          invalidateQueries.allUnreadCounts();
         }
       },
 
       // Handle when a post is deleted (may affect unread counts)
       [WebSocketEventType.POST_DELETED]: (data) => {
-        const { post, channel_id: channelId } = data;
-
-        if (!post || !channelId) return;
-
-        // We don't automatically update unread counts for deletions
-        // But we do invalidate the cache to ensure accurate data on next fetch
-        invalidateQueries.channelMessages(channelId);
-        invalidateQueries.channelUnreadCount(channelId);
+        // We currently don't automatically update unread counts for deletions
+        // This is consistent with Mattermost's own behavior
       },
     },
     [currentUser, incrementUnreadCount, markAsRead, addProcessedMessageId],
   );
+
+  // Return a WebSocket connection monitoring handler
+  return {
+    onWebSocketReconnect: () => {
+      // When WebSocket reconnects, we might need to refresh unread counts
+      // This would be called from the main component that uses this hook
+      console.log("WebSocket reconnected - refreshing unread counts");
+    },
+  };
 }
 
 /**

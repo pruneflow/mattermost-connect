@@ -3,14 +3,21 @@
  * Main provider component for MattermostConnect
  * Initializes API client, authentication, and WebSocket connections
  */
-import React, { useEffect, useState, ReactNode } from "react";
+import React, {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { apiClient } from "../core/api/client";
 import { queryClient } from "../core/api/queryClient";
 import { useAuthStore } from "../core/store/authStore";
 import { useWsStore } from "../core/store/wsStore";
-import { useInitializeAuthQuery } from "../core/api/queries/authQueries";
 import { wsService } from "../core/services/wsService";
+import { useUnreadCounts } from "../hooks/useUnreadCounts";
+import { JSX } from "react/jsx-runtime";
 
 /**
  * MattermostProvider props
@@ -53,13 +60,7 @@ function determineMode(props: MattermostProviderProps): "direct" | "proxy" {
   return "direct";
 }
 
-/**
- * Main provider component for MattermostConnect
- * Initializes all required services and provides context to child components
- * @param props Provider props
- * @returns Provider component
- */
-export function MattermostProvider({
+function MattermostProviderContent({
   children,
   serverUrl,
   proxyUrl,
@@ -71,24 +72,61 @@ export function MattermostProvider({
   onAuthError,
   onWebSocketError,
 }: MattermostProviderProps) {
-  // Track initialization status
+  // États
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<Error | null>(null);
 
-  // Use auth store actions
+  // CHANGEMENT IMPORTANT: Utiliser useRef pour l'état de la connexion WebSocket
+  // plutôt que useState, pour éviter des rendus supplémentaires
+  const wsConnectionStatusRef = useRef({
+    hadSuccessfulConnection: false,
+    hasDisconnected: false,
+    lastConnectedAt: 0,
+  });
+
+  // Hooks du store
   const { initialize, setError: setAuthError } = useAuthStore();
+  const {
+    connect: connectWs,
+    setError: setWsError,
+    isConnected,
+  } = useWsStore();
 
-  // Use WebSocket store actions
-  const { connect: connectWs, setError: setWsError } = useWsStore();
+  // Hook qui utilise React Query - maintenant utilisable en toute sécurité
+  const { loadInitialUnreadCounts } = useUnreadCounts();
 
-  // Set up API client
+  // Déterminer le mode (direct/proxy)
+  const mode = serverUrl ? "direct" : proxyUrl && clientId ? "proxy" : "direct";
+
+  // Gestionnaire de reconnexion WebSocket
+  const handleWsReconnect = useCallback(() => {
+    // Utiliser une fonction qui ne modifie pas l'état local
+    if (
+      wsConnectionStatusRef.current.hadSuccessfulConnection &&
+      wsConnectionStatusRef.current.hasDisconnected
+    ) {
+      void loadInitialUnreadCounts();
+      wsConnectionStatusRef.current.hasDisconnected = false;
+    }
+  }, [loadInitialUnreadCounts]); // Moins de dépendances
+
   useEffect(() => {
-    const mode = determineMode({
-      serverUrl,
-      proxyUrl,
-      clientId,
-    } as MattermostProviderProps);
+    if (isConnected) {
+      if (wsConnectionStatusRef.current.hasDisconnected) {
+        handleWsReconnect();
+      }
 
+      wsConnectionStatusRef.current = {
+        hadSuccessfulConnection: true,
+        hasDisconnected: false,
+        lastConnectedAt: Date.now(),
+      };
+    } else if (wsConnectionStatusRef.current.hadSuccessfulConnection) {
+      wsConnectionStatusRef.current.hasDisconnected = true;
+    }
+  }, [isConnected, handleWsReconnect]);
+
+  useEffect(() => {
     try {
       apiClient.configure({
         mode,
@@ -107,17 +145,17 @@ export function MattermostProvider({
       console.error("Failed to configure API client:", error);
       setInitError(error as Error);
     }
-  }, [serverUrl, proxyUrl, clientId, token, onAuthError]);
+  }, [serverUrl, proxyUrl, clientId, token, mode, onAuthError]);
 
-  // Initialize authentication
+  // Initialisation de l'authentification et WebSocket - légèrement modifiée
   useEffect(() => {
+    // Éviter les appels excessifs
+    if (isInitialized) return;
+
     const initAuth = async () => {
       try {
         // Initialize from stored token or provided token
         const isAuthenticated = await initialize();
-
-        // Update initialization status
-        setIsInitialized(true);
 
         // Call initialization callback
         if (onInitialized) {
@@ -138,6 +176,9 @@ export function MattermostProvider({
               const authToken = useAuthStore.getState().token;
               if (authToken) {
                 await connectWs(wsUrl, authToken);
+
+                // Sécuritaire d'appeler ici car le Provider est déjà monté
+                loadInitialUnreadCounts();
               }
             }
           } catch (wsError) {
@@ -148,7 +189,13 @@ export function MattermostProvider({
               onWebSocketError(wsError as Error);
             }
           }
+        } else if (isAuthenticated) {
+          // Même sans WebSocket, charger les compteurs
+          loadInitialUnreadCounts();
         }
+
+        // CHANGEMENT IMPORTANT: Mettre à jour isInitialized à la fin, pas au milieu
+        setIsInitialized(true);
       } catch (authError) {
         console.error("Failed to initialize authentication:", authError);
         setAuthError(authError as Error);
@@ -160,13 +207,7 @@ export function MattermostProvider({
       }
     };
 
-    const mode = determineMode({
-      serverUrl,
-      proxyUrl,
-      clientId,
-    } as MattermostProviderProps);
-
-    // Only initialize if we have the required configuration
+    // Seulement initialiser avec la configuration requise
     if (
       (mode === "direct" && serverUrl) ||
       (mode === "proxy" && proxyUrl && clientId)
@@ -174,9 +215,8 @@ export function MattermostProvider({
       initAuth();
     }
 
-    // Clean up on unmount
+    // Nettoyage
     return () => {
-      // Disconnect WebSocket if connected
       if (wsService.isSocketConnected()) {
         wsService.disconnect();
       }
@@ -187,6 +227,9 @@ export function MattermostProvider({
     clientId,
     token,
     enableWebSocket,
+    persistAuth,
+    mode,
+    isInitialized,
     initialize,
     connectWs,
     setAuthError,
@@ -194,11 +237,24 @@ export function MattermostProvider({
     onInitialized,
     onAuthError,
     onWebSocketError,
+    loadInitialUnreadCounts,
   ]);
 
-  // Provide React Query context to children
+  // Le rendu est simplement les enfants - toute la logique est au-dessus
+  return <>{children}</>;
+}
+
+/**
+ * Main provider component for MattermostConnect
+ * Initializes all required services and provides context to child components
+ * @param props Provider props
+ * @returns Provider component
+ */
+export function MattermostProvider(props: MattermostProviderProps) {
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <MattermostProviderContent {...props} />
+    </QueryClientProvider>
   );
 }
 

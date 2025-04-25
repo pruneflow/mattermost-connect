@@ -12,7 +12,10 @@ import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
 import { useAuthStore } from "../../../core/store/authStore";
 import { useDirectChannels } from "../../../hooks/useDirectChannels";
 import { useDirectChannelUsers } from "../../../hooks/useDirectChannelUsers";
-import { useUnreadWebSocketEvents } from "../../../hooks/useWebSocket";
+import {
+  useUnreadWebSocketEvents,
+  useWebSocket,
+} from "../../../hooks/useWebSocket";
 import {
   isDirectChannel,
   isGroupChannel,
@@ -77,6 +80,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     hasMentionsInChannel,
     isChannelMuted,
     teamUnreads,
+    refreshChannels,
   } = useChannels(teamId);
 
   // Get current user
@@ -89,8 +93,22 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const { isLoadingUsers, userIdsCount, loadedCount, stillMissingCount } =
     useDirectChannelUsers([...directChannels, ...groupChannels]);
 
+  // Monitor WebSocket connection
+  const { isConnected, connectionStatus } = useWebSocket();
+
   // Register WebSocket handlers for unread counts
-  useUnreadWebSocketEvents();
+  const { onWebSocketReconnect } = useUnreadWebSocketEvents();
+
+  // If WebSocket reconnects after disconnection, refresh data
+  useEffect(() => {
+    if (isConnected && connectionStatus.hasDisconnected) {
+      // Call WebSocket reconnect handler
+      onWebSocketReconnect();
+
+      // Refresh channels to get updated data
+      refreshChannels();
+    }
+  }, [isConnected, connectionStatus, refreshChannels, onWebSocketReconnect]);
 
   // Channel creation mutation
   const { createChannel, isCreating } = useChannelCreation();

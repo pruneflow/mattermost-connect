@@ -18,6 +18,8 @@ export interface TeamListUIProps extends ListComponentProps<Team> {
   onCreateTeam?: () => void;
   /** Callback when a team action is performed */
   onTeamAction?: (action: string, team: Team) => void;
+  /** Search method */
+  onSearch?: (term: string) => void;
 }
 
 const TeamListUI: React.FC<TeamListUIProps> = ({

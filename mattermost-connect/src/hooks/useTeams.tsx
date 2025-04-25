@@ -2,7 +2,7 @@
 /**
  * Hook for team functionality
  */
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeamStore, Team } from "../core/store/teamStore";
 import {
   useTeamsQuery,
@@ -38,16 +38,114 @@ export function useTeams() {
   const teamsQuery = useTeamsQuery();
 
   // Get unread counts from hook
-  const { teamUnreadCounts, hasUnreadsInTeam, hasMentionsInTeam } =
-    useUnreadCounts();
+  const {
+    teamUnreadCounts,
+    hasUnreadsInTeam,
+    hasMentionsInTeam,
+    prefetchAllTeamUnreadCounts,
+    loadInitialUnreadCounts,
+  } = useUnreadCounts();
+
+  // State to track if unread counts have been loaded
+  const [unreadCountsLoaded, setUnreadCountsLoaded] = useState(false);
+
+  // Ref to track attempts to load unread counts
+  const unreadLoadingAttemptsRef = useRef(0);
+
+  // Function to broadcast unread counts updates
+  const broadcastUnreadCountsUpdate = useCallback(() => {
+    // Create and dispatch a custom event with the current counts
+    const event = new CustomEvent("unreadCountsUpdated", {
+      detail: teamUnreadCounts,
+    });
+    window.dispatchEvent(event);
+  }, [teamUnreadCounts]);
+
+  // Pre-fetch unread counts for all teams when teams are loaded
+  useEffect(() => {
+    // Only proceed if we have teams and haven't already loaded counts
+    if (
+      teams.length > 0 &&
+      !unreadCountsLoaded &&
+      !teamsQuery.isLoading &&
+      unreadLoadingAttemptsRef.current < 3
+    ) {
+      // Increment the attempts counter
+      unreadLoadingAttemptsRef.current += 1;
+
+      // Set a timeout to ensure this runs after other initialization
+      setTimeout(() => {
+        // Try to load unread counts
+        prefetchAllTeamUnreadCounts(teams)
+          .then(() => {
+            // Mark as loaded
+            setUnreadCountsLoaded(true);
+
+            // Broadcast an update to let components know data is available
+            // Use another small delay to ensure data is fully propagated
+            setTimeout(() => {
+              broadcastUnreadCountsUpdate();
+            }, 50);
+          })
+          .catch((error: any) => {
+            console.error("Error prefetching team unread counts:", error);
+          });
+
+        // If we have minimal data, also try a full reload
+        if (Object.keys(teamUnreadCounts).length < teams.length) {
+          void loadInitialUnreadCounts();
+        }
+      }, 200);
+    }
+  }, [
+    teams,
+    unreadCountsLoaded,
+    teamsQuery.isLoading,
+    prefetchAllTeamUnreadCounts,
+    broadcastUnreadCountsUpdate,
+    loadInitialUnreadCounts,
+    teamUnreadCounts,
+  ]);
+
+  // Effect to periodically check and broadcast unread counts
+  // This helps ensure UI components stay updated
+  useEffect(() => {
+    if (teams.length === 0) return;
+
+    // First check shortly after initial render
+    const firstCheckTimer = setTimeout(() => {
+      broadcastUnreadCountsUpdate();
+    }, 500);
+
+    // Then check again after a longer delay to catch any late data
+    const secondCheckTimer = setTimeout(() => {
+      broadcastUnreadCountsUpdate();
+    }, 2000);
+
+    return () => {
+      clearTimeout(firstCheckTimer);
+      clearTimeout(secondCheckTimer);
+    };
+  }, [teams, broadcastUnreadCountsUpdate]);
 
   /**
    * Refreshes the teams list
    * @returns Promise resolving to the refreshed teams
    */
   const refreshTeams = useCallback(async () => {
-    return teamsQuery.refetch().then((result) => result.data || []);
-  }, [teamsQuery]);
+    return teamsQuery.refetch().then((result) => {
+      const fetchedTeams = result.data || [];
+
+      if (fetchedTeams.length > 0) {
+        return prefetchAllTeamUnreadCounts(fetchedTeams).then(() => {
+          broadcastUnreadCountsUpdate();
+          return fetchedTeams;
+        });
+      }
+
+      return fetchedTeams;
+    });
+  }, [teamsQuery, prefetchAllTeamUnreadCounts, broadcastUnreadCountsUpdate]);
 
   /**
    * Sets the active team by ID
@@ -101,13 +199,20 @@ export function useTeams() {
     [hasMentionsInTeam],
   );
 
+  // Force a recomputation of teamUnreadCounts to help with propagation
+  const computedTeamUnreadCounts = useMemo(() => {
+    // This simply creates a new reference to help trigger UI updates
+    return { ...teamUnreadCounts };
+  }, [teamUnreadCounts, unreadCountsLoaded]);
+
   return {
     // State
     teams,
     activeTeam,
     isLoading: isLoading || teamsQuery.isLoading || teamsQuery.isFetching,
     error: error || teamsQuery.error,
-    teamUnreadCounts,
+    teamUnreadCounts: computedTeamUnreadCounts,
+    unreadCountsLoaded,
 
     // Actions
     setActiveTeam,
@@ -118,6 +223,7 @@ export function useTeams() {
     getTeamUnreadCount,
     teamHasUnreads,
     teamHasMentions,
+    broadcastUnreadCountsUpdate,
 
     // Query states
     isRefreshing: teamsQuery.isRefetching,
