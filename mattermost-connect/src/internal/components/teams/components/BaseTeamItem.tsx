@@ -1,10 +1,9 @@
 // src/internal/components/teams/components/BaseTeamItem.tsx
 
 import React from "react";
-import { Typography, Badge, Box } from "@mui/material";
-import { Team } from "../../../../index";
+import { Box } from "@mui/material";
 import { TeamItemProps } from "../types";
-import { hasUnreadMessages, hasUnreadMentions } from "../utils/utils";
+import { hasUnreadMessages, hasUnreadMentions } from "../utils";
 
 export interface BaseTeamItemProps extends TeamItemProps {
   /** Whether to show team description */

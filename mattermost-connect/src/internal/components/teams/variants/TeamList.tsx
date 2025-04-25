@@ -4,34 +4,15 @@ import React from "react";
 import { List, Box, Divider, Button } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
-import {
-  TeamDisplayProps,
-  TeamInteractionProps,
-  TeamSearchProps,
-  TeamUnreadIndicatorProps,
-} from "../types";
+import { TeamSearchableVariantProps } from "../types";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import { SearchInput } from "../../../components/common";
 import TeamItemList from "./TeamItemList";
 
-export interface TeamListProps
-  extends BaseComponentProps,
-    TeamDisplayProps,
-    TeamInteractionProps,
-    TeamSearchProps,
-    TeamUnreadIndicatorProps {
-  /** Teams to display */
-  teams: Team[];
-  /** Currently selected team ID */
-  selectedTeamId?: string;
-  /** Callback when a team is selected */
-  onSelectTeam: (team: Team) => void;
-}
-
 /**
  * A list view of teams
  */
-const TeamList: React.FC<TeamListProps> = ({
+const TeamList: React.FC<TeamSearchableVariantProps> = ({
   teams,
   selectedTeamId,
   onSelectTeam,

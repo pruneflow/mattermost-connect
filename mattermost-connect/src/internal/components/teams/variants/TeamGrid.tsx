@@ -4,34 +4,14 @@ import React from "react";
 import { Box, Grid, Button } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
-import {
-  TeamDisplayProps,
-  TeamInteractionProps,
-  TeamSearchProps,
-  TeamUnreadIndicatorProps,
-} from "../types";
-import { BaseComponentProps } from "../../../types/componentTypes";
+import { TeamSearchableVariantProps } from "../types";
 import { SearchInput } from "../../../components/common";
 import TeamItemGrid from "./TeamItemGrid";
-
-export interface TeamGridProps
-  extends BaseComponentProps,
-    TeamDisplayProps,
-    TeamInteractionProps,
-    TeamSearchProps,
-    TeamUnreadIndicatorProps {
-  /** Teams to display */
-  teams: Team[];
-  /** Currently selected team ID */
-  selectedTeamId?: string;
-  /** Callback when a team is selected */
-  onSelectTeam: (team: Team) => void;
-}
 
 /**
  * A grid view of teams as cards
  */
-const TeamGrid: React.FC<TeamGridProps> = ({
+const TeamGrid: React.FC<TeamSearchableVariantProps> = ({
   teams,
   selectedTeamId,
   onSelectTeam,

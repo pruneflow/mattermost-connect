@@ -4,7 +4,7 @@ import React from "react";
 import { Avatar, Badge } from "@mui/material";
 import { Team } from "../../../../index";
 import { BaseComponentProps } from "../../../types/componentTypes";
-import { getTeamAvatarColor, getTeamInitials } from "../utils/utils";
+import { getTeamAvatarColor, getTeamInitials } from "../utils";
 
 export interface TeamAvatarProps extends BaseComponentProps {
   /** Team data */

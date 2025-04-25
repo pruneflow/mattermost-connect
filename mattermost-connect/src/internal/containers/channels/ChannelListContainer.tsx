@@ -55,16 +55,12 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   // Get channels data from hook
   const {
     channels,
-    publicChannels,
-    privateChannels,
     directChannels,
     groupChannels,
     favoriteChannels,
     activeChannel,
     isLoading,
-    error,
     setActiveChannel,
-    refreshChannels,
   } = useChannels(teamId);
 
   // Get user store for display names in direct messages

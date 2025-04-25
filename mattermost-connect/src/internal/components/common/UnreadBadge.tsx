@@ -38,6 +38,21 @@ const CountBadge = styled(Badge)(({ theme }) => ({
   },
 }));
 
+/**
+ * A badge component that displays unread counts or mentions with appropriate styling
+ *
+ * @param count - Number of unread items
+ * @param mentionCount - Number of mentions (higher priority than count)
+ * @param showZero - Whether to show the badge when count is 0
+ * @param max - Maximum number to display before showing '+'
+ * @param color - Color of the badge
+ * @param size - Size variant of the badge (not passed to Badge component)
+ * @param mentionPriority - Whether mention count should take priority over unread count
+ * @param children - Content to wrap with the badge
+ * @param className - Classname add to the component
+ * @param sx - Custom sx style
+ * @param id - Id pass to the component
+ */
 const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   count = 0,
   mentionCount = 0,
@@ -60,6 +75,17 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
     return <>{children}</>;
   }
 
+  // Adjust badge size based on size prop
+  const badgeSx = {
+    "& .MuiBadge-badge": {
+      fontSize: size === "small" ? "0.6rem" : "0.75rem",
+      height: size === "small" ? 16 : 20,
+      minWidth: size === "small" ? 16 : 20,
+      padding: size === "small" ? "0 4px" : "0 6px",
+    },
+    ...sx,
+  };
+
   // Use mention badge if there are mentions (higher priority)
   if (showMention && mentionPriority) {
     return (
@@ -67,9 +93,8 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
         badgeContent={mentionCount > max ? `${max}+` : mentionCount}
         color="error"
         max={max}
-        size={size}
         className={className}
-        sx={sx}
+        sx={badgeSx}
         id={id}
       >
         {children}
@@ -83,9 +108,8 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
       badgeContent={count > max ? `${max}+` : count}
       color={color}
       max={max}
-      size={size}
       className={className}
-      sx={sx}
+      sx={badgeSx}
       id={id}
       invisible={!showZero && count === 0}
     >

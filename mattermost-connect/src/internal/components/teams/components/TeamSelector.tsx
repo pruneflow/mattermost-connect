@@ -32,11 +32,20 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
   sx,
   id,
 }) => {
+  const currentTeamId = selectedTeamId || (teams.length > 0 ? teams[0].id : "");
+
+  // Define default no-op function for onSelectTeam if it's undefined
+  const handleSelectTeam = (team: Team) => {
+    if (onSelectTeam) {
+      onSelectTeam(team);
+    }
+  };
+
   // Common props for all variants
   const commonProps = {
     teams,
-    selectedTeamId,
-    onSelectTeam,
+    selectedTeamId: currentTeamId,
+    onSelectTeam: handleSelectTeam, // Use the wrapper function
     showIcons,
     showDescription,
     showMemberCount,
@@ -87,5 +96,8 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
     </Box>
   );
 };
+
+// Import Team type at the end to avoid circular dependency issues
+import { Team } from "../../../../index";
 
 export default TeamSelector;

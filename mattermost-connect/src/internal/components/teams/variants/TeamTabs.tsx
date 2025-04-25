@@ -3,32 +3,13 @@
 import React from "react";
 import { Box, Tabs, Tab } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
-import { Team } from "../../../../index";
-import {
-  TeamDisplayProps,
-  TeamInteractionProps,
-  TeamUnreadIndicatorProps,
-} from "../types";
-import { BaseComponentProps } from "../../../types/componentTypes";
+import { TeamVariantProps } from "../types";
 import TeamItemTabs from "./TeamItemTabs";
-
-export interface TeamTabsProps
-  extends BaseComponentProps,
-    TeamDisplayProps,
-    TeamInteractionProps,
-    TeamUnreadIndicatorProps {
-  /** Teams to display */
-  teams: Team[];
-  /** Currently selected team ID */
-  selectedTeamId?: string;
-  /** Callback when a team is selected */
-  onSelectTeam: (team: Team) => void;
-}
 
 /**
  * A horizontal tabs view of teams
  */
-const TeamTabs: React.FC<TeamTabsProps> = ({
+const TeamTabs: React.FC<TeamVariantProps> = ({
   teams,
   selectedTeamId,
   onSelectTeam,
@@ -41,12 +22,11 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
   sx,
   id,
 }) => {
-  // Select first team if none is selected
-  const currentTeamId = selectedTeamId || (teams.length > 0 ? teams[0].id : "");
-
+  console.debug("selectedTeamId", selectedTeamId);
   // Handle tab change
-  const handleChange = (event: React.SyntheticEvent, newValue: string) => {
-    const team = teams.find((t) => t.id === newValue);
+  const handleChange = (teamId: string) => {
+    const team = teams.find((t) => t.id === teamId);
+    console.debug("handle change team", team);
     if (team) {
       onSelectTeam(team);
     }
@@ -58,12 +38,12 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
       onCreateTeam();
     }
   };
-
+  console.debug("teams", teams);
   return (
     <Box
       className={className}
       sx={{
-        width: "100vw",
+        width: "100%",
         bgcolor: "background.paper",
         borderBottom: 1,
         borderColor: "divider",
@@ -76,8 +56,7 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
       id={id}
     >
       <Tabs
-        value={currentTeamId}
-        onChange={handleChange}
+        value={selectedTeamId}
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
@@ -93,17 +72,20 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
           },
         }}
       >
-        {teams.map((team) => (
-          <TeamItemTabs
-            key={team.id}
-            team={team}
-            isSelected={team.id === currentTeamId}
-            onClick={onSelectTeam}
-            showIcon={showIcons}
-            maxNameLength={maxNameLength}
-            unreadCounts={unreadCounts}
-          />
-        ))}
+        {teams.map((team) => {
+          return (
+            <TeamItemTabs
+              key={team.id}
+              value={team.id}
+              onClick={handleChange}
+              team={team}
+              isActive={team.id === selectedTeamId}
+              showIcon={showIcons}
+              maxNameLength={maxNameLength}
+              unreadCounts={unreadCounts}
+            />
+          );
+        })}
 
         {allowCreate && (
           <Tab

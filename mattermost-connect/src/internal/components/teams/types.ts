@@ -77,3 +77,27 @@ export interface TeamSelectorProps
   /** Display variant */
   variant?: "list" | "grid" | "tabs" | "sidebar";
 }
+
+/**
+ * Props specifically for variant components (List, Grid, Tabs, Sidebar)
+ * These require onSelectTeam to be a required prop
+ */
+export interface TeamVariantProps
+  extends BaseComponentProps,
+    TeamDisplayProps,
+    TeamUnreadIndicatorProps,
+    TeamInteractionProps {
+  /** Teams to display */
+  teams: Team[];
+  /** Currently selected team ID */
+  selectedTeamId?: string;
+  /** Callback when a team is selected - required in variant components */
+  onSelectTeam: (team: Team) => void;
+}
+
+/**
+ * Props specifically for search-enabled variant components (List, Grid)
+ */
+export interface TeamSearchableVariantProps
+  extends TeamVariantProps,
+    TeamSearchProps {}

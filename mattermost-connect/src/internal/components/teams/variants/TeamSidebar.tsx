@@ -4,31 +4,13 @@ import React from "react";
 import { Box, Stack, Tooltip, IconButton } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
-import {
-  TeamDisplayProps,
-  TeamInteractionProps,
-  TeamUnreadIndicatorProps,
-} from "../types";
-import { BaseComponentProps } from "../../../types/componentTypes";
+import { TeamVariantProps } from "../types";
 import TeamItemSidebar from "./TeamItemSidebar";
-
-export interface TeamSidebarProps
-  extends BaseComponentProps,
-    TeamDisplayProps,
-    TeamInteractionProps,
-    TeamUnreadIndicatorProps {
-  /** Teams to display */
-  teams: Team[];
-  /** Currently selected team ID */
-  selectedTeamId?: string;
-  /** Callback when a team is selected */
-  onSelectTeam: (team: Team) => void;
-}
 
 /**
  * A vertical sidebar with team icons
  */
-const TeamSidebar: React.FC<TeamSidebarProps> = ({
+const TeamSidebar: React.FC<TeamVariantProps> = ({
   teams,
   selectedTeamId,
   onSelectTeam,

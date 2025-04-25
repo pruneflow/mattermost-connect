@@ -47,6 +47,17 @@ const TeamListUI: React.FC<TeamListUIProps> = ({
   // Determine if member count should be shown
   const showMemberCount = density !== "compact" && variant !== "tabs";
 
+  // Handle search
+  const handleSearch = (term: string) => {
+    if (onTeamAction) {
+      onTeamAction("search", {
+        id: "",
+        name: term,
+        display_name: term,
+      } as Team);
+    }
+  };
+
   return (
     <TeamSelector
       teams={items}
@@ -59,16 +70,7 @@ const TeamListUI: React.FC<TeamListUIProps> = ({
       allowCreate={allowCreate}
       showSearch={showSearch}
       searchTerm={searchTerm || ""}
-      onSearch={(term) => {
-        // Aucune logique, juste un passage de prop
-        if (onTeamAction) {
-          onTeamAction("search", {
-            id: "",
-            name: term,
-            display_name: term,
-          } as Team);
-        }
-      }}
+      onSearch={handleSearch}
       onCreateTeam={onCreateTeam}
       unreadCounts={unreadCounts}
       className={className}
