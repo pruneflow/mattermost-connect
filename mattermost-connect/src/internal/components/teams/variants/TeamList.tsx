@@ -1,42 +1,31 @@
 // src/internal/components/teams/variants/TeamList.tsx
-/**
- * Component that displays teams in a list format
- */
+
 import React from "react";
 import { List, Box, Divider, Button } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
+import {
+  TeamDisplayProps,
+  TeamInteractionProps,
+  TeamSearchProps,
+  TeamUnreadIndicatorProps,
+} from "../types";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import { SearchInput } from "../../../components/common";
 import TeamItemList from "./TeamItemList";
 
-export interface TeamListProps extends BaseComponentProps {
+export interface TeamListProps
+  extends BaseComponentProps,
+    TeamDisplayProps,
+    TeamInteractionProps,
+    TeamSearchProps,
+    TeamUnreadIndicatorProps {
   /** Teams to display */
   teams: Team[];
   /** Currently selected team ID */
   selectedTeamId?: string;
   /** Callback when a team is selected */
   onSelectTeam: (team: Team) => void;
-  /** Whether to show icons */
-  showIcons?: boolean;
-  /** Whether to show descriptions */
-  showDescriptions?: boolean;
-  /** Whether to show member counts */
-  showMemberCount?: boolean;
-  /** Max name length before truncation */
-  maxNameLength?: number;
-  /** Whether to allow team creation */
-  allowCreate?: boolean;
-  /** Whether to show search input */
-  showSearch?: boolean;
-  /** Current search term */
-  searchTerm?: string;
-  /** Callback when search changes */
-  onSearch?: (term: string) => void;
-  /** Callback when create team is clicked */
-  onCreateTeam?: () => void;
-  /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
 }
 
 /**
@@ -47,7 +36,7 @@ const TeamList: React.FC<TeamListProps> = ({
   selectedTeamId,
   onSelectTeam,
   showIcons = true,
-  showDescriptions = false,
+  showDescription = false,
   showMemberCount = false,
   maxNameLength = 0,
   allowCreate = false,
@@ -107,14 +96,14 @@ const TeamList: React.FC<TeamListProps> = ({
               isSelected={team.id === selectedTeamId}
               onClick={onSelectTeam}
               showIcon={showIcons}
-              showDescription={showDescriptions}
+              showDescription={showDescription}
               showMemberCount={showMemberCount}
               maxNameLength={maxNameLength}
               unreadCounts={unreadCounts}
             />
 
             {/* Add divider between teams if descriptions are shown */}
-            {showDescriptions && index < teams.length - 1 && (
+            {showDescription && index < teams.length - 1 && (
               <Divider variant="middle" sx={{ my: 1 }} />
             )}
           </React.Fragment>

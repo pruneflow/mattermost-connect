@@ -1,7 +1,5 @@
 // src/internal/components/teams/variants/TeamItemSidebar.tsx
-/**
- * Sidebar item component for displaying a team in the TeamSidebar variant
- */
+
 import React from "react";
 import {
   Box,
@@ -13,17 +11,11 @@ import {
 } from "@mui/material";
 import { People as MembersIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
-import { BaseComponentProps } from "../../../types/componentTypes";
-import TeamAvatar from "../TeamAvatar";
-import { hasUnreadMessages, hasUnreadMentions } from "../utils";
+import { TeamItemProps } from "../types";
+import BaseTeamItem from "../components/BaseTeamItem";
+import TeamAvatar from "../components/TeamAvatar";
 
-export interface TeamItemSidebarProps extends BaseComponentProps {
-  /** Team data */
-  team: Team;
-  /** Whether the team is selected */
-  isSelected?: boolean;
-  /** Callback when team is clicked */
-  onClick?: (team: Team) => void;
+export interface TeamItemSidebarProps extends TeamItemProps {
   /** Show team description */
   showDescription?: boolean;
   /** Show member count */
@@ -47,24 +39,29 @@ const TeamItemSidebar: React.FC<TeamItemSidebarProps> = ({
   id,
 }) => {
   // Check for unread messages or mentions
-  const hasMessages = hasUnreadMessages(team, unreadCounts);
-  const hasMentions = hasUnreadMentions(team, unreadCounts);
+  const hasMessages =
+    unreadCounts &&
+    unreadCounts[team.id] &&
+    unreadCounts[team.id].messageCount > 0;
+  const hasMentions =
+    unreadCounts &&
+    unreadCounts[team.id] &&
+    unreadCounts[team.id].mentionCount > 0;
 
   // Get the mention count if any
   const mentionCount =
-    hasMentions && unreadCounts && unreadCounts[team.id]
-      ? unreadCounts[team.id].mentionCount
-      : 0;
-
-  // Handle team click
-  const handleClick = () => {
-    if (onClick) {
-      onClick(team);
-    }
-  };
+    hasMentions && unreadCounts ? unreadCounts[team.id].mentionCount : 0;
 
   return (
-    <Box
+    <BaseTeamItem
+      team={team}
+      isSelected={isSelected}
+      onClick={() => {
+        /* BaseTeamItem handles this */
+      }}
+      showDescription={showDescription}
+      showMemberCount={showMemberCount}
+      unreadCounts={unreadCounts}
       className={className}
       sx={{
         position: "relative",
@@ -156,7 +153,9 @@ const TeamItemSidebar: React.FC<TeamItemSidebarProps> = ({
         slots={{ transition: Zoom }}
       >
         <IconButton
-          onClick={handleClick}
+          onClick={() => {
+            if (onClick) onClick(team);
+          }}
           sx={{
             p: 0.5,
             borderRadius: 2,
@@ -178,7 +177,7 @@ const TeamItemSidebar: React.FC<TeamItemSidebarProps> = ({
           />
         </IconButton>
       </Tooltip>
-    </Box>
+    </BaseTeamItem>
   );
 };
 

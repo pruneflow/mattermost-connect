@@ -1,42 +1,31 @@
 // src/internal/components/teams/variants/TeamGrid.tsx
-/**
- * Component that displays teams in a grid format
- */
+
 import React from "react";
 import { Box, Grid, Button } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
+import {
+  TeamDisplayProps,
+  TeamInteractionProps,
+  TeamSearchProps,
+  TeamUnreadIndicatorProps,
+} from "../types";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import { SearchInput } from "../../../components/common";
 import TeamItemGrid from "./TeamItemGrid";
 
-export interface TeamGridProps extends BaseComponentProps {
+export interface TeamGridProps
+  extends BaseComponentProps,
+    TeamDisplayProps,
+    TeamInteractionProps,
+    TeamSearchProps,
+    TeamUnreadIndicatorProps {
   /** Teams to display */
   teams: Team[];
   /** Currently selected team ID */
   selectedTeamId?: string;
   /** Callback when a team is selected */
   onSelectTeam: (team: Team) => void;
-  /** Whether to show icons */
-  showIcons?: boolean;
-  /** Whether to show descriptions */
-  showDescriptions?: boolean;
-  /** Whether to show member counts */
-  showMemberCount?: boolean;
-  /** Max name length before truncation */
-  maxNameLength?: number;
-  /** Whether to allow team creation */
-  allowCreate?: boolean;
-  /** Whether to show search input */
-  showSearch?: boolean;
-  /** Current search term */
-  searchTerm?: string;
-  /** Callback when search changes */
-  onSearch?: (term: string) => void;
-  /** Callback when create team is clicked */
-  onCreateTeam?: () => void;
-  /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
 }
 
 /**
@@ -47,7 +36,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
   selectedTeamId,
   onSelectTeam,
   showIcons = true,
-  showDescriptions = true,
+  showDescription = true,
   showMemberCount = true,
   maxNameLength = 0,
   allowCreate = false,
@@ -102,7 +91,7 @@ const TeamGrid: React.FC<TeamGridProps> = ({
               isSelected={team.id === selectedTeamId}
               onClick={onSelectTeam}
               showIcon={showIcons}
-              showDescription={showDescriptions}
+              showDescription={showDescription}
               showMemberCount={showMemberCount}
               maxNameLength={maxNameLength}
               unreadCounts={unreadCounts}

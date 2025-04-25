@@ -1,23 +1,9 @@
 // src/internal/components/teams/TeamListUI.tsx
-/**
- * Component that displays a list of teams
- */
+
 import React from "react";
-import {
-  List,
-  Box,
-  Grid,
-  Tabs,
-  Paper,
-  Button,
-  CircularProgress,
-  Tab,
-} from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../index";
 import { ListComponentProps } from "../../types/componentTypes";
-import TeamItemUI from "./TeamItemUI";
-import { EmptyState, IconButton, SearchInput, Tooltip } from "../common";
+import TeamSelector from "./components/TeamSelector";
 
 export interface TeamListUIProps extends ListComponentProps<Team> {
   /** Unread counts by team ID */
@@ -55,268 +41,41 @@ const TeamListUI: React.FC<TeamListUIProps> = ({
   // Determine if we're using compact mode based on density
   const compact = density === "compact";
 
-  // Handle team click
-  const handleTeamClick = (team: Team) => {
-    if (onItemClick) {
-      onItemClick(team);
-    }
-  };
+  // Determine if description should be shown based on density and variant
+  const showDescription = variant !== "tabs" && density !== "compact";
 
-  // Handle create team click
-  const handleCreateTeam = () => {
-    if (onCreateTeam) {
-      onCreateTeam();
-    }
-  };
+  // Determine if member count should be shown
+  const showMemberCount = density !== "compact" && variant !== "tabs";
 
-  // Render loading state
-  if (isLoading) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        minHeight={100}
-        className={className}
-        sx={sx}
-        id={id}
-      >
-        <CircularProgress size={32} />
-      </Box>
-    );
-  }
-
-  // Render empty state
-  if (!items || items.length === 0) {
-    return (
-      <EmptyState
-        title={emptyMessage}
-        description="Join or create a team to get started"
-        actionText={allowCreate ? "Create Team" : undefined}
-        onAction={allowCreate ? handleCreateTeam : undefined}
-        className={className}
-        sx={sx}
-        id={id}
-      />
-    );
-  }
-
-  // Render based on variant
-  switch (variant) {
-    case "sidebar":
-      return (
-        <Box
-          className={className}
-          sx={{
-            width: "72px",
-            overflow: "auto",
-            borderRight: "1px solid",
-            borderColor: "divider",
-            py: 2,
-            display: "flex",
-            flexDirection: "column",
-            ...sx,
-          }}
-          id={id}
-        >
-          <List disablePadding sx={{ px: 1 }}>
-            {items.map((team) => (
-              <TeamItemUI
-                key={team.id}
-                item={team}
-                isActive={team.id === activeId}
-                variant="sidebar"
-                unreadCount={unreadCounts[team.id]?.messageCount || 0}
-                mentionCount={unreadCounts[team.id]?.mentionCount || 0}
-                onClick={handleTeamClick}
-              />
-            ))}
-          </List>
-
-          {allowCreate && (
-            <Box
-              sx={{
-                mt: "auto",
-                display: "flex",
-                justifyContent: "center",
-                px: 1,
-              }}
-            >
-              <Tooltip title="Create Team" placement="right" arrow>
-                <IconButton onClick={handleCreateTeam} color="primary">
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          )}
-        </Box>
-      );
-
-    case "tabs":
-      return (
-        <Box
-          className={className}
-          sx={{
-            width: "100%",
-            ...sx,
-          }}
-          id={id}
-        >
-          <Paper square elevation={0}>
-            <Tabs
-              value={activeId || false}
-              variant="scrollable"
-              scrollButtons="auto"
-              textColor="primary"
-              indicatorColor="primary"
-            >
-              {items.map((team) => (
-                <TeamItemUI
-                  key={team.id}
-                  item={team}
-                  isActive={team.id === activeId}
-                  variant="tabs"
-                  unreadCount={unreadCounts[team.id]?.messageCount || 0}
-                  mentionCount={unreadCounts[team.id]?.mentionCount || 0}
-                  onClick={handleTeamClick}
-                />
-              ))}
-
-              {allowCreate && (
-                <Tab
-                  icon={<AddIcon />}
-                  iconPosition="start"
-                  label="Create"
-                  onClick={handleCreateTeam}
-                />
-              )}
-            </Tabs>
-          </Paper>
-        </Box>
-      );
-
-    case "grid":
-      return (
-        <Box
-          className={className}
-          sx={{
-            width: "100%",
-            ...sx,
-          }}
-          id={id}
-        >
-          {showSearch && (
-            <Box sx={{ mb: 2 }}>
-              <SearchInput
-                value={searchTerm}
-                placeholder="Search teams..."
-                fullWidth
-              />
-            </Box>
-          )}
-
-          <Grid container spacing={2}>
-            {items.map((team) => (
-              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={team.id}>
-                <TeamItemUI
-                  item={team}
-                  isActive={team.id === activeId}
-                  variant="grid"
-                  compact={compact}
-                  unreadCount={unreadCounts[team.id]?.messageCount || 0}
-                  mentionCount={unreadCounts[team.id]?.mentionCount || 0}
-                  onClick={handleTeamClick}
-                />
-              </Grid>
-            ))}
-
-            {allowCreate && (
-              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <Box
-                  sx={{
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    p: 2,
-                    border: "2px dashed",
-                    borderColor: "divider",
-                    borderRadius: 2,
-                    minHeight: 148,
-                  }}
-                >
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={handleCreateTeam}
-                  >
-                    Create Team
-                  </Button>
-                </Box>
-              </Grid>
-            )}
-          </Grid>
-        </Box>
-      );
-
-    case "list":
-    default:
-      return (
-        <Box
-          className={className}
-          sx={{
-            width: "100%",
-            ...sx,
-          }}
-          id={id}
-        >
-          {showSearch && (
-            <Box sx={{ mb: 2 }}>
-              <SearchInput
-                value={searchTerm}
-                placeholder="Search teams..."
-                fullWidth
-              />
-            </Box>
-          )}
-
-          <List
-            disablePadding
-            sx={{
-              py: 0,
-            }}
-          >
-            {items.map((team) => (
-              <TeamItemUI
-                key={team.id}
-                item={team}
-                isActive={team.id === activeId}
-                showActions={true}
-                variant="list"
-                compact={compact}
-                unreadCount={unreadCounts[team.id]?.messageCount || 0}
-                mentionCount={unreadCounts[team.id]?.mentionCount || 0}
-                onClick={handleTeamClick}
-                onAction={onTeamAction}
-              />
-            ))}
-          </List>
-
-          {allowCreate && (
-            <Box sx={{ mt: 2 }}>
-              <Button
-                variant="outlined"
-                fullWidth
-                startIcon={<AddIcon />}
-                onClick={handleCreateTeam}
-              >
-                Create Team
-              </Button>
-            </Box>
-          )}
-        </Box>
-      );
-  }
+  return (
+    <TeamSelector
+      teams={items}
+      selectedTeamId={activeId}
+      onSelectTeam={onItemClick}
+      variant={variant as "list" | "grid" | "tabs" | "sidebar"}
+      showIcons={true}
+      showDescription={showDescription}
+      showMemberCount={showMemberCount}
+      allowCreate={allowCreate}
+      showSearch={showSearch}
+      searchTerm={searchTerm || ""}
+      onSearch={(term) => {
+        // Aucune logique, juste un passage de prop
+        if (onTeamAction) {
+          onTeamAction("search", {
+            id: "",
+            name: term,
+            display_name: term,
+          } as Team);
+        }
+      }}
+      onCreateTeam={onCreateTeam}
+      unreadCounts={unreadCounts}
+      className={className}
+      sx={sx}
+      id={id}
+    />
+  );
 };
 
 export default TeamListUI;

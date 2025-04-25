@@ -1,31 +1,28 @@
 // src/internal/components/teams/variants/TeamTabs.tsx
-/**
- * Component that displays teams in a tabbed format
- */
+
 import React from "react";
-import { Box, Tabs, Tab, Paper } from "@mui/material";
+import { Box, Tabs, Tab } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
+import {
+  TeamDisplayProps,
+  TeamInteractionProps,
+  TeamUnreadIndicatorProps,
+} from "../types";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import TeamItemTabs from "./TeamItemTabs";
 
-export interface TeamTabsProps extends BaseComponentProps {
+export interface TeamTabsProps
+  extends BaseComponentProps,
+    TeamDisplayProps,
+    TeamInteractionProps,
+    TeamUnreadIndicatorProps {
   /** Teams to display */
   teams: Team[];
   /** Currently selected team ID */
   selectedTeamId?: string;
   /** Callback when a team is selected */
   onSelectTeam: (team: Team) => void;
-  /** Whether to show icons */
-  showIcons?: boolean;
-  /** Max name length before truncation */
-  maxNameLength?: number;
-  /** Whether to allow team creation */
-  allowCreate?: boolean;
-  /** Callback when create team is clicked */
-  onCreateTeam?: () => void;
-  /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
 }
 
 /**
@@ -100,7 +97,7 @@ const TeamTabs: React.FC<TeamTabsProps> = ({
           <TeamItemTabs
             key={team.id}
             team={team}
-            isActive={team.id === currentTeamId}
+            isSelected={team.id === currentTeamId}
             onClick={onSelectTeam}
             showIcon={showIcons}
             maxNameLength={maxNameLength}

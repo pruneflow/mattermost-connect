@@ -1,9 +1,7 @@
-// src/internal/components/teams/utils.ts
-/**
- * Utility functions for team components
- */
-import { stringToColor, Team } from "../../../index";
-import { getInitials } from "../../utils/helper";
+// src/internal/components/teams/utils/index.ts
+
+import { stringToColor, Team } from "../../../../index";
+import { getInitials } from "../../../utils/helper";
 
 /**
  * Formats a team name, optionally truncating to a maximum length

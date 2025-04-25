@@ -1,22 +1,15 @@
 // src/internal/components/teams/variants/TeamItemTabs.tsx
-/**
- * Tab item component for displaying a team in the TeamTabs variant
- */
+
 import React from "react";
 import { Tab, Box, Typography, useMediaQuery, useTheme } from "@mui/material";
 import { Team } from "../../../../index";
-import { BaseComponentProps } from "../../../types/componentTypes";
+import { TeamItemProps } from "../types";
+import BaseTeamItem from "../components/BaseTeamItem";
+import TeamAvatar from "../components/TeamAvatar";
+import { formatTeamName } from "../utils";
 import { UnreadBadge } from "../../../components/common";
-import TeamAvatar from "../TeamAvatar";
-import { formatTeamName, hasUnreadMentions } from "../utils";
 
-export interface TeamItemTabsProps extends BaseComponentProps {
-  /** Team data */
-  team: Team;
-  /** Whether this tab is currently active/selected */
-  isActive?: boolean;
-  /** Callback when tab is clicked */
-  onClick?: (team: Team) => void;
+export interface TeamItemTabsProps extends TeamItemProps {
   /** Show team avatar/icon */
   showIcon?: boolean;
   /** Maximum name length before truncating */
@@ -30,7 +23,7 @@ export interface TeamItemTabsProps extends BaseComponentProps {
  */
 const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
   team,
-  isActive = false,
+  isSelected = false,
   onClick,
   showIcon = true,
   maxNameLength = 0,
@@ -48,69 +41,72 @@ const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
       ? unreadCounts[team.id]
       : { messageCount: 0, mentionCount: 0 };
 
-  const hasMentions = hasUnreadMentions(team, unreadCounts);
-
-  // Handle tab click
-  const handleClick = (event: React.SyntheticEvent, value: string) => {
-    if (onClick) {
-      onClick(team);
-    }
-  };
-
-  // Create the tab label with optional icon
-  const tabLabel = (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        flexDirection: isMobile ? "column" : "row",
-        gap: 1,
-      }}
-    >
-      {showIcon && <TeamAvatar team={team} size={24} />}
-
-      <UnreadBadge
-        count={unreadState.messageCount}
-        mentionCount={unreadState.mentionCount}
-        showZero={false}
-        mentionPriority={true}
-      >
-        <Typography
-          variant="body2"
-          noWrap
-          sx={{
-            maxWidth: 120,
-            textTransform: "none",
-          }}
-        >
-          {formatTeamName(team.display_name, maxNameLength)}
-        </Typography>
-      </UnreadBadge>
-    </Box>
-  );
-
   return (
-    <Tab
-      value={team.id}
-      label={tabLabel}
-      className={className}
-      onClick={(e) => handleClick(e, team.id)}
-      sx={{
-        minHeight: 48,
-        py: 1,
-        px: 2,
-        fontWeight: isActive ? 600 : unreadState.messageCount > 0 ? 600 : 400,
-        color:
-          unreadState.messageCount > 0 && !isActive
-            ? "text.primary"
-            : undefined,
-        "&.Mui-selected": {
-          color: "primary.main",
-        },
-        ...sx,
+    <BaseTeamItem
+      team={team}
+      isSelected={isSelected}
+      onClick={() => {
+        /* BaseTeamItem handles this */
       }}
+      unreadCounts={unreadCounts}
+      className={className}
+      sx={sx}
       id={id}
-    />
+    >
+      <Tab
+        value={team.id}
+        onClick={(e) => {
+          if (onClick) onClick(team);
+        }}
+        label={
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              flexDirection: isMobile ? "column" : "row",
+              gap: 1,
+            }}
+          >
+            {showIcon && <TeamAvatar team={team} size={24} />}
+
+            <UnreadBadge
+              count={unreadState.messageCount}
+              mentionCount={unreadState.mentionCount}
+              showZero={false}
+              mentionPriority={true}
+            >
+              <Typography
+                variant="body2"
+                noWrap
+                sx={{
+                  maxWidth: 120,
+                  textTransform: "none",
+                }}
+              >
+                {formatTeamName(team.display_name, maxNameLength)}
+              </Typography>
+            </UnreadBadge>
+          </Box>
+        }
+        sx={{
+          minHeight: 48,
+          py: 1,
+          px: 2,
+          fontWeight: isSelected
+            ? 600
+            : unreadState.messageCount > 0
+              ? 600
+              : 400,
+          color:
+            unreadState.messageCount > 0 && !isSelected
+              ? "text.primary"
+              : undefined,
+          "&.Mui-selected": {
+            color: "primary.main",
+          },
+        }}
+      />
+    </BaseTeamItem>
   );
 };
 

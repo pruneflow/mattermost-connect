@@ -1,30 +1,21 @@
 // src/internal/components/teams/variants/TeamItemList.tsx
-/**
- * List item component for displaying a team in the TeamList variant
- */
+
 import React from "react";
 import {
-  ListItem,
   ListItemButton,
   ListItemIcon,
   Badge,
-  Tooltip,
   Typography,
   Box,
 } from "@mui/material";
 import { People as MembersIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
-import { BaseComponentProps } from "../../../types/componentTypes";
-import TeamAvatar from "../TeamAvatar";
-import { formatTeamName, hasUnreadMessages, hasUnreadMentions } from "../utils";
+import { TeamItemProps } from "../types";
+import BaseTeamItem from "../components/BaseTeamItem";
+import TeamAvatar from "../components/TeamAvatar";
+import { formatTeamName } from "../utils";
 
-export interface TeamItemListProps extends BaseComponentProps {
-  /** Team data */
-  team: Team;
-  /** Whether the team is selected */
-  isSelected?: boolean;
-  /** Callback when team is clicked */
-  onClick?: (team: Team) => void;
+export interface TeamItemListProps extends TeamItemProps {
   /** Show team avatar/icon */
   showIcon?: boolean;
   /** Show team description */
@@ -53,28 +44,21 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
   sx,
   id,
 }) => {
-  // Check for unread messages or mentions
-  const hasMessages = hasUnreadMessages(team, unreadCounts);
-  const hasMentions = hasUnreadMentions(team, unreadCounts);
-
-  // Get the mention count if any
-  const mentionCount =
-    hasMentions && unreadCounts && unreadCounts[team.id]
-      ? unreadCounts[team.id].mentionCount
-      : 0;
-
-  // Handle team click
-  const handleClick = () => {
-    if (onClick) {
-      onClick(team);
-    }
-  };
-
   return (
-    <ListItem disablePadding className={className} sx={sx} id={id}>
+    <BaseTeamItem
+      team={team}
+      isSelected={isSelected}
+      onClick={onClick}
+      showDescription={showDescription}
+      showMemberCount={showMemberCount}
+      maxNameLength={maxNameLength}
+      unreadCounts={unreadCounts}
+      className={className}
+      sx={sx}
+      id={id}
+    >
       <ListItemButton
         selected={isSelected}
-        onClick={handleClick}
         sx={{
           borderRadius: 1,
           mb: 0.5,
@@ -92,8 +76,16 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
             <TeamAvatar
               team={team}
               size="small"
-              mentionCount={mentionCount}
-              showMentionBadge={false}
+              mentionCount={
+                unreadCounts && unreadCounts[team.id]
+                  ? unreadCounts[team.id].mentionCount
+                  : 0
+              }
+              showMentionBadge={
+                unreadCounts && unreadCounts[team.id]
+                  ? unreadCounts[team.id].mentionCount > 0
+                  : false
+              }
             />
           </ListItemIcon>
         )}
@@ -111,7 +103,15 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
             variant="body1"
             component="div"
             noWrap
-            fontWeight={isSelected ? 600 : hasMessages ? 600 : 400}
+            fontWeight={
+              isSelected
+                ? 600
+                : unreadCounts &&
+                    unreadCounts[team.id] &&
+                    unreadCounts[team.id].messageCount > 0
+                  ? 600
+                  : 400
+            }
           >
             {formatTeamName(team.display_name, maxNameLength)}
           </Typography>
@@ -133,39 +133,47 @@ const TeamItemList: React.FC<TeamItemListProps> = ({
           )}
         </Box>
 
-        {/* Mention badge */}
-        {hasMentions && (
-          <Badge
-            badgeContent={mentionCount}
-            color="error"
-            max={99}
-            sx={{ ml: 0.5 }}
-          />
-        )}
-
-        {/* Unread message indicator */}
-        {!hasMentions && hasMessages && (
-          <Badge variant="dot" color="primary" sx={{ ml: 0.5 }} />
-        )}
-
         {/* Member count badge */}
         {showMemberCount &&
           team.member_count &&
-          !hasMentions &&
-          !hasMessages && (
-            <Tooltip title="Members">
-              <Badge
-                badgeContent={team.member_count}
-                color="primary"
-                max={999}
-                sx={{ ml: 0.5 }}
-              >
-                <MembersIcon fontSize="small" />
-              </Badge>
-            </Tooltip>
+          !(
+            unreadCounts &&
+            unreadCounts[team.id] &&
+            (unreadCounts[team.id].messageCount > 0 ||
+              unreadCounts[team.id].mentionCount > 0)
+          ) && (
+            <Badge
+              badgeContent={team.member_count}
+              color="primary"
+              max={999}
+              sx={{ ml: 0.5 }}
+            >
+              <MembersIcon fontSize="small" />
+            </Badge>
           )}
+
+        {/* Unread indicators handled via Badge component */}
+        {unreadCounts && unreadCounts[team.id] && (
+          <>
+            {/* Mentions badge */}
+            {unreadCounts[team.id].mentionCount > 0 && (
+              <Badge
+                badgeContent={unreadCounts[team.id].mentionCount}
+                color="error"
+                max={99}
+                sx={{ ml: 0.5 }}
+              />
+            )}
+
+            {/* Unread message indicator */}
+            {unreadCounts[team.id].messageCount > 0 &&
+              unreadCounts[team.id].mentionCount === 0 && (
+                <Badge variant="dot" color="primary" sx={{ ml: 0.5 }} />
+              )}
+          </>
+        )}
       </ListItemButton>
-    </ListItem>
+    </BaseTeamItem>
   );
 };
 

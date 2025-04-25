@@ -1,12 +1,10 @@
-// src/internal/components/teams/TeamAvatar.tsx
-/**
- * Team avatar component that displays the team's initials or icon
- */
+// src/internal/components/teams/components/TeamAvatar.tsx
+
 import React from "react";
 import { Avatar, Badge } from "@mui/material";
-import { Team } from "../../../index";
-import { BaseComponentProps } from "../../types/componentTypes";
-import { getTeamAvatarColor, getTeamInitials } from "./utils";
+import { Team } from "../../../../index";
+import { BaseComponentProps } from "../../../types/componentTypes";
+import { getTeamAvatarColor, getTeamInitials } from "../utils/utils";
 
 export interface TeamAvatarProps extends BaseComponentProps {
   /** Team data */

@@ -1,31 +1,28 @@
 // src/internal/components/teams/variants/TeamSidebar.tsx
-/**
- * Component that displays teams in a vertical sidebar format
- */
+
 import React from "react";
 import { Box, Stack, Tooltip, IconButton } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import { Team } from "../../../../index";
+import {
+  TeamDisplayProps,
+  TeamInteractionProps,
+  TeamUnreadIndicatorProps,
+} from "../types";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import TeamItemSidebar from "./TeamItemSidebar";
 
-export interface TeamSidebarProps extends BaseComponentProps {
+export interface TeamSidebarProps
+  extends BaseComponentProps,
+    TeamDisplayProps,
+    TeamInteractionProps,
+    TeamUnreadIndicatorProps {
   /** Teams to display */
   teams: Team[];
   /** Currently selected team ID */
   selectedTeamId?: string;
   /** Callback when a team is selected */
   onSelectTeam: (team: Team) => void;
-  /** Whether to show descriptions */
-  showDescriptions?: boolean;
-  /** Whether to show member counts */
-  showMemberCount?: boolean;
-  /** Whether to allow team creation */
-  allowCreate?: boolean;
-  /** Callback when create team is clicked */
-  onCreateTeam?: () => void;
-  /** Unread counts for teams */
-  unreadCounts?: Record<string, { messageCount: number; mentionCount: number }>;
 }
 
 /**
@@ -35,7 +32,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
   teams,
   selectedTeamId,
   onSelectTeam,
-  showDescriptions = false,
+  showDescription = false,
   showMemberCount = false,
   allowCreate = false,
   onCreateTeam,
@@ -87,7 +84,7 @@ const TeamSidebar: React.FC<TeamSidebarProps> = ({
               team={team}
               isSelected={team.id === selectedTeamId}
               onClick={onSelectTeam}
-              showDescription={showDescriptions}
+              showDescription={showDescription}
               showMemberCount={showMemberCount}
               unreadCounts={unreadCounts}
             />
