@@ -1,23 +1,41 @@
 // src/internal/components/channels/ChannelListUI.tsx
 /**
- * Component that displays a list of channels
+ * UI component for displaying a list of channels
  */
-import React, { useMemo } from "react";
+import React, { useState } from "react";
 import {
   List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Typography,
+  TextField,
+  InputAdornment,
+  IconButton,
   Box,
-  Grid,
-  Tabs,
-  Paper,
-  Button,
+  Collapse,
+  Badge,
   CircularProgress,
-  Tab,
+  Paper,
+  Tooltip,
 } from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
+import SearchIcon from "@mui/icons-material/Search";
+import AddIcon from "@mui/icons-material/Add";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import { Channel } from "../../../index";
+import ChannelAvatarUI from "./ChannelAvatarUI";
 import { ListComponentProps } from "../../types/componentTypes";
-import ChannelItemUI from "./ChannelItemUI";
-import { EmptyState, SearchInput, SectionHeader } from "../common";
+import {
+  isDirectChannel,
+  isGroupChannel,
+} from "../../../utils/directChannelUtils";
 
 export interface ChannelListUIProps extends ListComponentProps<Channel> {
   /** Unread counts by channel ID */
@@ -30,78 +48,86 @@ export interface ChannelListUIProps extends ListComponentProps<Channel> {
   groupByType?: boolean;
   /** Whether to show favorite channels separately */
   showFavorites?: boolean;
-  /** Display names for direct/group messages by channel ID */
+  /** Display names by channel ID (for direct messages) */
   displayNamesByChannel?: Record<string, string[]>;
-  /** Favorite channels by ID */
+  /** Set of favorite channel IDs */
   favoriteChannels?: Set<string>;
-  /** Muted channels by ID */
+  /** Set of muted channel IDs */
   mutedChannels?: Set<string>;
-  /** Density of the list */
-  density?: "compact" | "comfortable" | "spacious";
+  /** Channel avatars data */
+  channelAvatars?: Record<
+    string,
+    {
+      userImageUrl?: string;
+      userStatus?: "online" | "away" | "dnd" | "offline";
+      groupAvatarUrls?: string[];
+      isLoading?: boolean;
+    }
+  >;
+  /** Whether users are currently being loaded */
+  isLoadingUsers?: boolean;
+  /** Number of user IDs being loaded */
+  loadingUserIds?: number;
   /** Callback when create channel button is clicked */
   onCreateChannel?: () => void;
   /** Callback when a channel action is performed */
   onChannelAction?: (action: string, channel: Channel) => void;
-  /** Callback when favorite is toggled */
+  /** Callback when favorite status is toggled */
   onToggleFavorite?: (channel: Channel) => void;
+  /** Callback when search term changes */
+  onSearchChange?: (term: string) => void;
 }
 
+/**
+ * UI component for displaying a list of channels with grouping, searching, and actions
+ */
 const ChannelListUI: React.FC<ChannelListUIProps> = ({
   items,
   activeId,
   variant = "list",
   density = "comfortable",
   isLoading = false,
-  emptyMessage = "No channels found",
+  emptyMessage = "No channels available",
   unreadCounts = {},
   allowCreate = false,
   showSearch = false,
+  searchTerm = "",
   groupByType = true,
   showFavorites = true,
   displayNamesByChannel = {},
-  favoriteChannels = new Set(),
-  mutedChannels = new Set(),
-  searchTerm = "",
+  favoriteChannels = new Set<string>(),
+  mutedChannels = new Set<string>(),
+  channelAvatars = {},
+  isLoadingUsers = false,
+  loadingUserIds = 0,
   onItemClick,
   onCreateChannel,
   onChannelAction,
   onToggleFavorite,
+  onSearchChange,
   className,
   sx,
   id,
 }) => {
-  // Determine if we're using compact mode based on density
-  const compact = density === "compact";
+  // State for expanded sections
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    favorites: true,
+    public: true,
+    private: true,
+    direct: true,
+    group: true,
+  });
 
-  // Handle channel click
-  const handleChannelClick = (channel: Channel) => {
-    if (onItemClick) {
-      onItemClick(channel);
-    }
+  // Toggle section expansion
+  const toggleExpanded = (section: string) => {
+    setExpanded((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
   };
 
-  // Handle create channel click
-  const handleCreateChannel = () => {
-    if (onCreateChannel) {
-      onCreateChannel();
-    }
-  };
-
-  // Find the active channel's index in tabs mode for proper tab selection
-  const activeTabIndex = useMemo(() => {
-    if (variant === "tabs" && activeId && items) {
-      const index = items.findIndex((channel) => channel.id === activeId);
-      return index >= 0 ? index : 0;
-    }
-    return 0;
-  }, [activeId, items, variant]);
-
-  // Group channels by type if needed
-  const groupedChannels = useMemo(() => {
-    if (!groupByType) {
-      return { all: items };
-    }
-
+  // Group channels by type
+  const groupedChannels = React.useMemo(() => {
     const grouped: Record<string, Channel[]> = {
       favorites: [],
       public: [],
@@ -110,457 +136,621 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
       group: [],
     };
 
-    // First pass for favorites if showing them separately
-    if (showFavorites) {
-      items.forEach((channel) => {
-        if (favoriteChannels.has(channel.id)) {
-          grouped.favorites.push(channel);
-        }
-      });
-    }
-
-    // Second pass for remaining channels
     items.forEach((channel) => {
-      // Skip if already in favorites
+      // Add to favorites if applicable
       if (showFavorites && favoriteChannels.has(channel.id)) {
-        return;
+        grouped.favorites.push(channel);
       }
 
-      // Group by type
-      switch (channel.type) {
-        case "O":
-          grouped.public.push(channel);
-          break;
-        case "P":
-          grouped.private.push(channel);
-          break;
-        case "D":
-          grouped.direct.push(channel);
-          break;
-        case "G":
-          grouped.group.push(channel);
-          break;
-        default:
-          break;
+      // Add to appropriate type group
+      if (isDirectChannel(channel)) {
+        grouped.direct.push(channel);
+      } else if (isGroupChannel(channel)) {
+        grouped.group.push(channel);
+      } else if (channel.type === "O") {
+        grouped.public.push(channel);
+      } else if (channel.type === "P") {
+        grouped.private.push(channel);
       }
     });
 
     return grouped;
-  }, [items, groupByType, showFavorites, favoriteChannels]);
+  }, [items, favoriteChannels, showFavorites]);
+
+  // Get padding based on density
+  const getPadding = () => {
+    switch (density) {
+      case "compact":
+        return "4px 8px";
+      case "spacious":
+        return "12px 16px";
+      case "comfortable":
+      default:
+        return "8px 12px";
+    }
+  };
+
+  // Render a section header
+  const renderSectionHeader = (
+    title: string,
+    count: number,
+    section: string,
+  ) => {
+    if (count === 0) return null;
+
+    return (
+      <ListItem
+        sx={{
+          p: 1,
+          pl: 2,
+          cursor: "pointer",
+        }}
+        onClick={() => toggleExpanded(section)}
+      >
+        <ListItemText
+          primary={
+            <Typography variant="body2" color="text.secondary">
+              {title} ({count})
+            </Typography>
+          }
+        />
+        {expanded[section] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+      </ListItem>
+    );
+  };
+
+  // Render a channel item
+  const renderChannelItem = (channel: Channel) => {
+    const isActive = channel.id === activeId;
+    const isFavorite = favoriteChannels.has(channel.id);
+    const isMuted = mutedChannels.has(channel.id);
+
+    // Get unread counts
+    const unread = unreadCounts[channel.id] || {
+      messageCount: 0,
+      mentionCount: 0,
+    };
+    const hasUnread = unread.messageCount > 0;
+    const hasMention = unread.mentionCount > 0;
+
+    // Get display name (especially for direct messages)
+    const displayNames = displayNamesByChannel[channel.id];
+    const channelDisplayName =
+      displayNames && displayNames.length > 0
+        ? displayNames[0]
+        : channel.display_name;
+
+    // Get avatar data
+    const avatarData = channelAvatars[channel.id] || {};
+
+    return (
+      <ListItem
+        key={channel.id}
+        disablePadding
+        sx={{
+          borderRadius: 1,
+          mb: 0.5,
+          backgroundColor: isActive ? "action.selected" : "transparent",
+          "&:hover": {
+            backgroundColor: "action.hover",
+          },
+        }}
+      >
+        <ListItemButton
+          sx={{
+            p: getPadding(),
+            borderRadius: 1,
+          }}
+          onClick={() => onItemClick && onItemClick(channel)}
+        >
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <ChannelAvatarUI
+              channel={channel}
+              size="small"
+              displayName={channelDisplayName}
+              userImageUrl={avatarData.userImageUrl}
+              userStatus={avatarData.userStatus}
+              groupAvatarUrls={avatarData.groupAvatarUrls}
+              showStatus={true}
+              isLoading={avatarData.isLoading}
+            />
+          </ListItemIcon>
+
+          <ListItemText
+            primary={
+              avatarData.isLoading &&
+              (isDirectChannel(channel) || isGroupChannel(channel)) ? (
+                <Typography
+                  variant="body2"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    color: "text.secondary",
+                  }}
+                >
+                  {channelDisplayName}
+                </Typography>
+              ) : (
+                <Typography
+                  variant="body2"
+                  fontWeight={hasUnread ? 600 : 400}
+                  sx={{
+                    color: hasMention ? "error.main" : "text.primary",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    opacity: isMuted ? 0.6 : 1,
+                  }}
+                >
+                  {channelDisplayName}
+                </Typography>
+              )
+            }
+          />
+
+          {/* Badge for unread mentions */}
+          {hasMention && (
+            <Badge
+              badgeContent={unread.mentionCount}
+              color="error"
+              sx={{ mr: 1 }}
+            />
+          )}
+
+          {/* Muted icon */}
+          {isMuted && (
+            <Tooltip title="Muted">
+              <VolumeOffIcon fontSize="small" color="action" sx={{ mr: 1 }} />
+            </Tooltip>
+          )}
+
+          {/* Favorite toggle */}
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite && onToggleFavorite(channel);
+            }}
+            sx={{
+              opacity: isFavorite ? 1 : 0,
+              "&:hover": { opacity: 1 },
+              mr: 0.5,
+            }}
+          >
+            {isFavorite ? (
+              <StarIcon fontSize="small" color="warning" />
+            ) : (
+              <StarBorderIcon fontSize="small" />
+            )}
+          </IconButton>
+
+          {/* More actions */}
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChannelAction && onChannelAction("more", channel);
+            }}
+            sx={{
+              opacity: 0,
+              "&:hover": { opacity: 1 },
+            }}
+          >
+            <MoreHorizIcon fontSize="small" />
+          </IconButton>
+        </ListItemButton>
+      </ListItem>
+    );
+  };
+
+  // Render a skeleton loading item
+  const renderSkeletonItem = (index: number) => {
+    return (
+      <ListItem
+        key={`skeleton-${index}`}
+        disablePadding
+        sx={{
+          borderRadius: 1,
+          mb: 0.5,
+        }}
+      >
+        <ListItemButton
+          sx={{
+            p: getPadding(),
+            borderRadius: 1,
+          }}
+          disabled
+        >
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <CircularProgress size={24} />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Box
+                sx={{
+                  width: `${Math.random() * 30 + 50}%`,
+                  height: 20,
+                  bgcolor: "rgba(0, 0, 0, 0.1)",
+                  borderRadius: 1,
+                }}
+              />
+            }
+          />
+        </ListItemButton>
+      </ListItem>
+    );
+  };
+
+  // Render search field
+  const renderSearch = () => {
+    if (!showSearch) return null;
+
+    return (
+      <Box sx={{ p: 1, mb: 1 }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search channels"
+          value={searchTerm}
+          onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mb: 1 }}
+        />
+      </Box>
+    );
+  };
+
+  // Render create button
+  const renderCreateButton = () => {
+    if (!allowCreate) return null;
+
+    return (
+      <Box sx={{ p: 1, mb: 1 }}>
+        <ListItem
+          disablePadding
+          sx={{
+            borderRadius: 1,
+            border: 1,
+            borderColor: "divider",
+          }}
+        >
+          <ListItemButton
+            sx={{
+              p: getPadding(),
+              borderRadius: 1,
+              justifyContent: "center",
+            }}
+            onClick={onCreateChannel}
+          >
+            <AddIcon fontSize="small" sx={{ mr: 1 }} />
+            <Typography variant="body2">Create Channel</Typography>
+          </ListItemButton>
+        </ListItem>
+      </Box>
+    );
+  };
 
   // Render loading state
-  if (isLoading) {
+  if (isLoading && items.length === 0) {
     return (
       <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        minHeight={100}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          width: "100%",
+          p: 2,
+          ...sx,
+        }}
         className={className}
-        sx={sx}
         id={id}
       >
-        <CircularProgress size={32} />
+        {showSearch && (
+          <Box sx={{ mb: 2 }}>
+            <Box
+              sx={{
+                height: 40,
+                bgcolor: "rgba(0, 0, 0, 0.1)",
+                borderRadius: 1,
+              }}
+            />
+          </Box>
+        )}
+
+        <Box sx={{ mb: 2 }}>
+          <Box
+            sx={{
+              width: 100,
+              height: 20,
+              bgcolor: "rgba(0, 0, 0, 0.1)",
+              borderRadius: 1,
+            }}
+          />
+        </Box>
+
+        {Array.from({ length: 7 }).map((_, index) => renderSkeletonItem(index))}
       </Box>
     );
   }
 
   // Render empty state
-  if (!items || items.length === 0) {
+  if (items.length === 0) {
     return (
-      <EmptyState
-        title={emptyMessage || "No items found"}
-        description="Join or create a channel to get started"
-        actionText={allowCreate ? "Create Channel" : undefined}
-        onAction={allowCreate ? handleCreateChannel : undefined}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100%",
+          p: 3,
+          ...sx,
+        }}
         className={className}
-        sx={sx}
         id={id}
-      />
+      >
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          align="center"
+          sx={{ mb: 2 }}
+        >
+          {emptyMessage}
+        </Typography>
+        {allowCreate && (
+          <Tooltip title="Create Channel">
+            <IconButton onClick={onCreateChannel} color="primary">
+              <AddIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
     );
   }
 
-  // Get section title by type
-  const getSectionTitle = (type: string): string => {
-    switch (type) {
-      case "favorites":
-        return "Favorites";
-      case "public":
-        return "Public Channels";
-      case "private":
-        return "Private Channels";
-      case "direct":
-        return "Direct Messages";
-      case "group":
-        return "Group Messages";
-      default:
-        return "Channels";
-    }
-  };
-
-  // Render based on variant
+  // Handle different variants (simplified)
   switch (variant) {
     case "sidebar":
+      // Render a more compact version
       return (
-        <Box
+        <Paper
+          elevation={0}
           className={className}
           sx={{
-            width: "240px",
-            overflow: "auto",
-            borderRight: "1px solid",
-            borderColor: "divider",
-            display: "flex",
-            flexDirection: "column",
+            height: "100%",
+            borderRadius: 0,
             ...sx,
           }}
           id={id}
         >
-          {showSearch && (
-            <Box sx={{ p: 1 }}>
-              <SearchInput
-                value={searchTerm}
-                placeholder="Search channels..."
-                size="small"
-                fullWidth
-              />
-            </Box>
-          )}
+          {renderSearch()}
+          {renderCreateButton()}
 
-          {groupByType ? (
-            <Box sx={{ flexGrow: 1, overflow: "auto" }}>
-              {Object.entries(groupedChannels).map(([type, channels]) => {
-                if (channels.length === 0) return null;
-
-                return (
-                  <Box key={type} sx={{ mb: 1 }}>
-                    <SectionHeader
-                      title={getSectionTitle(type)}
-                      divider={false}
-                      sx={{ px: 2, py: 0.5 }}
-                    />
-                    <List disablePadding dense>
-                      {channels.map((channel) => (
-                        <ChannelItemUI
-                          key={channel.id}
-                          item={channel}
-                          isActive={channel.id === activeId}
-                          variant="sidebar"
-                          unreadCount={
-                            unreadCounts[channel.id]?.messageCount || 0
-                          }
-                          mentionCount={
-                            unreadCounts[channel.id]?.mentionCount || 0
-                          }
-                          isFavorite={favoriteChannels.has(channel.id)}
-                          isMuted={mutedChannels.has(channel.id)}
-                          displayNames={displayNamesByChannel[channel.id]}
-                          compact={compact}
-                          onClick={handleChannelClick}
-                        />
-                      ))}
-                    </List>
-                  </Box>
-                );
-              })}
-            </Box>
-          ) : (
-            <List disablePadding dense sx={{ flexGrow: 1, overflow: "auto" }}>
-              {items.map((channel) => (
-                <ChannelItemUI
-                  key={channel.id}
-                  item={channel}
-                  isActive={channel.id === activeId}
-                  variant="sidebar"
-                  unreadCount={unreadCounts[channel.id]?.messageCount || 0}
-                  mentionCount={unreadCounts[channel.id]?.mentionCount || 0}
-                  isFavorite={favoriteChannels.has(channel.id)}
-                  isMuted={mutedChannels.has(channel.id)}
-                  displayNames={displayNamesByChannel[channel.id]}
-                  compact={compact}
-                  onClick={handleChannelClick}
-                />
-              ))}
-            </List>
-          )}
-
-          {allowCreate && (
-            <Box sx={{ p: 1, borderTop: "1px solid", borderColor: "divider" }}>
-              <Button
-                fullWidth
-                startIcon={<AddIcon />}
-                onClick={handleCreateChannel}
-                size="small"
-              >
-                Create Channel
-              </Button>
-            </Box>
-          )}
-        </Box>
-      );
-
-    case "tabs":
-      return (
-        <Box
-          className={className}
-          sx={{
-            width: "100%",
-            ...sx,
-          }}
-          id={id}
-        >
-          <Paper square elevation={0}>
-            {/* Fixed: using numeric index value for Tabs instead of channel ID */}
-            <Tabs
-              value={activeTabIndex}
-              variant="scrollable"
-              scrollButtons="auto"
-              textColor="primary"
-              indicatorColor="primary"
+          {/* User loading indicator */}
+          {isLoadingUsers && loadingUserIds > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                p: 1,
+                mb: 1,
+              }}
             >
-              {items.map((channel, index) => (
-                <Tab
-                  key={channel.id}
-                  label={
-                    <Box sx={{ display: "flex", alignItems: "center" }}>
-                      {/* Reusing channel item UI content but simplified for tab */}
-                      <ChannelItemUI
-                        item={channel}
-                        isActive={channel.id === activeId}
-                        variant="tabs"
-                        unreadCount={
-                          unreadCounts[channel.id]?.messageCount || 0
-                        }
-                        mentionCount={
-                          unreadCounts[channel.id]?.mentionCount || 0
-                        }
-                        isFavorite={favoriteChannels.has(channel.id)}
-                        isMuted={mutedChannels.has(channel.id)}
-                        displayNames={displayNamesByChannel[channel.id]}
-                        onClick={() => handleChannelClick(channel)}
-                      />
-                    </Box>
-                  }
-                  // Use index as value instead of channel.id
-                  value={index}
-                />
-              ))}
-
-              {allowCreate && (
-                <Tab
-                  icon={<AddIcon />}
-                  iconPosition="start"
-                  label="New"
-                  onClick={handleCreateChannel}
-                  // Value should be at the end of the array
-                  value={items.length}
-                />
-              )}
-            </Tabs>
-          </Paper>
-        </Box>
-      );
-
-    case "grid":
-      return (
-        <Box
-          className={className}
-          sx={{
-            width: "100%",
-            ...sx,
-          }}
-          id={id}
-        >
-          {showSearch && (
-            <Box sx={{ mb: 2 }}>
-              <SearchInput
-                value={searchTerm}
-                placeholder="Search channels..."
-                fullWidth
-              />
+              <CircularProgress size={16} sx={{ mr: 1 }} />
+              <Typography variant="caption" color="text.secondary">
+                Loading {loadingUserIds} user{loadingUserIds !== 1 ? "s" : ""}
+                ...
+              </Typography>
             </Box>
           )}
 
-          {groupByType ? (
-            <Box>
-              {Object.entries(groupedChannels).map(([type, channels]) => {
-                if (channels.length === 0) return null;
+          <List disablePadding>
+            {groupByType ? (
+              <>
+                {/* Favorites section */}
+                {showFavorites && groupedChannels.favorites.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Favorites",
+                      groupedChannels.favorites.length,
+                      "favorites",
+                    )}
+                    <Collapse in={expanded.favorites}>
+                      {groupedChannels.favorites.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
 
-                return (
-                  <Box key={type} sx={{ mb: 3 }}>
-                    <SectionHeader
-                      title={getSectionTitle(type)}
-                      divider={true}
-                      sx={{ mb: 1 }}
-                    />
-                    <Grid container spacing={2}>
-                      {channels.map((channel) => (
-                        <Grid
-                          size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
-                          key={channel.id}
-                        >
-                          <ChannelItemUI
-                            item={channel}
-                            isActive={channel.id === activeId}
-                            variant="grid"
-                            unreadCount={
-                              unreadCounts[channel.id]?.messageCount || 0
-                            }
-                            mentionCount={
-                              unreadCounts[channel.id]?.mentionCount || 0
-                            }
-                            isFavorite={favoriteChannels.has(channel.id)}
-                            isMuted={mutedChannels.has(channel.id)}
-                            displayNames={displayNamesByChannel[channel.id]}
-                            compact={compact}
-                            onClick={handleChannelClick}
-                          />
-                        </Grid>
-                      ))}
-                    </Grid>
-                  </Box>
-                );
-              })}
-            </Box>
-          ) : (
-            <Grid container spacing={2}>
-              {items.map((channel) => (
-                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={channel.id}>
-                  <ChannelItemUI
-                    item={channel}
-                    isActive={channel.id === activeId}
-                    variant="grid"
-                    unreadCount={unreadCounts[channel.id]?.messageCount || 0}
-                    mentionCount={unreadCounts[channel.id]?.mentionCount || 0}
-                    isFavorite={favoriteChannels.has(channel.id)}
-                    isMuted={mutedChannels.has(channel.id)}
-                    displayNames={displayNamesByChannel[channel.id]}
-                    compact={compact}
-                    onClick={handleChannelClick}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          )}
+                {/* Public channels section */}
+                {groupedChannels.public.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Public Channels",
+                      groupedChannels.public.length,
+                      "public",
+                    )}
+                    <Collapse in={expanded.public}>
+                      {groupedChannels.public.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
 
-          {allowCreate && (
-            <Box sx={{ mt: 2 }}>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleCreateChannel}
-              >
-                Create Channel
-              </Button>
-            </Box>
-          )}
-        </Box>
+                {/* Private channels section */}
+                {groupedChannels.private.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Private Channels",
+                      groupedChannels.private.length,
+                      "private",
+                    )}
+                    <Collapse in={expanded.private}>
+                      {groupedChannels.private.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
+
+                {/* Direct messages section */}
+                {groupedChannels.direct.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Direct Messages",
+                      groupedChannels.direct.length,
+                      "direct",
+                    )}
+                    <Collapse in={expanded.direct}>
+                      {groupedChannels.direct.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
+
+                {/* Group messages section */}
+                {groupedChannels.group.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Group Messages",
+                      groupedChannels.group.length,
+                      "group",
+                    )}
+                    <Collapse in={expanded.group}>
+                      {groupedChannels.group.map(renderChannelItem)}
+                    </Collapse>
+                  </>
+                )}
+              </>
+            ) : (
+              // Flat list, no grouping
+              items.map(renderChannelItem)
+            )}
+          </List>
+        </Paper>
       );
 
     case "list":
     default:
+      // Default list view
       return (
         <Box
           className={className}
           sx={{
-            width: "100%",
+            height: "100%",
             ...sx,
           }}
           id={id}
         >
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mb: 1,
-            }}
-          >
-            {showSearch && (
-              <Box sx={{ flexGrow: 1 }}>
-                <SearchInput
-                  value={searchTerm}
-                  placeholder="Search channels..."
-                  fullWidth
-                />
-              </Box>
-            )}
+          {renderSearch()}
+          {renderCreateButton()}
 
-            {allowCreate && (
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleCreateChannel}
-                sx={{ ml: 1 }}
-                size="small"
-              >
-                Create
-              </Button>
-            )}
-          </Box>
-
-          {groupByType ? (
-            <Box>
-              {Object.entries(groupedChannels).map(([type, channels]) => {
-                if (channels.length === 0) return null;
-
-                return (
-                  <Box key={type} sx={{ mb: 2 }}>
-                    <SectionHeader
-                      title={getSectionTitle(type)}
-                      divider={true}
-                    />
-                    <List disablePadding>
-                      {channels.map((channel) => (
-                        <ChannelItemUI
-                          key={channel.id}
-                          item={channel}
-                          isActive={channel.id === activeId}
-                          showActions={true}
-                          variant="list"
-                          unreadCount={
-                            unreadCounts[channel.id]?.messageCount || 0
-                          }
-                          mentionCount={
-                            unreadCounts[channel.id]?.mentionCount || 0
-                          }
-                          isFavorite={favoriteChannels.has(channel.id)}
-                          showFavoriteToggle={true}
-                          isMuted={mutedChannels.has(channel.id)}
-                          displayNames={displayNamesByChannel[channel.id]}
-                          compact={compact}
-                          onClick={handleChannelClick}
-                          onAction={onChannelAction}
-                          onToggleFavorite={onToggleFavorite}
-                        />
-                      ))}
-                    </List>
-                  </Box>
-                );
-              })}
+          {/* User loading indicator */}
+          {isLoadingUsers && loadingUserIds > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                p: 1,
+                mb: 1,
+              }}
+            >
+              <CircularProgress size={16} sx={{ mr: 1 }} />
+              <Typography variant="caption" color="text.secondary">
+                Loading {loadingUserIds} user{loadingUserIds !== 1 ? "s" : ""}
+                ...
+              </Typography>
             </Box>
-          ) : (
-            <List disablePadding>
-              {items.map((channel) => (
-                <ChannelItemUI
-                  key={channel.id}
-                  item={channel}
-                  isActive={channel.id === activeId}
-                  showActions={true}
-                  variant="list"
-                  unreadCount={unreadCounts[channel.id]?.messageCount || 0}
-                  mentionCount={unreadCounts[channel.id]?.mentionCount || 0}
-                  isFavorite={favoriteChannels.has(channel.id)}
-                  showFavoriteToggle={true}
-                  isMuted={mutedChannels.has(channel.id)}
-                  displayNames={displayNamesByChannel[channel.id]}
-                  compact={compact}
-                  onClick={handleChannelClick}
-                  onAction={onChannelAction}
-                  onToggleFavorite={onToggleFavorite}
-                />
-              ))}
-            </List>
           )}
+
+          <List disablePadding>
+            {groupByType ? (
+              <>
+                {/* Favorites section */}
+                {showFavorites && groupedChannels.favorites.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Favorites",
+                      groupedChannels.favorites.length,
+                      "favorites",
+                    )}
+                    <Collapse in={expanded.favorites}>
+                      {groupedChannels.favorites.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
+
+                {/* Public channels section */}
+                {groupedChannels.public.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Public Channels",
+                      groupedChannels.public.length,
+                      "public",
+                    )}
+                    <Collapse in={expanded.public}>
+                      {groupedChannels.public.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
+
+                {/* Private channels section */}
+                {groupedChannels.private.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Private Channels",
+                      groupedChannels.private.length,
+                      "private",
+                    )}
+                    <Collapse in={expanded.private}>
+                      {groupedChannels.private.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
+
+                {/* Direct messages section */}
+                {groupedChannels.direct.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Direct Messages",
+                      groupedChannels.direct.length,
+                      "direct",
+                    )}
+                    <Collapse in={expanded.direct}>
+                      {groupedChannels.direct.map(renderChannelItem)}
+                    </Collapse>
+                    <Divider sx={{ my: 1 }} />
+                  </>
+                )}
+
+                {/* Group messages section */}
+                {groupedChannels.group.length > 0 && (
+                  <>
+                    {renderSectionHeader(
+                      "Group Messages",
+                      groupedChannels.group.length,
+                      "group",
+                    )}
+                    <Collapse in={expanded.group}>
+                      {groupedChannels.group.map(renderChannelItem)}
+                    </Collapse>
+                  </>
+                )}
+              </>
+            ) : (
+              // Flat list, no grouping
+              items.map(renderChannelItem)
+            )}
+          </List>
         </Box>
       );
   }

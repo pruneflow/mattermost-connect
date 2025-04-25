@@ -93,44 +93,63 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
   return useQuery({
     queryKey,
     queryFn: async () => {
-      // Mark users as pending
-      if (options.userIds?.length) {
-        options.userIds.forEach((id) => addPendingUser(id));
+      // If no specific options are provided, return empty array
+      if (!options.userIds?.length && !options.inChannel && !options.inTeam) {
+        return [];
       }
 
-      // Build query parameters
-      let endpoint = "users";
-      const queryParams: string[] = [];
+      try {
+        let users: User[] = [];
 
-      if (options.userIds?.length) {
-        options.userIds.forEach((id) => {
-          queryParams.push(`id=${encodeURIComponent(id)}`);
-        });
+        // Handle fetching users by IDs - use POST to /users/ids
+        if (options.userIds?.length) {
+          // Mark users as pending
+          options.userIds.forEach((id) => addPendingUser(id));
+
+          console.log("Fetching users by IDs:", options.userIds);
+
+          // Use POST request to fetch users by IDs
+          const response = await apiClient.post<User[]>(
+            "users/ids",
+            options.userIds,
+          );
+          users = response.data;
+
+          console.log(
+            "Received users:",
+            users.map((u) => u.id),
+          );
+        }
+        // Handle fetching users by channel
+        else if (options.inChannel) {
+          const response = await apiClient.get<User[]>(
+            `users?in_channel=${encodeURIComponent(options.inChannel)}`,
+          );
+          users = response.data;
+        }
+        // Handle fetching users by team
+        else if (options.inTeam) {
+          const response = await apiClient.get<User[]>(
+            `users?in_team=${encodeURIComponent(options.inTeam)}`,
+          );
+          users = response.data;
+        }
+
+        // Update store with received users
+        if (users.length > 0) {
+          setUsers(users);
+        }
+
+        return users;
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        throw error;
       }
-
-      if (options.inChannel) {
-        queryParams.push(`in_channel=${encodeURIComponent(options.inChannel)}`);
-      }
-
-      if (options.inTeam) {
-        queryParams.push(`in_team=${encodeURIComponent(options.inTeam)}`);
-      }
-
-      if (queryParams.length > 0) {
-        endpoint += `?${queryParams.join("&")}`;
-      }
-
-      // Fetch users
-      const response = await apiClient.get<User[]>(endpoint);
-      const users = response.data;
-
-      // Update store
-      setUsers(users);
-
-      return users;
     },
     // Cache data for 5 minutes
     staleTime: 5 * 60 * 1000,
+    // Only enable the query if we have parameters to search with
+    enabled: !!(options.userIds?.length || options.inChannel || options.inTeam),
   });
 };
 

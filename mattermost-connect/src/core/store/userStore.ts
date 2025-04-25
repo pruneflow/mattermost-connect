@@ -101,8 +101,17 @@ export const useUserStore = create<UserState>()((set, get) => ({
    * Sets multiple users
    * @param users Users to set
    */
+  /**
+   * Sets multiple users
+   * @param users Users to set
+   */
   setUsers: (users: User[]) => {
-    if (!users.length) return;
+    if (!users || !users.length) return;
+
+    console.log(
+      "Setting users in store:",
+      users.map((u) => u.id),
+    );
 
     set((state) => {
       const now = Date.now();
@@ -113,6 +122,11 @@ export const useUserStore = create<UserState>()((set, get) => ({
 
       // Update each user
       users.forEach((user) => {
+        if (!user || !user.id) {
+          console.warn("Attempted to set invalid user:", user);
+          return;
+        }
+
         byId[user.id] = user;
         loadingStates[user.id] = false;
         lastFetchTimes[user.id] = now;

@@ -2,14 +2,20 @@
 /**
  * Container component for channel list that manages data fetching and state
  */
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useState, useMemo, useEffect } from "react";
 import { useChannels } from "../../../hooks/useChannels";
 import { BaseComponentProps } from "../../types/componentTypes";
 import ChannelListUI from "../../components/channels/ChannelListUI";
 import { Channel, ChannelGroupType } from "../../../index";
 import { useChannelCreation } from "../../../hooks/useChannels";
 import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
-import { useUserStore } from "../../../core/store/userStore";
+import { useAuthStore } from "../../../core/store/authStore";
+import { useDirectChannels } from "../../../hooks/useDirectChannels";
+import { useDirectChannelUsers } from "../../../hooks/useDirectChannelUsers";
+import {
+  isDirectChannel,
+  isGroupChannel,
+} from "../../../utils/directChannelUtils";
 
 export interface ChannelListContainerProps extends BaseComponentProps {
   /** Team ID for the channels */
@@ -59,15 +65,27 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     groupChannels,
     favoriteChannels,
     activeChannel,
-    isLoading,
+    isLoading: isLoadingChannels,
     setActiveChannel,
   } = useChannels(teamId);
 
-  // Get user store for display names in direct messages
-  const { getUserDisplayName } = useUserStore();
+  // Get current user
+  const { currentUser } = useAuthStore();
+
+  // Get direct channel utilities
+  const { getChannelsInfo, getDirectMessageDisplayNames } = useDirectChannels();
+
+  // Use our direct channel users hook to ensure users are loaded
+  const { isLoadingUsers, userIdsCount, loadedCount, stillMissingCount } =
+    useDirectChannelUsers([...directChannels, ...groupChannels]);
 
   // Channel creation mutation
   const { createChannel, isCreating } = useChannelCreation();
+
+  // Get channel info for all channels
+  const channelsInfo = useMemo(() => {
+    return getChannelsInfo([...directChannels, ...groupChannels]);
+  }, [directChannels, groupChannels, getChannelsInfo, loadedCount]);
 
   // Collect unread counts (simplified - would need to get from channel store)
   const unreadCounts = useMemo(() => {
@@ -106,33 +124,66 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     return new Set<string>();
   }, []);
 
-  // Get display names for direct messages
+  // Get display names for direct and group messages
   const displayNamesByChannel = useMemo(() => {
-    const displayNames: Record<string, string[]> = {};
+    return getDirectMessageDisplayNames([...directChannels, ...groupChannels]);
+  }, [
+    directChannels,
+    groupChannels,
+    getDirectMessageDisplayNames,
+    loadedCount,
+  ]);
 
-    [...directChannels, ...groupChannels].forEach((channel) => {
-      // This is simplified. In a real implementation, this would parse
-      // the channel.name to get user IDs for direct messages,
-      // or fetch members for group messages.
-      displayNames[channel.id] = [channel.display_name];
+  // Prepare channel avatars data
+  const channelAvatars = useMemo(() => {
+    const avatars: Record<
+      string,
+      {
+        userImageUrl?: string;
+        userStatus?: "online" | "away" | "dnd" | "offline";
+        groupAvatarUrls?: string[];
+        isLoading?: boolean;
+      }
+    > = {};
+
+    // Add data for direct and group channels
+    Object.entries(channelsInfo).forEach(([channelId, info]) => {
+      avatars[channelId] = {
+        userImageUrl: info.userImageUrl,
+        userStatus: info.userStatus,
+        groupAvatarUrls: info.groupAvatarUrls,
+        isLoading: info.status === "loading",
+      };
     });
 
-    return displayNames;
-  }, [directChannels, groupChannels, getUserDisplayName]);
+    return avatars;
+  }, [channelsInfo]);
 
   // Filter channels based on search term
   const filteredChannels = useMemo(() => {
     if (!searchTerm) return channels;
 
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return channels.filter(
-      (channel) =>
+    return channels.filter((channel) => {
+      // For direct channels, search in the display name we've generated
+      if (isDirectChannel(channel) || isGroupChannel(channel)) {
+        const channelDisplayNames = displayNamesByChannel[channel.id];
+        if (channelDisplayNames && channelDisplayNames.length > 0) {
+          return channelDisplayNames.some((name) =>
+            name.toLowerCase().includes(lowerSearchTerm),
+          );
+        }
+      }
+
+      // For regular channels, search in the standard fields
+      return (
         channel.display_name.toLowerCase().includes(lowerSearchTerm) ||
         channel.name.toLowerCase().includes(lowerSearchTerm) ||
         (channel.purpose &&
-          channel.purpose.toLowerCase().includes(lowerSearchTerm)),
-    );
-  }, [channels, searchTerm]);
+          channel.purpose.toLowerCase().includes(lowerSearchTerm))
+      );
+    });
+  }, [channels, searchTerm, displayNamesByChannel]);
 
   // Handle channel selection
   const handleChannelSelect = useCallback(
@@ -173,13 +224,31 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     console.log("Open create channel dialog");
   }, []);
 
+  // Determine if we're in a loading state
+  const isLoading =
+    isLoadingChannels || isCreating || (isLoadingUsers && userIdsCount > 0);
+
+  // Log loading status for debugging
+  useEffect(() => {
+    if (directChannels.length > 0 || groupChannels.length > 0) {
+      console.log(
+        `Direct channel users: ${loadedCount} loaded, ${stillMissingCount} still loading`,
+      );
+    }
+  }, [
+    directChannels.length,
+    groupChannels.length,
+    loadedCount,
+    stillMissingCount,
+  ]);
+
   return (
     <ChannelListUI
       items={filteredChannels}
       activeId={activeChannel?.id}
       variant={variant as "list" | "grid" | "sidebar" | "tabs"}
       density={density as "compact" | "comfortable" | "spacious"}
-      isLoading={isLoading || isCreating}
+      isLoading={isLoading}
       emptyMessage={emptyMessage}
       unreadCounts={unreadCounts}
       allowCreate={allowCreate}
@@ -190,13 +259,17 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
       displayNamesByChannel={displayNamesByChannel}
       favoriteChannels={favoriteChannelSet}
       mutedChannels={mutedChannelSet}
+      channelAvatars={channelAvatars} // Pass avatars data to UI
       onItemClick={handleChannelSelect}
       onCreateChannel={handleCreateChannel}
       onChannelAction={handleChannelAction}
       onToggleFavorite={handleToggleFavorite}
+      onSearchChange={handleSearch}
       className={className}
       sx={sx}
       id={id}
+      isLoadingUsers={isLoadingUsers && userIdsCount > 0}
+      loadingUserIds={userIdsCount}
     />
   );
 };
