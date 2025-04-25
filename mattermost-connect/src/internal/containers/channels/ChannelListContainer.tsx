@@ -6,13 +6,12 @@ import React, { useCallback, useState, useMemo, useEffect } from "react";
 import { useChannels } from "../../../hooks/useChannels";
 import { BaseComponentProps } from "../../types/componentTypes";
 import ChannelListUI from "../../components/channels/ChannelListUI";
-import { Channel, ChannelGroupType } from "../../../index";
+import { Channel } from "../../../index";
 import { useChannelCreation } from "../../../hooks/useChannels";
 import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
 import { useAuthStore } from "../../../core/store/authStore";
 import { useDirectChannels } from "../../../hooks/useDirectChannels";
 import { useDirectChannelUsers } from "../../../hooks/useDirectChannelUsers";
-import { useUnreadCounts } from "../../../hooks/useUnreadCounts";
 import { useUnreadWebSocketEvents } from "../../../hooks/useWebSocket";
 import {
   isDirectChannel,
@@ -74,6 +73,10 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     favoriteChannelSet,
     markChannelAsRead,
     toggleChannelMuted,
+    hasUnreadsInChannel,
+    hasMentionsInChannel,
+    isChannelMuted,
+    teamUnreads,
   } = useChannels(teamId);
 
   // Get current user
@@ -85,14 +88,6 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   // Use our direct channel users hook to ensure users are loaded
   const { isLoadingUsers, userIdsCount, loadedCount, stillMissingCount } =
     useDirectChannelUsers([...directChannels, ...groupChannels]);
-
-  // Use unread counts hook
-  const {
-    getAllUnreadCounts,
-    hasUnreadsInChannel,
-    hasMentionsInChannel,
-    isChannelMuted: checkChannelMuted,
-  } = useUnreadCounts();
 
   // Register WebSocket handlers for unread counts
   useUnreadWebSocketEvents();
@@ -224,11 +219,6 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const isLoading =
     isLoadingChannels || isCreating || (isLoadingUsers && userIdsCount > 0);
 
-  // Total unread counts for the team
-  const totalUnreads = useMemo(() => {
-    return getAllUnreadCounts();
-  }, [getAllUnreadCounts]);
-
   // Build props for the UI component
   const uiProps = useMemo(() => {
     return {
@@ -248,7 +238,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
       favoriteChannels: favoriteChannelSet,
       mutedChannels,
       channelAvatars,
-      totalUnreads,
+      totalUnreads: teamUnreads,
       onItemClick: handleChannelSelect,
       onCreateChannel: handleCreateChannel,
       onChannelAction: handleChannelAction,
@@ -277,7 +267,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     favoriteChannelSet,
     mutedChannels,
     channelAvatars,
-    totalUnreads,
+    teamUnreads,
     handleChannelSelect,
     handleCreateChannel,
     handleChannelAction,

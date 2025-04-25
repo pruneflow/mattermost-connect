@@ -1,4 +1,8 @@
-import React from "react";
+// src/internal/components/common/UnreadBadge.tsx
+/**
+ * Optimized badge component for unread counts
+ */
+import React, { memo } from "react";
 import { Badge, BadgeProps, styled } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
 
@@ -40,18 +44,7 @@ const CountBadge = styled(Badge)(({ theme }) => ({
 
 /**
  * A badge component that displays unread counts or mentions with appropriate styling
- *
- * @param count - Number of unread items
- * @param mentionCount - Number of mentions (higher priority than count)
- * @param showZero - Whether to show the badge when count is 0
- * @param max - Maximum number to display before showing '+'
- * @param color - Color of the badge
- * @param size - Size variant of the badge (not passed to Badge component)
- * @param mentionPriority - Whether mention count should take priority over unread count
- * @param children - Content to wrap with the badge
- * @param className - Classname add to the component
- * @param sx - Custom sx style
- * @param id - Id pass to the component
+ * Optimized with React.memo to prevent unnecessary re-renders
  */
 const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   count = 0,
@@ -118,4 +111,5 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   );
 };
 
-export default UnreadBadge;
+// Memoize the component to prevent unnecessary re-renders
+export default memo(UnreadBadge);

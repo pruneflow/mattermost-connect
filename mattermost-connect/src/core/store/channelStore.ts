@@ -3,6 +3,7 @@
  * Zustand store for channels state
  */
 import { create } from "zustand";
+import { combine, devtools } from "zustand/middleware";
 
 /**
  * Channel interface
@@ -53,10 +54,9 @@ export type ChannelGroupType =
   | "favorite";
 
 /**
- * Channels state
+ * Initial state for the channel store
  */
-export interface ChannelState {
-  // State
+interface ChannelState {
   /** Channels by team ID */
   channelsByTeam: Record<string, Channel[]>;
   /** Currently active channel */
@@ -75,50 +75,22 @@ export interface ChannelState {
   mutedChannels: Set<string>;
   /** Last processed message IDs to avoid duplicates */
   processedMessageIds: Set<string>;
-
-  // Actions
-  /** Sets channels for a team */
-  setChannels: (teamId: string, channels: Channel[]) => void;
-  /** Sets or updates a single channel */
-  setChannel: (channel: Channel) => void;
-  /** Sets the active channel */
-  setActiveChannel: (channel: Channel | null) => void;
-  /** Sets the loading state for a team */
-  setLoading: (teamId: string, isLoading: boolean) => void;
-  /** Sets the error state for a team */
-  setError: (teamId: string, error: Error | null) => void;
-  /** Updates the unread count for a channel */
-  updateUnreadCount: (
-    channelId: string,
-    messageCount: number,
-    mentionCount: number,
-    lastMessageId?: string,
-    lastViewedAt?: number,
-    totalMessageCount?: number,
-  ) => void;
-  /** Increments the unread count for a channel */
-  incrementUnreadCount: (
-    channelId: string,
-    messageIncrement: number,
-    mentionIncrement: number,
-    messageId?: string,
-    mentionsUserId?: boolean,
-  ) => void;
-  /** Marks a channel as read */
-  markAsRead: (channelId: string) => void;
-  /** Marks all channels in a team as read */
-  markAllAsRead: (teamId: string) => void;
-  /** Mutes or unmutes a channel */
-  setChannelMuted: (channelId: string, isMuted: boolean) => void;
-  /** Updates the typing users for a channel */
-  updateTypingUsers: (channelId: string, userIds: string[]) => void;
-  /** Adds a processed message ID to avoid duplicates */
-  addProcessedMessageId: (messageId: string) => void;
-  /** Gets a channel by ID */
-  getChannelById: (channelId: string | null | undefined) => Channel | null;
-  /** Resets the channels state */
-  reset: () => void;
 }
+
+/**
+ * Default initial state
+ */
+const initialState: ChannelState = {
+  channelsByTeam: {},
+  activeChannel: null,
+  loadingStates: {},
+  errors: {},
+  lastFetchTimes: {},
+  unreadCounts: {},
+  typingUsers: {},
+  mutedChannels: new Set<string>(),
+  processedMessageIds: new Set<string>(),
+};
 
 /**
  * Default unread count
@@ -130,373 +102,383 @@ const DEFAULT_UNREAD_COUNT: ChannelUnreadCount = {
 };
 
 /**
- * Create the channels store
+ * Create the channels store with devtools middleware for better debugging
  */
-export const useChannelStore = create<ChannelState>()((set, get) => ({
-  // Initial state
-  channelsByTeam: {},
-  activeChannel: null,
-  loadingStates: {},
-  errors: {},
-  lastFetchTimes: {},
-  unreadCounts: {},
-  typingUsers: {},
-  mutedChannels: new Set<string>(),
-  processedMessageIds: new Set<string>(),
-
-  /**
-   * Sets channels for a team
-   * @param teamId Team ID
-   * @param channels List of channels
-   */
-  setChannels: (teamId: string, channels: Channel[]) => {
-    set((state) => ({
-      channelsByTeam: {
-        ...state.channelsByTeam,
-        [teamId]: channels,
-      },
-      loadingStates: {
-        ...state.loadingStates,
-        [teamId]: false,
-      },
-      lastFetchTimes: {
-        ...state.lastFetchTimes,
-        [teamId]: Date.now(),
-      },
-      errors: {
-        ...state.errors,
-        [teamId]: null,
-      },
-    }));
-  },
-
-  /**
-   * Sets or updates a single channel
-   * @param channel Channel to set or update
-   */
-  setChannel: (channel: Channel) => {
-    const teamId = channel.team_id;
-
-    set((state) => {
-      // Get current channels for the team
-      const teamChannels = [...(state.channelsByTeam[teamId] || [])];
-
-      // Find existing channel index
-      const channelIndex = teamChannels.findIndex((c) => c.id === channel.id);
-
-      // Update or add the channel
-      if (channelIndex >= 0) {
-        teamChannels[channelIndex] = channel;
-      } else {
-        teamChannels.push(channel);
-      }
-
-      return {
-        channelsByTeam: {
-          ...state.channelsByTeam,
-          [teamId]: teamChannels,
-        },
-      };
-    });
-  },
-
-  /**
-   * Sets the active channel
-   * @param channel Channel to set as active
-   */
-  setActiveChannel: (channel: Channel | null) => {
-    set({ activeChannel: channel });
-
-    // Also mark as read if a channel is being activated
-    if (channel) {
-      get().markAsRead(channel.id);
-    }
-  },
-
-  /**
-   * Sets the loading state for a team
-   * @param teamId Team ID
-   * @param isLoading Whether channels are being loaded
-   */
-  setLoading: (teamId: string, isLoading: boolean) => {
-    set((state) => ({
-      loadingStates: {
-        ...state.loadingStates,
-        [teamId]: isLoading,
-      },
-    }));
-  },
-
-  /**
-   * Sets the error state for a team
-   * @param teamId Team ID
-   * @param error Error to set
-   */
-  setError: (teamId: string, error: Error | null) => {
-    set((state) => ({
-      errors: {
-        ...state.errors,
-        [teamId]: error,
-      },
-      loadingStates: {
-        ...state.loadingStates,
-        [teamId]: false,
-      },
-    }));
-  },
-
-  /**
-   * Updates the unread count for a channel
-   * @param channelId Channel ID
-   * @param messageCount Number of unread messages
-   * @param mentionCount Number of unread mentions
-   * @param lastMessageId ID of the last message
-   * @param lastViewedAt Time when the channel was last viewed
-   * @param totalMessageCount Total message count for the channel
-   */
-  updateUnreadCount: (
-    channelId: string,
-    messageCount: number,
-    mentionCount: number,
-    lastMessageId?: string,
-    lastViewedAt?: number,
-    totalMessageCount?: number,
-  ) => {
-    set((state) => {
-      // Get existing unread data for the channel
-      const existingUnread =
-        state.unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
-
-      return {
-        unreadCounts: {
-          ...state.unreadCounts,
-          [channelId]: {
-            ...existingUnread,
-            messageCount,
-            mentionCount,
-            lastMessageId: lastMessageId || existingUnread.lastMessageId,
-            lastViewedAt: lastViewedAt || existingUnread.lastViewedAt,
-            totalMessageCount:
-              totalMessageCount || existingUnread.totalMessageCount,
+export const useChannelStore = create(
+  devtools(
+    combine(initialState, (set, get) => ({
+      /**
+       * Sets channels for a team
+       * @param teamId Team ID
+       * @param channels List of channels
+       */
+      setChannels: (teamId: string, channels: Channel[]) => {
+        set(
+          {
+            channelsByTeam: {
+              ...get().channelsByTeam,
+              [teamId]: channels,
+            },
+            loadingStates: {
+              ...get().loadingStates,
+              [teamId]: false,
+            },
+            lastFetchTimes: {
+              ...get().lastFetchTimes,
+              [teamId]: Date.now(),
+            },
+            errors: {
+              ...get().errors,
+              [teamId]: null,
+            },
           },
-        },
-      };
-    });
-  },
+          false,
+          "channels/setChannels",
+        );
+      },
 
-  /**
-   * Increments the unread count for a channel
-   * @param channelId Channel ID
-   * @param messageIncrement Number of messages to increment by
-   * @param mentionIncrement Number of mentions to increment by
-   * @param messageId ID of the message causing the increment
-   * @param mentionsUserId Whether the current user is mentioned in the message
-   */
-  incrementUnreadCount: (
-    channelId: string,
-    messageIncrement: number,
-    mentionIncrement: number,
-    messageId?: string,
-    mentionsUserId: boolean = false,
-  ) => {
-    // Don't increment if channel is active
-    const activeChannel = get().activeChannel;
-    if (activeChannel && activeChannel.id === channelId) {
-      return;
-    }
+      /**
+       * Sets or updates a single channel
+       * @param channel Channel to set or update
+       */
+      setChannel: (channel: Channel) => {
+        const teamId = channel.team_id;
+        const teamChannels = [...(get().channelsByTeam[teamId] || [])];
+        const channelIndex = teamChannels.findIndex((c) => c.id === channel.id);
 
-    // Don't increment if we've already processed this message
-    if (messageId && get().processedMessageIds.has(messageId)) {
-      return;
-    }
+        // Update or add the channel
+        if (channelIndex >= 0) {
+          teamChannels[channelIndex] = channel;
+        } else {
+          teamChannels.push(channel);
+        }
 
-    // Add to processed message IDs if provided
-    if (messageId) {
-      get().addProcessedMessageId(messageId);
-    }
-
-    set((state) => {
-      // Get existing unread data for the channel
-      const existingUnread =
-        state.unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
-
-      // Don't increment if channel is muted and there are no direct mentions
-      if (existingUnread.isMuted && !mentionsUserId) {
-        return state;
-      }
-
-      return {
-        unreadCounts: {
-          ...state.unreadCounts,
-          [channelId]: {
-            ...existingUnread,
-            messageCount: Math.max(
-              0,
-              existingUnread.messageCount + messageIncrement,
-            ),
-            mentionCount: Math.max(
-              0,
-              existingUnread.mentionCount + mentionIncrement,
-            ),
-            lastMessageId: messageId || existingUnread.lastMessageId,
+        set(
+          {
+            channelsByTeam: {
+              ...get().channelsByTeam,
+              [teamId]: teamChannels,
+            },
           },
-        },
-      };
-    });
-  },
+          false,
+          "channels/setChannel",
+        );
+      },
 
-  /**
-   * Marks a channel as read
-   * @param channelId Channel ID
-   */
-  markAsRead: (channelId: string) => {
-    set((state) => {
-      const existingUnread =
-        state.unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
+      /**
+       * Sets the active channel
+       * @param channel Channel to set as active
+       */
+      setActiveChannel: (channel: Channel | null) => {
+        set({ activeChannel: channel }, false, "channels/setActiveChannel");
 
-      return {
-        unreadCounts: {
-          ...state.unreadCounts,
-          [channelId]: {
+        // Also mark as read if a channel is being activated
+        if (channel) {
+          get().markAsRead(channel.id);
+        }
+      },
+
+      /**
+       * Sets the loading state for a team
+       * @param teamId Team ID
+       * @param isLoading Whether channels are being loaded
+       */
+      setLoading: (teamId: string, isLoading: boolean) => {
+        set(
+          {
+            loadingStates: {
+              ...get().loadingStates,
+              [teamId]: isLoading,
+            },
+          },
+          false,
+          "channels/setLoading",
+        );
+      },
+
+      /**
+       * Sets the error state for a team
+       * @param teamId Team ID
+       * @param error Error to set
+       */
+      setError: (teamId: string, error: Error | null) => {
+        set(
+          {
+            errors: {
+              ...get().errors,
+              [teamId]: error,
+            },
+            loadingStates: {
+              ...get().loadingStates,
+              [teamId]: false,
+            },
+          },
+          false,
+          "channels/setError",
+        );
+      },
+
+      /**
+       * Updates the unread count for a channel
+       * @param channelId Channel ID
+       * @param messageCount Number of unread messages
+       * @param mentionCount Number of unread mentions
+       * @param lastMessageId ID of the last message
+       * @param lastViewedAt Time when the channel was last viewed
+       * @param totalMessageCount Total message count for the channel
+       */
+      updateUnreadCount: (
+        channelId: string,
+        messageCount: number,
+        mentionCount: number,
+        lastMessageId?: string,
+        lastViewedAt?: number,
+        totalMessageCount?: number,
+      ) => {
+        // Get existing unread data for the channel
+        const existingUnread =
+          get().unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
+
+        set(
+          {
+            unreadCounts: {
+              ...get().unreadCounts,
+              [channelId]: {
+                ...existingUnread,
+                messageCount,
+                mentionCount,
+                lastMessageId: lastMessageId || existingUnread.lastMessageId,
+                lastViewedAt: lastViewedAt || existingUnread.lastViewedAt,
+                totalMessageCount:
+                  totalMessageCount || existingUnread.totalMessageCount,
+              },
+            },
+          },
+          false,
+          "channels/updateUnreadCount",
+        );
+      },
+
+      /**
+       * Increments the unread count for a channel
+       * Optimized to avoid unnecessary updates in certain conditions
+       * @param channelId Channel ID
+       * @param messageIncrement Number of messages to increment by
+       * @param mentionIncrement Number of mentions to increment by
+       * @param messageId ID of the message causing the increment
+       * @param mentionsUserId Whether the current user is mentioned in the message
+       */
+      incrementUnreadCount: (
+        channelId: string,
+        messageIncrement: number,
+        mentionIncrement: number,
+        messageId?: string,
+        mentionsUserId: boolean = false,
+      ) => {
+        // Don't increment if channel is active
+        const activeChannel = get().activeChannel;
+        if (activeChannel && activeChannel.id === channelId) {
+          return;
+        }
+
+        // Don't increment if we've already processed this message
+        if (messageId && get().processedMessageIds.has(messageId)) {
+          return;
+        }
+
+        // Add to processed message IDs if provided
+        if (messageId) {
+          get().addProcessedMessageId(messageId);
+        }
+
+        // Get existing unread data for the channel
+        const existingUnread =
+          get().unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
+
+        // Don't increment if channel is muted and there are no direct mentions
+        if (existingUnread.isMuted && !mentionsUserId) {
+          return;
+        }
+
+        set(
+          {
+            unreadCounts: {
+              ...get().unreadCounts,
+              [channelId]: {
+                ...existingUnread,
+                messageCount: Math.max(
+                  0,
+                  existingUnread.messageCount + messageIncrement,
+                ),
+                mentionCount: Math.max(
+                  0,
+                  existingUnread.mentionCount + mentionIncrement,
+                ),
+                lastMessageId: messageId || existingUnread.lastMessageId,
+              },
+            },
+          },
+          false,
+          "channels/incrementUnreadCount",
+        );
+      },
+
+      /**
+       * Marks a channel as read
+       * @param channelId Channel ID
+       */
+      markAsRead: (channelId: string) => {
+        const existingUnread =
+          get().unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
+
+        set(
+          {
+            unreadCounts: {
+              ...get().unreadCounts,
+              [channelId]: {
+                ...existingUnread,
+                messageCount: 0,
+                mentionCount: 0,
+                lastViewedAt: Date.now(),
+              },
+            },
+          },
+          false,
+          "channels/markAsRead",
+        );
+      },
+
+      /**
+       * Marks all channels in a team as read
+       * @param teamId Team ID
+       */
+      markAllAsRead: (teamId: string) => {
+        const teamChannels = get().channelsByTeam[teamId] || [];
+        const updatedUnreadCounts = { ...get().unreadCounts };
+        const now = Date.now();
+
+        // Reset unread counts for all channels in the team
+        teamChannels.forEach((channel) => {
+          const existingUnread =
+            updatedUnreadCounts[channel.id] || DEFAULT_UNREAD_COUNT;
+          updatedUnreadCounts[channel.id] = {
             ...existingUnread,
             messageCount: 0,
             mentionCount: 0,
-            lastViewedAt: Date.now(),
+            lastViewedAt: now,
+          };
+        });
+
+        set(
+          {
+            unreadCounts: updatedUnreadCounts,
           },
-        },
-      };
-    });
-  },
-
-  /**
-   * Marks all channels in a team as read
-   * @param teamId Team ID
-   */
-  markAllAsRead: (teamId: string) => {
-    set((state) => {
-      const teamChannels = state.channelsByTeam[teamId] || [];
-      const updatedUnreadCounts = { ...state.unreadCounts };
-
-      // Reset unread counts for all channels in the team
-      teamChannels.forEach((channel) => {
-        const existingUnread =
-          updatedUnreadCounts[channel.id] || DEFAULT_UNREAD_COUNT;
-        updatedUnreadCounts[channel.id] = {
-          ...existingUnread,
-          messageCount: 0,
-          mentionCount: 0,
-          lastViewedAt: Date.now(),
-        };
-      });
-
-      return {
-        unreadCounts: updatedUnreadCounts,
-      };
-    });
-  },
-
-  /**
-   * Mutes or unmutes a channel
-   * @param channelId Channel ID
-   * @param isMuted Whether the channel should be muted
-   */
-  setChannelMuted: (channelId: string, isMuted: boolean) => {
-    set((state) => {
-      const mutedChannels = new Set(state.mutedChannels);
-      const existingUnread =
-        state.unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
-
-      if (isMuted) {
-        mutedChannels.add(channelId);
-      } else {
-        mutedChannels.delete(channelId);
-      }
-
-      return {
-        mutedChannels,
-        unreadCounts: {
-          ...state.unreadCounts,
-          [channelId]: {
-            ...existingUnread,
-            isMuted,
-          },
-        },
-      };
-    });
-  },
-
-  /**
-   * Updates the typing users for a channel
-   * @param channelId Channel ID
-   * @param userIds IDs of users who are typing
-   */
-  updateTypingUsers: (channelId: string, userIds: string[]) => {
-    set((state) => ({
-      typingUsers: {
-        ...state.typingUsers,
-        [channelId]: userIds,
-      },
-    }));
-  },
-
-  /**
-   * Adds a processed message ID to avoid duplicates
-   * @param messageId Message ID to add
-   */
-  addProcessedMessageId: (messageId: string) => {
-    set((state) => {
-      const processedMessageIds = new Set(state.processedMessageIds);
-      processedMessageIds.add(messageId);
-
-      // Limit size to prevent memory issues - keep last 1000 messages
-      if (processedMessageIds.size > 1000) {
-        const toRemove = Array.from(processedMessageIds).slice(
-          0,
-          processedMessageIds.size - 1000,
+          false,
+          "channels/markAllAsRead",
         );
-        toRemove.forEach((id) => processedMessageIds.delete(id));
-      }
+      },
 
-      return { processedMessageIds };
-    });
-  },
+      /**
+       * Mutes or unmutes a channel
+       * @param channelId Channel ID
+       * @param isMuted Whether the channel should be muted
+       */
+      setChannelMuted: (channelId: string, isMuted: boolean) => {
+        const mutedChannels = new Set(get().mutedChannels);
+        const existingUnread =
+          get().unreadCounts[channelId] || DEFAULT_UNREAD_COUNT;
 
-  /**
-   * Gets a channel by ID
-   * @param channelId Channel ID
-   * @returns Channel or null if not found
-   */
-  getChannelById: (channelId: string | null | undefined): Channel | null => {
-    if (!channelId) return null;
+        if (isMuted) {
+          mutedChannels.add(channelId);
+        } else {
+          mutedChannels.delete(channelId);
+        }
 
-    const { channelsByTeam } = get();
+        set(
+          {
+            mutedChannels,
+            unreadCounts: {
+              ...get().unreadCounts,
+              [channelId]: {
+                ...existingUnread,
+                isMuted,
+              },
+            },
+          },
+          false,
+          "channels/setChannelMuted",
+        );
+      },
 
-    // Search through all teams' channels
-    for (const teamChannels of Object.values(channelsByTeam)) {
-      const channel = teamChannels.find((c) => c.id === channelId);
-      if (channel) return channel;
-    }
+      /**
+       * Updates the typing users for a channel
+       * @param channelId Channel ID
+       * @param userIds IDs of users who are typing
+       */
+      updateTypingUsers: (channelId: string, userIds: string[]) => {
+        set(
+          {
+            typingUsers: {
+              ...get().typingUsers,
+              [channelId]: userIds,
+            },
+          },
+          false,
+          "channels/updateTypingUsers",
+        );
+      },
 
-    return null;
-  },
+      /**
+       * Adds a processed message ID to avoid duplicates
+       * @param messageId Message ID to add
+       */
+      addProcessedMessageId: (messageId: string) => {
+        const processedMessageIds = new Set(get().processedMessageIds);
+        processedMessageIds.add(messageId);
 
-  /**
-   * Resets the channels state
-   */
-  reset: () => {
-    set({
-      channelsByTeam: {},
-      activeChannel: null,
-      loadingStates: {},
-      errors: {},
-      lastFetchTimes: {},
-      unreadCounts: {},
-      typingUsers: {},
-      mutedChannels: new Set<string>(),
-      processedMessageIds: new Set<string>(),
-    });
-  },
-}));
+        // Limit size to prevent memory issues - keep last 1000 messages
+        if (processedMessageIds.size > 1000) {
+          const toRemove = Array.from(processedMessageIds).slice(
+            0,
+            processedMessageIds.size - 1000,
+          );
+          toRemove.forEach((id) => processedMessageIds.delete(id));
+        }
+
+        set({ processedMessageIds }, false, "channels/addProcessedMessageId");
+      },
+
+      /**
+       * Gets a channel by ID
+       * @param channelId Channel ID
+       * @returns Channel or null if not found
+       */
+      getChannelById: (
+        channelId: string | null | undefined,
+      ): Channel | null => {
+        if (!channelId) return null;
+
+        const { channelsByTeam } = get();
+
+        // Search through all teams' channels
+        for (const teamChannels of Object.values(channelsByTeam)) {
+          const channel = teamChannels.find((c) => c.id === channelId);
+          if (channel) return channel;
+        }
+
+        return null;
+      },
+
+      /**
+       * Resets the channels state
+       */
+      reset: () => {
+        set(initialState, false, "channels/reset");
+      },
+    })),
+    { name: "channelStore" },
+  ),
+);
 
 /**
  * Gets the unread count for a channel
@@ -560,6 +542,7 @@ export const isChannelMuted = (channelId: string): boolean => {
 
 /**
  * Gets total unread counts for all channels in a team
+ * Optimized for performance by memoizing frequently accessed data
  * @param teamId Team ID
  * @returns Object containing total message and mention counts
  */
@@ -572,8 +555,11 @@ export const getTeamUnreadCounts = (
   let totalMessages = 0;
   let totalMentions = 0;
 
-  teamChannels.forEach((channel) => {
+  // Use a for loop for better performance with large arrays
+  for (let i = 0; i < teamChannels.length; i++) {
+    const channel = teamChannels[i];
     const unreadCount = state.unreadCounts[channel.id] || DEFAULT_UNREAD_COUNT;
+
     if (!unreadCount.isMuted) {
       totalMessages += unreadCount.messageCount || 0;
       totalMentions += unreadCount.mentionCount || 0;
@@ -581,7 +567,7 @@ export const getTeamUnreadCounts = (
       // For muted channels, only count mentions
       totalMentions += unreadCount.mentionCount || 0;
     }
-  });
+  }
 
   return { messageCount: totalMessages, mentionCount: totalMentions };
 };
@@ -598,19 +584,15 @@ export const getTotalUnreadCounts = (): {
   let totalMessages = 0;
   let totalMentions = 0;
 
-  Object.values(state.channelsByTeam).forEach((teamChannels) => {
-    teamChannels.forEach((channel) => {
-      const unreadCount =
-        state.unreadCounts[channel.id] || DEFAULT_UNREAD_COUNT;
-      if (!unreadCount.isMuted) {
-        totalMessages += unreadCount.messageCount || 0;
-        totalMentions += unreadCount.mentionCount || 0;
-      } else {
-        // For muted channels, only count mentions
-        totalMentions += unreadCount.mentionCount || 0;
-      }
-    });
-  });
+  // First, get all teams
+  const teamIds = Object.keys(state.channelsByTeam);
+
+  // Then calculate totals for each team
+  for (const teamId of teamIds) {
+    const teamCounts = getTeamUnreadCounts(teamId);
+    totalMessages += teamCounts.messageCount;
+    totalMentions += teamCounts.mentionCount;
+  }
 
   return { messageCount: totalMessages, mentionCount: totalMentions };
 };

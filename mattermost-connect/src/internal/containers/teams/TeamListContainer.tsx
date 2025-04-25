@@ -50,9 +50,8 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
   // Team creation mutation
   const { createTeam, isCreating } = useTeamCreation();
 
-  // Get unread counts from hook
-  const { teamUnreadCounts, hasUnreadsInTeam, hasMentionsInTeam } =
-    useUnreadCounts();
+  // Get unread counts from optimized hook
+  const { teamUnreadCounts } = useUnreadCounts();
 
   // Filter teams based on search term
   const filteredTeams = useMemo(() => {
