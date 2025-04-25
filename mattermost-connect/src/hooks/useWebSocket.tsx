@@ -4,12 +4,14 @@
  */
 import { useCallback, useEffect } from "react";
 import {
-  useWsStore,
   registerWsHandler,
   registerWsHandlers,
+  useWsStore,
 } from "../core/store/wsStore";
-import { wsService, WebSocketEventType } from "../core/services/wsService";
+import { WebSocketEventType } from "../core/services/wsService";
 import { useAuthStore } from "../core/store/authStore";
+import { useChannelStore } from "../core/store/channelStore";
+import { invalidateQueries } from "../core/api/queryClient";
 
 /**
  * Hook that provides WebSocket connection functionality
@@ -30,7 +32,11 @@ export function useWebSocket() {
   } = useWsStore();
 
   // Get auth state
-  const { token } = useAuthStore();
+  const { token, currentUser } = useAuthStore();
+
+  // Get channel store actions
+  const { incrementUnreadCount, markAsRead, addProcessedMessageId } =
+    useChannelStore();
 
   /**
    * Connects to the WebSocket server with the current token
@@ -61,6 +67,140 @@ export function useWebSocket() {
     return connect(url, token);
   }, [url, token, connect, disconnect]);
 
+  /**
+   * Registers handlers for unread-related WebSocket events
+   */
+  const registerUnreadHandlers = useCallback(() => {
+    if (!currentUser) return;
+
+    const handlers: Record<string, (data: any) => void> = {
+      // Handle new messages
+      [WebSocketEventType.POSTED]: (data) => {
+        const { post, channel_id: channelId, sender_name: senderName } = data;
+
+        if (!post || !channelId) return;
+
+        // Parse the post data
+        const postData = typeof post === "string" ? JSON.parse(post) : post;
+
+        // Don't increment for own messages
+        if (postData.user_id === currentUser.id) return;
+
+        // Avoid duplicate processing by tracking message IDs
+        if (addProcessedMessageId) {
+          addProcessedMessageId(postData.id);
+        }
+
+        // Check if this message mentions the current user
+        const mentionsUser =
+          postData.props &&
+          postData.props.mentions &&
+          Array.isArray(postData.props.mentions) &&
+          postData.props.mentions.includes(currentUser.id);
+
+        // Increment unread count for the channel
+        incrementUnreadCount(
+          channelId,
+          1, // Increment message count by 1
+          mentionsUser ? 1 : 0, // Increment mention count if user is mentioned
+          postData.id, // Message ID
+          mentionsUser, // Flag that user is mentioned for specific handling
+        );
+
+        // Invalidate related queries
+        invalidateQueries.channelUnreadCount(channelId);
+      },
+
+      // Handle when a channel is viewed (by current user or others)
+      [WebSocketEventType.CHANNEL_VIEWED]: (data) => {
+        const { channel_id: channelId, user_id: userId } = data;
+
+        // Only process for current user
+        if (userId === currentUser.id && channelId) {
+          // Mark channel as read in local state
+          markAsRead(channelId);
+
+          // Invalidate related queries
+          invalidateQueries.channelUnreadCount(channelId);
+        }
+      },
+
+      // Handle when a post is edited
+      [WebSocketEventType.POST_EDITED]: (data) => {
+        const { post, channel_id: channelId } = data;
+
+        if (!post || !channelId) return;
+
+        // Invalidate channel messages to refresh
+        invalidateQueries.channelMessages(channelId);
+      },
+
+      // Handle when a post is deleted
+      [WebSocketEventType.POST_DELETED]: (data) => {
+        const { post, channel_id: channelId } = data;
+
+        if (!post || !channelId) return;
+
+        // Invalidate channel messages to refresh
+        invalidateQueries.channelMessages(channelId);
+      },
+
+      // Handle when channel unread state changes
+      ["channel_marked_read"]: (data) => {
+        const { channel_id: channelId, user_id: userId } = data;
+
+        // Only process for current user
+        if (userId === currentUser.id && channelId) {
+          // Mark channel as read in local state
+          markAsRead(channelId);
+
+          // Invalidate related queries
+          invalidateQueries.channelUnreadCount(channelId);
+        }
+      },
+
+      // Handle when a user is added to a channel
+      [WebSocketEventType.USER_ADDED]: (data) => {
+        const {
+          team_id: teamId,
+          channel_id: channelId,
+          user_id: userId,
+        } = data;
+
+        // Update channel list if current user was added
+        if (userId === currentUser.id && teamId) {
+          invalidateQueries.team(teamId);
+        }
+      },
+
+      // Handle when a user is removed from a channel
+      [WebSocketEventType.USER_REMOVED]: (data) => {
+        const { channel_id: channelId, user_id: userId } = data;
+
+        // Update channel list if current user was removed
+        if (userId === currentUser.id && channelId) {
+          const channel = useChannelStore.getState().getChannelById(channelId);
+          if (channel?.team_id) {
+            invalidateQueries.team(channel.team_id);
+          }
+        }
+      },
+    };
+
+    // Register all handlers
+    return registerWsHandlers(handlers);
+  }, [currentUser, incrementUnreadCount, markAsRead, addProcessedMessageId]);
+
+  // Register unread handlers when connected
+  useEffect(() => {
+    if (isConnected && currentUser) {
+      const unregister = registerUnreadHandlers();
+      return () => {
+        if (unregister) unregister();
+      };
+    }
+  }, [isConnected, currentUser, registerUnreadHandlers]);
+
   return {
     // State
     isConnected,
@@ -80,7 +220,9 @@ export function useWebSocket() {
 
 /**
  * Hook that registers WebSocket event handlers
- * @param eventHandlers Record of event types to handler functions
+ * @param eventType Event type to handle
+ * @param handler Handler function
+ * @param deps Dependencies for handler
  */
 export function useWebSocketEvent<T = any>(
   eventType: string,
@@ -101,6 +243,7 @@ export function useWebSocketEvent<T = any>(
 /**
  * Hook that registers multiple WebSocket event handlers
  * @param eventHandlers Record of event types to handler functions
+ * @param deps Dependencies for handlers
  */
 export function useWebSocketEvents(
   eventHandlers: Record<string, (data: any) => void>,
@@ -118,8 +261,88 @@ export function useWebSocketEvents(
 }
 
 /**
+ * Hook for handling unread-related WebSocket events
+ * @returns WebSocket handlers for unread events
+ */
+export function useUnreadWebSocketEvents() {
+  const { currentUser } = useAuthStore();
+  const { incrementUnreadCount, markAsRead, addProcessedMessageId } =
+    useChannelStore();
+
+  // Register handlers for events that affect unread counts
+  useWebSocketEvents(
+    {
+      // New message posted
+      [WebSocketEventType.POSTED]: (data) => {
+        const { post, channel_id: channelId } = data;
+
+        if (!post || !channelId || !currentUser) return;
+
+        // Parse the post data
+        const postData = typeof post === "string" ? JSON.parse(post) : post;
+
+        // Don't increment for own messages
+        if (postData.user_id === currentUser.id) return;
+
+        // Avoid duplicate processing
+        if (addProcessedMessageId) {
+          addProcessedMessageId(postData.id);
+        }
+
+        // Check if this message mentions the current user
+        const mentionsUser =
+          postData.props &&
+          postData.props.mentions &&
+          Array.isArray(postData.props.mentions) &&
+          postData.props.mentions.includes(currentUser.id);
+
+        // Increment unread count
+        incrementUnreadCount(
+          channelId,
+          1,
+          mentionsUser ? 1 : 0,
+          postData.id,
+          mentionsUser,
+        );
+
+        // Invalidate related queries
+        invalidateQueries.channelUnreadCount(channelId);
+      },
+
+      // Channel viewed
+      [WebSocketEventType.CHANNEL_VIEWED]: (data) => {
+        const { channel_id: channelId, user_id: userId } = data;
+
+        if (!currentUser) return;
+
+        // Only process for current user
+        if (userId === currentUser.id && channelId) {
+          markAsRead(channelId);
+          invalidateQueries.channelUnreadCount(channelId);
+        }
+      },
+
+      // Channel marked as read
+      ["channel_marked_read"]: (data) => {
+        const { channel_id: channelId, user_id: userId } = data;
+
+        if (!currentUser) return;
+
+        // Only process for current user
+        if (userId === currentUser.id && channelId) {
+          markAsRead(channelId);
+          invalidateQueries.channelUnreadCount(channelId);
+        }
+      },
+    },
+    [currentUser, incrementUnreadCount, markAsRead, addProcessedMessageId],
+  );
+}
+
+/**
  * Specialized hook for message events
  * @param handler Handler function for new messages
+ * @param deps Dependencies for handler
  */
 export function useWebSocketMessageEvents(
   handler: (data: any) => void,
@@ -133,6 +356,7 @@ export function useWebSocketMessageEvents(
 /**
  * Specialized hook for reaction events
  * @param handler Handler function for reaction events
+ * @param deps Dependencies for handler
  */
 export function useWebSocketReactionEvents(
   handler: (data: any) => void,
@@ -145,6 +369,7 @@ export function useWebSocketReactionEvents(
 /**
  * Specialized hook for channel events
  * @param handler Handler function for channel events
+ * @param deps Dependencies for handler
  */
 export function useWebSocketChannelEvents(
   handler: (data: any) => void,
@@ -160,6 +385,7 @@ export function useWebSocketChannelEvents(
 /**
  * Specialized hook for user events
  * @param handler Handler function for user events
+ * @param deps Dependencies for handler
  */
 export function useWebSocketUserEvents(
   handler: (data: any) => void,
@@ -174,6 +400,7 @@ export function useWebSocketUserEvents(
 /**
  * Specialized hook for team events
  * @param handler Handler function for team events
+ * @param deps Dependencies for handler
  */
 export function useWebSocketTeamEvents(
   handler: (data: any) => void,
@@ -189,6 +416,7 @@ export function useWebSocketTeamEvents(
  * Hook that registers a handler for typing events
  * @param channelId Channel ID to listen for typing events
  * @param handler Handler function for typing events
+ * @param deps Dependencies for handler
  */
 export function useWebSocketTypingEvents(
   channelId: string | undefined,
@@ -216,11 +444,7 @@ export function useTypingIndicator(channelId: string | undefined) {
   const { sendMessage } = useWsStore();
   const { currentUser } = useAuthStore();
 
-  /**
-   * Sends a typing indicator
-   * @param parentId Optional parent ID for thread typing
-   */
-  const sendTypingEvent = useCallback(
+  return useCallback(
     (parentId?: string) => {
       if (!channelId || !currentUser) return;
 
@@ -234,6 +458,4 @@ export function useTypingIndicator(channelId: string | undefined) {
     },
     [channelId, currentUser, sendMessage],
   );
-
-  return sendTypingEvent;
 }

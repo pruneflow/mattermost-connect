@@ -2,13 +2,14 @@
 /**
  * Container component for team list that manages data fetching and state
  */
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useMemo } from "react";
 import { useTeams } from "../../../hooks/useTeams";
 import { BaseComponentProps } from "../../types/componentTypes";
 import TeamListUI from "../../components/teams/TeamListUI";
 import { Team } from "../../../index";
 import { useTeamCreation } from "../../../hooks/useTeams";
 import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
+import { useUnreadCounts } from "../../../hooks/useUnreadCounts";
 
 export interface TeamListContainerProps extends BaseComponentProps {
   /** How to display the teams */
@@ -49,16 +50,23 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
   // Team creation mutation
   const { createTeam, isCreating } = useTeamCreation();
 
+  // Get unread counts from hook
+  const { teamUnreadCounts, hasUnreadsInTeam, hasMentionsInTeam } =
+    useUnreadCounts();
+
   // Filter teams based on search term
-  const filteredTeams = searchTerm
-    ? teams.filter(
-        (team) =>
-          team.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (team.description &&
-            team.description.toLowerCase().includes(searchTerm.toLowerCase())),
-      )
-    : teams;
+  const filteredTeams = useMemo(() => {
+    if (!searchTerm) return teams;
+
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return teams.filter(
+      (team) =>
+        team.display_name.toLowerCase().includes(lowerSearchTerm) ||
+        team.name.toLowerCase().includes(lowerSearchTerm) ||
+        (team.description &&
+          team.description.toLowerCase().includes(lowerSearchTerm)),
+    );
+  }, [teams, searchTerm]);
 
   // Handle team selection
   const handleTeamSelect = useCallback(
@@ -90,6 +98,23 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
     console.log("Open create team dialog");
   }, []);
 
+  // Format unread counts for UI
+  const unreadCountsForUI = useMemo(() => {
+    const result: Record<
+      string,
+      { messageCount: number; mentionCount: number }
+    > = {};
+
+    teams.forEach((team) => {
+      result[team.id] = {
+        messageCount: teamUnreadCounts[team.id]?.messageCount || 0,
+        mentionCount: teamUnreadCounts[team.id]?.mentionCount || 0,
+      };
+    });
+
+    return result;
+  }, [teams, teamUnreadCounts]);
+
   return (
     <TeamListUI
       items={filteredTeams}
@@ -98,12 +123,14 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
       density={density as "compact" | "comfortable" | "spacious"}
       isLoading={isLoading || isCreating}
       emptyMessage={emptyMessage}
+      unreadCounts={unreadCountsForUI}
       allowCreate={allowCreate}
       showSearch={showSearch}
       searchTerm={searchTerm}
       onItemClick={handleTeamSelect}
       onCreateTeam={handleCreateTeam}
       onTeamAction={handleTeamAction}
+      onSearchChange={handleSearch}
       className={className}
       sx={sx}
       id={id}
@@ -111,4 +138,4 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
   );
 };
 
-export default TeamListContainer;
+export default React.memo(TeamListContainer);

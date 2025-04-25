@@ -50,12 +50,25 @@ export const QUERY_KEYS = {
   channels: {
     byTeam: (teamId: string) => ["channels", "byTeam", teamId],
     byId: (id: string) => ["channels", id],
+    unreadCount: (channelId: string) => ["channelUnreadCount", channelId],
+    unreadCounts: (teamId: string) => ["channelUnreadCounts", teamId],
+    unreadMessages: (channelId: string, since?: number) => [
+      "channelUnreadMessages",
+      channelId,
+      since,
+    ],
   },
 
   // Message-related queries
   messages: {
     byChannel: (channelId: string) => ["messages", "byChannel", channelId],
     thread: (rootId: string) => ["messages", "thread", rootId],
+    since: (channelId: string, since: number) => [
+      "messages",
+      "since",
+      channelId,
+      since,
+    ],
   },
 
   // User-related queries
@@ -67,6 +80,12 @@ export const QUERY_KEYS = {
     inTeam: (teamId: string) => ["users", "inTeam", teamId],
     statuses: ["users", "statuses"],
     status: (userId: string) => ["users", "status", userId],
+  },
+
+  // Unread count queries
+  unread: {
+    total: ["unread", "total"],
+    byTeam: (teamId: string) => ["unread", "byTeam", teamId],
   },
 };
 
@@ -88,6 +107,12 @@ export const invalidateQueries = {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.teams.byId(teamId) });
     queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.channels.byTeam(teamId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.channels.unreadCounts(teamId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.unread.byTeam(teamId),
     });
   },
 
@@ -111,6 +136,46 @@ export const invalidateQueries = {
     queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.users.inChannel(channelId),
     });
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+    });
+  },
+
+  /**
+   * Invalidates unread count queries for a channel
+   */
+  channelUnreadCount: (channelId: string) => {
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+    });
+
+    // Get the channel to find its team
+    const { getChannelById } =
+      require("../store/channelStore").useChannelStore.getState();
+    const channel = getChannelById(channelId);
+
+    if (channel?.team_id) {
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+      });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.unread.byTeam(channel.team_id),
+      });
+    }
+
+    // Also invalidate total unread counts
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.unread.total,
+    });
+  },
+
+  /**
+   * Invalidates all unread-related queries
+   */
+  allUnreadCounts: () => {
+    queryClient.invalidateQueries({ queryKey: ["channelUnreadCount"] });
+    queryClient.invalidateQueries({ queryKey: ["channelUnreadCounts"] });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unread.total });
   },
 
   /**
@@ -127,6 +192,9 @@ export const invalidateQueries = {
     queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.messages.byChannel(channelId),
     });
+
+    // Also invalidate unread counts for this channel
+    invalidateQueries.channelUnreadCount(channelId);
   },
 
   /**

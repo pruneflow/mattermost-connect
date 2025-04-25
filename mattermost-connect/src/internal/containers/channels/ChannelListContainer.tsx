@@ -12,6 +12,8 @@ import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
 import { useAuthStore } from "../../../core/store/authStore";
 import { useDirectChannels } from "../../../hooks/useDirectChannels";
 import { useDirectChannelUsers } from "../../../hooks/useDirectChannelUsers";
+import { useUnreadCounts } from "../../../hooks/useUnreadCounts";
+import { useUnreadWebSocketEvents } from "../../../hooks/useWebSocket";
 import {
   isDirectChannel,
   isGroupChannel,
@@ -67,6 +69,11 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     activeChannel,
     isLoading: isLoadingChannels,
     setActiveChannel,
+    unreadCounts,
+    mutedChannels,
+    favoriteChannelSet,
+    markChannelAsRead,
+    toggleChannelMuted,
   } = useChannels(teamId);
 
   // Get current user
@@ -79,6 +86,17 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const { isLoadingUsers, userIdsCount, loadedCount, stillMissingCount } =
     useDirectChannelUsers([...directChannels, ...groupChannels]);
 
+  // Use unread counts hook
+  const {
+    getAllUnreadCounts,
+    hasUnreadsInChannel,
+    hasMentionsInChannel,
+    isChannelMuted: checkChannelMuted,
+  } = useUnreadCounts();
+
+  // Register WebSocket handlers for unread counts
+  useUnreadWebSocketEvents();
+
   // Channel creation mutation
   const { createChannel, isCreating } = useChannelCreation();
 
@@ -86,43 +104,6 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const channelsInfo = useMemo(() => {
     return getChannelsInfo([...directChannels, ...groupChannels]);
   }, [directChannels, groupChannels, getChannelsInfo, loadedCount]);
-
-  // Collect unread counts (simplified - would need to get from channel store)
-  const unreadCounts = useMemo(() => {
-    // This is a placeholder. In a real implementation, this would
-    // get actual unread counts from the channel store.
-    const counts: Record<
-      string,
-      { messageCount: number; mentionCount: number }
-    > = {};
-
-    channels.forEach((channel) => {
-      counts[channel.id] = {
-        messageCount: 0, // Replace with actual unread counts
-        mentionCount: 0, // Replace with actual mention counts
-      };
-    });
-
-    return counts;
-  }, [channels]);
-
-  // Collect favorite channels
-  const favoriteChannelSet = useMemo(() => {
-    const favoriteSet = new Set<string>();
-
-    favoriteChannels.forEach((channel) => {
-      favoriteSet.add(channel.id);
-    });
-
-    return favoriteSet;
-  }, [favoriteChannels]);
-
-  // Collect muted channels (simplified - would need to get from preferences)
-  const mutedChannelSet = useMemo(() => {
-    // This is a placeholder. In a real implementation, this would
-    // get actual muted channels from preferences.
-    return new Set<string>();
-  }, []);
 
   // Get display names for direct and group messages
   const displayNamesByChannel = useMemo(() => {
@@ -190,20 +171,35 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     (channel: Channel) => {
       setActiveChannel(channel);
 
+      // Mark channel as read when selected
+      markChannelAsRead(channel.id);
+
       if (onChannelSelect) {
         onChannelSelect(channel);
       }
     },
-    [setActiveChannel, onChannelSelect],
+    [setActiveChannel, markChannelAsRead, onChannelSelect],
   );
 
   // Handle channel action
   const handleChannelAction = useCallback(
     (action: string, channel: Channel) => {
-      // Actions can be implemented as needed
-      console.log("Channel action:", action, channel);
+      switch (action) {
+        case "mute":
+          toggleChannelMuted(channel.id, true);
+          break;
+        case "unmute":
+          toggleChannelMuted(channel.id, false);
+          break;
+        case "markAsRead":
+          markChannelAsRead(channel.id);
+          break;
+        default:
+          // Other actions handled by parent component
+          console.log("Channel action:", action, channel);
+      }
     },
-    [],
+    [toggleChannelMuted, markChannelAsRead],
   );
 
   // Handle toggle favorite
@@ -228,50 +224,73 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const isLoading =
     isLoadingChannels || isCreating || (isLoadingUsers && userIdsCount > 0);
 
-  // Log loading status for debugging
-  useEffect(() => {
-    if (directChannels.length > 0 || groupChannels.length > 0) {
-      console.log(
-        `Direct channel users: ${loadedCount} loaded, ${stillMissingCount} still loading`,
-      );
-    }
+  // Total unread counts for the team
+  const totalUnreads = useMemo(() => {
+    return getAllUnreadCounts();
+  }, [getAllUnreadCounts]);
+
+  // Build props for the UI component
+  const uiProps = useMemo(() => {
+    return {
+      items: filteredChannels,
+      activeId: activeChannel?.id,
+      variant: variant as "list" | "grid" | "sidebar" | "tabs",
+      density: density as "compact" | "comfortable" | "spacious",
+      isLoading,
+      emptyMessage,
+      unreadCounts,
+      allowCreate,
+      showSearch,
+      searchTerm,
+      groupByType,
+      showFavorites,
+      displayNamesByChannel,
+      favoriteChannels: favoriteChannelSet,
+      mutedChannels,
+      channelAvatars,
+      totalUnreads,
+      onItemClick: handleChannelSelect,
+      onCreateChannel: handleCreateChannel,
+      onChannelAction: handleChannelAction,
+      onToggleFavorite: handleToggleFavorite,
+      onSearchChange: handleSearch,
+      isLoadingUsers: isLoadingUsers && userIdsCount > 0,
+      loadingUserIds: userIdsCount,
+      className,
+      sx,
+      id,
+    };
   }, [
-    directChannels.length,
-    groupChannels.length,
-    loadedCount,
-    stillMissingCount,
+    filteredChannels,
+    activeChannel?.id,
+    variant,
+    density,
+    isLoading,
+    emptyMessage,
+    unreadCounts,
+    allowCreate,
+    showSearch,
+    searchTerm,
+    groupByType,
+    showFavorites,
+    displayNamesByChannel,
+    favoriteChannelSet,
+    mutedChannels,
+    channelAvatars,
+    totalUnreads,
+    handleChannelSelect,
+    handleCreateChannel,
+    handleChannelAction,
+    handleToggleFavorite,
+    handleSearch,
+    isLoadingUsers,
+    userIdsCount,
+    className,
+    sx,
+    id,
   ]);
 
-  return (
-    <ChannelListUI
-      items={filteredChannels}
-      activeId={activeChannel?.id}
-      variant={variant as "list" | "grid" | "sidebar" | "tabs"}
-      density={density as "compact" | "comfortable" | "spacious"}
-      isLoading={isLoading}
-      emptyMessage={emptyMessage}
-      unreadCounts={unreadCounts}
-      allowCreate={allowCreate}
-      showSearch={showSearch}
-      searchTerm={searchTerm}
-      groupByType={groupByType}
-      showFavorites={showFavorites}
-      displayNamesByChannel={displayNamesByChannel}
-      favoriteChannels={favoriteChannelSet}
-      mutedChannels={mutedChannelSet}
-      channelAvatars={channelAvatars} // Pass avatars data to UI
-      onItemClick={handleChannelSelect}
-      onCreateChannel={handleCreateChannel}
-      onChannelAction={handleChannelAction}
-      onToggleFavorite={handleToggleFavorite}
-      onSearchChange={handleSearch}
-      className={className}
-      sx={sx}
-      id={id}
-      isLoadingUsers={isLoadingUsers && userIdsCount > 0}
-      loadingUserIds={userIdsCount}
-    />
-  );
+  return <ChannelListUI {...uiProps} />;
 };
 
-export default ChannelListContainer;
+export default React.memo(ChannelListContainer);

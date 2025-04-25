@@ -2,7 +2,7 @@
 /**
  * Hook for team functionality
  */
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useTeamStore, Team } from "../core/store/teamStore";
 import {
   useTeamsQuery,
@@ -15,6 +15,8 @@ import {
   useTeamStatsQuery,
   useTeamMembersQuery,
 } from "../core/api/queries/teamQueries";
+import { useUnreadCounts } from "./useUnreadCounts";
+import { getTeamUnreadCounts } from "../core/store/channelStore";
 
 /**
  * Hook that provides team functionality
@@ -34,6 +36,10 @@ export function useTeams() {
 
   // Get team queries
   const teamsQuery = useTeamsQuery();
+
+  // Get unread counts from hook
+  const { teamUnreadCounts, hasUnreadsInTeam, hasMentionsInTeam } =
+    useUnreadCounts();
 
   /**
    * Refreshes the teams list
@@ -62,12 +68,46 @@ export function useTeams() {
     [getTeamById, setActiveTeam],
   );
 
+  /**
+   * Gets unread count for a team
+   * @param teamId Team ID
+   * @returns Unread count object
+   */
+  const getTeamUnreadCount = useCallback((teamId: string) => {
+    return getTeamUnreadCounts(teamId);
+  }, []);
+
+  /**
+   * Checks if a team has unread messages
+   * @param teamId Team ID
+   * @returns Whether the team has unread messages
+   */
+  const teamHasUnreads = useCallback(
+    (teamId: string) => {
+      return hasUnreadsInTeam(teamId);
+    },
+    [hasUnreadsInTeam],
+  );
+
+  /**
+   * Checks if a team has mentions
+   * @param teamId Team ID
+   * @returns Whether the team has mentions
+   */
+  const teamHasMentions = useCallback(
+    (teamId: string) => {
+      return hasMentionsInTeam(teamId);
+    },
+    [hasMentionsInTeam],
+  );
+
   return {
     // State
     teams,
     activeTeam,
     isLoading: isLoading || teamsQuery.isLoading || teamsQuery.isFetching,
     error: error || teamsQuery.error,
+    teamUnreadCounts,
 
     // Actions
     setActiveTeam,
@@ -75,6 +115,9 @@ export function useTeams() {
     refreshTeams,
     updateUnreadCount,
     getTeamById,
+    getTeamUnreadCount,
+    teamHasUnreads,
+    teamHasMentions,
 
     // Query states
     isRefreshing: teamsQuery.isRefetching,
@@ -94,6 +137,9 @@ export function useTeam(teamId: string | undefined) {
   const teamQuery = useTeamQuery(teamId);
   const teamStatsQuery = useTeamStatsQuery(teamId);
   const teamMembersQuery = useTeamMembersQuery(teamId);
+
+  // Get unread counts for this team
+  const { getUnreadCountsByTeam, markTeamAsRead } = useUnreadCounts();
 
   // Get team mutations
   const updateTeamMutation = useUpdateTeamMutation();
@@ -163,11 +209,28 @@ export function useTeam(teamId: string | undefined) {
     return teamQuery.refetch().then((result) => result.data || null);
   }, [teamQuery]);
 
+  /**
+   * Gets unread counts for this team
+   */
+  const unreadCounts = useMemo(() => {
+    if (!teamId) return { messageCount: 0, mentionCount: 0 };
+    return getUnreadCountsByTeam(teamId);
+  }, [teamId, getUnreadCountsByTeam]);
+
+  /**
+   * Marks all channels in this team as read
+   */
+  const markAllAsRead = useCallback(async () => {
+    if (!teamId) return;
+    return markTeamAsRead(teamId);
+  }, [teamId, markTeamAsRead]);
+
   return {
     // State
     team: teamQuery.data,
     stats: teamStatsQuery.data,
     members: teamMembersQuery.data,
+    unreadCounts,
     isLoading: teamQuery.isLoading || teamQuery.isFetching,
     isUpdating: updateTeamMutation.isPending,
     isDeleting: deleteTeamMutation.isPending,
@@ -180,6 +243,7 @@ export function useTeam(teamId: string | undefined) {
     leaveTeam,
     setAsActive,
     refreshTeam,
+    markAllAsRead,
   };
 }
 

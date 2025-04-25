@@ -9,8 +9,10 @@ import {
   Channel,
   ChannelUnreadCount,
   useChannelStore,
+  getChannelUnreadCount,
 } from "../../store/channelStore";
 import { useTeamStore } from "../../store/teamStore";
+import { useAuthStore } from "../../store/authStore";
 
 /**
  * Fetches channels for a team
@@ -38,6 +40,34 @@ export const useChannelsQuery = (teamId: string | undefined) => {
 
         // Update store
         setChannels(teamId, channels);
+
+        // Fetch unread counts for all channels
+        // This could be optimized by batching, but we'll keep it simple for now
+        for (const channel of channels) {
+          try {
+            const unreadResponse = await apiClient.get<ChannelUnreadCount>(
+              `users/me/channels/${channel.id}/unread`,
+            );
+            const unreadData = unreadResponse.data;
+
+            // Update store with unread counts
+            useChannelStore
+              .getState()
+              .updateUnreadCount(
+                channel.id,
+                unreadData.messageCount,
+                unreadData.mentionCount,
+                unreadData.lastMessageId,
+                unreadData.lastViewedAt,
+                channel.total_msg_count,
+              );
+          } catch (unreadError) {
+            console.error(
+              `Error fetching unread counts for channel ${channel.id}:`,
+              unreadError,
+            );
+          }
+        }
 
         return channels;
       } catch (error) {
@@ -83,6 +113,31 @@ export const useChannelQuery = (channelId: string | undefined) => {
         // Update store
         setChannel(channel);
 
+        // Also fetch unread count for this channel
+        try {
+          const unreadResponse = await apiClient.get<ChannelUnreadCount>(
+            `users/me/channels/${channel.id}/unread`,
+          );
+          const unreadData = unreadResponse.data;
+
+          // Update store with unread counts
+          useChannelStore
+            .getState()
+            .updateUnreadCount(
+              channel.id,
+              unreadData.messageCount,
+              unreadData.mentionCount,
+              unreadData.lastMessageId,
+              unreadData.lastViewedAt,
+              channel.total_msg_count,
+            );
+        } catch (unreadError) {
+          console.error(
+            `Error fetching unread counts for channel ${channel.id}:`,
+            unreadError,
+          );
+        }
+
         return channel;
       } catch (error) {
         setError(channelId, error as Error);
@@ -103,9 +158,12 @@ export const useChannelQuery = (channelId: string | undefined) => {
  */
 export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
   const { updateUnreadCount } = useChannelStore();
+  const queryClient = useQueryClient();
 
   return useQuery({
-    queryKey: ["channelUnreadCount", channelId],
+    queryKey: channelId
+      ? QUERY_KEYS.channels.unreadCount(channelId)
+      : ["channelUnreadCount", "undefined"],
     queryFn: async () => {
       if (!channelId) {
         throw new Error("Channel ID is required");
@@ -116,6 +174,26 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
       );
       const unreadData = response.data;
 
+      // Get the channel to extract total_msg_count
+      let totalMsgCount: number | undefined;
+      try {
+        const channel = await queryClient.fetchQuery({
+          queryKey: QUERY_KEYS.channels.byId(channelId),
+          queryFn: async () => {
+            const channelResponse = await apiClient.get<Channel>(
+              `channels/${channelId}`,
+            );
+            return channelResponse.data;
+          },
+        });
+        totalMsgCount = channel.total_msg_count;
+      } catch (error) {
+        console.error(
+          `Error fetching channel ${channelId} for total message count:`,
+          error,
+        );
+      }
+
       // Update store
       updateUnreadCount(
         channelId,
@@ -123,6 +201,7 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
         unreadData.mentionCount,
         unreadData.lastMessageId,
         unreadData.lastViewedAt,
+        totalMsgCount,
       );
 
       return unreadData;
@@ -131,6 +210,73 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
     enabled: !!channelId,
     // Cache data for 30 seconds
     staleTime: 30 * 1000,
+  });
+};
+
+/**
+ * Fetches unread counts for all channels in a team
+ * @param teamId Team ID
+ * @returns Query hook for channel unread counts
+ */
+export const useChannelUnreadCountsQuery = (teamId: string | undefined) => {
+  const { channelsByTeam } = useChannelStore();
+  const queryClient = useQueryClient();
+
+  return useQuery({
+    queryKey: teamId
+      ? QUERY_KEYS.channels.unreadCounts(teamId)
+      : ["channelUnreadCounts", "undefined"],
+    queryFn: async () => {
+      if (!teamId) {
+        throw new Error("Team ID is required");
+      }
+
+      const channels = channelsByTeam[teamId] || [];
+      const unreadCounts: Record<string, ChannelUnreadCount> = {};
+
+      // Fetch unread counts for all channels in parallel
+      const promises = channels.map(async (channel) => {
+        try {
+          const response = await apiClient.get<ChannelUnreadCount>(
+            `users/me/channels/${channel.id}/unread`,
+          );
+          return { channelId: channel.id, data: response.data };
+        } catch (error) {
+          console.error(
+            `Error fetching unread count for channel ${channel.id}:`,
+            error,
+          );
+          return { channelId: channel.id, data: null };
+        }
+      });
+
+      const results = await Promise.all(promises);
+
+      // Process results and update store
+      results.forEach(({ channelId, data }) => {
+        if (data) {
+          unreadCounts[channelId] = data;
+
+          // Update store with unread counts
+          useChannelStore
+            .getState()
+            .updateUnreadCount(
+              channelId,
+              data.messageCount,
+              data.mentionCount,
+              data.lastMessageId,
+              data.lastViewedAt,
+              channels.find((c) => c.id === channelId)?.total_msg_count,
+            );
+        }
+      });
+
+      return unreadCounts;
+    },
+    // Don't run query if teamId is not provided
+    enabled: !!teamId,
+    // Cache data for 1 minute
+    staleTime: 60 * 1000,
   });
 };
 
@@ -320,6 +466,9 @@ export const useLeaveChannelMutation = () => {
  * Marks a channel as viewed
  */
 export const useViewChannelMutation = () => {
+  const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
+
   return useMutation({
     mutationFn: async (channelId: string) => {
       await apiClient.post("channels/members/me/view", {
@@ -328,9 +477,106 @@ export const useViewChannelMutation = () => {
       return channelId;
     },
     onSuccess: (channelId) => {
-      // Update channel store
+      // Optimistically update the store immediately
       const { markAsRead } = useChannelStore.getState();
       markAsRead(channelId);
+
+      // Invalidate the unread count query for this channel
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+      });
+
+      // Also invalidate the channel queries since last_viewed_at might have changed
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byId(channelId),
+      });
+
+      // Get the channel to find its team
+      const channel = useChannelStore.getState().getChannelById(channelId);
+      if (channel?.team_id) {
+        // Invalidate the team unread counts
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+        });
+      }
+    },
+  });
+};
+
+/**
+ * Marks all channels in a team as read
+ */
+export const useMarkAllChannelsAsReadMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (teamId: string) => {
+      await apiClient.post(`teams/${teamId}/channels/read`);
+      return teamId;
+    },
+    onSuccess: (teamId) => {
+      // Optimistically update the store immediately
+      const { markAllAsRead } = useChannelStore.getState();
+      markAllAsRead(teamId);
+
+      // Invalidate team channels query to refresh unread counts
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byTeam(teamId),
+      });
+
+      // Invalidate unread counts for this team
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCounts(teamId),
+      });
+
+      // Update individual channel unread counts in the store
+      const teamChannels =
+        useChannelStore.getState().channelsByTeam[teamId] || [];
+      teamChannels.forEach((channel) => {
+        useChannelStore.getState().markAsRead(channel.id);
+      });
+    },
+  });
+};
+
+/**
+ * Marks a channel as muted/unmuted
+ */
+export const useToggleChannelMutedMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      channelId,
+      muted,
+    }: {
+      channelId: string;
+      muted: boolean;
+    }) => {
+      // Create preference object
+      const preference = {
+        user_id: "me",
+        category: "channel_notifications",
+        name: channelId,
+        value: muted ? "true" : "false",
+      };
+
+      // Save preference
+      await apiClient.post("preferences", [preference]);
+      return { channelId, muted };
+    },
+    onSuccess: ({ channelId, muted }) => {
+      // Update our local state
+      useChannelStore.getState().setChannelMuted(channelId, muted);
+
+      // Get the channel to find its team
+      const channel = useChannelStore.getState().getChannelById(channelId);
+      if (channel?.team_id) {
+        // Invalidate team unread counts
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+        });
+      }
     },
   });
 };
