@@ -26,9 +26,7 @@ export function messageContainsMention(
     return true;
   }
 
-  // Also check message content for @username mentions
-  // This is a simple implementation - in production you'd want more sophisticated
-  // username detection, including nicknames, etc.
+  // Check message content for @username mentions
   if (message.message && userId) {
     // Get the user from somewhere - this is a placeholder
     // In practice, you would pass the user object or access it from a store
@@ -232,4 +230,76 @@ export function isMessageProcessed(
 ): boolean {
   const key = createProcessedMessageKey(messageId, channelId);
   return processedIds.has(key) || processedIds.has(messageId);
+}
+
+/**
+ * Formats unread count data for UI badge display
+ * @param msgCount Number of unread messages
+ * @param mentionCount Number of unread mentions
+ * @param isMuted Whether channel is muted
+ * @returns Object with formatted count and color
+ */
+export function formatUnreadBadgeData(
+  msgCount: number,
+  mentionCount: number,
+  isMuted: boolean = false,
+): { text: string; color: "primary" | "error" | "default" } {
+  // Determine the display text
+  let text = "";
+
+  if (mentionCount > 0) {
+    // If there are mentions, show mention count
+    text = formatUnreadCount(mentionCount);
+  } else if (msgCount > 0 && !isMuted) {
+    // If there are unreads and not muted, show unread count
+    text = formatUnreadCount(msgCount);
+  }
+
+  // Determine badge color
+  const color = getUnreadBadgeColor(mentionCount > 0, msgCount > 0, isMuted);
+
+  return { text, color };
+}
+
+/**
+ * Creates a throttled function to update unread counts
+ * @param updateFn Function to update unread counts
+ * @param delay Delay in milliseconds
+ * @returns Throttled function
+ */
+export function throttleUnreadUpdates<T extends (...args: any[]) => any>(
+  updateFn: T,
+  delay: number = 200,
+): (...args: Parameters<T>) => void {
+  let lastCall = 0;
+  let timeoutId: number | null = null;
+  let pendingArgs: Parameters<T> | null = null;
+
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
+
+    // If we haven't called recently, call immediately
+    if (now - lastCall >= delay) {
+      lastCall = now;
+      updateFn(...args);
+      return;
+    }
+
+    // Otherwise, schedule a call
+    pendingArgs = args;
+
+    if (timeoutId === null) {
+      timeoutId = window.setTimeout(
+        () => {
+          if (pendingArgs) {
+            updateFn(...pendingArgs);
+            lastCall = Date.now();
+            pendingArgs = null;
+          }
+          timeoutId = null;
+        },
+        delay - (now - lastCall),
+      );
+    }
+  };
 }

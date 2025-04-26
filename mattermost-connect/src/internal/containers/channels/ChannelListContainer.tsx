@@ -13,9 +13,11 @@ import { useAuthStore } from "../../../core/store/authStore";
 import { useDirectChannels } from "../../../hooks/useDirectChannels";
 import { useDirectChannelUsers } from "../../../hooks/useDirectChannelUsers";
 import {
-  useUnreadWebSocketEvents,
-  useWebSocket,
-} from "../../../hooks/useWebSocket";
+  useUnreadCounts,
+  useUnreadCountsListener,
+  useTeamUnreadCount,
+} from "../../../hooks/useUnreadCounts";
+import { useWebSocket } from "../../../hooks/useWebSocket";
 import {
   isDirectChannel,
   isGroupChannel,
@@ -62,6 +64,11 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   // State for search
   const [searchTerm, setSearchTerm] = useState("");
 
+  // State for unread counts to trigger UI updates
+  const [channelUnreadCounts, setChannelUnreadCounts] = useState<
+    Record<string, { msg_count: number; mention_count: number }>
+  >({});
+
   // Get channels data from hook
   const {
     channels,
@@ -74,14 +81,20 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     unreadCounts,
     mutedChannels,
     favoriteChannelSet,
+    refreshChannels,
+  } = useChannels(teamId);
+
+  // Team unread count hook for efficient team-level access
+  const { unreadCount: teamUnreads } = useTeamUnreadCount(teamId);
+
+  // Get core unread counts functionality
+  const {
     markChannelAsRead,
     toggleChannelMuted,
     hasUnreadsInChannel,
     hasMentionsInChannel,
     isChannelMuted,
-    teamUnreads,
-    refreshChannels,
-  } = useChannels(teamId);
+  } = useUnreadCounts();
 
   // Get current user
   const { currentUser } = useAuthStore();
@@ -90,30 +103,40 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const { getChannelsInfo, getDirectMessageDisplayNames } = useDirectChannels();
 
   // Use our direct channel users hook to ensure users are loaded
-  const { isLoadingUsers, userIdsCount, loadedCount, stillMissingCount } =
-    useDirectChannelUsers([...directChannels, ...groupChannels]);
+  const { isLoadingUsers, userIdsCount, loadedCount } = useDirectChannelUsers([
+    ...directChannels,
+    ...groupChannels,
+  ]);
 
   // Monitor WebSocket connection
   const { isConnected, connectionStatus } = useWebSocket();
 
-  // Register WebSocket handlers for unread counts
-  const { onWebSocketReconnect } = useUnreadWebSocketEvents();
+  // Channel creation mutation
+  const { createChannel, isCreating } = useChannelCreation();
+
+  // Listen for unread count updates
+  useUnreadCountsListener(() => {
+    // Just force a refresh of unread counts when changes occur
+    setChannelUnreadCounts({ ...unreadCounts });
+  });
 
   // If WebSocket reconnects after disconnection, refresh data
   useEffect(() => {
     if (isConnected && connectionStatus.hasDisconnected) {
-      // Call WebSocket reconnect handler
-      onWebSocketReconnect();
-
       // Refresh channels to get updated data
       refreshChannels();
+
+      // Force UI to update with latest unread counts
+      setChannelUnreadCounts({ ...unreadCounts });
     }
-  }, [isConnected, connectionStatus, refreshChannels, onWebSocketReconnect]);
+  }, [isConnected, connectionStatus, refreshChannels, unreadCounts]);
 
-  // Channel creation mutation
-  const { createChannel, isCreating } = useChannelCreation();
+  // Update channelUnreadCounts state when unreadCounts changes
+  useEffect(() => {
+    setChannelUnreadCounts({ ...unreadCounts });
+  }, [unreadCounts]);
 
-  // Get channel info for all channels
+  // Get channel info for all direct/group channels
   const channelsInfo = useMemo(() => {
     return getChannelsInfo([...directChannels, ...groupChannels]);
   }, [directChannels, groupChannels, getChannelsInfo, loadedCount]);
@@ -237,6 +260,22 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
   const isLoading =
     isLoadingChannels || isCreating || (isLoadingUsers && userIdsCount > 0);
 
+  // Create helper functions to check channel state
+  const channelHasUnreads = useCallback(
+    (channelId: string) => hasUnreadsInChannel(channelId),
+    [hasUnreadsInChannel],
+  );
+
+  const channelHasMentions = useCallback(
+    (channelId: string) => hasMentionsInChannel(channelId),
+    [hasMentionsInChannel],
+  );
+
+  const channelIsMuted = useCallback(
+    (channelId: string) => isChannelMuted(channelId),
+    [isChannelMuted],
+  );
+
   // Build props for the UI component
   const uiProps = useMemo(() => {
     return {
@@ -246,7 +285,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
       density: density as "compact" | "comfortable" | "spacious",
       isLoading,
       emptyMessage,
-      unreadCounts,
+      unreadCounts: channelUnreadCounts, // Use state variable for UI updates
       allowCreate,
       showSearch,
       searchTerm,
@@ -264,6 +303,9 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
       onSearchChange: handleSearch,
       isLoadingUsers: isLoadingUsers && userIdsCount > 0,
       loadingUserIds: userIdsCount,
+      hasUnreads: channelHasUnreads,
+      hasMentions: channelHasMentions,
+      isMuted: channelIsMuted,
       className,
       sx,
       id,
@@ -275,7 +317,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     density,
     isLoading,
     emptyMessage,
-    unreadCounts,
+    channelUnreadCounts,
     allowCreate,
     showSearch,
     searchTerm,
@@ -293,6 +335,9 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = ({
     handleSearch,
     isLoadingUsers,
     userIdsCount,
+    channelHasUnreads,
+    channelHasMentions,
+    channelIsMuted,
     className,
     sx,
     id,

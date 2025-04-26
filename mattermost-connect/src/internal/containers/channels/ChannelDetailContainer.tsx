@@ -8,6 +8,7 @@ import { BaseComponentProps } from "../../types/componentTypes";
 import ChannelDetailUI from "../../components/channels/ChannelDetailUI";
 import { ConfirmDialog } from "../../components/common";
 import { getUserStatus, useUserStore } from "../../../core/store/userStore";
+import { useChannelUnreadCount } from "../../../hooks/useUnreadCounts";
 
 export interface ChannelDetailContainerProps extends BaseComponentProps {
   /** Channel ID to display */
@@ -55,14 +56,18 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
     removeFromFavorites,
   } = useChannel(channelId);
 
+  // Get channel unread count information
+  const {
+    unreadCount,
+    hasMentions,
+    hasUnreads,
+    muted,
+    markAsRead,
+    toggleMuted,
+  } = useChannelUnreadCount(channelId);
+
   // Get user store for user data
   const { getUserById, getUserDisplayName } = useUserStore();
-
-  // Determine if the channel is a favorite (placeholder - would come from preferences)
-  const isFavorite = channel?.is_favorite || false;
-
-  // Determine if the channel is muted (placeholder - would come from preferences)
-  const isMuted = false;
 
   // Get member count
   const memberCount = members?.length || 0;
@@ -91,17 +96,16 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
           : undefined,
       };
     });
-  }, [
-    members,
-    memberPreviewCount,
-    getUserById,
-    getUserDisplayName,
-    getUserStatus,
-  ]);
+  }, [members, memberPreviewCount, getUserById, getUserDisplayName]);
 
   // Handle toggle favorite
   const handleToggleFavorite = useCallback(async () => {
+    if (!channel) return;
+
     try {
+      // Determine if the channel is currently a favorite
+      const isFavorite = channel.is_favorite || false;
+
       if (isFavorite) {
         await removeFromFavorites();
       } else {
@@ -114,7 +118,23 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
     } catch (error) {
       console.error("Error toggling favorite:", error);
     }
-  }, [isFavorite, addToFavorites, removeFromFavorites, onUpdate]);
+  }, [channel, addToFavorites, removeFromFavorites, onUpdate]);
+
+  // Handle toggle mute
+  const handleToggleMute = useCallback(async () => {
+    if (!channel) return;
+
+    try {
+      // Toggle mute status
+      await toggleMuted(!muted);
+
+      if (onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error("Error toggling mute:", error);
+    }
+  }, [channel, muted, toggleMuted, onUpdate]);
 
   // Handle view members
   const handleViewMembers = useCallback(() => {
@@ -140,6 +160,19 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
     // This would typically copy a link to the channel
     console.log("Copy link for channel:", channelId);
   }, [channelId]);
+
+  // Handle mark as read
+  const handleMarkAsRead = useCallback(async () => {
+    try {
+      await markAsRead();
+
+      if (onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error("Error marking channel as read:", error);
+    }
+  }, [markAsRead, onUpdate]);
 
   // Handle leave confirm
   const handleLeaveConfirm = useCallback(async () => {
@@ -181,13 +214,18 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
       {channel && (
         <ChannelDetailUI
           channel={channel}
-          isFavorite={isFavorite}
-          isMuted={isMuted}
+          isFavorite={channel.is_favorite || false}
+          isMuted={muted}
+          hasUnreads={hasUnreads}
+          hasMentions={hasMentions}
+          unreadCount={unreadCount}
           memberCount={memberCount}
           memberPreview={memberPreview}
           showActions={showActions}
           canManage={canManage}
           onToggleFavorite={handleToggleFavorite}
+          onToggleMute={handleToggleMute}
+          onMarkAsRead={handleMarkAsRead}
           onViewMembers={handleViewMembers}
           onInvite={handleInvite}
           onEdit={handleEdit}

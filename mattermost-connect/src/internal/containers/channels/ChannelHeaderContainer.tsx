@@ -7,6 +7,7 @@ import { useChannel } from "../../../hooks/useChannels";
 import { BaseComponentProps } from "../../types/componentTypes";
 import ChannelHeaderUI from "../../components/channels/ChannelHeaderUI";
 import { ConfirmDialog } from "../../components/common";
+import { useChannelUnreadCount } from "../../../hooks/useUnreadCounts";
 
 export interface ChannelHeaderContainerProps extends BaseComponentProps {
   /** Channel ID */
@@ -62,11 +63,18 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = ({
     viewChannel,
   } = useChannel(channelId);
 
-  // Determine favorite status (placeholder - would come from preferences)
-  const isFavorite = channel?.is_favorite || false;
+  // Get unread count information from specialized hook
+  const {
+    unreadCount,
+    muted: isMuted,
+    hasUnreads,
+    hasMentions,
+    markAsRead,
+    toggleMuted,
+  } = useChannelUnreadCount(channelId);
 
-  // Determine mute status (placeholder - would come from preferences)
-  const isMuted = false;
+  // Determine favorite status
+  const isFavorite = channel?.is_favorite || false;
 
   // Get member count from members data
   const membersCount = members?.length || 0;
@@ -87,11 +95,25 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = ({
   }, [channel, isFavorite, addToFavorites, removeFromFavorites]);
 
   // Handle toggle mute
-  const handleToggleMute = useCallback(() => {
-    // This would typically interact with preferences
+  const handleToggleMute = useCallback(async () => {
     setMuteDialogOpen(false);
-    console.log("Toggle mute for channel:", channelId);
-  }, [channelId]);
+
+    try {
+      // Toggle current mute state
+      await toggleMuted(!isMuted);
+    } catch (error) {
+      console.error("Error toggling mute:", error);
+    }
+  }, [isMuted, toggleMuted]);
+
+  // Handle marking channel as read
+  const handleMarkAsRead = useCallback(async () => {
+    try {
+      await markAsRead();
+    } catch (error) {
+      console.error("Error marking channel as read:", error);
+    }
+  }, [markAsRead]);
 
   // Handle settings
   const handleSettings = useCallback(() => {
@@ -174,12 +196,16 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = ({
           membersCount={membersCount}
           isFavorite={isFavorite}
           isMuted={isMuted}
+          hasUnreads={hasUnreads}
+          hasMentions={hasMentions}
+          unreadCount={unreadCount}
           hasSearch={showSearch}
           showSettings={showSettings}
           showLeave={showLeave}
           size={size}
           onToggleFavorite={handleToggleFavorite}
           onToggleMute={() => setMuteDialogOpen(true)}
+          onMarkAsRead={handleMarkAsRead}
           onViewMembers={handleViewMembers}
           onSettings={handleSettings}
           onInfo={handleInfo}

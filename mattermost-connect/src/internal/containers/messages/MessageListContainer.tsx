@@ -8,6 +8,7 @@ import { useMessages } from "../../../hooks/useMessages";
 import {
   useWebSocketMessageEvents,
   useWebSocketTypingEvents,
+  useTypingIndicator,
 } from "../../../hooks/useWebSocket";
 import { BaseComponentProps } from "../../types/componentTypes";
 import MessageListUI from "../../components/messages/MessageListUI";
@@ -16,6 +17,7 @@ import { Message } from "../../../index";
 import { getUserStatus, useUserStore } from "../../../core/store/userStore";
 import { useMessageStore } from "../../../core/store/messageStore";
 import { useAuthStore } from "../../../core/store/authStore";
+import { useChannelUnreadCount } from "../../../hooks/useUnreadCounts";
 
 export interface MessageListContainerProps extends BaseComponentProps {
   /** Channel ID to display messages for */
@@ -76,23 +78,17 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     setEditingMessage,
   } = useMessages(channelId);
 
+  // Get unread counts from specialized hook
+  const { markAsRead } = useChannelUnreadCount(channelId);
+
   // Get user store for display names and status
   const { getUserById, getUserDisplayName } = useUserStore();
 
   // Get current user
   const { currentUser } = useAuthStore();
 
-  // FIXED: Safely handle typing users by maintaining a local state
-  // This helps avoid the "e3.typingUsers is undefined" error
-  const [typingUsersState, setTypingUsersState] = useState<string[]>([]);
-
-  // Get typing state from message store, with a safety check
-  useEffect(() => {
-    // Safely get typing users from store
-    const messageStore = useMessageStore.getState();
-    const typingUsers = messageStore.typingUsers?.[channelId] || [];
-    setTypingUsersState(typingUsers);
-  }, [channelId, useMessageStore]);
+  // Get typing users safely using a local state
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
   // State for whether message is being sent
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -102,6 +98,18 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
 
   // Reference to the message being edited
   const editingMessageRef = useRef<Message | null>(null);
+
+  // Mark channel as read when viewing messages
+  useEffect(() => {
+    if (channelId) {
+      // Small delay to allow UI to render first
+      const timer = setTimeout(() => {
+        markAsRead();
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [channelId, markAsRead]);
 
   // Listening for WebSocket message events
   useWebSocketMessageEvents(
@@ -117,15 +125,14 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
   useWebSocketTypingEvents(
     channelId,
     (data) => {
-      // Update typing users in our local state
-      setTypingUsersState((prevUsers) => {
+      setTypingUsers((prevUsers) => {
         // Add user if not already there
         if (!prevUsers.includes(data.user_id)) {
           const newUsers = [...prevUsers, data.user_id];
 
           // Auto-remove after 5 seconds (typical typing indicator lifetime)
           setTimeout(() => {
-            setTypingUsersState((users) =>
+            setTypingUsers((users) =>
               users.filter((id) => id !== data.user_id),
             );
           }, 5000);
@@ -168,16 +175,16 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     });
 
     // Also add typing users to ensure their names are available
-    typingUsersState.forEach((userId) => {
+    typingUsers.forEach((userId) => {
       if (!displayNames[userId]) {
         displayNames[userId] = getUserDisplayName(userId);
       }
     });
 
     return displayNames;
-  }, [messages, typingUsersState, getUserDisplayName]);
+  }, [messages, typingUsers, getUserDisplayName]);
 
-  // Build user image URLs map (simplified - would need to get actual URLs)
+  // Build user image URLs map
   const userImageUrls = React.useMemo(() => {
     const imageUrls: Record<string, string> = {};
 
@@ -331,12 +338,15 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
     setReplyToMessage(null);
   }, [setReplyToMessage]);
 
+  // Get typing indicator hook
+  const sendTypingEvent = useTypingIndicator(channelId);
+
   // Handle user typing
   const handleTyping = useCallback(() => {
-    // In a real implementation, this would call a WebSocket method
-    // to send a typing indicator to other users
-    console.log("User is typing...");
-  }, []);
+    if (sendTypingEvent) {
+      sendTypingEvent();
+    }
+  }, [sendTypingEvent]);
 
   // Render edit form
   const renderEditForm = useCallback(
@@ -392,8 +402,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = ({
           onAddReaction={handleAddReaction}
           onReactionClick={handleReactionClick}
           renderEditForm={renderEditForm}
-          // FIXED: Use the safely managed typingUsersState instead of direct store access
-          typingUserIds={typingUsersState}
+          typingUserIds={typingUsers}
           sx={{ height: "100%" }}
         />
       </Box>

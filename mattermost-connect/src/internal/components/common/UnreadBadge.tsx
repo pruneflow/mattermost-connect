@@ -1,115 +1,133 @@
 // src/internal/components/common/UnreadBadge.tsx
 /**
- * Optimized badge component for unread counts
+ * Reusable component for displaying unread message counts
  */
-import React, { memo } from "react";
-import { Badge, BadgeProps, styled } from "@mui/material";
+import React from "react";
+import { Badge, Box, Typography } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
+import { formatUnreadBadgeData } from "../../../utils/unreadCountUtils";
 
 export interface UnreadBadgeProps extends BaseComponentProps {
-  /** Number of unread items */
-  count?: number;
-  /** Number of mentions */
-  mention_count?: number;
-  /** Whether the badge should be shown if count is 0 */
-  showZero?: boolean;
-  /** Maximum number to display before showing '+' */
-  max?: number;
-  /** Color of the badge */
-  color?: BadgeProps["color"];
-  /** Badge sizing variant */
-  size?: "small" | "medium";
-  /** Whether mention count should have priority */
-  mentionPriority?: boolean;
-  /** Children to wrap with the badge */
+  /** Number of unread messages */
+  messageCount: number;
+  /** Number of mention notifications */
+  mentionCount: number;
+  /** Whether the channel/item is muted */
+  isMuted?: boolean;
+  /** Whether to show a dot indicator instead of a count for unreads */
+  showDotForUnreads?: boolean;
+  /** Badge vertical position */
+  vertical?: "top" | "bottom";
+  /** Badge horizontal position */
+  horizontal?: "left" | "right";
+  /** Element to wrap with the badge */
   children?: React.ReactNode;
+  /** Override for max count before showing + */
+  maxDisplayCount?: number;
+  /** Size of the badge */
+  size?: "small" | "medium" | "large";
 }
 
-// Styled badge for mentions (higher priority)
-const MentionBadge = styled(Badge)(({ theme }) => ({
-  "& .MuiBadge-badge": {
-    backgroundColor: theme.palette.error.main,
-    color: theme.palette.error.contrastText,
-    fontWeight: "bold",
-  },
-}));
-
-// Styled badge for normal unread count
-const CountBadge = styled(Badge)(({ theme }) => ({
-  "& .MuiBadge-badge": {
-    backgroundColor: theme.palette.primary.main,
-    color: theme.palette.primary.contrastText,
-  },
-}));
-
 /**
- * A badge component that displays unread counts or mentions with appropriate styling
- * Optimized with React.memo to prevent unnecessary re-renders
+ * Component for displaying unread message and mention counts
+ *
+ * Can be used as a standalone badge or to wrap other elements
  */
 const UnreadBadge: React.FC<UnreadBadgeProps> = ({
-  count = 0,
-  mention_count = 0,
-  showZero = false,
-  max = 99,
-  color = "primary",
-  size = "medium",
-  mentionPriority = true,
+  messageCount = 0,
+  mentionCount = 0,
+  isMuted = false,
+  showDotForUnreads = false,
+  vertical = "top",
+  horizontal = "right",
   children,
+  maxDisplayCount = 99,
+  size = "medium",
   className,
   sx,
   id,
 }) => {
-  // Determine which count to show based on priority
-  const showMention = mention_count > 0;
-  const showCount = (count > 0 || showZero) && !showMention;
+  // Format badge data for display
+  const badgeData = formatUnreadBadgeData(messageCount, mentionCount, isMuted);
 
-  // Don't render any badge if there's nothing to show
-  if (!showMention && !showCount) {
-    return <>{children}</>;
+  // Handle case where we want to show a dot for unreads
+  let badgeContent: React.ReactNode = badgeData.text;
+
+  if (showDotForUnreads && messageCount > 0 && mentionCount === 0 && !isMuted) {
+    badgeContent = "";
+    // Empty content will make the badge show a dot
   }
 
-  // Adjust badge size based on size prop
-  const badgeSx = {
-    "& .MuiBadge-badge": {
-      fontSize: size === "small" ? "0.6rem" : "0.75rem",
-      height: size === "small" ? 16 : 20,
-      minWidth: size === "small" ? 16 : 20,
-      padding: size === "small" ? "0 4px" : "0 6px",
-    },
-    ...sx,
-  };
+  // If there's nothing to show, render children without a badge
+  if (!badgeData.text && !showDotForUnreads) {
+    return <>{children}</> || null;
+  }
 
-  // Use mention badge if there are mentions (higher priority)
-  if (showMention && mentionPriority) {
+  // If used as a standalone badge (no children)
+  if (!children) {
     return (
-      <MentionBadge
-        badgeContent={mention_count > max ? `${max}+` : mention_count}
-        color="error"
-        max={max}
-        className={className}
-        sx={badgeSx}
-        id={id}
-      >
-        {children}
-      </MentionBadge>
+      <Box className={className} sx={sx} id={id}>
+        <Badge
+          badgeContent={badgeContent}
+          color={badgeData.color}
+          variant={
+            showDotForUnreads && messageCount > 0 && mentionCount === 0
+              ? "dot"
+              : "standard"
+          }
+          sx={{
+            "& .MuiBadge-badge": {
+              fontSize:
+                size === "small"
+                  ? "0.65rem"
+                  : size === "large"
+                    ? "0.85rem"
+                    : "0.75rem",
+              height: size === "small" ? 16 : size === "large" ? 22 : 20,
+              minWidth: size === "small" ? 16 : size === "large" ? 22 : 20,
+            },
+          }}
+        >
+          {/* Empty box as placeholder */}
+          <Box sx={{ width: 8, height: 8 }} />
+        </Badge>
+      </Box>
     );
   }
 
-  // Otherwise use regular count badge
+  // Used as a wrapper for other elements
   return (
-    <CountBadge
-      badgeContent={count > max ? `${max}+` : count}
-      color={color}
-      max={max}
+    <Badge
+      badgeContent={badgeContent}
+      color={badgeData.color}
+      variant={
+        showDotForUnreads && messageCount > 0 && mentionCount === 0
+          ? "dot"
+          : "standard"
+      }
+      anchorOrigin={{
+        vertical,
+        horizontal,
+      }}
       className={className}
-      sx={badgeSx}
+      sx={{
+        "& .MuiBadge-badge": {
+          fontSize:
+            size === "small"
+              ? "0.65rem"
+              : size === "large"
+                ? "0.85rem"
+                : "0.75rem",
+          height: size === "small" ? 16 : size === "large" ? 22 : 20,
+          minWidth: size === "small" ? 16 : size === "large" ? 22 : 20,
+        },
+        ...sx,
+      }}
       id={id}
-      invisible={!showZero && count === 0}
     >
       {children}
-    </CountBadge>
+    </Badge>
   );
 };
 
-// Memoize the component to prevent unnecessary re-renders
-export default memo(UnreadBadge);
+export default UnreadBadge;

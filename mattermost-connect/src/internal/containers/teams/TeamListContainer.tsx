@@ -2,20 +2,17 @@
 /**
  * Container component for team list that manages data fetching and state
  */
-import React, {
-  useCallback,
-  useState,
-  useMemo,
-  useEffect,
-  useRef,
-} from "react";
+import React, { useCallback, useState, useMemo, useEffect } from "react";
 import { useTeams } from "../../../hooks/useTeams";
 import { BaseComponentProps } from "../../types/componentTypes";
 import TeamListUI from "../../components/teams/TeamListUI";
 import { Team } from "../../../index";
 import { useTeamCreation } from "../../../hooks/useTeams";
 import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
-import { useUnreadCounts } from "../../../hooks/useUnreadCounts";
+import {
+  useUnreadCounts,
+  useUnreadCountsListener,
+} from "../../../hooks/useUnreadCounts";
 import { useWebSocket } from "../../../hooks/useWebSocket";
 
 export interface TeamListContainerProps extends BaseComponentProps {
@@ -50,11 +47,10 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
   // State for search
   const [searchTerm, setSearchTerm] = useState("");
 
-  // State to force re-render when unread counts update
-  const [forceUpdate, setForceUpdate] = useState(0);
-
-  // Ref to track if we've forced an update for initial data
-  const hasForceUpdatedRef = useRef(false);
+  // State for unread counts to ensure UI updates
+  const [unreadCounts, setUnreadCounts] = useState<
+    Record<string, { msg_count: number; mention_count: number }>
+  >({});
 
   // Get teams data from hook
   const { teams, activeTeam, isLoading, error, setActiveTeam, refreshTeams } =
@@ -64,11 +60,18 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
   const { createTeam, isCreating } = useTeamCreation();
 
   // Get unread counts from optimized hook
-  const { teamUnreadCounts, loadInitialUnreadCounts, initialLoadCompleted } =
-    useUnreadCounts();
+  const {
+    teamUnreadCounts,
+    loadInitialUnreadCounts,
+    initialLoadCompleted,
+    prefetchAllTeamUnreadCounts,
+  } = useUnreadCounts();
 
   // Monitor WebSocket connection
   const { isConnected, connectionStatus } = useWebSocket();
+
+  // Listen for unread count updates
+  useUnreadCountsListener(setUnreadCounts);
 
   // If WebSocket reconnects after disconnection, refresh data
   useEffect(() => {
@@ -89,36 +92,19 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
     initialLoadCompleted,
   ]);
 
-  // Force a re-render when unread counts change
+  // Load unread counts when teams are loaded
   useEffect(() => {
-    // If we have teams and unread counts
-    if (teams.length > 0 && Object.keys(teamUnreadCounts).length > 0) {
-      // If we haven't already forced an update for the initial data
-      if (!hasForceUpdatedRef.current) {
-        hasForceUpdatedRef.current = true;
-        // Force re-render with a slight delay to ensure data is processed
-        setTimeout(() => {
-          setForceUpdate((prev) => prev + 1);
-        }, 100);
-      }
+    if (teams.length > 0 && !initialLoadCompleted) {
+      void prefetchAllTeamUnreadCounts(teams);
     }
-  }, [teams, teamUnreadCounts]);
+  }, [teams, initialLoadCompleted, prefetchAllTeamUnreadCounts]);
 
-  // Listen for custom unread counts update events
+  // Initialize unread counts state from teamUnreadCounts
   useEffect(() => {
-    const handleUnreadCountsUpdate = () => {
-      // Force re-render to reflect new unread counts
-      setForceUpdate((prev) => prev + 1);
-    };
-
-    window.addEventListener("unreadCountsUpdated", handleUnreadCountsUpdate);
-    return () => {
-      window.removeEventListener(
-        "unreadCountsUpdated",
-        handleUnreadCountsUpdate,
-      );
-    };
-  }, []);
+    if (Object.keys(teamUnreadCounts).length > 0) {
+      setUnreadCounts(teamUnreadCounts);
+    }
+  }, [teamUnreadCounts]);
 
   // Filter teams based on search term
   const filteredTeams = useMemo(() => {
@@ -157,28 +143,10 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
     setSearchTerm(term);
   }, []);
 
-  // Handle create team (placeholder - would typically open a dialog)
+  // Handle create team (would typically open a dialog)
   const handleCreateTeam = useCallback(() => {
-    // Example implementation - would typically open a dialog
-    // then call createTeam with form data
     console.log("Open create team dialog");
   }, []);
-
-  // Format unread counts for UI - includes forceUpdate in dependencies
-  // to ensure it recalculates when forced
-  const unreadCountsForUI = useMemo(() => {
-    const result: Record<string, { msg_count: number; mention_count: number }> =
-      {};
-
-    teams.forEach((team) => {
-      result[team.id] = {
-        msg_count: teamUnreadCounts[team.id]?.msg_count || 0,
-        mention_count: teamUnreadCounts[team.id]?.mention_count || 0,
-      };
-    });
-
-    return result;
-  }, [teams, teamUnreadCounts, forceUpdate]);
 
   return (
     <TeamListUI
@@ -188,7 +156,7 @@ const TeamListContainer: React.FC<TeamListContainerProps> = ({
       density={density as "compact" | "comfortable" | "spacious"}
       isLoading={isLoading || isCreating}
       emptyMessage={emptyMessage}
-      unreadCounts={unreadCountsForUI}
+      unreadCounts={unreadCounts}
       allowCreate={allowCreate}
       showSearch={showSearch}
       searchTerm={searchTerm}
