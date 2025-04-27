@@ -1,52 +1,31 @@
 // src/core/store/authStore.ts
-/**
- * Zustand store for authentication state
- */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { User, authService } from "../services/authService";
 import { apiClient } from "../api/client";
 
-/**
- * Authentication state
- */
 export interface AuthState {
   // State
-  /** Authentication token */
   token: string | null;
-  /** Currently logged in user */
   currentUser: User | null;
-  /** Whether the user is authenticated */
   isAuthenticated: boolean;
-  /** Whether authentication is in progress */
   isAuthenticating: boolean;
-  /** Error that occurred during authentication */
   error: Error | null;
-  /** Server URL (for direct mode) */
   serverUrl?: string | null;
 
   // Actions
-  /** Initializes authentication from stored token */
   initialize: () => Promise<boolean>;
-  /** Logs in a user */
   login: (
     username: string,
     password: string,
     serverUrl?: string,
   ) => Promise<User>;
-  /** Logs out the current user */
   logout: () => void;
-  /** Refreshes the current user */
   refreshCurrentUser: () => Promise<User | null>;
-  /** Sets the current user */
   setCurrentUser: (user: User) => void;
-  /** Sets the error state */
   setError: (error: Error | null) => void;
 }
 
-/**
- * Create the authentication store with persistence
- */
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -57,10 +36,6 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticating: false,
       error: null,
 
-      /**
-       * Initializes authentication from stored token
-       * @returns Promise resolving to whether initialization succeeded
-       */
       initialize: async () => {
         try {
           set({ isAuthenticating: true, error: null });
@@ -98,18 +73,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /**
-       * Logs in a user
-       * @param username Username or email
-       * @param password User password
-       * @param serverUrl Server URL (for direct mode)
-       * @returns Promise resolving to the logged in user
-       */
       login: async (username: string, password: string, serverUrl?: string) => {
         try {
           set({ isAuthenticating: true, error: null });
 
-          // If a server URL is provided, update the API client configuration
           if (serverUrl && apiClient.getMode() === "direct") {
             apiClient.configure({
               mode: "direct",
@@ -141,9 +108,6 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /**
-       * Logs out the current user
-       */
       logout: () => {
         authService.logout();
         set({
@@ -154,10 +118,6 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      /**
-       * Refreshes the current user
-       * @returns Promise resolving to the current user
-       */
       refreshCurrentUser: async () => {
         if (!get().isAuthenticated) {
           return null;
@@ -171,7 +131,6 @@ export const useAuthStore = create<AuthState>()(
             return user;
           }
 
-          // If no user was returned, token might be invalid
           authService.logout();
           set({
             token: null,
@@ -181,7 +140,6 @@ export const useAuthStore = create<AuthState>()(
 
           return null;
         } catch (error) {
-          // If an error occurred, authentication probably failed
           authService.logout();
           set({
             token: null,
@@ -194,25 +152,16 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /**
-       * Sets the current user
-       * @param user User to set
-       */
       setCurrentUser: (user: User) => {
         set({ currentUser: user });
       },
 
-      /**
-       * Sets the error state
-       * @param error Error to set
-       */
       setError: (error: Error | null) => {
         set({ error });
       },
     }),
     {
       name: "mattermost-auth",
-      // Only persist token and server URL
       partialize: (state) => ({
         token: state.token,
         serverUrl: state.serverUrl,
