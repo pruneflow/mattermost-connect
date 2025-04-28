@@ -1,6 +1,5 @@
-// types/settings.types.ts
 /**
- * Types for user settings
+ * User settings related type definitions
  */
 
 /**
@@ -14,6 +13,26 @@ export type NotificationLevel = "all" | "mentions" | "none";
 export type ThemeOption = "default" | "dark" | "light" | "system" | string;
 
 /**
+ * Clock display format
+ */
+export type ClockDisplay = "12h" | "24h";
+
+/**
+ * Message display format
+ */
+export type MessageDisplay = "clean" | "compact" | "standard";
+
+/**
+ * Channel notification override
+ */
+export interface ChannelNotificationOverride {
+  desktop?: NotificationLevel;
+  mobile?: NotificationLevel;
+  email?: NotificationLevel;
+  mark_unread?: "all" | "mention";
+}
+
+/**
  * Notification settings
  */
 export interface NotificationSettings {
@@ -21,13 +40,7 @@ export interface NotificationSettings {
   mobile: NotificationLevel;
   email: NotificationLevel;
   sound: boolean;
-  channelOverrides: Record<
-    string,
-    {
-      desktop?: NotificationLevel;
-      mobile?: NotificationLevel;
-    }
-  >;
+  channelOverrides: Record<string, ChannelNotificationOverride>;
 }
 
 /**
@@ -36,10 +49,12 @@ export interface NotificationSettings {
 export interface AppearanceSettings {
   theme: ThemeOption;
   compactView: boolean;
-  clockDisplay: "12h" | "24h";
+  clockDisplay: ClockDisplay;
   linkPreview: boolean;
   collapseLinks: boolean;
-  messageDisplay: "clean" | "compact" | "standard";
+  messageDisplay: MessageDisplay;
+  customFontSize?: string;
+  language?: string;
 }
 
 /**
@@ -50,18 +65,17 @@ export interface PrivacySettings {
   showTypingIndicator: boolean;
   showReadStatus: boolean;
   autoDownloadAttachments: boolean;
+  sharePresence?: boolean;
 }
 
 /**
- * User settings state
+ * Advanced settings
  */
-export interface UserSettingsState {
-  favorites: Set<string>;
-  mutedChannels: Set<string>;
-  notifications: NotificationSettings;
-  appearance: AppearanceSettings;
-  privacy: PrivacySettings;
-  lastUpdated: number;
+export interface AdvancedSettings {
+  enableDebugMode?: boolean;
+  enableExperimentalFeatures?: boolean;
+  performanceMode?: "default" | "high" | "low";
+  cacheSize?: number;
 }
 
 /**
@@ -74,6 +88,7 @@ export enum PreferenceKey {
   NOTIFICATIONS = "notifications",
   APPEARANCE = "appearance",
   PRIVACY = "privacy",
+  ADVANCED = "advanced",
 }
 
 /**
@@ -84,4 +99,30 @@ export interface UserPreference {
   category: string;
   name: string;
   value: string;
+}
+
+/**
+ * Preference category types
+ */
+export enum PreferenceCategory {
+  DISPLAY_SETTINGS = "display_settings",
+  THEME = "theme",
+  NOTIFICATIONS = "notifications",
+  CHANNEL_OPEN_TIME = "channel_open_time",
+  CHANNEL_APPROXIMATE_VIEW_TIME = "channel_approximate_view_time",
+  FAVORITE_CHANNEL = "favorite_channel",
+  SIDEBAR_SETTINGS = "sidebar_settings",
+}
+
+/**
+ * User settings state
+ */
+export interface UserSettingsState {
+  favorites: Set<string>;
+  mutedChannels: Set<string>;
+  notifications: NotificationSettings;
+  appearance: AppearanceSettings;
+  privacy: PrivacySettings;
+  advanced: AdvancedSettings;
+  lastUpdated: number;
 }

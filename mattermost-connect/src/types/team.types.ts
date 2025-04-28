@@ -1,22 +1,28 @@
-// types/team.types.ts
 /**
- * Types for team-related data and functions
+ * Team related type definitions
  */
+import { Entity, PaginationParams } from "./common";
+
+/**
+ * Team types
+ */
+export type TeamType = "O" | "I"; // O = Open, I = Invite Only
 
 /**
  * Team interface representing a Mattermost team
  */
-export interface Team {
-  id: string;
+export interface Team extends Entity {
   name: string;
   display_name: string;
   description?: string;
-  type?: "O" | "I"; // O = Open, I = Invite Only
+  type: TeamType;
+  company_name?: string;
+  allowed_domains?: string;
   invite_id?: string;
-  create_at: string;
-  update_at?: string;
-  delete_at?: number;
-  member_count?: number;
+  allow_open_invite?: boolean;
+  scheme_id?: string;
+  group_constrained?: boolean;
+  email?: string;
 }
 
 /**
@@ -37,17 +43,19 @@ export interface TeamMember {
   roles: string;
   scheme_admin?: boolean;
   scheme_user?: boolean;
+  mention_count?: number;
+  msg_count?: number;
 }
 
 /**
- * State for team store
+ * Team member with user information
  */
-export interface TeamState {
-  teams: Team[];
-  activeTeam: Team | null;
-  teamStats: Record<string, TeamStats>;
-  teamMembers: Record<string, TeamMember[]>;
-  lastFetchTimes: Record<string, number>;
+export interface TeamMemberWithUser extends TeamMember {
+  user_id: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
 }
 
 /**
@@ -56,21 +64,52 @@ export interface TeamState {
 export interface CreateTeamParams {
   name: string;
   display_name: string;
-  type: "O" | "I";
+  type: TeamType;
   description?: string;
+  allowed_domains?: string;
+  company_name?: string;
 }
 
 /**
  * Team update parameters
  */
 export interface UpdateTeamParams {
+  display_name?: string;
+  description?: string;
+  company_name?: string;
+  allowed_domains?: string;
+  invite_id?: string;
+  allow_open_invite?: boolean;
+}
+
+/**
+ * Team search parameters
+ */
+export interface TeamSearchParams extends PaginationParams {
+  term: string;
+  exclude_default_channels?: boolean;
+}
+
+/**
+ * Team invitation info
+ */
+export interface TeamInviteInfo {
   teamId: string;
-  data: Partial<{
-    display_name: string;
-    description: string;
-    company_name: string;
-    allowed_domains: string;
-    invite_id: string;
-    allow_open_invite: boolean;
-  }>;
+  teamName: string;
+  displayName: string;
+  inviteId: string;
+  isValid: boolean;
+}
+
+/**
+ * Team state
+ */
+export interface TeamState {
+  teams: Team[];
+  activeTeam: Team | null;
+  teamStats: Record<string, TeamStats>;
+  teamMembers: Record<string, TeamMember[]>;
+  lastFetchTimes: Record<string, number>;
+  isLoading: boolean;
+  error: Error | null;
 }

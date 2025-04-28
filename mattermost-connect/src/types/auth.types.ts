@@ -1,13 +1,17 @@
-// types/auth.types.ts
 /**
- * Types for authentication-related data and functions
+ * Authentication related type definitions
  */
+import { Entity, WithId, WithTimestamps } from "./common";
+
+/**
+ * Authentication modes
+ */
+export type AuthMode = "direct" | "proxy";
 
 /**
  * User interface representing a Mattermost user
  */
-export interface User {
-  id: string;
+export interface User extends Entity {
   username: string;
   email?: string;
   first_name?: string;
@@ -16,8 +20,29 @@ export interface User {
   roles?: string;
   props?: Record<string, unknown>;
   last_picture_update?: number;
-  update_at: number;
 }
+
+/**
+ * Authentication token information
+ */
+export interface AuthToken {
+  token: string;
+  issuedAt: number;
+  expiresAt?: number;
+}
+
+/**
+ * Authentication state
+ */
+export type AuthState =
+  | { status: "unauthenticated" }
+  | { status: "authenticating" }
+  | {
+      status: "authenticated";
+      user: User;
+      token: string;
+      serverUrl?: string;
+    };
 
 /**
  * Authentication response from the server
@@ -37,17 +62,8 @@ export interface AuthServiceConfig {
   storageKey?: string;
   /** Key to use in localStorage for server URL */
   serverStorageKey?: string;
-}
-
-/**
- * State for authentication store
- */
-export interface AuthState {
-  token: string | null;
-  currentUser: User | null;
-  isAuthenticated: boolean;
-  isAuthenticating: boolean;
-  serverUrl?: string | null;
+  /** Auth mode to use */
+  mode?: AuthMode;
 }
 
 /**
@@ -57,4 +73,38 @@ export interface LoginParams {
   username: string;
   password: string;
   serverUrl?: string;
+}
+
+/**
+ * Password reset parameters
+ */
+export interface PasswordResetParams {
+  token: string;
+  newPassword: string;
+}
+
+/**
+ * Session information
+ */
+export interface Session {
+  userId: string;
+  token: string;
+  createdAt: number;
+  expiresAt?: number;
+  lastActivityAt: number;
+  isActive: boolean;
+}
+
+/**
+ * API Client configuration
+ */
+export interface ApiClientConfig {
+  mode: AuthMode;
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  token?: string;
+  userId?: string;
+  defaultHeaders?: Record<string, string>;
+  onError?: (error: any) => void;
 }

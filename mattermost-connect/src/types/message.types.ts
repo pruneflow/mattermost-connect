@@ -1,9 +1,7 @@
-// types/message.types.ts
 /**
- * Types for message-related data and functions
+ * Message related type definitions
  */
-
-import { ReactionType } from "./reaction.types";
+import { Entity, PaginationParams } from "./common";
 
 /**
  * Message attachment interface
@@ -15,6 +13,30 @@ export interface MessageAttachment {
   size?: number;
   url?: string;
   link?: string;
+  width?: number;
+  height?: number;
+  mime_type?: string;
+  download_url?: string;
+  preview_url?: string;
+}
+
+/**
+ * Message reaction interface
+ */
+export interface MessageReaction {
+  emoji_name: string;
+  user_id: string;
+  post_id: string;
+  create_at: number;
+}
+
+/**
+ * Message mention interface
+ */
+export interface MessageMention {
+  user_id: string;
+  username: string;
+  is_channel_mention?: boolean;
 }
 
 /**
@@ -23,38 +45,91 @@ export interface MessageAttachment {
 export interface MessageMetadata {
   files?: MessageAttachment[];
   emojis?: string[];
-  reactions?: ReactionType[];
+  reactions?: MessageReaction[];
+  mentions?: MessageMention[];
+  images?: {
+    height: number;
+    width: number;
+    url: string;
+  }[];
+  embeds?: {
+    type: string;
+    url: string;
+    data?: any;
+  }[];
+}
+
+/**
+ * Message props interface
+ */
+export interface MessageProps {
+  mentions?: string[];
+  channel_mentions?: Record<string, string>;
+  images?: Record<string, any>;
+  emojis?: string[];
+  attachments?: any[];
+  from_webhook?: boolean;
+  override_username?: string;
+  override_icon_url?: string;
 }
 
 /**
  * Message interface representing a Mattermost post
  */
-export interface Message {
-  id: string;
+export interface Message extends Entity {
   user_id: string;
   channel_id: string;
   message: string;
-  create_at: number;
-  update_at: number;
-  delete_at?: number;
   metadata?: MessageMetadata;
   is_pinned?: boolean;
   has_reactions?: boolean;
   reply_count?: number;
-  root_id?: string;
+  root_id?: string; // Present if message is part of a thread
+  original_id?: string; // Present if message is a copy
   file_ids?: string[];
-  props?: Record<string, unknown>;
+  props?: MessageProps;
+  recipients?: string[]; // For direct messages
+  is_following?: boolean; // For threads
+}
+
+/**
+ * Message with user info
+ */
+export interface MessageWithUser extends Message {
+  user?: {
+    id: string;
+    username: string;
+    first_name?: string;
+    last_name?: string;
+  };
+}
+
+/**
+ * Thread interface
+ */
+export interface Thread {
+  id: string; // Root message ID
+  reply_count: number;
+  last_reply_at: number;
+  participants?: string[];
+  is_following?: boolean;
+  unread_replies?: number;
+  unread_mentions?: number;
 }
 
 /**
  * Message pagination options
  */
-export interface MessagePaginationOptions {
-  page?: number;
-  perPage?: number;
-  since?: number;
-  before?: string;
-  after?: string;
+export interface MessagePaginationOptions extends PaginationParams {
+  channelId: string;
+  forceRefresh?: boolean;
+}
+
+/**
+ * Thread pagination options
+ */
+export interface ThreadPaginationOptions extends PaginationParams {
+  rootId: string;
   forceRefresh?: boolean;
 }
 
@@ -75,10 +150,21 @@ export interface SendMessageParams {
   message: string;
   fileIds?: string[];
   rootId?: string;
+  metadata?: Partial<MessageMetadata>;
+  props?: MessageProps;
 }
 
 /**
- * State for message store
+ * Reaction count by emoji
+ */
+export interface ReactionCount {
+  emoji_name: string;
+  count: number;
+  userIds: string[];
+}
+
+/**
+ * Message state
  */
 export interface MessageState {
   messagesByChannel: Record<string, Message[]>;

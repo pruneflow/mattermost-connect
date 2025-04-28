@@ -1,6 +1,5 @@
-// types/websocket.types.ts
 /**
- * Types for WebSocket related data and functions
+ * WebSocket related type definitions
  */
 
 /**
@@ -28,13 +27,15 @@ export enum WebSocketEventType {
   REACTION_ADDED = "reaction_added",
   REACTION_REMOVED = "reaction_removed",
   PREFERENCES_CHANGED = "preferences_changed",
+  CHANNEL_MARKED_READ = "channel_marked_read",
+  TEAM_MARKED_READ = "team_marked_read",
   ALL = "*",
 }
 
 /**
- * Type for WebSocket message handlers
+ * WebSocket message handler type
  */
-export type MessageHandler = (data: any) => void;
+export type MessageHandler<T = any> = (data: T) => void;
 
 /**
  * WebSocket connection options
@@ -48,6 +49,58 @@ export interface WebSocketOptions {
   onError?: (event: Event) => void;
   /** Interval in ms for sending ping messages */
   pingInterval?: number;
+  /** Max reconnect attempts before giving up */
+  maxReconnectAttempts?: number;
+  /** Base delay for reconnect attempts in ms */
+  reconnectDelay?: number;
+}
+
+/**
+ * WebSocket message format
+ */
+export interface WebSocketMessage {
+  seq?: number;
+  action?: string;
+  data?: any;
+  event?: string;
+  broadcast?: {
+    omit_users?: null | string[];
+    user_id?: string;
+    channel_id?: string;
+    team_id?: string;
+  };
+}
+
+/**
+ * Typing indicator data from WebSocket
+ */
+export interface TypingData {
+  channel_id: string;
+  parent_id?: string; // For threads
+  user_id: string;
+}
+
+/**
+ * Posted message data from WebSocket
+ */
+export interface PostedData {
+  channel_display_name: string;
+  channel_name: string;
+  channel_type: string;
+  channel_id: string;
+  post: string; // JSON string of the message
+  sender_name: string;
+  team_id: string;
+}
+
+/**
+ * Status change data from WebSocket
+ */
+export interface StatusChangeData {
+  user_id: string;
+  status: string;
+  manual?: boolean;
+  last_activity_at?: number;
 }
 
 /**
@@ -61,23 +114,5 @@ export interface WebsocketState {
   lastConnectedAt: number | null;
   lastDisconnectedAt: number | null;
   hasBeenDisconnected: boolean;
-}
-
-/**
- * WebSocket message format
- */
-export interface WebSocketMessage {
-  seq?: number;
-  action?: string;
-  data?: any;
-  event?: string;
-}
-
-/**
- * Typing indicator data
- */
-export interface TypingData {
-  channel_id: string;
-  parent_id?: string;
-  user_id: string;
+  error: Error | null;
 }

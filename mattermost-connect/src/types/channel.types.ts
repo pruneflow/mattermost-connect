@@ -1,26 +1,66 @@
-// types/channel.types.ts
 /**
- * Types for channel-related data and functions
+ * Channel related type definitions
  */
+import { Entity, PaginationParams } from "./common";
+import { UserStatus } from "./user.types";
 
 /**
- * Channel interface representing a Mattermost channel
+ * Channel types
  */
-export interface Channel {
-  id: string;
-  team_id: string;
+export type ChannelType = "O" | "P" | "D" | "G";
+// O = Public, P = Private, D = Direct Message, G = Group Message
+
+/**
+ * Channel base interface
+ */
+export interface ChannelBase extends Entity {
+  team_id: string; // Empty for direct/group channels
   name: string;
   display_name: string;
-  type: "O" | "P" | "D" | "G"; // O = Public, P = Private, D = Direct Message, G = Group Message
+  type: ChannelType;
   header?: string;
   purpose?: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-  total_msg_count?: number;
   last_post_at?: number;
+  total_msg_count?: number;
   is_favorite?: boolean;
 }
+
+/**
+ * Public channel interface
+ */
+export interface PublicChannel extends ChannelBase {
+  type: "O";
+}
+
+/**
+ * Private channel interface
+ */
+export interface PrivateChannel extends ChannelBase {
+  type: "P";
+}
+
+/**
+ * Direct message channel interface
+ */
+export interface DirectChannel extends ChannelBase {
+  type: "D";
+}
+
+/**
+ * Group message channel interface
+ */
+export interface GroupChannel extends ChannelBase {
+  type: "G";
+}
+
+/**
+ * Discriminated union of all channel types
+ */
+export type Channel =
+  | PublicChannel
+  | PrivateChannel
+  | DirectChannel
+  | GroupChannel;
 
 /**
  * Channel member information
@@ -34,6 +74,17 @@ export interface ChannelMember {
   mention_count: number;
   scheme_admin?: boolean;
   scheme_user?: boolean;
+  notify_props?: ChannelNotifyProps;
+}
+
+/**
+ * Channel notification preferences
+ */
+export interface ChannelNotifyProps {
+  desktop: "all" | "mention" | "none";
+  mark_unread: "all" | "mention";
+  push: "all" | "mention" | "none";
+  ignore_channel_mentions: "off" | "on";
 }
 
 /**
@@ -59,26 +110,24 @@ export interface CreateChannelParams {
 }
 
 /**
- * State for channel store
- */
-export interface ChannelState {
-  channelsByTeam: Record<string, Channel[]>;
-  activeChannel: Channel | null;
-  members: Record<string, ChannelMember[]>;
-  lastFetchTimes: Record<string, number>;
-}
-
-/**
  * Channel update parameters
  */
 export interface UpdateChannelParams {
-  channelId: string;
-  data: Partial<{
-    name: string;
-    display_name: string;
-    purpose: string;
-    header: string;
-  }>;
+  display_name?: string;
+  name?: string;
+  purpose?: string;
+  header?: string;
+}
+
+/**
+ * Channel search parameters
+ */
+export interface ChannelSearchParams extends PaginationParams {
+  term: string;
+  team_id?: string;
+  exclude_default_channels?: boolean;
+  include_deleted?: boolean;
+  private?: boolean;
 }
 
 /**
@@ -91,6 +140,19 @@ export interface DirectChannelInfo {
   userIds: string[];
   otherUserId?: string | null;
   userImageUrl?: string;
-  userStatus?: string;
+  userStatus?: UserStatus;
   groupAvatarUrls?: string[];
+  status: "complete" | "loading" | "error";
+}
+
+/**
+ * Channel state
+ */
+export interface ChannelState {
+  channelsByTeam: Record<string, Channel[]>;
+  activeChannel: Channel | null;
+  members: Record<string, ChannelMember[]>;
+  directChannelInfoById: Record<string, DirectChannelInfo>;
+  pendingUserIds: string[];
+  lastFetchTimes: Record<string, number>;
 }

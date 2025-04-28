@@ -1,7 +1,7 @@
-// types/unread.types.ts
 /**
  * Types for unread count related data and functions
  */
+import { PaginationParams } from "./common";
 
 /**
  * Unread count information for a channel
@@ -16,17 +16,54 @@ export interface ChannelUnreadCount {
 }
 
 /**
- * Unread count state for the store
+ * Team unread count information
  */
-export interface UnreadState {
-  unreadCounts: Record<string, ChannelUnreadCount>;
-  mutedChannels: Set<string>;
-  processedMessageIds: Set<string>;
-  teamUnreadCounts: Record<
-    string,
-    { msg_count: number; mention_count: number }
-  >;
-  lastFetchTimes: Record<string, number>;
+export interface TeamUnreadCount {
+  msg_count: number;
+  mention_count: number;
+  channelIds?: string[]; // Optional list of channels with unreads
+}
+
+/**
+ * Total unread count across all teams
+ */
+export interface TotalUnreadCount {
+  msg_count: number;
+  mention_count: number;
+  teamCounts?: Record<string, TeamUnreadCount>;
+}
+
+/**
+ * Muted channel information
+ */
+export interface MutedChannelInfo {
+  channelId: string;
+  isMuted: boolean;
+  muteExpiration?: number; // Optional timestamp for temporary mutes
+}
+
+/**
+ * Parameters for marking a channel as read
+ */
+export interface MarkAsReadParams {
+  channelId: string;
+  messageId?: string; // Optional ID of the last message read
+}
+
+/**
+ * Parameters for marking all channels in a team as read
+ */
+export interface MarkTeamAsReadParams {
+  teamId: string;
+  excludeChannelIds?: string[]; // Optional channels to exclude
+}
+
+/**
+ * Message history parameters for fetching unread messages
+ */
+export interface MessageHistoryParams extends PaginationParams {
+  channelId: string;
+  sinceTimestamp: number;
 }
 
 /**
@@ -35,31 +72,38 @@ export interface UnreadState {
 export interface FormattedUnreadCount {
   text: string;
   color: "primary" | "error" | "default";
+  hasMentions: boolean;
+  hasUnreads: boolean;
 }
 
 /**
- * Message history parameters for fetching unread messages
- */
-export interface MessageHistoryParams {
-  channelId: string;
-  sinceTimestamp: number;
-  page?: number;
-  perPage?: number;
-}
-
-/**
- * Channel unread options
+ * Channel unread options for filtering
  */
 export interface ChannelUnreadOptions {
   includeMuted?: boolean;
   onlyWithMentions?: boolean;
+  sortByLastActivity?: boolean;
 }
 
 /**
- * Team unread notification event
+ * Unread count state for the store
+ */
+export interface UnreadState {
+  unreadCounts: Record<string, ChannelUnreadCount>;
+  mutedChannels: Set<string>;
+  processedMessageIds: Set<string>;
+  teamUnreadCounts: Record<string, TeamUnreadCount>;
+  lastFetchTimes: Record<string, number>;
+  isLoading: boolean;
+  error: Error | null;
+}
+
+/**
+ * Unread counts updated event data
  */
 export interface UnreadCountsUpdatedEvent {
-  teamId: string;
+  teamId?: string;
+  channelId?: string;
   counts: Record<string, { msg_count: number; mention_count: number }>;
   timestamp: number;
 }
