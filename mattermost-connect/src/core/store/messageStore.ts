@@ -9,10 +9,8 @@ import {
   Message,
   MessageReaction,
   ReactionCount,
-  ErrorSource,
   MessageState,
 } from "../../types";
-import { handleError } from "./errorStore";
 import { messageService } from "../services/messageService";
 import { createLoadingSlice } from "./storeUtils";
 import { subscribeWithSelector } from "zustand/middleware";
@@ -98,8 +96,34 @@ export const useMessageStore = create<MessageStoreState>()(
         isLoading: loadingSlice.isLoading,
         loadingIds: loadingSlice.loadingIds,
         error: loadingSlice.error,
-        setLoading: loadingSlice.setLoading,
-        setError: loadingSlice.setError,
+        setError: (channelId: string, error: Error | null) => {
+          set((state) => {
+            state.errors[channelId] = error;
+            if (error) {
+              state.error = error;
+            } else if (state.error && state.errors[channelId] === state.error) {
+              state.error = null;
+            }
+          });
+        },
+
+        setLoading: (channelId: string, isLoading: boolean) => {
+          set((state) => {
+            if (isLoading) {
+              if (!state.loadingChannelIds.includes(channelId)) {
+                state.loadingChannelIds.push(channelId);
+              }
+              // Mettre à jour également l'état global de chargement
+              state.isLoading = true;
+            } else {
+              state.loadingChannelIds = state.loadingChannelIds.filter(
+                (id: string) => id !== channelId,
+              );
+              // L'état global est false seulement si aucun canal n'est en cours de chargement
+              state.isLoading = state.loadingChannelIds.length > 0;
+            }
+          });
+        },
 
         /**
          * Sets all messages for a channel

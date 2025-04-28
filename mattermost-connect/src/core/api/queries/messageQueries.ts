@@ -1,69 +1,111 @@
 // src/core/api/queries/messageQueries.ts
 /**
  * React Query hooks for message operations
- * Organized by query type and optimized for caching
+ * Optimized for message-related queries and mutations
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS, invalidateQueries } from "../queryClient";
 import { Message, MessagePaginationOptions } from "../../../types";
 import { useMessageStore } from "../../store/messageStore";
-import { useAuthStore } from "../../store/authStore";
 import { createQueryOptions, createMutationOptions } from "../queryUtils";
 import { buildUrlWithParams } from "../apiUtils";
 
-// ====================
-// SECTION: MESSAGE RETRIEVAL
-// ====================
+// ==========================================
+// COMMON TYPE DEFINITIONS
+// ==========================================
 
 /**
- * Fetches messages for a channel
- * @param channelId - Channel ID
- * @param options - Pagination options
- * @returns Query hook for messages
+ * Parameters for message API requests with pagination
  */
-export const useMessagesQuery = (
+interface MessagesQueryParams {
+  page: number;
+  per_page: number;
+  since?: number;
+  before?: string;
+  after?: string;
+  [key: string]: any;
+}
+
+/**
+ * Response format for message endpoints that return multiple posts
+ */
+interface PostsResponse {
+  posts: Record<string, Message>;
+  order: string[];
+}
+
+/**
+ * Response format for file upload
+ */
+interface UploadFilesResponse {
+  file_infos: Array<{
+    id: string;
+    [key: string]: any;
+  }>;
+}
+
+/**
+ * Result type for message context queries
+ */
+interface MessageContext {
+  before: Message[];
+  target: Message | null;
+  after: Message[];
+}
+
+/**
+ * Custom query keys specific to message operations
+ */
+const MESSAGE_KEYS = {
+  pinned: (channelId: string) => ["messages", "pinned", channelId] as const,
+  search: (channelId: string, term: string) =>
+    ["messages", "search", channelId, term] as const,
+  context: (channelId: string, messageId: string) =>
+    ["messages", "context", channelId, messageId] as const,
+  fileInfo: (fileId: string) => ["fileInfo", fileId] as const,
+};
+
+// ==========================================
+// MESSAGE QUERY HOOKS
+// ==========================================
+
+/**
+ * Hook for fetching messages in a channel
+ */
+export function useMessagesQuery(
   channelId: string | undefined,
   options: MessagePaginationOptions = {},
-) => {
+) {
   const { setMessages, setLoading, setError } = useMessageStore();
 
-  return useQuery({
+  return useQuery<Message[], Error>({
     queryKey: channelId
-      ? [...QUERY_KEYS.messages.byChannel(channelId), options]
-      : ["messages", "byChannel", "undefined", options],
+      ? ([...QUERY_KEYS.messages.byChannel(channelId), options] as const)
+      : ["messages-placeholder"],
+
     queryFn: async () => {
-      if (!channelId) {
-        return [];
-      }
+      if (!channelId) return [];
 
       setLoading(channelId, true);
+
       try {
-        // Build query parameters
         const { page = 0, perPage = 60, since = 0, before, after } = options;
-        const params = { page, per_page: perPage };
+        const params: MessagesQueryParams = { page, per_page: perPage };
 
         if (since) params.since = since;
         if (before) params.before = before;
         if (after) params.after = after;
 
-        // Build URL with parameters
         const url = buildUrlWithParams(`channels/${channelId}/posts`, params);
+        const response = await apiClient.get<PostsResponse>(url);
 
-        // Fetch messages
-        const response = await apiClient.get<{
-          posts: Record<string, Message>;
-          order: string[];
-        }>(url);
-
-        // Transform response
         const { posts, order } = response.data;
         const messages = order
-          .map((postId: string) => posts[postId])
-          .filter(Boolean);
+          .map((postId) => posts[postId])
+          .filter((msg): msg is Message => !!msg);
 
-        // Update store only for base queries
-        // (not for queries with before/after/since)
+        // Only update store for base queries
         if (!before && !after && !since && page === 0) {
           setMessages(channelId, messages);
         }
@@ -76,49 +118,42 @@ export const useMessagesQuery = (
         setLoading(channelId, false);
       }
     },
-    // Message-specific options based on standard configurations
+
+    enabled: !!channelId,
     ...createQueryOptions("message", {
-      enabled: !!channelId,
       refetchOnWindowFocus: true,
-      staleTime: 30 * 1000, // 30 seconds
+      staleTime: 30 * 1000,
     }),
   });
-};
+}
 
 /**
- * Fetches thread messages for a root message
- * @param rootMessageId - Root message ID
- * @returns Query hook for thread messages
+ * Hook for fetching thread messages
  */
-export const useThreadMessagesQuery = (rootMessageId: string | undefined) => {
+export function useThreadMessagesQuery(rootMessageId: string | undefined) {
   const { setThreadMessages, setThreadLoading } = useMessageStore();
 
-  return useQuery({
+  return useQuery<Message[], Error>({
     queryKey: rootMessageId
       ? QUERY_KEYS.messages.thread(rootMessageId)
-      : ["messages", "thread", "undefined"],
+      : ["thread-messages-placeholder"],
+
     queryFn: async () => {
-      if (!rootMessageId) {
-        return [];
-      }
+      if (!rootMessageId) return [];
 
       setThreadLoading(rootMessageId, true);
-      try {
-        // Fetch thread messages
-        const response = await apiClient.get<{
-          posts: Record<string, Message>;
-          order: string[];
-        }>(`posts/${rootMessageId}/thread`);
 
-        // Transform response
+      try {
+        const response = await apiClient.get<PostsResponse>(
+          `posts/${rootMessageId}/thread`,
+        );
+
         const { posts, order } = response.data;
         const messages = order
-          .map((postId: string) => posts[postId])
-          .filter((message: Message) => message.id !== rootMessageId); // Exclude root message
+          .map((postId) => posts[postId])
+          .filter((msg): msg is Message => !!msg && msg.id !== rootMessageId);
 
-        // Update store
         setThreadMessages(rootMessageId, messages);
-
         return messages;
       } catch (error) {
         console.error(
@@ -130,100 +165,247 @@ export const useThreadMessagesQuery = (rootMessageId: string | undefined) => {
         setThreadLoading(rootMessageId, false);
       }
     },
-    // Thread-specific options
+
+    enabled: !!rootMessageId,
     ...createQueryOptions("message", {
-      enabled: !!rootMessageId,
-      staleTime: 30 * 1000, // 30 seconds
+      staleTime: 30 * 1000,
     }),
   });
-};
+}
 
 /**
- * Fetches pinned messages for a channel
- * @param channelId - Channel ID
- * @returns Query hook for pinned messages
+ * Hook for fetching pinned messages in a channel
  */
-export const usePinnedMessagesQuery = (channelId: string | undefined) => {
+export function usePinnedMessagesQuery(channelId: string | undefined) {
   const { setPinnedMessages } = useMessageStore();
 
-  return useQuery({
+  return useQuery<Message[], Error>({
     queryKey: channelId
-      ? ["pinnedMessages", channelId]
-      : ["pinnedMessages", "undefined"],
+      ? MESSAGE_KEYS.pinned(channelId)
+      : ["pinned-messages-placeholder"],
+
     queryFn: async () => {
-      if (!channelId) {
-        return [];
-      }
+      if (!channelId) return [];
 
-      const response = await apiClient.get<{
-        posts: Record<string, Message>;
-        order: string[];
-      }>(`channels/${channelId}/pinned`);
+      const response = await apiClient.get<PostsResponse>(
+        `channels/${channelId}/pinned`,
+      );
 
-      // Transform response
       const { posts, order } = response.data;
       const pinnedMessages = order
-        .map((postId: string) => posts[postId])
-        .filter(Boolean);
+        .map((postId) => posts[postId])
+        .filter((msg): msg is Message => !!msg);
 
-      // Update store
       setPinnedMessages(channelId, pinnedMessages);
-
       return pinnedMessages;
     },
-    // Pinned messages specific options
+
+    enabled: !!channelId,
     ...createQueryOptions("message", {
-      enabled: !!channelId,
-      staleTime: 60 * 1000, // 1 minute for pinned messages (change less frequently)
+      staleTime: 60 * 1000,
     }),
   });
-};
+}
 
 /**
- * Fetches file information
- * @param fileId - File ID
- * @returns Query hook for file information
+ * Hook for fetching file information
  */
-export const useFileInfoQuery = (fileId: string | undefined) => {
-  return useQuery({
-    queryKey: fileId ? ["fileInfo", fileId] : ["fileInfo", "undefined"],
+export function useFileInfoQuery(fileId: string | undefined) {
+  return useQuery<any, Error>({
+    queryKey: fileId
+      ? MESSAGE_KEYS.fileInfo(fileId)
+      : ["file-info-placeholder"],
+
     queryFn: async () => {
-      if (!fileId) {
-        throw new Error("File ID is required");
-      }
+      if (!fileId) throw new Error("File ID is required");
 
       const response = await apiClient.get(`files/${fileId}/info`);
       return response.data;
     },
-    // File info specific options
+
+    enabled: !!fileId,
     ...createQueryOptions("message", {
-      enabled: !!fileId,
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 5 * 60 * 1000,
     }),
   });
-};
-
-// ====================
-// SECTION: MESSAGE SENDING OPERATIONS
-// ====================
+}
 
 /**
- * Sends a new message
+ * Hook for searching messages in a channel
  */
-export const useSendMessageMutation = () => {
+export function useSearchMessagesQuery(
+  channelId: string | undefined,
+  searchTerm: string | undefined,
+) {
+  return useQuery<Message[], Error>({
+    queryKey:
+      channelId && searchTerm
+        ? MESSAGE_KEYS.search(channelId, searchTerm)
+        : ["search-messages-placeholder"],
+
+    queryFn: async () => {
+      if (!channelId || !searchTerm || searchTerm.trim() === "") return [];
+
+      const params = {
+        terms: searchTerm,
+        is_or_search: true,
+        include_deleted_channels: false,
+        page: 0,
+        per_page: 20,
+      };
+
+      const response = await apiClient.post<PostsResponse>(
+        `teams/posts/search`,
+        params,
+      );
+
+      const { posts, order } = response.data;
+      return order
+        .map((postId) => posts[postId])
+        .filter(
+          (post): post is Message => !!post && post.channel_id === channelId,
+        );
+    },
+
+    enabled: !!(channelId && searchTerm && searchTerm.trim() !== ""),
+    ...createQueryOptions("message", {
+      staleTime: 30 * 1000,
+      retry: false,
+    }),
+  });
+}
+
+/**
+ * Hook for fetching unread messages in a channel
+ */
+export function useUnreadMessagesQuery(
+  channelId: string | undefined,
+  lastViewedAt: number | undefined,
+) {
+  return useQuery<Message[], Error>({
+    queryKey:
+      channelId && lastViewedAt
+        ? QUERY_KEYS.messages.since(channelId, lastViewedAt)
+        : ["unread-messages-placeholder"],
+
+    queryFn: async () => {
+      if (!channelId || !lastViewedAt) return [];
+
+      const params: MessagesQueryParams = {
+        page: 0,
+        per_page: 60,
+        since: lastViewedAt,
+      };
+
+      const url = buildUrlWithParams(`channels/${channelId}/posts`, params);
+      const response = await apiClient.get<PostsResponse>(url);
+
+      const { posts, order } = response.data;
+      return order
+        .map((postId) => posts[postId])
+        .filter((msg): msg is Message => !!msg);
+    },
+
+    enabled: !!(channelId && lastViewedAt),
+    ...createQueryOptions("message", {
+      staleTime: 0,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+    }),
+  });
+}
+
+/**
+ * Hook for fetching message context (messages before and after a specific message)
+ */
+export function useMessageContextQuery(
+  channelId: string | undefined,
+  messageId: string | undefined,
+  count: number = 10,
+) {
+  return useQuery<MessageContext, Error>({
+    queryKey:
+      channelId && messageId
+        ? MESSAGE_KEYS.context(channelId, messageId)
+        : ["message-context-placeholder"],
+
+    queryFn: async () => {
+      if (!channelId || !messageId) {
+        return { before: [], target: null, after: [] };
+      }
+
+      // Fetch messages before target
+      const beforeParams: MessagesQueryParams = {
+        page: 0,
+        per_page: count,
+        before: messageId,
+      };
+
+      const beforeUrl = buildUrlWithParams(
+        `channels/${channelId}/posts`,
+        beforeParams,
+      );
+      const beforeResponse = await apiClient.get<PostsResponse>(beforeUrl);
+
+      // Fetch target message
+      const targetResponse = await apiClient.get<Message>(`posts/${messageId}`);
+
+      // Fetch messages after target
+      const afterParams: MessagesQueryParams = {
+        page: 0,
+        per_page: count,
+        after: messageId,
+      };
+
+      const afterUrl = buildUrlWithParams(
+        `channels/${channelId}/posts`,
+        afterParams,
+      );
+      const afterResponse = await apiClient.get<PostsResponse>(afterUrl);
+
+      // Transform responses
+      const before = beforeResponse.data.order
+        .map((postId) => beforeResponse.data.posts[postId])
+        .filter((msg): msg is Message => !!msg);
+
+      const target = targetResponse.data;
+
+      const after = afterResponse.data.order
+        .map((postId) => afterResponse.data.posts[postId])
+        .filter((msg): msg is Message => !!msg);
+
+      return { before, target, after };
+    },
+
+    enabled: !!(channelId && messageId),
+    ...createQueryOptions("message", {
+      staleTime: 30 * 1000,
+    }),
+  });
+}
+
+// ==========================================
+// MESSAGE MUTATION HOOKS
+// ==========================================
+
+/**
+ * Interface for sending a message
+ */
+interface SendMessageParams {
+  channelId: string;
+  message: string;
+  fileIds?: string[];
+}
+
+/**
+ * Hook for sending a new message
+ */
+export function useSendMessageMutation() {
   const queryClient = useQueryClient();
   const { addMessage } = useMessageStore();
 
-  return useMutation({
-    mutationFn: async ({
-      channelId,
-      message,
-      fileIds = [],
-    }: {
-      channelId: string;
-      message: string;
-      fileIds?: string[];
-    }) => {
+  return useMutation<Message, Error, SendMessageParams>({
+    mutationFn: async ({ channelId, message, fileIds = [] }) => {
       if (!channelId || (!message && fileIds.length === 0)) {
         throw new Error("Channel ID and either message or files are required");
       }
@@ -236,37 +418,35 @@ export const useSendMessageMutation = () => {
 
       return response.data;
     },
-    onSuccess: (newMessage) => {
-      // Invalidate channel messages query
-      invalidateQueries.channelMessages(newMessage.channel_id);
 
-      // Update store
+    onSuccess: (newMessage) => {
+      invalidateQueries.channelMessages(newMessage.channel_id);
       addMessage(newMessage);
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
+}
 
 /**
- * Replies to a message in a thread
+ * Interface for replying to a message
  */
-export const useReplyToMessageMutation = () => {
+interface ReplyMessageParams {
+  channelId: string;
+  rootMessageId: string;
+  message: string;
+  fileIds?: string[];
+}
+
+/**
+ * Hook for replying to a message in a thread
+ */
+export function useReplyToMessageMutation() {
   const queryClient = useQueryClient();
   const { addMessage, setReplyToMessage } = useMessageStore();
 
-  return useMutation({
-    mutationFn: async ({
-      channelId,
-      rootMessageId,
-      message,
-      fileIds = [],
-    }: {
-      channelId: string;
-      rootMessageId: string;
-      message: string;
-      fileIds?: string[];
-    }) => {
+  return useMutation<Message, Error, ReplyMessageParams>({
+    mutationFn: async ({ channelId, rootMessageId, message, fileIds = [] }) => {
       if (!channelId || !rootMessageId || (!message && fileIds.length === 0)) {
         throw new Error(
           "Channel ID, root message ID, and either message or files are required",
@@ -282,42 +462,39 @@ export const useReplyToMessageMutation = () => {
 
       return response.data;
     },
+
     onSuccess: (newMessage) => {
-      // Invalidate queries
       if (newMessage.root_id) {
         invalidateQueries.thread(newMessage.root_id);
       }
 
       invalidateQueries.channelMessages(newMessage.channel_id);
 
-      // Update store
       addMessage(newMessage);
       setReplyToMessage(null);
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
-
-// ====================
-// SECTION: MESSAGE MODIFICATION OPERATIONS
-// ====================
+}
 
 /**
- * Edits an existing message
+ * Interface for editing a message
  */
-export const useEditMessageMutation = () => {
+interface EditMessageParams {
+  messageId: string;
+  message: string;
+}
+
+/**
+ * Hook for editing an existing message
+ */
+export function useEditMessageMutation() {
   const queryClient = useQueryClient();
   const { updateMessage } = useMessageStore();
 
-  return useMutation({
-    mutationFn: async ({
-      messageId,
-      message,
-    }: {
-      messageId: string;
-      message: string;
-    }) => {
+  return useMutation<Message, Error, EditMessageParams>({
+    mutationFn: async ({ messageId, message }) => {
       if (!messageId || !message) {
         throw new Error("Message ID and content are required");
       }
@@ -339,37 +516,46 @@ export const useEditMessageMutation = () => {
 
       return patchResponse.data;
     },
+
     onSuccess: (updatedMessage) => {
-      // Invalidate queries
       if (updatedMessage.root_id) {
         invalidateQueries.thread(updatedMessage.root_id);
       }
 
       invalidateQueries.channelMessages(updatedMessage.channel_id);
 
-      // Update store
       updateMessage(updatedMessage);
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
+}
 
 /**
- * Deletes a message
+ * Interface for deleting a message
  */
-export const useDeleteMessageMutation = () => {
+interface DeleteMessageParams {
+  messageId: string;
+  channelId: string;
+}
+
+/**
+ * Result type for delete operation
+ */
+interface DeleteMessageResult {
+  messageId: string;
+  channelId: string;
+}
+
+/**
+ * Hook for deleting a message
+ */
+export function useDeleteMessageMutation() {
   const queryClient = useQueryClient();
   const { getMessageById, deleteMessage } = useMessageStore();
 
-  return useMutation({
-    mutationFn: async ({
-      messageId,
-      channelId,
-    }: {
-      messageId: string;
-      channelId: string;
-    }) => {
+  return useMutation<DeleteMessageResult, Error, DeleteMessageParams>({
+    mutationFn: async ({ messageId, channelId }) => {
       if (!messageId) {
         throw new Error("Message ID is required");
       }
@@ -377,44 +563,48 @@ export const useDeleteMessageMutation = () => {
       await apiClient.delete(`posts/${messageId}`);
       return { messageId, channelId };
     },
+
     onSuccess: ({ messageId, channelId }) => {
-      // Get message from store to check if it's part of a thread
       const message = getMessageById(messageId);
 
-      // Invalidate queries
       if (message?.root_id) {
         invalidateQueries.thread(message.root_id);
       }
 
       invalidateQueries.channelMessages(channelId);
 
-      // Update store
       deleteMessage(messageId, channelId);
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
-
-// ====================
-// SECTION: PINNING OPERATIONS
-// ====================
+}
 
 /**
- * Pins a message in a channel
+ * Interface for pinning/unpinning messages
  */
-export const usePinMessageMutation = () => {
+interface PinMessageParams {
+  messageId: string;
+  channelId: string;
+}
+
+/**
+ * Result type for pin/unpin operations
+ */
+interface PinMessageResult {
+  messageId: string;
+  channelId: string;
+}
+
+/**
+ * Hook for pinning a message
+ */
+export function usePinMessageMutation() {
   const queryClient = useQueryClient();
   const { updateMessage } = useMessageStore();
 
-  return useMutation({
-    mutationFn: async ({
-      messageId,
-      channelId,
-    }: {
-      messageId: string;
-      channelId: string;
-    }) => {
+  return useMutation<PinMessageResult, Error, PinMessageParams>({
+    mutationFn: async ({ messageId, channelId }) => {
       if (!messageId) {
         throw new Error("Message ID is required");
       }
@@ -422,17 +612,16 @@ export const usePinMessageMutation = () => {
       await apiClient.post(`posts/${messageId}/pin`);
       return { messageId, channelId };
     },
+
     onSuccess: async ({ messageId, channelId }) => {
-      // Invalidate queries
       queryClient.invalidateQueries({
-        queryKey: ["pinnedMessages", channelId],
+        queryKey: MESSAGE_KEYS.pinned(channelId),
       });
 
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.messages.byChannel(channelId),
       });
 
-      // Update message in store by fetching it first
       try {
         const response = await apiClient.get<Message>(`posts/${messageId}`);
         updateMessage(response.data);
@@ -440,26 +629,20 @@ export const usePinMessageMutation = () => {
         console.error("Error refetching pinned message:", error);
       }
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
+}
 
 /**
- * Unpins a message from a channel
+ * Hook for unpinning a message
  */
-export const useUnpinMessageMutation = () => {
+export function useUnpinMessageMutation() {
   const queryClient = useQueryClient();
   const { updateMessage } = useMessageStore();
 
-  return useMutation({
-    mutationFn: async ({
-      messageId,
-      channelId,
-    }: {
-      messageId: string;
-      channelId: string;
-    }) => {
+  return useMutation<PinMessageResult, Error, PinMessageParams>({
+    mutationFn: async ({ messageId, channelId }) => {
       if (!messageId) {
         throw new Error("Message ID is required");
       }
@@ -467,17 +650,16 @@ export const useUnpinMessageMutation = () => {
       await apiClient.post(`posts/${messageId}/unpin`);
       return { messageId, channelId };
     },
+
     onSuccess: async ({ messageId, channelId }) => {
-      // Invalidate queries
       queryClient.invalidateQueries({
-        queryKey: ["pinnedMessages", channelId],
+        queryKey: MESSAGE_KEYS.pinned(channelId),
       });
 
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.messages.byChannel(channelId),
       });
 
-      // Update message in store by fetching it first
       try {
         const response = await apiClient.get<Message>(`posts/${messageId}`);
         updateMessage(response.data);
@@ -485,27 +667,25 @@ export const useUnpinMessageMutation = () => {
         console.error("Error refetching unpinned message:", error);
       }
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
-
-// ====================
-// SECTION: ATTACHMENT OPERATIONS
-// ====================
+}
 
 /**
- * Uploads files to be attached to a message
+ * Interface for uploading files
  */
-export const useUploadFilesMutation = () => {
-  return useMutation({
-    mutationFn: async ({
-      channelId,
-      files,
-    }: {
-      channelId: string;
-      files: File[];
-    }) => {
+interface UploadFilesParams {
+  channelId: string;
+  files: File[];
+}
+
+/**
+ * Hook for uploading files to attach to a message
+ */
+export function useUploadFilesMutation() {
+  return useMutation<UploadFilesResponse, Error, UploadFilesParams>({
+    mutationFn: async ({ channelId, files }) => {
       if (!channelId || files.length === 0) {
         throw new Error("Channel ID and files are required");
       }
@@ -520,178 +700,7 @@ export const useUploadFilesMutation = () => {
       const response = await apiClient.uploadFiles(formData);
       return response.data;
     },
-    // Standard mutation options
+
     ...createMutationOptions(),
   });
-};
-
-// ====================
-// SECTION: UTILITIES AND EXTENSIONS
-// ====================
-
-/**
- * Searches for messages in a channel
- * @param channelId - Channel ID
- * @param searchTerm - Search term
- * @returns Query hook for search results
- */
-export const useSearchMessagesQuery = (
-  channelId: string | undefined,
-  searchTerm: string | undefined,
-) => {
-  return useQuery({
-    queryKey: ["messages", "search", channelId, searchTerm],
-    queryFn: async () => {
-      if (!channelId || !searchTerm || searchTerm.trim() === "") {
-        return [];
-      }
-
-      const params = {
-        terms: searchTerm,
-        is_or_search: true,
-        include_deleted_channels: false,
-        page: 0,
-        per_page: 20,
-      };
-
-      const response = await apiClient.post(`teams/posts/search`, params);
-
-      // Filter messages to only keep those from the specified channel
-      const allPosts = response.data.posts || {};
-      const order = response.data.order || [];
-
-      return order
-        .map((postId: string) => allPosts[postId])
-        .filter((post: Message) => post.channel_id === channelId);
-    },
-    // Search-specific options
-    ...createQueryOptions("message", {
-      enabled: !!channelId && !!searchTerm && searchTerm.trim() !== "",
-      staleTime: 30 * 1000, // 30 seconds
-      retry: false,
-    }),
-  });
-};
-
-/**
- * Fetches unread messages in a channel
- * @param channelId - Channel ID
- * @param lastViewedAt - Timestamp of last viewed
- * @returns Query hook for unread messages
- */
-export const useUnreadMessagesQuery = (
-  channelId: string | undefined,
-  lastViewedAt: number | undefined,
-) => {
-  const { setMessages } = useMessageStore();
-
-  return useQuery({
-    queryKey:
-      channelId && lastViewedAt
-        ? QUERY_KEYS.messages.since(channelId, lastViewedAt)
-        : ["messages", "unread", "undefined"],
-    queryFn: async () => {
-      if (!channelId || !lastViewedAt) {
-        return [];
-      }
-
-      const response = await apiClient.get<{
-        posts: Record<string, Message>;
-        order: string[];
-      }>(`channels/${channelId}/posts`, {
-        params: { since: lastViewedAt },
-      });
-
-      // Transform response
-      const { posts, order } = response.data;
-      return order.map((postId: string) => posts[postId]).filter(Boolean);
-    },
-    // Unread messages specific options
-    ...createQueryOptions("message", {
-      enabled: !!channelId && !!lastViewedAt,
-      staleTime: 0, // Always refresh unread messages
-      refetchOnWindowFocus: true,
-      refetchOnMount: true,
-    }),
-  });
-};
-
-/**
- * Fetches recent messages around a specific message
- * @param channelId - Channel ID
- * @param messageId - Central message ID
- * @param count - Number of messages before/after to fetch
- * @returns Query hook for message context
- */
-export const useMessageContextQuery = (
-  channelId: string | undefined,
-  messageId: string | undefined,
-  count: number = 10,
-) => {
-  return useQuery({
-    queryKey: ["messages", "context", channelId, messageId, count],
-    queryFn: async () => {
-      if (!channelId || !messageId) {
-        return { before: [], target: null, after: [] };
-      }
-
-      // Fetch messages before
-      const beforeResponse = await apiClient.get<{
-        posts: Record<string, Message>;
-        order: string[];
-      }>(`channels/${channelId}/posts`, {
-        params: { before: messageId, per_page: count },
-      });
-
-      // Fetch target message
-      const targetResponse = await apiClient.get<Message>(`posts/${messageId}`);
-
-      // Fetch messages after
-      const afterResponse = await apiClient.get<{
-        posts: Record<string, Message>;
-        order: string[];
-      }>(`channels/${channelId}/posts`, {
-        params: { after: messageId, per_page: count },
-      });
-
-      // Transform responses
-      const before = beforeResponse.data.order
-        .map((postId: string) => beforeResponse.data.posts[postId])
-        .filter(Boolean);
-
-      const target = targetResponse.data;
-
-      const after = afterResponse.data.order
-        .map((postId: string) => afterResponse.data.posts[postId])
-        .filter(Boolean);
-
-      return { before, target, after };
-    },
-    // Message context specific options
-    ...createQueryOptions("message", {
-      enabled: !!channelId && !!messageId,
-      staleTime: 30 * 1000, // 30 seconds
-    }),
-  });
-};
-
-// Extension of query keys for new queries
-if (QUERY_KEYS.messages) {
-  QUERY_KEYS.messages.pinned = (channelId: string) => [
-    "messages",
-    "pinned",
-    channelId,
-  ];
-  QUERY_KEYS.messages.search = (channelId: string, term: string) => [
-    "messages",
-    "search",
-    channelId,
-    term,
-  ];
-  QUERY_KEYS.messages.context = (channelId: string, messageId: string) => [
-    "messages",
-    "context",
-    channelId,
-    messageId,
-  ];
 }

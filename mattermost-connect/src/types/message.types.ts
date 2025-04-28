@@ -121,7 +121,6 @@ export interface Thread {
  * Message pagination options
  */
 export interface MessagePaginationOptions extends PaginationParams {
-  channelId: string;
   forceRefresh?: boolean;
 }
 

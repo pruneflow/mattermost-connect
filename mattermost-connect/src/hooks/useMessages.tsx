@@ -9,7 +9,8 @@ import {
   useMessageStore,
   getSortedChannelMessages,
   getSortedThreadMessages,
-} from "../core/store/messageStore";
+  useAuthStore,
+} from "../core/store";
 import {
   useMessagesQuery,
   useThreadMessagesQuery,
@@ -22,8 +23,6 @@ import {
   usePinnedMessagesQuery,
   useUploadFilesMutation,
 } from "../core/api/queries/messageQueries";
-import { useAuthStore } from "../core/store/authStore";
-import { messageService } from "../core/services/messageService";
 import { debounce } from "../utils/performance";
 
 /**
@@ -34,7 +33,7 @@ import { debounce } from "../utils/performance";
  */
 export function useMessages(
   channelId: string | undefined,
-  options: MessagePaginationOptions = {},
+  options: MessagePaginationOptions = { channelId: "your-channel-id" },
 ) {
   // Get state from store
   const {
@@ -166,12 +165,16 @@ export function useMessages(
         throw new Error("Channel ID is required to upload files");
       }
 
-      const result = await uploadFilesMutation.mutateAsync({
+      const result = (await uploadFilesMutation.mutateAsync({
         channelId,
         files,
-      });
+      })) as unknown as { file_infos: Array<{ id: string }> };
 
-      return result.file_infos.map((info: any) => info.id);
+      if (result && result.file_infos) {
+        return result.file_infos.map((info: any) => info.id);
+      } else {
+        return [];
+      }
     },
     [channelId, uploadFilesMutation],
   );
@@ -353,12 +356,16 @@ export function useThread(
    */
   const uploadThreadFiles = useCallback(
     async (files: File[]) => {
-      const result = await uploadFilesMutation.mutateAsync({
+      const result = (await uploadFilesMutation.mutateAsync({
         channelId,
         files,
-      });
+      })) as unknown as { file_infos: Array<{ id: string }> };
 
-      return result.file_infos.map((info: any) => info.id);
+      if (result && result.file_infos) {
+        return result.file_infos.map((info: any) => info.id);
+      } else {
+        return [];
+      }
     },
     [channelId, uploadFilesMutation],
   );
