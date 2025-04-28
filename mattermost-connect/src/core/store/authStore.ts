@@ -1,32 +1,37 @@
 // src/core/store/authStore.ts
+/**
+ * Authentication store
+ * Manages user authentication state and actions
+ */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { User, authService } from "../services/authService";
+import { User, AuthState, LoginParams } from "../../types/auth.types";
+import { authService } from "../services/authService";
 import { apiClient } from "../api/client";
+import { emitEvent } from "./eventStore";
+import { EventType, EventCategory } from "../../types/event.types";
+import { ErrorSource } from "../../types/error.types";
+import { handleError } from "./errorStore";
 
-export interface AuthState {
-  // State
-  token: string | null;
-  currentUser: User | null;
-  isAuthenticated: boolean;
-  isAuthenticating: boolean;
-  error: Error | null;
-  serverUrl?: string | null;
-
+/**
+ * Authentication store state and actions
+ */
+interface AuthStoreState extends AuthState {
   // Actions
   initialize: () => Promise<boolean>;
-  login: (
-    username: string,
-    password: string,
-    serverUrl?: string,
-  ) => Promise<User>;
+  login: (params: LoginParams) => Promise<User>;
   logout: () => void;
   refreshCurrentUser: () => Promise<User | null>;
   setCurrentUser: (user: User) => void;
-  setError: (error: Error | null) => void;
+
+  // Reset
+  reset: () => void;
 }
 
-export const useAuthStore = create<AuthState>()(
+/**
+ * Authentication store for managing user session
+ */
+export const useAuthStore = create<AuthStoreState>()(
   persist(
     (set, get) => ({
       // Initial state
@@ -34,11 +39,15 @@ export const useAuthStore = create<AuthState>()(
       currentUser: null,
       isAuthenticated: false,
       isAuthenticating: false,
-      error: null,
+      serverUrl: null,
 
+      /**
+       * Initializes authentication from stored token
+       * @returns Whether authentication was successful
+       */
       initialize: async () => {
         try {
-          set({ isAuthenticating: true, error: null });
+          set({ isAuthenticating: true });
 
           const isAuthenticated = await authService.initializeAuth();
 
@@ -57,6 +66,9 @@ export const useAuthStore = create<AuthState>()(
                 isAuthenticating: false,
               });
 
+              // Emit authenticated event
+              emitEvent(EventType.LOGIN_SUCCESS, { user });
+
               return true;
             }
           }
@@ -67,16 +79,25 @@ export const useAuthStore = create<AuthState>()(
           set({
             isAuthenticating: false,
             isAuthenticated: false,
-            error: error as Error,
           });
+
+          // Handle and report error
+          handleError(error as Error, ErrorSource.AUTH);
+
           return false;
         }
       },
 
-      login: async (username: string, password: string, serverUrl?: string) => {
+      /**
+       * Logs in a user with credentials
+       * @param params Login parameters
+       * @returns The authenticated user
+       */
+      login: async ({ username, password, serverUrl }: LoginParams) => {
         try {
-          set({ isAuthenticating: true, error: null });
+          set({ isAuthenticating: true });
 
+          // Configure API client for direct mode if serverUrl is provided
           if (serverUrl && apiClient.getMode() === "direct") {
             apiClient.configure({
               mode: "direct",
@@ -84,12 +105,14 @@ export const useAuthStore = create<AuthState>()(
             });
           }
 
+          // Call auth service to login
           const { token, user } = await authService.login(
             username,
             password,
             serverUrl,
           );
 
+          // Update store with authentication data
           set({
             token,
             currentUser: user,
@@ -98,26 +121,45 @@ export const useAuthStore = create<AuthState>()(
             serverUrl: serverUrl || authService.getStoredServerUrl(),
           });
 
+          // Emit login success event
+          emitEvent(EventType.LOGIN_SUCCESS, { user });
+
           return user;
         } catch (error) {
-          set({
-            isAuthenticating: false,
-            error: error as Error,
-          });
+          set({ isAuthenticating: false });
+
+          // Handle and report error
+          handleError(error as Error, ErrorSource.AUTH);
+
           throw error;
         }
       },
 
+      /**
+       * Logs out the current user
+       */
       logout: () => {
+        // Get user before logout for event
+        const user = get().currentUser;
+
+        // Perform logout in auth service
         authService.logout();
+
+        // Clear authentication state
         set({
           token: null,
           currentUser: null,
           isAuthenticated: false,
-          error: null,
         });
+
+        // Emit logout event
+        emitEvent(EventType.LOGOUT, { user });
       },
 
+      /**
+       * Refreshes current user data
+       * @returns Updated user or null if not authenticated
+       */
       refreshCurrentUser: async () => {
         if (!get().isAuthenticated) {
           return null;
@@ -131,33 +173,63 @@ export const useAuthStore = create<AuthState>()(
             return user;
           }
 
+          // If user retrieval fails, logout
           authService.logout();
+
           set({
             token: null,
             currentUser: null,
             isAuthenticated: false,
           });
 
+          // Emit session expired event
+          emitEvent(EventType.SESSION_EXPIRED, { reason: "User not found" });
+
           return null;
         } catch (error) {
+          // On error, logout and report
           authService.logout();
+
           set({
             token: null,
             currentUser: null,
             isAuthenticated: false,
-            error: error as Error,
+          });
+
+          // Handle and report error
+          handleError(error as Error, ErrorSource.AUTH);
+
+          // Emit session expired event
+          emitEvent(EventType.SESSION_EXPIRED, {
+            reason: "Error refreshing user",
           });
 
           return null;
         }
       },
 
+      /**
+       * Updates the current user information
+       * @param user Updated user object
+       */
       setCurrentUser: (user: User) => {
         set({ currentUser: user });
+
+        // Emit user updated event
+        emitEvent(EventType.USER_UPDATED, { user });
       },
 
-      setError: (error: Error | null) => {
-        set({ error });
+      /**
+       * Resets the store to initial state
+       */
+      reset: () => {
+        set({
+          token: null,
+          currentUser: null,
+          isAuthenticated: false,
+          isAuthenticating: false,
+          serverUrl: null,
+        });
       },
     }),
     {
