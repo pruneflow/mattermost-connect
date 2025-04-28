@@ -33,7 +33,7 @@ export interface Entity extends WithId, WithTimestamps {}
  */
 export interface LoadingState {
   isLoading: boolean;
-  loadingIds?: string[];
+  loadingIds: string[];
 }
 
 /**
@@ -41,7 +41,7 @@ export interface LoadingState {
  */
 export interface ErrorState {
   error: Error | null;
-  errors?: Record<string, Error | null>;
+  errors: Record<string, Error | null>;
 }
 
 /**
@@ -64,6 +64,18 @@ export enum ErrorSource {
   UI = "ui",
   STORAGE = "storage",
   UNKNOWN = "unknown",
+}
+
+/**
+ * API Error extended from Error
+ */
+export interface ApiError extends Error {
+  status?: number;
+  data?: any;
+  request?: {
+    url: string;
+    method: string;
+  };
 }
 
 /**
@@ -181,18 +193,6 @@ export interface EventPayload<T = any> {
 export type EventHandler<T = any> = (payload: EventPayload<T>) => void;
 
 // --- API and Query types ---
-
-/**
- * Standard API error interface
- */
-export interface ApiError extends Error {
-  status?: number;
-  data?: any;
-  request?: {
-    url: string;
-    method: string;
-  };
-}
 
 /**
  * Standard pagination parameters

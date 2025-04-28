@@ -26,6 +26,20 @@ export interface Team extends Entity {
 }
 
 /**
+ * Formatted team interface for UI display
+ */
+export interface FormattedTeam {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  type: TeamType;
+  isOpen: boolean;
+  memberCount: number | null;
+  url: string;
+}
+
+/**
  * Team statistics
  */
 export interface TeamStats {
@@ -111,5 +125,7 @@ export interface TeamState {
   teamMembers: Record<string, TeamMember[]>;
   lastFetchTimes: Record<string, number>;
   isLoading: boolean;
+  loadingIds: string[];
   error: Error | null;
+  errors: Record<string, Error | null>;
 }

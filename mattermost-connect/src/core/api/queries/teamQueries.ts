@@ -1,12 +1,28 @@
 // src/core/api/queries/teamQueries.ts
 /**
  * React Query hooks for team operations
+ * Standardized queries using React Query
  */
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
-import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { Team, TeamMember, TeamStats } from "../../types";
-import { useTeamStore } from "../../store/teamStore";
+import { invalidateQueries } from "../queryClient";
+
+// Team-specific query keys
+const TEAM_QUERY_KEYS = {
+  all: ["teams"],
+  byId: (id: string) => ["teams", id],
+  stats: (id: string) => ["teams", "stats", id],
+  members: (id: string) => ["teams", "members", id],
+};
+import {
+  Team,
+  TeamMember,
+  TeamStats,
+  CreateTeamParams,
+  UpdateTeamParams,
+  ApiError,
+} from "../../../types";
+import { useTeamStore } from "../../store";
 import { createQueryOptions, createMutationOptions } from "../queryUtils";
 
 /**
@@ -16,8 +32,8 @@ import { createQueryOptions, createMutationOptions } from "../queryUtils";
 export const useTeamsQuery = () => {
   const { setTeams, setLoading, setError } = useTeamStore();
 
-  return useQuery({
-    queryKey: QUERY_KEYS.teams.all,
+  return useQuery<Team[], ApiError>({
+    queryKey: TEAM_QUERY_KEYS.all,
     queryFn: async () => {
       setLoading(true);
       try {
@@ -46,8 +62,8 @@ export const useTeamsQuery = () => {
 export const useTeamQuery = (teamId: string | undefined) => {
   const { setTeam, setLoadingId, setErrorForId, getTeamById } = useTeamStore();
 
-  return useQuery({
-    queryKey: teamId ? QUERY_KEYS.teams.byId(teamId) : ["teams", "undefined"],
+  return useQuery<Team, ApiError>({
+    queryKey: teamId ? TEAM_QUERY_KEYS.byId(teamId) : ["teams", "undefined"],
     queryFn: async () => {
       if (!teamId) {
         throw new Error("Team ID is required");
@@ -83,13 +99,10 @@ export const useTeamQuery = (teamId: string | undefined) => {
  * Creates a new team
  */
 export const useCreateTeamMutation = () => {
-  return useMutation({
-    mutationFn: async (teamData: {
-      name: string;
-      display_name: string;
-      type: "O" | "I";
-      description?: string;
-    }) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Team, ApiError, CreateTeamParams>({
+    mutationFn: async (teamData) => {
       const response = await apiClient.post<Team>("teams", teamData);
       return response.data;
     },
@@ -99,7 +112,7 @@ export const useCreateTeamMutation = () => {
       setTeam(newTeam);
 
       // Invalidate teams queries
-      invalidateQueries.allTeams();
+      queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
     },
     ...createMutationOptions(),
   });
@@ -109,21 +122,14 @@ export const useCreateTeamMutation = () => {
  * Updates an existing team
  */
 export const useUpdateTeamMutation = () => {
-  return useMutation({
-    mutationFn: async ({
-      teamId,
-      teamData,
-    }: {
-      teamId: string;
-      teamData: Partial<{
-        display_name: string;
-        description: string;
-        company_name: string;
-        allowed_domains: string;
-        invite_id: string;
-        allow_open_invite: boolean;
-      }>;
-    }) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Team,
+    ApiError,
+    { teamId: string; teamData: UpdateTeamParams }
+  >({
+    mutationFn: async ({ teamId, teamData }) => {
       const response = await apiClient.put<Team>(`teams/${teamId}`, teamData);
       return response.data;
     },
@@ -133,7 +139,9 @@ export const useUpdateTeamMutation = () => {
       updateTeam(updatedTeam);
 
       // Invalidate specific team query
-      invalidateQueries.team(updatedTeam.id);
+      queryClient.invalidateQueries({
+        queryKey: TEAM_QUERY_KEYS.byId(updatedTeam.id),
+      });
     },
     ...createMutationOptions(),
   });
@@ -143,8 +151,10 @@ export const useUpdateTeamMutation = () => {
  * Deletes a team
  */
 export const useDeleteTeamMutation = () => {
-  return useMutation({
-    mutationFn: async (teamId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<string, ApiError, string>({
+    mutationFn: async (teamId) => {
       await apiClient.delete(`teams/${teamId}`);
       return teamId;
     },
@@ -154,7 +164,8 @@ export const useDeleteTeamMutation = () => {
       removeTeam(teamId);
 
       // Invalidate teams queries
-      invalidateQueries.allTeams();
+      queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
+      queryClient.removeQueries({ queryKey: TEAM_QUERY_KEYS.byId(teamId) });
     },
     ...createMutationOptions(),
   });
@@ -164,8 +175,10 @@ export const useDeleteTeamMutation = () => {
  * Joins a team using an invite code
  */
 export const useJoinTeamMutation = () => {
-  return useMutation({
-    mutationFn: async (inviteId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Team, ApiError, string>({
+    mutationFn: async (inviteId) => {
       const response = await apiClient.post<Team>(`teams/invite/${inviteId}`);
       return response.data;
     },
@@ -175,7 +188,7 @@ export const useJoinTeamMutation = () => {
       setTeam(newTeam);
 
       // Invalidate teams queries
-      invalidateQueries.allTeams();
+      queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
     },
     ...createMutationOptions(),
   });
@@ -185,8 +198,10 @@ export const useJoinTeamMutation = () => {
  * Leaves a team
  */
 export const useLeaveTeamMutation = () => {
-  return useMutation({
-    mutationFn: async (teamId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<string, ApiError, string>({
+    mutationFn: async (teamId) => {
       await apiClient.delete(`teams/${teamId}/members/me`);
       return teamId;
     },
@@ -196,7 +211,8 @@ export const useLeaveTeamMutation = () => {
       removeTeam(teamId);
 
       // Invalidate teams queries
-      invalidateQueries.allTeams();
+      queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
+      queryClient.removeQueries({ queryKey: TEAM_QUERY_KEYS.byId(teamId) });
     },
     ...createMutationOptions(),
   });
@@ -210,9 +226,9 @@ export const useLeaveTeamMutation = () => {
 export const useTeamStatsQuery = (teamId: string | undefined) => {
   const { setTeamStats } = useTeamStore();
 
-  return useQuery({
+  return useQuery<TeamStats, ApiError>({
     queryKey: teamId
-      ? QUERY_KEYS.teams.stats(teamId)
+      ? TEAM_QUERY_KEYS.stats(teamId)
       : ["teamStats", "undefined"],
     queryFn: async () => {
       if (!teamId) {
@@ -239,9 +255,9 @@ export const useTeamStatsQuery = (teamId: string | undefined) => {
 export const useTeamMembersQuery = (teamId: string | undefined) => {
   const { setTeamMembers } = useTeamStore();
 
-  return useQuery({
+  return useQuery<TeamMember[], ApiError>({
     queryKey: teamId
-      ? QUERY_KEYS.teams.members(teamId)
+      ? TEAM_QUERY_KEYS.members(teamId)
       : ["teamMembers", "undefined"],
     queryFn: async () => {
       if (!teamId) {
@@ -260,4 +276,56 @@ export const useTeamMembersQuery = (teamId: string | undefined) => {
     enabled: !!teamId,
     ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes
   });
+};
+
+/**
+ * Searches for teams
+ * @param searchTerm Search term
+ * @returns Query hook for team search results
+ */
+export const useSearchTeamsQuery = (searchTerm: string | undefined) => {
+  return useQuery<Team[], ApiError>({
+    queryKey: ["teams", "search", searchTerm],
+    queryFn: async () => {
+      if (!searchTerm || searchTerm.trim().length === 0) {
+        return [];
+      }
+
+      const response = await apiClient.post<Team[]>(`teams/search`, {
+        term: searchTerm,
+      });
+
+      return response.data;
+    },
+    enabled: !!searchTerm && searchTerm.trim().length > 0,
+    ...createQueryOptions("team", { staleTime: 2 * 60 * 1000 }), // 2 minutes
+  });
+};
+
+/**
+ * Gets information about a team invite
+ * @param inviteId Invite ID
+ * @returns Query hook for team invite information
+ */
+export const useTeamInviteInfoQuery = (inviteId: string | undefined) => {
+  return useQuery<{ name: string; display_name: string; id: string }, ApiError>(
+    {
+      queryKey: ["teams", "invite", inviteId],
+      queryFn: async () => {
+        if (!inviteId) {
+          throw new Error("Invite ID is required");
+        }
+
+        const response = await apiClient.get<{
+          name: string;
+          display_name: string;
+          id: string;
+        }>(`teams/invite/${inviteId}`);
+
+        return response.data;
+      },
+      enabled: !!inviteId,
+      ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes
+    },
+  );
 };

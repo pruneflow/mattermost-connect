@@ -1,10 +1,19 @@
 // src/hooks/useTeams.tsx
 /**
  * Hooks for team functionality
+ * Provides optimized React hooks for working with teams
  */
 import { useCallback, useMemo } from "react";
-import { Team, TeamMember, TeamStats } from "../types";
-import { useTeamStore } from "../core/store/teamStore";
+import {
+  Team,
+  TeamMember,
+  TeamStats,
+  FormattedTeam,
+  CreateTeamParams,
+  UpdateTeamParams,
+  ApiError,
+} from "../types";
+import { useTeamStore } from "../core/store";
 import { teamService } from "../core/services/teamService";
 import {
   useTeamsQuery,
@@ -16,10 +25,13 @@ import {
   useLeaveTeamMutation,
   useTeamStatsQuery,
   useTeamMembersQuery,
+  useSearchTeamsQuery,
+  useTeamInviteInfoQuery,
 } from "../core/api/queries/teamQueries";
 
 /**
  * Hook that provides teams functionality
+ * Combines store and API access for teams
  * @returns Teams state and actions
  */
 export function useTeams() {
@@ -58,18 +70,16 @@ export function useTeams() {
   );
 
   /**
-   * Gets formatted teams
-   * @returns Formatted teams for display
+   * Gets formatted teams for UI display
    */
-  const formattedTeams = useMemo(() => {
-    return teams.map((team) => teamService.formatTeam(team));
+  const formattedTeams = useMemo<FormattedTeam[]>(() => {
+    return teamService.formatTeams(teams);
   }, [teams]);
 
   /**
-   * Sorts teams by display name
-   * @returns Sorted teams
+   * Gets alphabetically sorted teams
    */
-  const sortedTeams = useMemo(() => {
+  const sortedTeams = useMemo<Team[]>(() => {
     return teamService.sortTeams(teams);
   }, [teams]);
 
@@ -104,12 +114,16 @@ export interface TeamDetailResult {
   isUpdating: boolean;
   isDeleting: boolean;
   isLeaving: boolean;
-  error: Error | null;
-  updateTeam: (data: Partial<Team>) => Promise<Team>;
-  deleteTeam: () => Promise<void>;
-  leaveTeam: () => Promise<void>;
+  error: ApiError | null;
+  updateTeam: (data: UpdateTeamParams) => Promise<Team>;
+  deleteTeam: () => Promise<string>;
+  leaveTeam: () => Promise<string>;
   setAsActive: () => void;
   refreshTeam: () => Promise<Team | null>;
+  refreshStats: () => Promise<TeamStats | null>;
+  refreshMembers: () => Promise<TeamMember[] | null>;
+  getMemberById: (userId: string) => TeamMember | undefined;
+  getFormattedTeam: () => FormattedTeam;
 }
 
 /**
@@ -119,7 +133,7 @@ export interface TeamDetailResult {
  */
 export function useTeam(teamId: string | undefined): TeamDetailResult {
   // Get state from store
-  const { setActiveTeam, getTeamById } = useTeamStore();
+  const { setActiveTeam, getTeamById, getTeamMembers } = useTeamStore();
 
   // Get team queries
   const teamQuery = useTeamQuery(teamId);
@@ -137,14 +151,14 @@ export function useTeam(teamId: string | undefined): TeamDetailResult {
    * @returns Promise resolving to the updated team
    */
   const updateTeam = useCallback(
-    async (teamData: Partial<Team>) => {
+    async (teamData: UpdateTeamParams) => {
       if (!teamId) {
         throw new Error("Team ID is required for update");
       }
 
       return updateTeamMutation.mutateAsync({
         teamId,
-        teamData: teamData,
+        teamData,
       });
     },
     [teamId, updateTeamMutation],
@@ -152,26 +166,26 @@ export function useTeam(teamId: string | undefined): TeamDetailResult {
 
   /**
    * Deletes a team
-   * @returns Promise resolving to void
+   * @returns Promise resolving to the deleted team ID
    */
   const deleteTeam = useCallback(async () => {
     if (!teamId) {
       throw new Error("Team ID is required for deletion");
     }
 
-    await deleteTeamMutation.mutateAsync(teamId);
+    return deleteTeamMutation.mutateAsync(teamId);
   }, [teamId, deleteTeamMutation]);
 
   /**
    * Leaves a team
-   * @returns Promise resolving to void
+   * @returns Promise resolving to the left team ID
    */
   const leaveTeam = useCallback(async () => {
     if (!teamId) {
       throw new Error("Team ID is required to leave");
     }
 
-    await leaveTeamMutation.mutateAsync(teamId);
+    return leaveTeamMutation.mutateAsync(teamId);
   }, [teamId, leaveTeamMutation]);
 
   /**
@@ -194,10 +208,61 @@ export function useTeam(teamId: string | undefined): TeamDetailResult {
     return teamQuery.refetch().then((result) => result.data || null);
   }, [teamQuery]);
 
+  /**
+   * Refreshes the team stats
+   * @returns Promise resolving to the refreshed team stats
+   */
+  const refreshStats = useCallback(async () => {
+    return teamStatsQuery.refetch().then((result) => result.data || null);
+  }, [teamStatsQuery]);
+
+  /**
+   * Refreshes the team members
+   * @returns Promise resolving to the refreshed team members
+   */
+  const refreshMembers = useCallback(async () => {
+    return teamMembersQuery.refetch().then((result) => result.data || null);
+  }, [teamMembersQuery]);
+
+  /**
+   * Gets a team member by user ID
+   * @param userId User ID
+   * @returns Team member or undefined if not found
+   */
+  const getMemberById = useCallback(
+    (userId: string) => {
+      if (!teamId) return undefined;
+      const members = getTeamMembers(teamId);
+      return members.find((member) => member.user_id === userId);
+    },
+    [teamId, getTeamMembers],
+  );
+
+  /**
+   * Gets formatted team data for UI
+   * @returns Formatted team data
+   */
+  const getFormattedTeam = useCallback(() => {
+    const team = teamQuery.data;
+    if (!team) {
+      return {
+        id: teamId || "",
+        name: "",
+        displayName: "Loading...",
+        description: "",
+        type: "O" as const,
+        isOpen: true,
+        memberCount: null,
+        url: "",
+      };
+    }
+    return teamService.formatTeam(team);
+  }, [teamId, teamQuery.data]);
+
   return {
     // State
-    team: teamQuery.data,
-    stats: teamStatsQuery.data,
+    team: teamQuery.data || null,
+    stats: teamStatsQuery.data || null,
     members: teamMembersQuery.data || [],
     isLoading: teamQuery.isLoading || teamQuery.isFetching,
     isUpdating: updateTeamMutation.isPending,
@@ -211,16 +276,25 @@ export function useTeam(teamId: string | undefined): TeamDetailResult {
     leaveTeam,
     setAsActive,
     refreshTeam,
+    refreshStats,
+    refreshMembers,
+    getMemberById,
+    getFormattedTeam,
   };
 }
 
 /**
  * Hook that provides team creation and joining functionality
+ * @returns Team creation and joining actions and state
  */
 export function useTeamCreation() {
   // Get team creation and join mutations
   const createTeamMutation = useCreateTeamMutation();
   const joinTeamMutation = useJoinTeamMutation();
+
+  // Get invite info query hook generator
+  const getTeamInviteInfoQuery = (inviteId: string) =>
+    useTeamInviteInfoQuery(inviteId);
 
   /**
    * Creates a new team
@@ -228,12 +302,7 @@ export function useTeamCreation() {
    * @returns Promise resolving to the created team
    */
   const createTeam = useCallback(
-    async (teamData: {
-      name: string;
-      display_name: string;
-      type: "O" | "I";
-      description?: string;
-    }) => {
+    async (teamData: CreateTeamParams) => {
       // Validate team name
       if (!teamService.validateTeamName(teamData.name)) {
         throw new Error("Invalid team name format");
@@ -265,6 +334,24 @@ export function useTeamCreation() {
     return teamService.sanitizeTeamName(displayName);
   }, []);
 
+  /**
+   * Validates a team name
+   * @param name Team name
+   * @returns Whether the name is valid
+   */
+  const validateTeamName = useCallback((name: string) => {
+    return teamService.validateTeamName(name);
+  }, []);
+
+  /**
+   * Gets information about a team invite
+   * @param inviteId Invite ID
+   * @returns Query for team invite info
+   */
+  const getInviteInfo = useCallback((inviteId: string) => {
+    return getTeamInviteInfoQuery(inviteId);
+  }, []);
+
   return {
     // State
     isCreating: createTeamMutation.isPending,
@@ -276,5 +363,40 @@ export function useTeamCreation() {
     createTeam,
     joinTeamByInvite,
     generateTeamName,
+    validateTeamName,
+    getInviteInfo,
+  };
+}
+
+/**
+ * Hook that provides team search functionality
+ * @param searchTerm Search term
+ * @returns Search results and state
+ */
+export function useTeamSearch(searchTerm: string | undefined) {
+  // Get search query
+  const searchQuery = useSearchTeamsQuery(searchTerm);
+
+  /**
+   * Refreshes search results
+   * @returns Promise resolving to the refreshed search results
+   */
+  const refreshResults = useCallback(async () => {
+    return searchQuery.refetch().then((result) => result.data || []);
+  }, [searchQuery]);
+
+  /**
+   * Gets formatted search results
+   */
+  const formattedResults = useMemo<FormattedTeam[]>(() => {
+    return searchQuery.data ? teamService.formatTeams(searchQuery.data) : [];
+  }, [searchQuery.data]);
+
+  return {
+    results: searchQuery.data || [],
+    formattedResults,
+    isLoading: searchQuery.isLoading || searchQuery.isFetching,
+    error: searchQuery.error,
+    refreshResults,
   };
 }

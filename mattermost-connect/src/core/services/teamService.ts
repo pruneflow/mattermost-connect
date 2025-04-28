@@ -1,33 +1,26 @@
 // src/core/services/teamService.ts
 /**
  * Team service
- * Provides business logic for team operations
+ * Provides business logic for team operations and formatting
  */
-import { Team, TeamMember, TeamStats, User } from "../../types";
-import { apiClient } from "../api/client";
+import {
+  Team,
+  TeamMember,
+  TeamStats,
+  User,
+  FormattedTeam,
+  UnreadState,
+} from "../../types";
 
 /**
- * Format interface for team display
+ * Service for team-related operations
+ * Separates business logic from state management
  */
-export interface FormattedTeam {
-  id: string;
-  name: string;
-  displayName: string;
-  description: string;
-  type: "O" | "I";
-  isOpen: boolean;
-  memberCount?: number;
-  url?: string;
-}
-
-/**
- * Service for team operations
- */
-export class TeamService {
+class TeamService {
   /**
    * Formats a team for display
    * @param team Team to format
-   * @returns Formatted team data
+   * @returns Formatted team data ready for UI display
    */
   public formatTeam(team: Team): FormattedTeam {
     return {
@@ -37,8 +30,18 @@ export class TeamService {
       description: team.description || "",
       type: team.type,
       isOpen: team.type === "O",
+      memberCount: null,
       url: this.getTeamUrl(team),
     };
+  }
+
+  /**
+   * Formats multiple teams for display
+   * @param teams Array of teams to format
+   * @returns Array of formatted teams
+   */
+  public formatTeams(teams: Team[]): FormattedTeam[] {
+    return teams.map((team) => this.formatTeam(team));
   }
 
   /**
@@ -53,8 +56,8 @@ export class TeamService {
   }
 
   /**
-   * Gets a team URL
-   * @param team Team
+   * Constructs a URL for a team
+   * @param team Team object
    * @returns Team URL
    */
   public getTeamUrl(team: Team): string {
@@ -62,7 +65,7 @@ export class TeamService {
   }
 
   /**
-   * Formats a list of team members with user data
+   * Formats team members with user data
    * @param members Team members
    * @param users Users by ID
    * @returns Formatted team members with user data
@@ -82,11 +85,11 @@ export class TeamService {
   }
 
   /**
-   * Gets a formatted user name
+   * Formats a user's name for display
    * @param user User object
-   * @returns Formatted name
+   * @returns Formatted user name
    */
-  private formatUserName(user?: User): string {
+  public formatUserName(user?: User): string {
     if (!user) return "Unknown User";
 
     if (user.first_name && user.last_name) {
@@ -99,33 +102,35 @@ export class TeamService {
   }
 
   /**
-   * Validates team name
-   * @param name Team name
-   * @returns Whether name is valid
+   * Validates a team name
+   * @param name Team name to validate
+   * @returns Whether the name is valid
    */
   public validateTeamName(name: string): boolean {
+    // Team names must be lowercase alphanumeric or hyphens,
+    // starting and ending with a letter or number
     const nameRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
     return nameRegex.test(name) && name.length >= 2 && name.length <= 64;
   }
 
   /**
-   * Creates URL-friendly name from display name
-   * @param displayName Display name
-   * @returns URL-friendly name
+   * Creates a URL-friendly team name from a display name
+   * @param displayName Display name to convert
+   * @returns URL-friendly team name
    */
   public sanitizeTeamName(displayName: string): string {
     return displayName
       .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/[^a-z0-9-]/g, "") // Remove non-alphanumeric characters
+      .replace(/-+/g, "-") // Replace multiple hyphens with a single one
+      .replace(/^-|-$/g, ""); // Remove leading and trailing hyphens
   }
 
   /**
-   * Checks if user has admin role in team
-   * @param member Team member
-   * @returns Whether user is admin
+   * Checks if a user has admin role in a team
+   * @param member Team member to check
+   * @returns Whether the user is a team admin
    */
   public isTeamAdmin(member: TeamMember): boolean {
     return member.roles.includes("team_admin") || member.scheme_admin === true;
@@ -133,29 +138,72 @@ export class TeamService {
 
   /**
    * Gets total unread count for a team
-   * @param teamStats Team stats
-   * @param unreadCounts Unread counts by channel
-   * @returns Total unread counts
+   * @param teamId Team ID
+   * @param channelsByTeam Channels by team ID
+   * @param unreadState
+   * @returns Total unread counts for the team
    */
   public getTeamUnreadCounts(
     teamId: string,
-    channelsByTeam: Record<string, any[]>,
-    unreadCounts: Record<string, { msg_count: number; mention_count: number }>,
+    channelsByTeam: Record<string, { id: string }[]>,
+    unreadState: UnreadState,
   ): { msg_count: number; mention_count: number } {
     const channels = channelsByTeam[teamId] || [];
     let totalMessages = 0;
     let totalMentions = 0;
 
     for (const channel of channels) {
-      const unreadCount = unreadCounts[channel.id] || {
+      const unreadCount = unreadState.unreadCounts[channel.id] || {
         msg_count: 0,
         mention_count: 0,
       };
-      totalMessages += unreadCount.msg_count;
-      totalMentions += unreadCount.mention_count;
+
+      // Skip counts for muted channels unless they have mentions
+      const isMuted = unreadState.mutedChannels.has(channel.id);
+      if (!isMuted || unreadCount.mention_count > 0) {
+        totalMessages += unreadCount.msg_count;
+        totalMentions += unreadCount.mention_count;
+      }
     }
 
-    return { msg_count: totalMessages, mention_count: totalMentions };
+    return {
+      msg_count: totalMessages,
+      mention_count: totalMentions,
+    };
+  }
+
+  /**
+   * Filters teams by search term
+   * @param teams Teams to filter
+   * @param searchTerm Search term
+   * @returns Filtered teams
+   */
+  public filterTeamsByTerm(teams: Team[], searchTerm: string): Team[] {
+    if (!searchTerm) return teams;
+
+    const lowerTerm = searchTerm.toLowerCase();
+    return teams.filter(
+      (team) =>
+        team.display_name.toLowerCase().includes(lowerTerm) ||
+        team.name.toLowerCase().includes(lowerTerm) ||
+        (team.description &&
+          team.description.toLowerCase().includes(lowerTerm)),
+    );
+  }
+
+  /**
+   * Gets display name for the user's role in a team
+   * @param member Team member
+   * @returns Role display name
+   */
+  public getTeamRoleDisplayName(member: TeamMember): string {
+    if (this.isTeamAdmin(member)) {
+      return "Team Admin";
+    } else if (member.roles.includes("team_user")) {
+      return "Team Member";
+    } else {
+      return "Member";
+    }
   }
 }
 
