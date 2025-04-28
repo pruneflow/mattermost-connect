@@ -1,147 +1,61 @@
 // src/utils/directChannelUtils.ts
 /**
- * Utility functions for handling direct messages and group channels
+ * Utility functions specifically for direct and group message channels
+ * Extended functionality on top of the core channelUtils
  */
-import { Channel } from "../core/store/channelStore";
-import { User } from "../core/services/authService";
 import { stringToColor } from "./mattermostUtils";
+import { Channel } from "../types/channel.types";
+import { User } from "../types/auth.types";
+import {
+  isDirectChannel,
+  isGroupChannel,
+  isDirectOrGroupChannel,
+  getUserIdsFromDirectChannel,
+  getOtherUserIdFromDirectChannel,
+  getUserIdsFromGroupChannel,
+  getDirectChannelDisplayName,
+  getGroupChannelDisplayName,
+  getChannelInitials,
+} from "./channelUtils";
+
+// Re-export base functions for backward compatibility
+export {
+  isDirectChannel,
+  isGroupChannel,
+  isDirectOrGroupChannel,
+  getUserIdsFromDirectChannel,
+  getOtherUserIdFromDirectChannel,
+  getUserIdsFromGroupChannel,
+  getDirectChannelDisplayName,
+  getGroupChannelDisplayName,
+  getChannelInitials,
+};
 
 /**
- * Checks if a channel is a direct message channel
- * @param channel Channel to check
- * @returns Whether the channel is a direct message
+ * Status for a direct channel information request
  */
-export function isDirectChannel(channel: Channel): boolean {
-  return channel.type === "D";
-}
+export type DirectChannelInfoStatus = "complete" | "loading" | "error";
 
 /**
- * Checks if a channel is a group message channel
- * @param channel Channel to check
- * @returns Whether the channel is a group message
+ * Interface for direct channel information
  */
-export function isGroupChannel(channel: Channel): boolean {
-  return channel.type === "G";
-}
-
-/**
- * Checks if a channel is a direct or group message channel
- * @param channel Channel to check
- * @returns Whether the channel is a direct or group message
- */
-export function isDirectOrGroupChannel(channel: Channel): boolean {
-  return isDirectChannel(channel) || isGroupChannel(channel);
-}
-
-/**
- * Extracts user IDs from a direct channel name
- * Direct channel names are formatted as "user1_id__user2_id" with IDs sorted alphabetically
- * @param channelName The channel name (not display_name)
- * @returns Array of user IDs
- */
-export function getUserIdsFromDirectChannel(channelName: string): string[] {
-  // Direct channel names are two user IDs sorted alphabetically and joined with a double underscore
-  return channelName.split("__");
-}
-
-/**
- * Gets the other user ID from a direct channel (not current user)
- * @param channelName The channel name (not display_name)
- * @param currentUserId Current user ID
- * @returns The other user ID or null if not found
- */
-export function getOtherUserIdFromDirectChannel(
-  channelName: string,
-  currentUserId: string,
-): string | null {
-  const userIds = getUserIdsFromDirectChannel(channelName);
-  const otherUserId = userIds.find((id) => id !== currentUserId);
-  return otherUserId || null;
-}
-
-/**
- * Generates a display name for a direct channel
- * @param otherUser The other user in the direct channel
- * @param fallbackName Fallback name if user info is not available
- * @returns Display name for the direct channel
- */
-export function getDirectChannelDisplayName(
-  otherUser: User | null | undefined,
-  fallbackName: string = "Unknown User",
-): string {
-  if (!otherUser) {
-    return fallbackName;
-  }
-
-  if (otherUser.first_name && otherUser.last_name) {
-    return `${otherUser.first_name} ${otherUser.last_name}`;
-  } else if (otherUser.nickname) {
-    return otherUser.nickname;
-  } else {
-    return otherUser.username || fallbackName;
-  }
-}
-
-/**
- * Generates a display name for a group channel
- * @param users Array of users in the group
- * @param currentUserId Current user ID to exclude from the display name
- * @param maxNames Maximum number of names to include before using "and X more"
- * @returns Display name for the group channel
- */
-export function getGroupChannelDisplayName(
-  users: User[],
-  currentUserId: string,
-  maxNames: number = 3,
-): string {
-  // Filter out current user and get valid users
-  const otherUsers = users.filter((user) => user.id !== currentUserId);
-
-  if (otherUsers.length === 0) {
-    return "Group Channel";
-  }
-
-  // Format names
-  const formattedNames = otherUsers.map((user) => {
-    if (user.first_name) {
-      return user.first_name;
-    } else if (user.nickname) {
-      return user.nickname;
-    } else {
-      return user.username;
-    }
-  });
-
-  // Limit the number of displayed names
-  if (formattedNames.length <= maxNames) {
-    return formattedNames.join(", ");
-  } else {
-    const displayedNames = formattedNames.slice(0, maxNames);
-    const remainingCount = formattedNames.length - maxNames;
-    return `${displayedNames.join(", ")} and ${remainingCount} more`;
-  }
-}
-
-/**
- * Generates a unique key for caching display names
- * @param channelId Channel ID
- * @param currentUserId Current user ID
- * @returns Cache key
- */
-export function getDisplayNameCacheKey(
-  channelId: string,
-  currentUserId: string,
-): string {
-  return `${channelId}:${currentUserId}`;
-}
-
-/**
- * Generates a placeholder display name for a direct channel when user data is not available
- * @param userId User ID
- * @returns Placeholder display name
- */
-export function getPlaceholderDisplayName(userId: string): string {
-  return `User ${userId.substring(0, 5)}...`;
+export interface DirectChannelDisplayInfo {
+  /** Whether the channel is a direct message */
+  isDirect: boolean;
+  /** Whether the channel is a group message */
+  isGroup: boolean;
+  /** Display name for the channel */
+  displayName: string;
+  /** User IDs for display and avatar purposes */
+  userIds: string[];
+  /** Avatar URLs for members (for group channels) */
+  avatarUrls?: string[];
+  /** Status of the other user (for direct channels) */
+  status?: string;
+  /** Avatar URL of the other user (for direct channels) */
+  avatarUrl?: string;
+  /** Loading status of the display info */
+  isLoading: boolean;
 }
 
 /**
@@ -154,45 +68,168 @@ export function getGroupChannelColor(channelId: string): string {
 }
 
 /**
- * Generates initials for a direct or group channel
- * @param displayName Display name of the channel
- * @returns Initials (1-2 characters)
+ * Creates a formatted display object for direct/group channels
+ * @param channel Channel object
+ * @param users Map of user objects by ID
+ * @param currentUserId Current user ID
+ * @param statusMap Map of user statuses
+ * @returns Formatted display info
  */
-export function getChannelInitials(displayName: string): string {
-  if (!displayName) return "?";
+export function createDirectChannelDisplayInfo(
+  channel: Channel,
+  users: Record<string, User>,
+  currentUserId: string,
+  statusMap: Record<string, string> = {},
+): DirectChannelDisplayInfo {
+  // Default values
+  const result: DirectChannelDisplayInfo = {
+    isDirect: false,
+    isGroup: false,
+    displayName: channel.display_name,
+    userIds: [],
+    isLoading: false,
+  };
 
-  const parts = displayName.trim().split(/[\s,]+/);
+  // Direct message
+  if (isDirectChannel(channel)) {
+    const userIds = getUserIdsFromDirectChannel(channel.name);
+    const otherUserId = getOtherUserIdFromDirectChannel(
+      channel.name,
+      currentUserId,
+    );
 
-  if (parts.length === 1) {
-    return parts[0].charAt(0).toUpperCase();
+    result.isDirect = true;
+    result.userIds = userIds;
+
+    // Get other user info if available
+    if (otherUserId) {
+      const otherUser = users[otherUserId];
+
+      if (otherUser) {
+        result.displayName = getDirectChannelDisplayName(otherUser);
+        result.status = statusMap[otherUserId] || "offline";
+
+        // Set avatar URL if available
+        if (otherUser.last_picture_update) {
+          result.avatarUrl = `/api/v4/users/${otherUser.id}/image?_=${otherUser.last_picture_update}`;
+        }
+      } else {
+        // User not loaded yet
+        result.isLoading = true;
+      }
+    }
+  }
+  // Group message
+  else if (isGroupChannel(channel)) {
+    const userIds = getUserIdsFromGroupChannel(channel);
+    result.isGroup = true;
+    result.userIds = userIds;
+
+    // Get avatars for users in the group
+    const groupUsers: User[] = [];
+    const avatarUrls: string[] = [];
+
+    userIds.forEach((userId) => {
+      const user = users[userId];
+      if (user) {
+        groupUsers.push(user);
+
+        if (user.last_picture_update) {
+          avatarUrls.push(
+            `/api/v4/users/${user.id}/image?_=${user.last_picture_update}`,
+          );
+        }
+      }
+    });
+
+    if (groupUsers.length > 0) {
+      // Create group display name from user list
+      result.displayName = getGroupChannelDisplayName(
+        groupUsers,
+        currentUserId,
+      );
+      result.avatarUrls = avatarUrls;
+    } else {
+      // Users not loaded yet
+      result.isLoading = true;
+    }
   }
 
-  return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  return result;
 }
 
 /**
- * Extracts user IDs from a group channel name or members list
- * @param channel Group channel
- * @param members Optional list of channel members
- * @returns Array of user IDs
+ * Checks if all required users for a direct channel are loaded
+ * @param channel Channel to check
+ * @param users Map of users by ID
+ * @param currentUserId Current user ID
+ * @returns Whether all required users are loaded
  */
-export function getUserIdsFromGroupChannel(
+export function areDirectChannelUsersLoaded(
   channel: Channel,
-  members?: { user_id: string }[],
+  users: Record<string, User>,
+  currentUserId: string,
+): boolean {
+  // For direct messages, we need the other user
+  if (isDirectChannel(channel)) {
+    const otherUserId = getOtherUserIdFromDirectChannel(
+      channel.name,
+      currentUserId,
+    );
+    return otherUserId ? !!users[otherUserId] : true;
+  }
+
+  // For group messages, we should have at least one other user
+  if (isGroupChannel(channel)) {
+    const userIds = getUserIdsFromGroupChannel(channel);
+    const otherUserIds = userIds.filter((id) => id !== currentUserId);
+    return otherUserIds.some((id) => !!users[id]);
+  }
+
+  // Not a direct/group channel, so no users needed
+  return true;
+}
+
+/**
+ * Builds a list of user IDs needed to properly display all direct/group channels
+ * @param channels List of channels
+ * @param users Current loaded users map
+ * @param currentUserId Current user ID
+ * @returns List of user IDs that need to be loaded
+ */
+export function getNeededUserIdsForDirectChannels(
+  channels: Channel[],
+  users: Record<string, User>,
+  currentUserId: string,
 ): string[] {
-  if (members && members.length > 0) {
-    return members.map((member) => member.user_id);
-  }
+  const neededUserIds: string[] = [];
 
-  // If members aren't provided and we have a channel name that looks like a
-  // group of user IDs (G__user1__user2__user3), try to parse those
-  if (channel.name && channel.name.startsWith("G__")) {
-    const parts = channel.name.split("__");
-    // Remove the 'G' prefix and return the rest of the parts
-    return parts.slice(1).filter((part) => part.length > 0);
-  }
+  channels.forEach((channel) => {
+    if (isDirectChannel(channel)) {
+      const otherUserId = getOtherUserIdFromDirectChannel(
+        channel.name,
+        currentUserId,
+      );
+      if (
+        otherUserId &&
+        !users[otherUserId] &&
+        !neededUserIds.includes(otherUserId)
+      ) {
+        neededUserIds.push(otherUserId);
+      }
+    } else if (isGroupChannel(channel)) {
+      const userIds = getUserIdsFromGroupChannel(channel);
+      userIds.forEach((userId) => {
+        if (
+          userId !== currentUserId &&
+          !users[userId] &&
+          !neededUserIds.includes(userId)
+        ) {
+          neededUserIds.push(userId);
+        }
+      });
+    }
+  });
 
-  // If we can't determine the members, return an empty array
-  // In a real implementation, you would fetch members from the API
-  return [];
+  return neededUserIds;
 }

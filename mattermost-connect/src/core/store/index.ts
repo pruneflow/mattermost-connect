@@ -9,13 +9,13 @@ import { useAuthStore } from "./authStore";
 import { useUserStore } from "./userStore";
 import { useTeamStore } from "./teamStore";
 import { useChannelStore } from "./channelStore";
-import { useDirectMessageStore } from "./directMessageStore";
 import { useMessageStore } from "./messageStore";
 import { useReactionStore } from "./reactionStore";
 import { useUnreadStore } from "./unreadStore";
 import { useWsStore } from "./wsStore";
 import { useEventStore } from "./eventStore";
 import { useErrorStore } from "./errorStore";
+import { useUserSettingsStore } from "./userSettingsStore";
 
 // Re-export everything
 // Authentication
@@ -33,17 +33,13 @@ export {
 export { useTeamStore } from "./teamStore";
 
 // Channels
-export { useChannelStore, getChannelsByType } from "./channelStore";
-
-// Direct Messages
 export {
-  useDirectMessageStore,
+  useChannelStore,
+  getChannelsByType,
   isDirectChannel,
   isGroupChannel,
   isDirectOrGroupChannel,
-  getUserIdsFromDirectChannel,
-  getOtherUserIdFromDirectChannel,
-} from "./directMessageStore";
+} from "./channelStore";
 
 // Messages
 export {
@@ -89,10 +85,10 @@ export const resetAllStores = () => {
   useUserStore.getState().reset();
   useTeamStore.getState().reset();
   useChannelStore.getState().reset();
-  useDirectMessageStore.getState().reset();
   useMessageStore.getState().reset();
   useReactionStore.getState().reset();
   useUnreadStore.getState().reset();
   useEventStore.getState().reset();
   useErrorStore.getState().reset();
+  useUserSettingsStore.getState().reset();
 };

@@ -1,7 +1,7 @@
 // src/core/store/channelStore.ts
 /**
  * Channel store
- * Manages channel data and active channel selection
+ * Manages all channel data including direct and group message channels
  */
 import { create } from "zustand";
 import {
@@ -14,13 +14,36 @@ import { emitEvent } from "./eventStore";
 import { EventType } from "../../types/event.types";
 import { ErrorSource } from "../../types/error.types";
 import { handleError } from "./errorStore";
+import { User } from "../../types/auth.types";
+import { UserStatus } from "../../types/user.types";
+import {
+  DirectChannelInfo,
+  isDirectChannel,
+  isGroupChannel,
+  getUserIdsFromDirectChannel,
+  getOtherUserIdFromDirectChannel,
+  getUserIdsFromGroupChannel,
+  getDirectChannelDisplayName,
+  getGroupChannelDisplayName,
+  getChannelInitials,
+} from "../../utils/channelUtils";
+
+/**
+ * Enhanced channel store state with direct message information
+ */
+interface EnhancedChannelState extends ChannelState {
+  // Direct channel specific fields
+  directChannelInfoById: Record<string, DirectChannelInfo>;
+  pendingUserIds: string[];
+}
 
 /**
  * Channel store state and actions
  */
-interface ChannelStoreState extends ChannelState {
+interface ChannelStoreState extends EnhancedChannelState {
   // Fields not in base state
   loadingTeamIds: string[];
+  loadingChannelIds: string[];
   errors: Record<string, Error | null>;
 
   // Actions - Basic CRUD
@@ -32,6 +55,7 @@ interface ChannelStoreState extends ChannelState {
 
   // Actions - Loading/Error
   setLoading: (teamId: string, isLoading: boolean) => void;
+  setChannelLoading: (channelId: string, isLoading: boolean) => void;
   setError: (teamId: string, error: Error | null) => void;
 
   // Actions - Channel Properties
@@ -42,19 +66,53 @@ interface ChannelStoreState extends ChannelState {
     value: Channel[K],
   ) => void;
 
-  // Selectors
+  // Actions - Direct Channel Info
+  setDirectChannelInfo: (channelId: string, info: DirectChannelInfo) => void;
+  updateDirectChannelInfo: <K extends keyof DirectChannelInfo>(
+    channelId: string,
+    key: K,
+    value: DirectChannelInfo[K],
+  ) => void;
+  setDirectChannelUserStatus: (channelId: string, status: UserStatus) => void;
+  setDirectChannelUserImage: (channelId: string, imageUrl: string) => void;
+  addPendingUser: (userId: string) => void;
+  removePendingUser: (userId: string) => void;
+
+  // Selectors - Basic Channel
   getChannelById: (channelId: string) => Channel | null;
   getChannelsByTeam: (teamId: string) => Channel[];
   getChannelsByType: (teamId: string, type: ChannelGroupType) => Channel[];
   getChannelMembers: (channelId: string) => ChannelMember[];
   isChannelLoading: (teamId: string) => boolean;
 
+  // Selectors - Direct Channel Info
+  getDirectChannelInfo: (channelId: string) => DirectChannelInfo | null;
+  isDirectChannelLoading: (channelId: string) => boolean;
+  isPendingUser: (userId: string) => boolean;
+
+  // Global helpers
+  createDefaultDirectChannelInfo: (
+    channel: Channel,
+    userId?: string,
+  ) => DirectChannelInfo;
+
   // Reset
   reset: () => void;
 }
 
 /**
- * Channel store for managing channel data
+ * Default direct channel info object
+ */
+const DEFAULT_CHANNEL_INFO: DirectChannelInfo = {
+  isDirect: false,
+  isGroup: false,
+  displayName: "",
+  userIds: [],
+  status: "complete",
+};
+
+/**
+ * Channel store for managing all channel data
  */
 export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
   // Initial state
@@ -62,8 +120,13 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
   activeChannel: null,
   members: {},
   loadingTeamIds: [],
+  loadingChannelIds: [],
   errors: {},
   lastFetchTimes: {},
+
+  // Direct channel specific state
+  directChannelInfoById: {},
+  pendingUserIds: [],
 
   /**
    * Sets all channels for a team
@@ -73,12 +136,30 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
   setChannels: (teamId: string, channels: Channel[]) => {
     set((state) => {
       // Store channels by team
+      const directChannelInfoById = { ...state.directChannelInfoById };
+
+      // Pre-create direct channel info for direct and group channels
+      channels.forEach((channel) => {
+        if (
+          (isDirectChannel(channel) || isGroupChannel(channel)) &&
+          !directChannelInfoById[channel.id]
+        ) {
+          // Create default info for direct/group channels
+          directChannelInfoById[channel.id] =
+            get().createDefaultDirectChannelInfo(channel);
+        }
+      });
+
       return {
         channelsByTeam: {
           ...state.channelsByTeam,
           [teamId]: channels,
         },
+        directChannelInfoById,
         loadingTeamIds: state.loadingTeamIds.filter((id) => id !== teamId),
+        loadingChannelIds: state.loadingChannelIds.filter(
+          (id) => !channels.some((channel) => channel.id === id),
+        ),
         errors: {
           ...state.errors,
           [teamId]: null,
@@ -98,6 +179,8 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
   setChannel: (channel: Channel) => {
     set((state) => {
       const teamId = channel.team_id;
+      const isDirectMsg = isDirectChannel(channel);
+      const isGroupMsg = isGroupChannel(channel);
 
       // Get existing channels for this team
       const teamChannels = [...(state.channelsByTeam[teamId] || [])];
@@ -116,11 +199,27 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
         emitEvent(EventType.CHANNEL_CREATED, { channel });
       }
 
+      // Update or create direct channel info if needed
+      let directChannelInfoById = state.directChannelInfoById;
+
+      if (isDirectMsg || isGroupMsg) {
+        if (!directChannelInfoById[channel.id]) {
+          directChannelInfoById = {
+            ...directChannelInfoById,
+            [channel.id]: get().createDefaultDirectChannelInfo(channel),
+          };
+        }
+      }
+
       return {
         channelsByTeam: {
           ...state.channelsByTeam,
           [teamId]: teamChannels,
         },
+        directChannelInfoById,
+        loadingChannelIds: state.loadingChannelIds.filter(
+          (id) => id !== channel.id,
+        ),
         lastFetchTimes: {
           ...state.lastFetchTimes,
           [channel.id]: Date.now(),
@@ -166,6 +265,10 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
       // Remove members for this channel
       const { [channelId]: _, ...members } = state.members;
 
+      // Remove direct channel info if applicable
+      const { [channelId]: __, ...directChannelInfoById } =
+        state.directChannelInfoById;
+
       // Emit channel deleted/left event
       emitEvent(EventType.CHANNEL_DELETED, {
         channel: removedChannel,
@@ -179,6 +282,7 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
         },
         activeChannel,
         members,
+        directChannelInfoById,
       };
     });
   },
@@ -209,12 +313,34 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
    * @param members Channel members
    */
   setChannelMembers: (channelId: string, members: ChannelMember[]) => {
-    set((state) => ({
-      members: {
-        ...state.members,
-        [channelId]: members,
-      },
-    }));
+    set((state) => {
+      // Get the channel to check if it's a direct/group channel
+      const channel = get().getChannelById(channelId);
+      const stateUpdate: Partial<ChannelStoreState> = {
+        members: {
+          ...state.members,
+          [channelId]: members,
+        },
+      };
+
+      // If it's a group channel, update the direct channel info with member IDs
+      if (channel && isGroupChannel(channel)) {
+        const memberUserIds = members.map((m) => m.user_id);
+
+        if (state.directChannelInfoById[channelId]) {
+          // Update existing info with new member IDs
+          stateUpdate.directChannelInfoById = {
+            ...state.directChannelInfoById,
+            [channelId]: {
+              ...state.directChannelInfoById[channelId],
+              userIds: memberUserIds,
+            },
+          };
+        }
+      }
+
+      return stateUpdate as ChannelStoreState;
+    });
   },
 
   /**
@@ -235,6 +361,32 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
         // Remove from loading teams
         return {
           loadingTeamIds: state.loadingTeamIds.filter((id) => id !== teamId),
+        };
+      }
+      return state;
+    });
+  },
+
+  /**
+   * Sets the loading state for a specific channel
+   * @param channelId Channel ID
+   * @param isLoading Whether channel is loading
+   */
+  setChannelLoading: (channelId: string, isLoading: boolean) => {
+    set((state) => {
+      if (isLoading) {
+        // Add to loading channels if not already there
+        if (!state.loadingChannelIds.includes(channelId)) {
+          return {
+            loadingChannelIds: [...state.loadingChannelIds, channelId],
+          };
+        }
+      } else {
+        // Remove from loading channels
+        return {
+          loadingChannelIds: state.loadingChannelIds.filter(
+            (id) => id !== channelId,
+          ),
         };
       }
       return state;
@@ -366,6 +518,182 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
   },
 
   /**
+   * Sets information for a direct/group channel
+   * @param channelId Channel ID
+   * @param info Channel information
+   */
+  setDirectChannelInfo: (channelId: string, info: DirectChannelInfo) => {
+    set((state) => ({
+      directChannelInfoById: {
+        ...state.directChannelInfoById,
+        [channelId]: info,
+      },
+      loadingChannelIds: state.loadingChannelIds.filter(
+        (id) => id !== channelId,
+      ),
+    }));
+  },
+
+  /**
+   * Updates a specific property of direct channel info
+   * @param channelId Channel ID
+   * @param key Property key
+   * @param value Property value
+   */
+  updateDirectChannelInfo: <K extends keyof DirectChannelInfo>(
+    channelId: string,
+    key: K,
+    value: DirectChannelInfo[K],
+  ) => {
+    set((state) => {
+      const existingInfo = state.directChannelInfoById[channelId];
+
+      if (!existingInfo) {
+        return state;
+      }
+
+      return {
+        directChannelInfoById: {
+          ...state.directChannelInfoById,
+          [channelId]: {
+            ...existingInfo,
+            [key]: value,
+          },
+        },
+      };
+    });
+  },
+
+  /**
+   * Sets user status for a direct channel
+   * @param channelId Channel ID
+   * @param status User status
+   */
+  setDirectChannelUserStatus: (channelId: string, status: UserStatus) => {
+    set((state) => {
+      const existingInfo = state.directChannelInfoById[channelId];
+
+      if (!existingInfo || !existingInfo.isDirect) {
+        return state;
+      }
+
+      return {
+        directChannelInfoById: {
+          ...state.directChannelInfoById,
+          [channelId]: {
+            ...existingInfo,
+            userStatus: status,
+          },
+        },
+      };
+    });
+  },
+
+  /**
+   * Sets user image URL for a direct channel
+   * @param channelId Channel ID
+   * @param imageUrl Image URL
+   */
+  setDirectChannelUserImage: (channelId: string, imageUrl: string) => {
+    set((state) => {
+      const existingInfo = state.directChannelInfoById[channelId];
+
+      if (!existingInfo || !existingInfo.isDirect) {
+        return state;
+      }
+
+      return {
+        directChannelInfoById: {
+          ...state.directChannelInfoById,
+          [channelId]: {
+            ...existingInfo,
+            userImageUrl: imageUrl,
+          },
+        },
+      };
+    });
+  },
+
+  /**
+   * Adds a user ID to pending loading state
+   * @param userId User ID
+   */
+  addPendingUser: (userId: string) => {
+    set((state) => {
+      if (state.pendingUserIds.includes(userId)) {
+        return state;
+      }
+
+      return {
+        pendingUserIds: [...state.pendingUserIds, userId],
+      };
+    });
+  },
+
+  /**
+   * Removes a user ID from pending loading state
+   * @param userId User ID
+   */
+  removePendingUser: (userId: string) => {
+    set((state) => ({
+      pendingUserIds: state.pendingUserIds.filter((id) => id !== userId),
+    }));
+  },
+
+  /**
+   * Creates default direct channel info for a channel
+   * @param channel Channel object
+   * @param currentUserId Optional current user ID
+   * @returns Direct channel info
+   */
+  createDefaultDirectChannelInfo: (
+    channel: Channel,
+    currentUserId?: string,
+  ): DirectChannelInfo => {
+    // Generate a default DirectChannelInfo object
+    let info: DirectChannelInfo = {
+      ...DEFAULT_CHANNEL_INFO,
+      displayName: channel.display_name || "Loading...",
+      status: "loading",
+    };
+
+    // For direct message channels
+    if (isDirectChannel(channel)) {
+      const userIds = getUserIdsFromDirectChannel(channel.name);
+      const otherUserId = currentUserId
+        ? getOtherUserIdFromDirectChannel(channel.name, currentUserId)
+        : userIds[0];
+
+      info = {
+        ...info,
+        isDirect: true,
+        isGroup: false,
+        userIds,
+        otherUserId,
+        displayName:
+          channel.display_name ||
+          (otherUserId
+            ? `User ${otherUserId.substring(0, 5)}...`
+            : "Direct Message"),
+      };
+    }
+    // For group message channels
+    else if (isGroupChannel(channel)) {
+      const userIds = getUserIdsFromGroupChannel(channel);
+
+      info = {
+        ...info,
+        isDirect: false,
+        isGroup: true,
+        userIds,
+        displayName: channel.display_name || "Group Message",
+      };
+    }
+
+    return info;
+  },
+
+  /**
    * Gets a channel by ID
    * @param channelId Channel ID
    * @returns Channel or null if not found
@@ -436,6 +764,33 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
   },
 
   /**
+   * Gets direct channel info for a channel
+   * @param channelId Channel ID
+   * @returns Direct channel info or null if not found
+   */
+  getDirectChannelInfo: (channelId: string): DirectChannelInfo | null => {
+    return get().directChannelInfoById[channelId] || null;
+  },
+
+  /**
+   * Checks if a direct channel is loading
+   * @param channelId Channel ID
+   * @returns Whether the channel is loading
+   */
+  isDirectChannelLoading: (channelId: string): boolean => {
+    return get().loadingChannelIds.includes(channelId);
+  },
+
+  /**
+   * Checks if a user ID is pending loading
+   * @param userId User ID
+   * @returns Whether the user is pending
+   */
+  isPendingUser: (userId: string): boolean => {
+    return get().pendingUserIds.includes(userId);
+  },
+
+  /**
    * Resets the store to initial state
    */
   reset: () => {
@@ -444,8 +799,11 @@ export const useChannelStore = create<ChannelStoreState>()((set, get) => ({
       activeChannel: null,
       members: {},
       loadingTeamIds: [],
+      loadingChannelIds: [],
       errors: {},
       lastFetchTimes: {},
+      directChannelInfoById: {},
+      pendingUserIds: [],
     });
   },
 }));
@@ -462,3 +820,24 @@ export function getChannelsByType(
 ): Channel[] {
   return useChannelStore.getState().getChannelsByType(teamId, type);
 }
+
+/**
+ * Helper function to check if a channel is a direct message
+ * @param channel Channel to check
+ * @returns Whether channel is a direct message
+ */
+export { isDirectChannel } from "../../utils/channelUtils";
+
+/**
+ * Helper function to check if a channel is a group message
+ * @param channel Channel to check
+ * @returns Whether channel is a group message
+ */
+export { isGroupChannel } from "../../utils/channelUtils";
+
+/**
+ * Helper function to check if a channel is a direct or group message
+ * @param channel Channel to check
+ * @returns Whether channel is a direct or group message
+ */
+export { isDirectOrGroupChannel } from "../../utils/channelUtils";
