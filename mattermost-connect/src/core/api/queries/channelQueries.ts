@@ -4,13 +4,10 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
-import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { Channel, ChannelMember, ChannelUnreadCount } from "../../types";
+import { QUERY_KEYS } from "../queryClient";
+import { Channel, ChannelMember } from "../../../types";
 import { useChannelStore } from "../../store/channelStore";
-import { useDirectChannelStore } from "../../store/directChannelStore";
-import { useTeamStore } from "../../store/teamStore";
 import { useAuthStore } from "../../store/authStore";
-import { createQueryOptions, createMutationOptions } from "../queryUtils";
 
 /**
  * Fetches channels for a team
@@ -18,9 +15,7 @@ import { createQueryOptions, createMutationOptions } from "../queryUtils";
  * @returns Query hook for channels
  */
 export const useChannelsQuery = (teamId: string | undefined) => {
-  const { setChannels, setLoading, setLoadingId, setError } = useChannelStore();
-  const { refreshDirectChannelInfo } = useDirectChannelStore();
-  const { currentUser } = useAuthStore();
+  const { setChannels } = useChannelStore();
 
   return useQuery({
     queryKey: teamId
@@ -31,9 +26,6 @@ export const useChannelsQuery = (teamId: string | undefined) => {
         return [];
       }
 
-      setLoading(true);
-      setLoadingId(teamId, true);
-
       try {
         const response = await apiClient.get<Channel[]>(
           `users/me/teams/${teamId}/channels`,
@@ -43,25 +35,15 @@ export const useChannelsQuery = (teamId: string | undefined) => {
         // Update store
         setChannels(teamId, channels);
 
-        // Refresh direct channel info for direct/group channels
-        const currentUserId = currentUser?.id;
-        if (currentUserId) {
-          channels.forEach((channel) => {
-            if (channel.type === "D" || channel.type === "G") {
-              refreshDirectChannelInfo(channel.id, currentUserId);
-            }
-          });
-        }
-
         return channels;
       } catch (error) {
-        setError(teamId, error as Error);
         throw error;
       }
     },
     // Don't run query if teamId is not provided
     enabled: !!teamId,
-    ...createQueryOptions("channel"),
+    // Cache data for 2 minutes
+    staleTime: 2 * 60 * 1000,
   });
 };
 
@@ -71,10 +53,7 @@ export const useChannelsQuery = (teamId: string | undefined) => {
  * @returns Query hook for a channel
  */
 export const useChannelQuery = (channelId: string | undefined) => {
-  const { setChannel, getChannelById, setLoadingId, setErrorForId } =
-    useChannelStore();
-  const { refreshDirectChannelInfo } = useDirectChannelStore();
-  const { currentUser } = useAuthStore();
+  const { getChannelById, setChannel } = useChannelStore();
 
   return useQuery({
     queryKey: channelId
@@ -91,8 +70,6 @@ export const useChannelQuery = (channelId: string | undefined) => {
         return cachedChannel;
       }
 
-      setLoadingId(channelId, true);
-
       try {
         const response = await apiClient.get<Channel>(`channels/${channelId}`);
         const channel = response.data;
@@ -100,21 +77,15 @@ export const useChannelQuery = (channelId: string | undefined) => {
         // Update store
         setChannel(channel);
 
-        // Refresh direct channel info if needed
-        const currentUserId = currentUser?.id;
-        if (currentUserId && (channel.type === "D" || channel.type === "G")) {
-          refreshDirectChannelInfo(channel.id, currentUserId);
-        }
-
         return channel;
       } catch (error) {
-        setErrorForId(channelId, error as Error);
         throw error;
       }
     },
     // Don't run query if channelId is not provided
     enabled: !!channelId,
-    ...createQueryOptions("channel"),
+    // Cache data for 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -124,17 +95,22 @@ export const useChannelQuery = (channelId: string | undefined) => {
  * @returns Query hook for channel unread count
  */
 export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
-  const { updateUnreadCount } = useUnreadStore();
-  const { currentUser } = useAuthStore();
   const queryClient = useQueryClient();
+  const { getState } = useAuthStore;
 
   return useQuery({
     queryKey: channelId
       ? QUERY_KEYS.channels.unreadCount(channelId)
       : ["channelUnreadCount", "undefined"],
     queryFn: async () => {
-      if (!channelId || !currentUser) {
-        throw new Error("Channel ID and current user are required");
+      if (!channelId) {
+        throw new Error("Channel ID is required");
+      }
+
+      // Get current user from auth store state
+      const currentUser = getState().currentUser;
+      if (!currentUser) {
+        throw new Error("User must be authenticated");
       }
 
       // Use the correct Mattermost API endpoint
@@ -146,47 +122,19 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
       }>(`users/${currentUser.id}/channels/${channelId}/unread`);
 
       // Map response to our internal ChannelUnreadCount format
-      const unreadData: ChannelUnreadCount = {
+      const unreadData = {
         msg_count: response.data.msg_count,
         mention_count: response.data.mention_count,
         lastViewedAt: response.data.last_viewed_at,
       };
 
-      // Get the channel to extract total_msg_count
-      let totalMsgCount: number | undefined;
-      try {
-        const channel = await queryClient.fetchQuery({
-          queryKey: QUERY_KEYS.channels.byId(channelId),
-          queryFn: async () => {
-            const channelResponse = await apiClient.get<Channel>(
-              `channels/${channelId}`,
-            );
-            return channelResponse.data;
-          },
-        });
-        totalMsgCount = channel.total_msg_count;
-      } catch (error) {
-        console.error(
-          `Error fetching channel ${channelId} for total message count:`,
-          error,
-        );
-      }
-
-      // Update store
-      updateUnreadCount(
-        channelId,
-        unreadData.msg_count,
-        unreadData.mention_count,
-        undefined, // last message ID
-        unreadData.lastViewedAt,
-        totalMsgCount,
-      );
-
+      // Get the channel to find its team
       return unreadData;
     },
-    // Don't run query if channelId is not provided
-    enabled: !!channelId && !!currentUser,
-    ...createQueryOptions("unread", { staleTime: 30 * 1000 }),
+    // Don't run query if channelId is not provided or user not authenticated
+    enabled: !!channelId && !!getState().currentUser,
+    // Cache data for 30 seconds
+    staleTime: 30 * 1000,
   });
 };
 
@@ -195,6 +143,7 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
  */
 export const useCreateChannelMutation = () => {
   const queryClient = useQueryClient();
+  const { setChannel } = useChannelStore();
 
   return useMutation({
     mutationFn: async (channelData: {
@@ -210,13 +159,13 @@ export const useCreateChannelMutation = () => {
     },
     onSuccess: (newChannel) => {
       // Invalidate team channels query
-      invalidateQueries.channels.byTeam(newChannel.team_id);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byTeam(newChannel.team_id),
+      });
 
       // Update channel store
-      const { setChannel } = useChannelStore.getState();
       setChannel(newChannel);
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -225,6 +174,7 @@ export const useCreateChannelMutation = () => {
  */
 export const useUpdateChannelMutation = () => {
   const queryClient = useQueryClient();
+  const { updateChannel } = useChannelStore();
 
   return useMutation({
     mutationFn: async ({
@@ -247,22 +197,13 @@ export const useUpdateChannelMutation = () => {
     },
     onSuccess: (updatedChannel) => {
       // Invalidate specific channel query
-      invalidateQueries.channels.byId(updatedChannel.id);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byId(updatedChannel.id),
+      });
 
       // Update channel in store
-      const { updateChannel } = useChannelStore.getState();
       updateChannel(updatedChannel);
-
-      // Refresh direct channel info if needed
-      if (updatedChannel.type === "D" || updatedChannel.type === "G") {
-        const { refreshDirectChannelInfo } = useDirectChannelStore.getState();
-        const { currentUser } = useAuthStore.getState();
-        if (currentUser) {
-          refreshDirectChannelInfo(updatedChannel.id, currentUser.id);
-        }
-      }
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -271,10 +212,11 @@ export const useUpdateChannelMutation = () => {
  */
 export const useDeleteChannelMutation = () => {
   const queryClient = useQueryClient();
+  const { getChannelById, removeChannel } = useChannelStore();
 
   return useMutation({
     mutationFn: async (channelId: string) => {
-      const channel = useChannelStore.getState().getChannelById(channelId);
+      const channel = getChannelById(channelId);
       if (!channel) {
         throw new Error("Channel not found");
       }
@@ -285,17 +227,19 @@ export const useDeleteChannelMutation = () => {
     onSuccess: ({ channelId, teamId }) => {
       if (teamId) {
         // Invalidate team channels query
-        invalidateQueries.channels.byTeam(teamId);
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.byTeam(teamId),
+        });
       }
 
       // Update channel store
-      const { removeChannel } = useChannelStore.getState();
       removeChannel(channelId);
 
       // Invalidate unread counts
-      invalidateQueries.channels.unreadCount(channelId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+      });
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -304,6 +248,7 @@ export const useDeleteChannelMutation = () => {
  */
 export const useJoinChannelMutation = () => {
   const queryClient = useQueryClient();
+  const { setChannel } = useChannelStore();
 
   return useMutation({
     mutationFn: async ({
@@ -323,22 +268,13 @@ export const useJoinChannelMutation = () => {
     },
     onSuccess: ({ channel, teamId }) => {
       // Invalidate team channels query
-      invalidateQueries.channels.byTeam(teamId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byTeam(teamId),
+      });
 
       // Update channel store
-      const { setChannel } = useChannelStore.getState();
       setChannel(channel);
-
-      // Refresh direct channel info if needed
-      if (channel.type === "D" || channel.type === "G") {
-        const { refreshDirectChannelInfo } = useDirectChannelStore.getState();
-        const { currentUser } = useAuthStore.getState();
-        if (currentUser) {
-          refreshDirectChannelInfo(channel.id, currentUser.id);
-        }
-      }
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -347,10 +283,11 @@ export const useJoinChannelMutation = () => {
  */
 export const useLeaveChannelMutation = () => {
   const queryClient = useQueryClient();
+  const { getChannelById, removeChannel } = useChannelStore();
 
   return useMutation({
     mutationFn: async (channelId: string) => {
-      const channel = useChannelStore.getState().getChannelById(channelId);
+      const channel = getChannelById(channelId);
       if (!channel) {
         throw new Error("Channel not found");
       }
@@ -361,17 +298,19 @@ export const useLeaveChannelMutation = () => {
     onSuccess: ({ channelId, teamId }) => {
       if (teamId) {
         // Invalidate team channels query
-        invalidateQueries.channels.byTeam(teamId);
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.byTeam(teamId),
+        });
       }
 
       // Update channel store
-      const { removeChannel } = useChannelStore.getState();
       removeChannel(channelId);
 
       // Invalidate unread counts
-      invalidateQueries.channels.unreadCount(channelId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+      });
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -380,6 +319,7 @@ export const useLeaveChannelMutation = () => {
  */
 export const useViewChannelMutation = () => {
   const queryClient = useQueryClient();
+  const { getChannelById } = useChannelStore();
 
   return useMutation({
     mutationFn: async (channelId: string) => {
@@ -390,16 +330,44 @@ export const useViewChannelMutation = () => {
     },
     onSuccess: (channelId) => {
       // Invalidate the unread count query for this channel
-      invalidateQueries.channels.unreadCount(channelId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+      });
 
       // Get the channel to find its team
-      const channel = useChannelStore.getState().getChannelById(channelId);
+      const channel = getChannelById(channelId);
       if (channel?.team_id) {
         // Invalidate the team unread counts
-        invalidateQueries.channels.unreadCounts(channel.team_id);
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+        });
       }
     },
-    ...createMutationOptions(),
+  });
+};
+
+/**
+ * Marks all channels in a team as read
+ */
+export const useMarkAllChannelsAsReadMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (teamId: string) => {
+      await apiClient.post(`teams/${teamId}/channels/members/me/mark_read`);
+      return teamId;
+    },
+    onSuccess: (teamId) => {
+      // Invalidate all unread counts for this team
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCounts(teamId),
+      });
+
+      // Also invalidate team-level unread counts
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.unread.byTeam(teamId),
+      });
+    },
   });
 };
 
@@ -431,7 +399,8 @@ export const useChannelMembersQuery = (channelId: string | undefined) => {
       return members;
     },
     enabled: !!channelId,
-    ...createQueryOptions("channel"),
+    // Cache data for 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -440,11 +409,12 @@ export const useChannelMembersQuery = (channelId: string | undefined) => {
  */
 export const useAddChannelToFavoritesMutation = () => {
   const queryClient = useQueryClient();
+  const { getChannelById, setChannelProperty } = useChannelStore();
 
   return useMutation({
     mutationFn: async (channelId: string) => {
       // First get the channel to ensure we have team_id
-      const channel = useChannelStore.getState().getChannelById(channelId);
+      const channel = getChannelById(channelId);
       if (!channel) {
         throw new Error("Channel not found");
       }
@@ -462,13 +432,13 @@ export const useAddChannelToFavoritesMutation = () => {
     },
     onSuccess: ({ channelId, teamId }) => {
       // Invalidate team channels query
-      invalidateQueries.channels.byTeam(teamId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byTeam(teamId),
+      });
 
       // Optimistically update channel in store
-      const { setChannelProperty } = useChannelStore.getState();
       setChannelProperty(channelId, "is_favorite", true);
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -477,11 +447,12 @@ export const useAddChannelToFavoritesMutation = () => {
  */
 export const useRemoveChannelFromFavoritesMutation = () => {
   const queryClient = useQueryClient();
+  const { getChannelById, setChannelProperty } = useChannelStore();
 
   return useMutation({
     mutationFn: async (channelId: string) => {
       // First get the channel to ensure we have team_id
-      const channel = useChannelStore.getState().getChannelById(channelId);
+      const channel = getChannelById(channelId);
       if (!channel) {
         throw new Error("Channel not found");
       }
@@ -492,13 +463,13 @@ export const useRemoveChannelFromFavoritesMutation = () => {
     },
     onSuccess: ({ channelId, teamId }) => {
       // Invalidate team channels query
-      invalidateQueries.channels.byTeam(teamId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byTeam(teamId),
+      });
 
       // Optimistically update channel in store
-      const { setChannelProperty } = useChannelStore.getState();
       setChannelProperty(channelId, "is_favorite", false);
     },
-    ...createMutationOptions(),
   });
 };
 
@@ -507,6 +478,7 @@ export const useRemoveChannelFromFavoritesMutation = () => {
  */
 export const useToggleChannelMutedMutation = () => {
   const queryClient = useQueryClient();
+  const { getChannelById } = useChannelStore();
 
   return useMutation({
     mutationFn: async ({
@@ -530,18 +502,18 @@ export const useToggleChannelMutedMutation = () => {
     },
     onSuccess: ({ channelId }) => {
       // Invalidate unread counts
-      invalidateQueries.channels.unreadCount(channelId);
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+      });
 
       // Get the channel to find its team
-      const channel = useChannelStore.getState().getChannelById(channelId);
+      const channel = getChannelById(channelId);
       if (channel?.team_id) {
         // Invalidate team unread counts
-        invalidateQueries.channels.unreadCounts(channel.team_id);
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+        });
       }
     },
-    ...createMutationOptions(),
   });
 };
-
-// Import at the end to avoid circular dependencies
-import { useUnreadStore } from "../../../hooks/useUnreadCounts";

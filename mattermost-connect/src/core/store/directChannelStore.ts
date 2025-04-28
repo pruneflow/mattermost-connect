@@ -5,7 +5,7 @@
  */
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { Channel, DirectChannelInfo, User, UserStatus } from "../../types";
+import { DirectChannelInfo, UserStatus } from "../../types";
 import { channelService } from "../services/channelService";
 import { createLoadingSlice } from "./storeUtils";
 import { useUserStore } from "./userStore";
@@ -79,7 +79,9 @@ export const useDirectChannelStore = create<DirectChannelState>()(
         state.directChannelInfoById[channelId] = info;
 
         // Clear loading state
-        state.loadingIds = state.loadingIds.filter((id) => id !== channelId);
+        state.loadingIds = state.loadingIds.filter(
+          (id: string) => id !== channelId,
+        );
       });
     },
 
@@ -150,7 +152,7 @@ export const useDirectChannelStore = create<DirectChannelState>()(
     removePendingUser: (userId: string) => {
       set((state) => {
         state.pendingUserIds = state.pendingUserIds.filter(
-          (id) => id !== userId,
+          (id: string) => id !== userId,
         );
       });
     },

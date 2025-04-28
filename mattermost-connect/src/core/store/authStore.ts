@@ -22,6 +22,7 @@ import { handleError } from "./errorStore";
  */
 interface AuthStoreState extends AuthState {
   // Actions
+  currentUser: User;
   initialize: () => Promise<boolean>;
   login: (params: LoginParams) => Promise<User>;
   logout: () => void;

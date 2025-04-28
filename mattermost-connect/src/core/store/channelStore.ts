@@ -5,15 +5,9 @@
  */
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import {
-  Channel,
-  ChannelMember,
-  ChannelGroupType,
-  ErrorSource,
-} from "../../types";
+import { Channel, ChannelMember, ChannelGroupType } from "../../types";
 import { channelService } from "../services/channelService";
 import { createLoadingSlice } from "./storeUtils";
-import { handleError } from "./errorStore";
 
 /**
  * Channel store state interface
@@ -79,7 +73,9 @@ export const useChannelStore = create<ChannelState>()(
         state.lastFetchTimes[teamId] = Date.now();
 
         // Clear loading state for this team
-        state.loadingIds = state.loadingIds.filter((id) => id !== teamId);
+        state.loadingIds = state.loadingIds.filter(
+          (id: string) => id !== teamId,
+        );
 
         // Clear error state
         if (state.errors[teamId]) {
@@ -103,7 +99,7 @@ export const useChannelStore = create<ChannelState>()(
 
         // Check if channel already exists
         const existingIndex = state.channelsByTeam[teamId].findIndex(
-          (c) => c.id === channel.id,
+          (c: Channel) => c.id === channel.id,
         );
 
         if (existingIndex !== -1) {
@@ -118,7 +114,9 @@ export const useChannelStore = create<ChannelState>()(
         state.lastFetchTimes[channel.id] = Date.now();
 
         // Clear loading state
-        state.loadingIds = state.loadingIds.filter((id) => id !== channel.id);
+        state.loadingIds = state.loadingIds.filter(
+          (id: string) => id !== channel.id,
+        );
       });
     },
 
@@ -131,8 +129,10 @@ export const useChannelStore = create<ChannelState>()(
         // Find the team that contains this channel
         let teamIdToUpdate: string | undefined;
 
-        for (const [teamId, channels] of Object.entries(state.channelsByTeam)) {
-          if (channels.some((c) => c.id === channelId)) {
+        // Utiliser for...in au lieu de Object.entries pour préserver le type
+        for (const teamId in state.channelsByTeam) {
+          const channels = state.channelsByTeam[teamId];
+          if (channels.some((c: Channel) => c.id === channelId)) {
             teamIdToUpdate = teamId;
             break;
           }
@@ -143,7 +143,7 @@ export const useChannelStore = create<ChannelState>()(
         // Remove the channel from the team
         state.channelsByTeam[teamIdToUpdate] = state.channelsByTeam[
           teamIdToUpdate
-        ].filter((c) => c.id !== channelId);
+        ].filter((c: Channel) => c.id !== channelId);
 
         // Clear active channel if it was this one
         if (state.activeChannel?.id === channelId) {
@@ -185,8 +185,11 @@ export const useChannelStore = create<ChannelState>()(
     updateChannel: (channel: Partial<Channel> & { id: string }) => {
       set((state) => {
         // Find the channel in all teams
-        for (const [teamId, channels] of Object.entries(state.channelsByTeam)) {
-          const channelIndex = channels.findIndex((c) => c.id === channel.id);
+        Object.entries(state.channelsByTeam).forEach((teamId) => {
+          const channels = state.channelsByTeam[teamId];
+          const channelIndex = channels.findIndex(
+            (c: Channel) => c.id === channel.id,
+          );
 
           if (channelIndex !== -1) {
             // Update channel
@@ -202,10 +205,8 @@ export const useChannelStore = create<ChannelState>()(
                 ...channel,
               };
             }
-
-            break;
           }
-        }
+        });
       });
     },
 
@@ -221,9 +222,11 @@ export const useChannelStore = create<ChannelState>()(
       value: Channel[K],
     ) => {
       set((state) => {
-        // Find the channel in all teams
-        for (const [teamId, channels] of Object.entries(state.channelsByTeam)) {
-          const channelIndex = channels.findIndex((c) => c.id === channelId);
+        Object.keys(state.channelsByTeam).forEach((teamId) => {
+          const channels = state.channelsByTeam[teamId];
+          const channelIndex = channels.findIndex(
+            (c: Channel) => c.id === channelId,
+          );
 
           if (channelIndex !== -1) {
             // Update specific property
@@ -236,10 +239,8 @@ export const useChannelStore = create<ChannelState>()(
                 [key]: value,
               };
             }
-
-            break;
           }
-        }
+        });
       });
     },
 
