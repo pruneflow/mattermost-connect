@@ -5,12 +5,16 @@
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { User, AuthState, LoginParams } from "../../types/auth.types";
+import {
+  User,
+  AuthState,
+  LoginParams,
+  EventType,
+  ErrorSource,
+} from "../../types";
 import { authService } from "../services/authService";
 import { apiClient } from "../api/client";
 import { emitEvent } from "./eventStore";
-import { EventType, EventCategory } from "../../types/event.types";
-import { ErrorSource } from "../../types/error.types";
 import { handleError } from "./errorStore";
 
 /**

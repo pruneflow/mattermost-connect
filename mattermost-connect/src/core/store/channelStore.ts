@@ -9,13 +9,12 @@ import {
   ChannelState,
   ChannelMember,
   ChannelGroupType,
-} from "../../types/channel.types";
+  EventType,
+  ErrorSource,
+  UserStatus,
+} from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
-import { ErrorSource } from "../../types/error.types";
 import { handleError } from "./errorStore";
-import { User } from "../../types/auth.types";
-import { UserStatus } from "../../types/user.types";
 import {
   DirectChannelInfo,
   isDirectChannel,
@@ -23,9 +22,6 @@ import {
   getUserIdsFromDirectChannel,
   getOtherUserIdFromDirectChannel,
   getUserIdsFromGroupChannel,
-  getDirectChannelDisplayName,
-  getGroupChannelDisplayName,
-  getChannelInitials,
 } from "../../utils/channelUtils";
 
 /**

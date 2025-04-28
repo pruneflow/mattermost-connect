@@ -8,10 +8,9 @@ import {
   ReactionState,
   ReactionType,
   ReactionCount,
-  EmojiData,
-} from "../../types/reaction.types";
+  EventType,
+} from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
 
 /**
  * Reaction store state and actions

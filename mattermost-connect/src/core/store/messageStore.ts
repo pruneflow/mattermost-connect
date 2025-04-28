@@ -4,14 +4,8 @@
  * Manages message data, threads, and pinned messages
  */
 import { create } from "zustand";
-import {
-  MessageState,
-  Message,
-  MessageMetadata,
-} from "../../types/message.types";
+import { MessageState, Message, EventType, ErrorSource } from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
-import { ErrorSource } from "../../types/error.types";
 import { handleError } from "./errorStore";
 
 /**

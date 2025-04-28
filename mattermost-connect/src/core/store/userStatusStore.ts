@@ -1,6 +1,6 @@
 // src/core/store/userStatusStore.ts
 import { create } from "zustand";
-import { UserStatus } from "./userStore";
+import { UserStatus } from "../../types";
 
 interface UserStatusState {
   userStatus: Record<string, UserStatus>;

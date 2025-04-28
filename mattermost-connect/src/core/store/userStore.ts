@@ -5,15 +5,14 @@
  */
 import { create } from "zustand";
 import {
+  EventType,
+  User,
   UserState,
   UserStatus,
   UserStatusInfo,
-  TypingInfo,
   UserWithStatus,
-} from "../../types/user.types";
-import { User } from "../../types/auth.types";
+} from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
 
 // Typing indicator timeout (5 seconds)
 const TYPING_TIMEOUT = 5000;
@@ -78,7 +77,7 @@ export const useUserStore = create<UserStoreState>()((set, get) => ({
     }
 
     set((state) => {
-      const newState = {
+      return {
         byId: {
           ...state.byId,
           [user.id]: user,
@@ -89,8 +88,6 @@ export const useUserStore = create<UserStoreState>()((set, get) => ({
           [user.id]: Date.now(),
         },
       };
-
-      return newState;
     });
 
     // Emit user updated event

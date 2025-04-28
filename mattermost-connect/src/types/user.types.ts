@@ -26,7 +26,7 @@ export interface UserStatusInfo {
 export interface UserState {
   byId: Record<string, User>;
   statusByUserId: Record<string, UserStatus>;
-  typingUsers: Record<string, string[]>;
+  typingUsers: Record<string, Record<string, number>>;
   loadingUserIds: string[];
   lastFetchTimes: Record<string, number>;
 }

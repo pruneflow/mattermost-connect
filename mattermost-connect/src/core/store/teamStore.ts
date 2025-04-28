@@ -4,10 +4,15 @@
  * Manages team data and active team selection
  */
 import { create } from "zustand";
-import { Team, TeamState, TeamStats, TeamMember } from "../../types/team.types";
+import {
+  Team,
+  TeamState,
+  TeamStats,
+  TeamMember,
+  EventType,
+  ErrorSource,
+} from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
-import { ErrorSource } from "../../types/error.types";
 import { handleError } from "./errorStore";
 
 /**
@@ -24,6 +29,8 @@ interface TeamStoreState extends TeamState {
   setLoading: (isLoading: boolean) => void;
   setError: (error: Error | null) => void;
   updateTeam: (team: Partial<Team> & { id: string }) => void;
+  isLoading: boolean;
+  error: Error | null;
 
   // Selectors
   getTeamById: (teamId: string) => Team | null;

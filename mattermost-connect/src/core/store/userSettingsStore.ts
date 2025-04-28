@@ -13,9 +13,9 @@ import {
   ThemeOption,
   NotificationLevel,
   PreferenceKey,
-} from "../../types/settings.types";
+  EventType,
+} from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
 
 /**
  * Enhanced user settings state and actions

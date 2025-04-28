@@ -7,11 +7,10 @@ import { create } from "zustand";
 import {
   UnreadState,
   ChannelUnreadCount,
-  ChannelUnreadOptions,
-} from "../../types/unread.types";
-import { Channel } from "../../types/channel.types";
+  Channel,
+  EventType,
+} from "../../types";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
 
 /**
  * Unread store state and actions

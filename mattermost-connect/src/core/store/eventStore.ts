@@ -4,12 +4,7 @@
  * Manages application-wide events and subscriptions
  */
 import { create } from "zustand";
-import {
-  EventType,
-  EventCategory,
-  EventPayload,
-  EventHandler,
-} from "../../types/event.types";
+import { EventType, EventPayload, EventHandler } from "../../types";
 
 interface EventStoreState {
   // State

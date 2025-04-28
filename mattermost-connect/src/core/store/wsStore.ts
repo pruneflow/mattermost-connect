@@ -9,11 +9,11 @@ import {
   WebSocketOptions,
   WebSocketMessage,
   MessageHandler,
-} from "../../types/websocket.types";
+  EventType,
+  ErrorSource,
+} from "../../types";
 import { wsService } from "../services/wsService";
 import { emitEvent } from "./eventStore";
-import { EventType } from "../../types/event.types";
-import { ErrorSource } from "../../types/error.types";
 import { handleError } from "./errorStore";
 
 /**
@@ -337,6 +337,11 @@ export const useWsStore = create<WebSocketStoreState>()((set, get) => ({
 }));
 
 /**
+ * Définition du type MessageHandler générique
+ */
+export type GenericMessageHandler<T = any> = (data: T) => void;
+
+/**
  * Registers a WebSocket event handler
  * @param eventType WebSocket event type
  * @param handler Event handler
@@ -344,9 +349,9 @@ export const useWsStore = create<WebSocketStoreState>()((set, get) => ({
  */
 export function registerWsHandler<T = any>(
   eventType: string,
-  handler: MessageHandler<T>,
+  handler: GenericMessageHandler<T>,
 ): () => void {
-  return wsService.addMessageHandler(eventType, handler);
+  return wsService.addMessageHandler(eventType, handler as MessageHandler);
 }
 
 /**

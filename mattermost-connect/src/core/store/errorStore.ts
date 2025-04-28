@@ -10,7 +10,7 @@ import {
   ErrorFilter,
   ErrorSeverity,
   ErrorSource,
-} from "../../types/error.types";
+} from "../../types";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -189,9 +189,7 @@ export const useErrorStore = create<ErrorStoreState>()((set, get) => ({
       if (filter.severity && error.severity !== filter.severity) return false;
       if (filter.handled !== undefined && error.handled !== filter.handled)
         return false;
-      if (filter.since && error.timestamp < filter.since) return false;
-
-      return true;
+      return !(filter.since && error.timestamp < filter.since);
     });
   },
 
