@@ -1,16 +1,20 @@
 // src/core/api/queries/userQueries.ts
 /**
  * React Query hooks for user operations
+ * Optimized and standardized queries using shared patterns
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
-import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { User } from "../../services/authService";
+import { QUERY_KEYS } from "../queryClient";
 import {
+  User,
   UserStatus,
   UserStatusInfo,
-  useUserStore,
-} from "../../store/userStore";
+  UserProfileUpdate,
+  ApiError,
+} from "../../../types";
+import { useAuthStore, useUserStore } from "../../store";
+import { createQueryOptions, createMutationOptions } from "../queryUtils";
 
 /**
  * Options for fetching users
@@ -22,6 +26,10 @@ export interface GetUsersOptions {
   inChannel?: string;
   /** Team ID to get members from */
   inTeam?: string;
+  /** Whether to include detailed profiles */
+  withProfiles?: boolean;
+  /** Whether to include statuses */
+  withStatuses?: boolean;
 }
 
 /**
@@ -32,7 +40,7 @@ export interface GetUsersOptions {
 export const useUserQuery = (userId: string | undefined) => {
   const { setUser, setLoading, setError, getUserById } = useUserStore();
 
-  return useQuery({
+  return useQuery<User, ApiError>({
     queryKey: userId
       ? QUERY_KEYS.users.byId(userId)
       : ["users", "byId", "undefined"],
@@ -47,7 +55,9 @@ export const useUserQuery = (userId: string | undefined) => {
         return cachedUser;
       }
 
-      setLoading(userId, true);
+      setLoading(true); // Set global loading state
+      setLoadingId(userId, true); // Set loading for this specific user
+
       try {
         const response = await apiClient.get<User>(`users/${userId}`);
         const user = response.data;
@@ -57,14 +67,19 @@ export const useUserQuery = (userId: string | undefined) => {
 
         return user;
       } catch (error) {
-        setError(userId, error as Error);
+        setError(error as Error);
         throw error;
+      } finally {
+        setLoading(false);
+        setLoadingId(userId, false);
       }
     },
     // Don't run query if userId is not provided
     enabled: !!userId,
-    // Cache data for 5 minutes
-    staleTime: 5 * 60 * 1000,
+    ...createQueryOptions("user", {
+      // Cache for 5 minutes
+      staleTime: 5 * 60 * 1000,
+    }),
   });
 };
 
@@ -74,7 +89,7 @@ export const useUserQuery = (userId: string | undefined) => {
  * @returns Query hook for users
  */
 export const useUsersQuery = (options: GetUsersOptions = {}) => {
-  const { setUsers, addPendingUser } = useUserStore();
+  const { setUsers, setLoading, setError } = useUserStore();
 
   // Create a stable query key based on options
   const queryKey = (() => {
@@ -90,7 +105,7 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
     return QUERY_KEYS.users.all;
   })();
 
-  return useQuery({
+  return useQuery<User[], ApiError>({
     queryKey,
     queryFn: async () => {
       // If no specific options are provided, return empty array
@@ -98,15 +113,14 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
         return [];
       }
 
+      setLoading(true);
+
       try {
         let users: User[] = [];
 
         // Handle fetching users by IDs - use POST to /users/ids
         if (options.userIds?.length) {
-          // Mark users as pending
-          options.userIds.forEach((id) => addPendingUser(id));
-
-          console.log("Fetching users by IDs:", options.userIds);
+          console.debug("Fetching users by IDs:", options.userIds);
 
           // Use POST request to fetch users by IDs
           const response = await apiClient.post<User[]>(
@@ -114,24 +128,29 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
             options.userIds,
           );
           users = response.data;
-
-          console.log(
-            "Received users:",
-            users.map((u) => u.id),
-          );
         }
         // Handle fetching users by channel
         else if (options.inChannel) {
-          const response = await apiClient.get<User[]>(
-            `users?in_channel=${encodeURIComponent(options.inChannel)}`,
-          );
+          // Build URL with pagination and additional parameters
+          let url = `users?in_channel=${encodeURIComponent(options.inChannel)}`;
+
+          if (options.withProfiles) {
+            url += "&with_profiles=true";
+          }
+
+          const response = await apiClient.get<User[]>(url);
           users = response.data;
         }
         // Handle fetching users by team
         else if (options.inTeam) {
-          const response = await apiClient.get<User[]>(
-            `users?in_team=${encodeURIComponent(options.inTeam)}`,
-          );
+          // Build URL with pagination and additional parameters
+          let url = `users?in_team=${encodeURIComponent(options.inTeam)}`;
+
+          if (options.withProfiles) {
+            url += "&with_profiles=true";
+          }
+
+          const response = await apiClient.get<User[]>(url);
           users = response.data;
         }
 
@@ -142,14 +161,22 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
 
         return users;
       } catch (error) {
-        console.error("Error fetching users:", error);
+        setError(error as Error);
         throw error;
+      } finally {
+        setLoading(false);
       }
     },
-    // Cache data for 5 minutes
-    staleTime: 5 * 60 * 1000,
-    // Only enable the query if we have parameters to search with
-    enabled: !!(options.userIds?.length || options.inChannel || options.inTeam),
+    ...createQueryOptions("user", {
+      // Cache for 5 minutes
+      staleTime: 5 * 60 * 1000,
+      // Only enable the query if we have parameters to search with
+      enabled: !!(
+        options.userIds?.length ||
+        options.inChannel ||
+        options.inTeam
+      ),
+    }),
   });
 };
 
@@ -161,7 +188,7 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
 export const useUserStatusQuery = (userId: string | undefined) => {
   const { setUserStatus } = useUserStore();
 
-  return useQuery({
+  return useQuery<UserStatus, ApiError>({
     queryKey: userId
       ? QUERY_KEYS.users.status(userId)
       : ["users", "status", "undefined"],
@@ -182,8 +209,10 @@ export const useUserStatusQuery = (userId: string | undefined) => {
     },
     // Don't run query if userId is not provided
     enabled: !!userId,
-    // Cache data for a short time (statuses change frequently)
-    staleTime: 60 * 1000, // 1 minute
+    ...createQueryOptions("user", {
+      // Cache for a shorter time since statuses change frequently
+      staleTime: 60 * 1000, // 1 minute
+    }),
   });
 };
 
@@ -195,7 +224,7 @@ export const useUserStatusQuery = (userId: string | undefined) => {
 export const useUserStatusesQuery = (userIds: string[] = []) => {
   const { setUserStatuses } = useUserStore();
 
-  return useQuery({
+  return useQuery<UserStatusInfo[], ApiError>({
     queryKey: [...QUERY_KEYS.users.statuses, userIds],
     queryFn: async () => {
       if (!userIds.length) {
@@ -208,15 +237,17 @@ export const useUserStatusesQuery = (userIds: string[] = []) => {
       );
       const statuses = response.data;
 
-      // Update store
+      // Update store with statuses
       setUserStatuses(statuses);
 
       return statuses;
     },
     // Don't run query if no userIds are provided
     enabled: userIds.length > 0,
-    // Cache data for a short time (statuses change frequently)
-    staleTime: 60 * 1000, // 1 minute
+    ...createQueryOptions("user", {
+      // Cache for a shorter time since statuses change frequently
+      staleTime: 60 * 1000, // 1 minute
+    }),
   });
 };
 
@@ -225,18 +256,14 @@ export const useUserStatusesQuery = (userIds: string[] = []) => {
  */
 export const useUpdateUserProfileMutation = () => {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
 
-  return useMutation({
-    mutationFn: async (
-      userData: Partial<{
-        email: string;
-        username: string;
-        first_name: string;
-        last_name: string;
-        nickname: string;
-        position: string;
-      }>,
-    ) => {
+  return useMutation<User, ApiError, UserProfileUpdate>({
+    mutationFn: async (userData) => {
+      if (!currentUser) {
+        throw new Error("User must be authenticated");
+      }
+
       const response = await apiClient.put<User>("users/me/patch", userData);
       return response.data;
     },
@@ -254,6 +281,7 @@ export const useUpdateUserProfileMutation = () => {
       const { setCurrentUser } = useAuthStore.getState();
       setCurrentUser(updatedUser);
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -262,16 +290,22 @@ export const useUpdateUserProfileMutation = () => {
  */
 export const useUpdateUserStatusMutation = () => {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
 
-  return useMutation({
-    mutationFn: async (status: UserStatus) => {
+  return useMutation<
+    { userId: string; status: UserStatus },
+    ApiError,
+    UserStatus
+  >({
+    mutationFn: async (status) => {
       // Get current user ID
-      const currentUser = useAuthStore.getState().currentUser;
       if (!currentUser) {
-        throw new Error("No current user found");
+        throw new Error("User must be authenticated");
       }
 
+      // Update status via API
       await apiClient.put(`users/${currentUser.id}/status`, { status });
+
       return { userId: currentUser.id, status };
     },
     onSuccess: ({ userId, status }) => {
@@ -284,6 +318,7 @@ export const useUpdateUserStatusMutation = () => {
       const { setUserStatus } = useUserStore.getState();
       setUserStatus(userId, status);
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -291,20 +326,19 @@ export const useUpdateUserStatusMutation = () => {
  * Updates the current user's password
  */
 export const useUpdatePasswordMutation = () => {
-  return useMutation({
-    mutationFn: async ({
-      currentPassword,
-      newPassword,
-    }: {
-      currentPassword: string;
-      newPassword: string;
-    }) => {
+  return useMutation<
+    boolean,
+    ApiError,
+    { currentPassword: string; newPassword: string }
+  >({
+    mutationFn: async ({ currentPassword, newPassword }) => {
       await apiClient.put("users/password", {
         current_password: currentPassword,
         new_password: newPassword,
       });
       return true;
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -313,19 +347,22 @@ export const useUpdatePasswordMutation = () => {
  */
 export const useUploadProfileImageMutation = () => {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
 
-  return useMutation({
-    mutationFn: async (imageFile: File) => {
+  return useMutation<string, ApiError, File>({
+    mutationFn: async (imageFile) => {
       // Get current user ID
-      const currentUser = useAuthStore.getState().currentUser;
       if (!currentUser) {
-        throw new Error("No current user found");
+        throw new Error("User must be authenticated");
       }
 
+      // Create form data for file upload
       const formData = new FormData();
       formData.append("image", imageFile);
 
+      // Upload image
       await apiClient.post(`users/${currentUser.id}/image`, formData);
+
       return currentUser.id;
     },
     onSuccess: (userId) => {
@@ -334,11 +371,12 @@ export const useUploadProfileImageMutation = () => {
         queryKey: QUERY_KEYS.users.byId(userId),
       });
 
-      // Also invalidate current user query
+      // Also invalidate current user query in auth store
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.auth.current,
       });
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -352,46 +390,61 @@ export const useSearchUsersQuery = (
   term: string | undefined,
   options: { inTeam?: string; inChannel?: string; notInChannel?: string } = {},
 ) => {
-  const { setUsers } = useUserStore();
+  const { setUsers, setLoading, setError } = useUserStore();
 
-  return useQuery({
+  return useQuery<User[], ApiError>({
     queryKey: ["users", "search", term, options],
     queryFn: async () => {
       if (!term) {
         return [];
       }
 
-      // Build query parameters
-      let endpoint = "users/search";
-      const body: any = { term };
+      setLoading(true);
 
-      if (options.inTeam) {
-        body.team_id = options.inTeam;
+      try {
+        // Build query parameters
+        const searchBody: Record<string, any> = { term };
+
+        if (options.inTeam) {
+          searchBody.team_id = options.inTeam;
+        }
+
+        if (options.inChannel) {
+          searchBody.channel_id = options.inChannel;
+        }
+
+        if (options.notInChannel) {
+          searchBody.not_in_channel_id = options.notInChannel;
+        }
+
+        // Search users
+        const response = await apiClient.post<User[]>(
+          "users/search",
+          searchBody,
+        );
+        const users = response.data;
+
+        // Update store
+        setUsers(users);
+
+        return users;
+      } catch (error) {
+        setError(error as Error);
+        throw error;
+      } finally {
+        setLoading(false);
       }
-
-      if (options.inChannel) {
-        body.channel_id = options.inChannel;
-      }
-
-      if (options.notInChannel) {
-        body.not_in_channel_id = options.notInChannel;
-      }
-
-      // Search users
-      const response = await apiClient.post<User[]>(endpoint, body);
-      const users = response.data;
-
-      // Update store
-      setUsers(users);
-
-      return users;
     },
     // Don't run query if no term is provided
     enabled: !!term,
-    // Cache data for a short time
-    staleTime: 60 * 1000, // 1 minute
+    ...createQueryOptions("user", {
+      // Cache for a short time
+      staleTime: 60 * 1000, // 1 minute
+    }),
   });
 };
 
-// Import at the end to avoid circular dependencies
-import { useAuthStore } from "../../store/authStore";
+// Helper function to access setLoadingId from userStore
+const setLoadingId = (userId: string, isLoading: boolean) => {
+  useUserStore.getState().setLoadingId(userId, isLoading);
+};
