@@ -6,17 +6,10 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";
-import {
-  User,
-  UserStatus,
-  UserStatusInfo,
-  EventType,
-  ErrorSource,
-} from "../../types";
+import { User, UserStatus, UserStatusInfo, EventType } from "../../types";
 import { userService } from "../services/userService";
 import { createLoadingSlice } from "./storeUtils";
 import { emitEvent } from "./eventStore";
-import { handleError } from "./errorStore";
 
 // Typing indicator timeout (5 seconds)
 const TYPING_TIMEOUT = 5000;
@@ -122,7 +115,9 @@ export const useUserStore = create<UserStoreState>()(
             state.lastFetchTimes[user.id] = Date.now();
 
             // Remove from loading IDs if present
-            state.loadingIds = state.loadingIds.filter((id) => id !== user.id);
+            state.loadingIds = state.loadingIds.filter(
+              (id: string) => id !== user.id,
+            );
 
             // Ensure initialization flag is set
             state.isInitialized = true;
@@ -156,7 +151,7 @@ export const useUserStore = create<UserStoreState>()(
 
               // Remove from loading IDs if present
               state.loadingIds = state.loadingIds.filter(
-                (id) => id !== user.id,
+                (id: string) => id !== user.id,
               );
             });
 
@@ -207,7 +202,9 @@ export const useUserStore = create<UserStoreState>()(
             delete state.lastFetchTimes[userId];
 
             // Remove from loading IDs if present
-            state.loadingIds = state.loadingIds.filter((id) => id !== userId);
+            state.loadingIds = state.loadingIds.filter(
+              (id: string) => id !== userId,
+            );
           });
         },
 
@@ -350,11 +347,13 @@ export const useUserStore = create<UserStoreState>()(
             let hasChanges = false;
 
             // Process each channel
-            Object.entries(state.typingUsers).forEach(([channelId, users]) => {
+            Object.keys(state.typingUsers).forEach((channelId) => {
+              const users = state.typingUsers[channelId];
               const validUsers: Record<string, number> = {};
 
               // Keep only non-expired users
-              Object.entries(users).forEach(([userId, timestamp]) => {
+              Object.keys(users).forEach((userId) => {
+                const timestamp = users[userId];
                 if (timestamp > expirationTime) {
                   validUsers[userId] = timestamp;
                 } else {
@@ -396,7 +395,7 @@ export const useUserStore = create<UserStoreState>()(
         getUsersByIds: (userIds: string[]): User[] => {
           const { byId } = get();
           return userIds
-            .map((id) => byId[id])
+            .map((id: string) => byId[id])
             .filter((user): user is User => !!user);
         },
 
