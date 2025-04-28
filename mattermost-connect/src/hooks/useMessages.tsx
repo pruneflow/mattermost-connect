@@ -1,11 +1,12 @@
 // src/hooks/useMessages.tsx
 /**
- * Hook for message functionality
+ * Hooks for message functionality
+ * Optimized and modular hooks for different message use cases
  */
-import { useCallback } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
+import { Message, MessagePaginationOptions, ReactionCount } from "../types";
 import {
   useMessageStore,
-  Message,
   getSortedChannelMessages,
   getSortedThreadMessages,
 } from "../core/store/messageStore";
@@ -16,22 +17,20 @@ import {
   useReplyToMessageMutation,
   useEditMessageMutation,
   useDeleteMessageMutation,
-  useAddReactionMutation,
-  useRemoveReactionMutation,
   usePinMessageMutation,
   useUnpinMessageMutation,
   usePinnedMessagesQuery,
   useUploadFilesMutation,
-  useFileInfoQuery,
-  MessagePaginationOptions,
 } from "../core/api/queries/messageQueries";
 import { useAuthStore } from "../core/store/authStore";
+import { messageService } from "../core/services/messageService";
+import { debounce } from "../utils/performance";
 
 /**
- * Hook that provides messages functionality for a channel
- * @param channelId Channel ID
- * @param options Pagination options
- * @returns Messages state and actions
+ * Main hook for channel messages management
+ * @param channelId - Channel ID
+ * @param options - Pagination options
+ * @returns Message state and actions
  */
 export function useMessages(
   channelId: string | undefined,
@@ -45,16 +44,20 @@ export function useMessages(
     setHighlightedMessage,
     setReplyToMessage,
     setEditingMessage,
+    addReaction,
+    removeReaction,
+    hasUserReacted,
+    getReactionCounts,
   } = useMessageStore();
 
   // Get current user
   const { currentUser } = useAuthStore();
 
-  // Get messages query
+  // Message queries
   const messagesQuery = useMessagesQuery(channelId, options);
   const pinnedMessagesQuery = usePinnedMessagesQuery(channelId);
 
-  // Get mutations
+  // Message mutations
   const sendMessageMutation = useSendMessageMutation();
   const editMessageMutation = useEditMessageMutation();
   const deleteMessageMutation = useDeleteMessageMutation();
@@ -64,7 +67,7 @@ export function useMessages(
 
   /**
    * Refreshes the messages list
-   * @returns Promise resolving to the refreshed messages
+   * @returns Promise resolving to refreshed messages
    */
   const refreshMessages = useCallback(async () => {
     return messagesQuery.refetch().then((result) => result.data || []);
@@ -72,8 +75,8 @@ export function useMessages(
 
   /**
    * Sends a new message
-   * @param content Message content
-   * @param fileIds Optional file IDs to attach
+   * @param content - Message content
+   * @param fileIds - Optional file IDs to attach
    * @returns Promise resolving to the sent message
    */
   const sendMessage = useCallback(
@@ -93,8 +96,8 @@ export function useMessages(
 
   /**
    * Edits a message
-   * @param messageId Message ID
-   * @param content New message content
+   * @param messageId - Message ID
+   * @param content - New content
    * @returns Promise resolving to the edited message
    */
   const editMessage = useCallback(
@@ -106,15 +109,13 @@ export function useMessages(
 
   /**
    * Deletes a message
-   * @param messageId Message ID
-   * @returns Promise resolving to the deleted message ID
+   * @param messageId - Message ID
+   * @returns Promise resolving when deletion completes
    */
   const deleteMessage = useCallback(
     async (messageId: string) => {
       if (!channelId) {
-        throw new Error(
-          "Channel ID is required to delete a message from context",
-        );
+        throw new Error("Channel ID is required to delete a message");
       }
 
       return deleteMessageMutation.mutateAsync({ messageId, channelId });
@@ -124,8 +125,8 @@ export function useMessages(
 
   /**
    * Pins a message
-   * @param messageId Message ID
-   * @returns Promise resolving to the pinned message ID
+   * @param messageId - Message ID
+   * @returns Promise resolving when action completes
    */
   const pinMessage = useCallback(
     async (messageId: string) => {
@@ -140,8 +141,8 @@ export function useMessages(
 
   /**
    * Unpins a message
-   * @param messageId Message ID
-   * @returns Promise resolving to the unpinned message ID
+   * @param messageId - Message ID
+   * @returns Promise resolving when action completes
    */
   const unpinMessage = useCallback(
     async (messageId: string) => {
@@ -155,9 +156,9 @@ export function useMessages(
   );
 
   /**
-   * Uploads files to be attached to a message
-   * @param files Files to upload
-   * @returns Promise resolving to the uploaded file IDs
+   * Uploads files to attach to a message
+   * @param files - Files to upload
+   * @returns Promise resolving with the uploaded file IDs
    */
   const uploadFiles = useCallback(
     async (files: File[]) => {
@@ -176,6 +177,29 @@ export function useMessages(
   );
 
   /**
+   * Adds or removes a reaction on a message
+   * @param messageId - Message ID
+   * @param emoji - Emoji name
+   * @returns Promise resolving when action completes
+   */
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!currentUser) {
+        throw new Error("User not authenticated");
+      }
+
+      const alreadyReacted = hasUserReacted(messageId, currentUser.id, emoji);
+
+      if (alreadyReacted) {
+        removeReaction(messageId, currentUser.id, emoji);
+      } else {
+        addReaction(messageId, currentUser.id, emoji);
+      }
+    },
+    [currentUser, addReaction, removeReaction, hasUserReacted],
+  );
+
+  /**
    * Gets sorted messages for the channel
    * @returns Sorted messages
    */
@@ -184,10 +208,29 @@ export function useMessages(
     return getSortedChannelMessages(channelId);
   }, [channelId]);
 
+  // Use memoized values for better performance
+  const messages = useMemo(() => getSortedMessages(), [getSortedMessages]);
+  const pinnedMessages = useMemo(
+    () => pinnedMessagesQuery.data || [],
+    [pinnedMessagesQuery.data],
+  );
+
+  /**
+   * Gets reaction counts for a message
+   * @param messageId - Message ID
+   * @returns Reaction counts by emoji
+   */
+  const getMessageReactionCounts = useCallback(
+    (messageId: string): ReactionCount[] => {
+      return getReactionCounts(messageId);
+    },
+    [getReactionCounts],
+  );
+
   return {
     // State
-    messages: getSortedMessages(),
-    pinnedMessages: pinnedMessagesQuery.data || [],
+    messages,
+    pinnedMessages,
     highlightedMessageId,
     replyToMessage,
     editingMessageId,
@@ -207,16 +250,20 @@ export function useMessages(
     pinMessage,
     unpinMessage,
     uploadFiles,
+    toggleReaction,
     setHighlightedMessage,
     setReplyToMessage,
     setEditingMessage,
+    getMessageReactionCounts,
+    hasUserReacted: (messageId: string, emoji: string) =>
+      currentUser ? hasUserReacted(messageId, currentUser.id, emoji) : false,
   };
 }
 
 /**
- * Hook that provides thread functionality for a root message
- * @param rootMessageId Root message ID
- * @param channelId Channel ID
+ * Specialized hook for thread management
+ * @param rootMessageId - Root message ID
+ * @param channelId - Channel ID
  * @returns Thread state and actions
  */
 export function useThread(
@@ -224,23 +271,29 @@ export function useThread(
   channelId: string,
 ) {
   // Get state from store
-  const { setReplyToMessage } = useMessageStore();
+  const {
+    setReplyToMessage,
+    addReaction,
+    removeReaction,
+    hasUserReacted,
+    getReactionCounts,
+  } = useMessageStore();
 
   // Get current user
   const { currentUser } = useAuthStore();
 
-  // Get thread messages query
+  // Thread messages query
   const threadMessagesQuery = useThreadMessagesQuery(rootMessageId);
 
-  // Get mutations
+  // Thread-related mutations
   const replyToMessageMutation = useReplyToMessageMutation();
   const editMessageMutation = useEditMessageMutation();
   const deleteMessageMutation = useDeleteMessageMutation();
   const uploadFilesMutation = useUploadFilesMutation();
 
   /**
-   * Refreshes the thread messages
-   * @returns Promise resolving to the refreshed thread messages
+   * Refreshes thread messages
+   * @returns Promise resolving to refreshed thread messages
    */
   const refreshThreadMessages = useCallback(async () => {
     return threadMessagesQuery.refetch().then((result) => result.data || []);
@@ -248,8 +301,8 @@ export function useThread(
 
   /**
    * Replies to the thread
-   * @param content Reply content
-   * @param fileIds Optional file IDs to attach
+   * @param content - Reply content
+   * @param fileIds - Optional file IDs to attach
    * @returns Promise resolving to the sent reply
    */
   const replyToThread = useCallback(
@@ -270,8 +323,8 @@ export function useThread(
 
   /**
    * Edits a message in the thread
-   * @param messageId Message ID
-   * @param content New message content
+   * @param messageId - Message ID
+   * @param content - New content
    * @returns Promise resolving to the edited message
    */
   const editThreadMessage = useCallback(
@@ -283,8 +336,8 @@ export function useThread(
 
   /**
    * Deletes a message from the thread
-   * @param messageId Message ID
-   * @returns Promise resolving to the deleted message ID
+   * @param messageId - Message ID
+   * @returns Promise resolving when deletion completes
    */
   const deleteThreadMessage = useCallback(
     async (messageId: string) => {
@@ -294,9 +347,9 @@ export function useThread(
   );
 
   /**
-   * Uploads files to be attached to a thread reply
-   * @param files Files to upload
-   * @returns Promise resolving to the uploaded file IDs
+   * Uploads files to attach to a thread reply
+   * @param files - Files to upload
+   * @returns Promise resolving with the uploaded file IDs
    */
   const uploadThreadFiles = useCallback(
     async (files: File[]) => {
@@ -311,6 +364,29 @@ export function useThread(
   );
 
   /**
+   * Adds or removes a reaction on a thread message
+   * @param messageId - Message ID
+   * @param emoji - Emoji name
+   * @returns Promise resolving when action completes
+   */
+  const toggleThreadReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!currentUser) {
+        throw new Error("User not authenticated");
+      }
+
+      const alreadyReacted = hasUserReacted(messageId, currentUser.id, emoji);
+
+      if (alreadyReacted) {
+        removeReaction(messageId, currentUser.id, emoji);
+      } else {
+        addReaction(messageId, currentUser.id, emoji);
+      }
+    },
+    [currentUser, addReaction, removeReaction, hasUserReacted],
+  );
+
+  /**
    * Gets sorted messages for the thread
    * @returns Sorted thread messages
    */
@@ -319,9 +395,27 @@ export function useThread(
     return getSortedThreadMessages(rootMessageId);
   }, [rootMessageId]);
 
+  // Use memoized values for better performance
+  const threadMessages = useMemo(
+    () => getThreadMessages(),
+    [getThreadMessages],
+  );
+
+  /**
+   * Gets reaction counts for a thread message
+   * @param messageId - Message ID
+   * @returns Reaction counts by emoji
+   */
+  const getThreadReactionCounts = useCallback(
+    (messageId: string): ReactionCount[] => {
+      return getReactionCounts(messageId);
+    },
+    [getReactionCounts],
+  );
+
   return {
     // State
-    threadMessages: getThreadMessages(),
+    threadMessages,
     isLoading: threadMessagesQuery.isLoading || threadMessagesQuery.isFetching,
     isReplying: replyToMessageMutation.isPending,
     isEditing: editMessageMutation.isPending,
@@ -335,134 +429,269 @@ export function useThread(
     editThreadMessage,
     deleteThreadMessage,
     uploadThreadFiles,
+    toggleThreadReaction,
     setReplyToMessage,
+    getThreadReactionCounts,
+    hasUserReacted: (messageId: string, emoji: string) =>
+      currentUser ? hasUserReacted(messageId, currentUser.id, emoji) : false,
   };
 }
 
 /**
- * Hook that provides functionality for message reactions
- * @returns Reaction actions and state
+ * Specialized hook for pinned messages
+ * @param channelId - Channel ID
+ * @returns Pinned messages state and actions
+ */
+export function usePinnedMessages(channelId: string | undefined) {
+  const pinnedMessagesQuery = usePinnedMessagesQuery(channelId);
+  const pinMessageMutation = usePinMessageMutation();
+  const unpinMessageMutation = useUnpinMessageMutation();
+
+  /**
+   * Pins a message
+   * @param messageId - Message ID
+   * @returns Promise resolving when action completes
+   */
+  const pinMessage = useCallback(
+    async (messageId: string) => {
+      if (!channelId) {
+        throw new Error("Channel ID is required to pin a message");
+      }
+
+      return pinMessageMutation.mutateAsync({ messageId, channelId });
+    },
+    [channelId, pinMessageMutation],
+  );
+
+  /**
+   * Unpins a message
+   * @param messageId - Message ID
+   * @returns Promise resolving when action completes
+   */
+  const unpinMessage = useCallback(
+    async (messageId: string) => {
+      if (!channelId) {
+        throw new Error("Channel ID is required to unpin a message");
+      }
+
+      return unpinMessageMutation.mutateAsync({ messageId, channelId });
+    },
+    [channelId, unpinMessageMutation],
+  );
+
+  return {
+    // State
+    pinnedMessages: pinnedMessagesQuery.data || [],
+    isLoading: pinnedMessagesQuery.isLoading,
+    isPinning: pinMessageMutation.isPending || unpinMessageMutation.isPending,
+
+    // Actions
+    pinMessage,
+    unpinMessage,
+    refreshPinnedMessages: pinnedMessagesQuery.refetch,
+  };
+}
+
+/**
+ * Specialized hook for message composition
+ * @param channelId - Channel ID
+ * @param initialText - Initial text (optional)
+ * @returns Message composer state and actions
+ */
+export function useMessageComposer(
+  channelId: string,
+  initialText: string = "",
+) {
+  const [text, setText] = useState(initialText);
+  const [files, setFiles] = useState<File[]>([]);
+
+  const { sendMessage } = useMessages(channelId);
+  const { uploadFiles } = useMessages(channelId);
+
+  /**
+   * Updates the message text
+   * @param newText - New text
+   */
+  const updateText = useCallback((newText: string) => {
+    setText(newText);
+  }, []);
+
+  /**
+   * Adds files to attach
+   * @param newFiles - Files to add
+   */
+  const addFiles = useCallback((newFiles: File[]) => {
+    setFiles((prev) => [...prev, ...newFiles]);
+  }, []);
+
+  /**
+   * Removes a file
+   * @param fileIndex - Index of file to remove
+   */
+  const removeFile = useCallback((fileIndex: number) => {
+    setFiles((prev) => prev.filter((_, index) => index !== fileIndex));
+  }, []);
+
+  /**
+   * Submits the message with attachments
+   * @returns Promise resolving to the sent message
+   */
+  const submitMessage = useCallback(async () => {
+    if (!text.trim() && files.length === 0) return null;
+
+    try {
+      // Upload files first if any
+      let fileIds: string[] = [];
+      if (files.length > 0) {
+        fileIds = await uploadFiles(files);
+      }
+
+      // Send message with any attached files
+      const result = await sendMessage(text, fileIds);
+
+      // Reset form
+      setText("");
+      setFiles([]);
+
+      return result;
+    } catch (error) {
+      console.error("Error sending message:", error);
+      throw error;
+    }
+  }, [text, files, sendMessage, uploadFiles]);
+
+  // Typing notification optimized with debounce
+  const debouncedTypingNotification = useMemo(
+    () =>
+      debounce(() => {
+        // This function should notify the server that the user is typing
+        // Implemented in the WebSocket service
+      }, 1000),
+    [],
+  );
+
+  // Trigger typing notification when text changes
+  useEffect(() => {
+    if (text.length > 0) {
+      debouncedTypingNotification();
+    }
+  }, [text, debouncedTypingNotification]);
+
+  return {
+    // State
+    text,
+    files,
+
+    // Actions
+    updateText,
+    addFiles,
+    removeFile,
+    submitMessage,
+
+    // Utilities
+    reset: () => {
+      setText("");
+      setFiles([]);
+    },
+    isEmpty: text.trim() === "" && files.length === 0,
+  };
+}
+
+/**
+ * Specialized hook for message reactions management
  */
 export function useMessageReactions() {
-  // Get mutations
-  const addReactionMutation = useAddReactionMutation();
-  const removeReactionMutation = useRemoveReactionMutation();
-
-  // Get current user
   const { currentUser } = useAuthStore();
+  const {
+    addReaction,
+    removeReaction,
+    hasUserReacted,
+    getReactionCounts,
+    getReactionsByEmoji,
+  } = useMessageStore();
 
   /**
    * Adds a reaction to a message
-   * @param messageId Message ID
-   * @param emoji Emoji name
-   * @returns Promise resolving to the added reaction
+   * @param messageId - Message ID
+   * @param emoji - Emoji name
    */
-  const addReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      return addReactionMutation.mutateAsync({ messageId, emoji });
+  const addMessageReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      if (!currentUser) {
+        console.warn("Cannot add reaction: user not logged in");
+        return;
+      }
+
+      addReaction(messageId, currentUser.id, emoji);
     },
-    [addReactionMutation],
+    [currentUser, addReaction],
   );
 
   /**
    * Removes a reaction from a message
-   * @param messageId Message ID
-   * @param emoji Emoji name
-   * @param channelId Channel ID
-   * @returns Promise resolving to the removed reaction
+   * @param messageId - Message ID
+   * @param emoji - Emoji name
    */
-  const removeReaction = useCallback(
-    async (messageId: string, emoji: string, channelId: string) => {
-      return removeReactionMutation.mutateAsync({
-        messageId,
-        emoji,
-        channelId,
-      });
+  const removeMessageReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      if (!currentUser) {
+        console.warn("Cannot remove reaction: user not logged in");
+        return;
+      }
+
+      removeReaction(messageId, currentUser.id, emoji);
     },
-    [removeReactionMutation],
+    [currentUser, removeReaction],
   );
 
   /**
-   * Toggles a reaction on a message
-   * @param messageId Message ID
-   * @param emoji Emoji name
-   * @param hasReacted Whether the current user has already reacted
-   * @param channelId Channel ID
-   * @returns Promise resolving to the toggled reaction
+   * Toggles a reaction based on current state
+   * @param messageId - Message ID
+   * @param emoji - Emoji name
    */
   const toggleReaction = useCallback(
-    async (
-      messageId: string,
-      emoji: string,
-      hasReacted: boolean,
-      channelId: string,
-    ) => {
+    (messageId: string, emoji: string) => {
+      if (!currentUser) {
+        console.warn("Cannot toggle reaction: user not logged in");
+        return;
+      }
+
+      const hasReacted = hasUserReacted(messageId, currentUser.id, emoji);
+
       if (hasReacted) {
-        return removeReaction(messageId, emoji, channelId);
+        removeMessageReaction(messageId, emoji);
       } else {
-        return addReaction(messageId, emoji);
+        addMessageReaction(messageId, emoji);
       }
     },
-    [addReaction, removeReaction],
+    [currentUser, hasUserReacted, addMessageReaction, removeMessageReaction],
   );
 
   /**
-   * Checks if the current user has reacted with an emoji to a message
-   * @param message Message object
-   * @param emoji Emoji name
-   * @returns Whether the current user has reacted
+   * Checks if current user has reacted with an emoji
+   * @param messageId - Message ID
+   * @param emoji - Emoji name
+   * @returns True if user has reacted
    */
-  const hasUserReacted = useCallback(
-    (message: Message, emoji: string): boolean => {
-      if (!currentUser || !message.metadata?.reactions) return false;
-
-      return message.metadata.reactions.some(
-        (reaction) =>
-          reaction.emoji_name === emoji && reaction.user_id === currentUser.id,
-      );
+  const userHasReacted = useCallback(
+    (messageId: string, emoji: string): boolean => {
+      if (!currentUser) return false;
+      return hasUserReacted(messageId, currentUser.id, emoji);
     },
-    [currentUser],
+    [currentUser, hasUserReacted],
   );
 
   return {
-    // State
-    isReacting:
-      addReactionMutation.isPending || removeReactionMutation.isPending,
-    addError: addReactionMutation.error,
-    removeError: removeReactionMutation.error,
+    // State - no local state in this hook
 
     // Actions
-    addReaction,
-    removeReaction,
+    addReaction: addMessageReaction,
+    removeReaction: removeMessageReaction,
     toggleReaction,
-    hasUserReacted,
-  };
-}
 
-/**
- * Hook that provides file information functionality
- * @param fileId File ID
- * @returns File info state and actions
- */
-export function useFileInfo(fileId: string | undefined) {
-  // Get file info query
-  const fileInfoQuery = useFileInfoQuery(fileId);
-
-  /**
-   * Refreshes the file information
-   * @returns Promise resolving to the refreshed file information
-   */
-  const refreshFileInfo = useCallback(async () => {
-    return fileInfoQuery.refetch().then((result) => result.data || null);
-  }, [fileInfoQuery]);
-
-  return {
-    // State
-    fileInfo: fileInfoQuery.data,
-    isLoading: fileInfoQuery.isLoading || fileInfoQuery.isFetching,
-    error: fileInfoQuery.error,
-
-    // Actions
-    refreshFileInfo,
+    // Selectors
+    getReactionCounts,
+    getReactionsByEmoji,
+    hasUserReacted: userHasReacted,
   };
 }
