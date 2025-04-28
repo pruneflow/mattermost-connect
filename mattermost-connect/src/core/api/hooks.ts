@@ -17,12 +17,16 @@ import {
   createMutationOptions,
   invalidateRelated,
 } from "./queryUtils";
+import { buildUrlWithParams, extractPaginationInfo } from "./apiUtils";
 import { PaginationParams, ApiError } from "../../types";
 
 /**
  * Hook for fetching a list of entities
  */
-export function useList<TData, TParams = {}>(
+export function useList<
+  TData,
+  TParams extends Record<string, any> = Record<string, any>,
+>(
   entityType: string,
   endpoint: string,
   params?: TParams & PaginationParams,
@@ -33,7 +37,11 @@ export function useList<TData, TParams = {}>(
   return useQuery<TData[], ApiError>({
     queryKey,
     queryFn: async () => {
-      const response = await apiClient.get<TData[]>(endpoint, { params });
+      // Build URL with query parameters
+      const url = buildUrlWithParams(endpoint, params);
+
+      // Make the API request
+      const response = await apiClient.get<TData[]>(url);
       return response.data;
     },
     ...createQueryOptions(entityType as any, options),
@@ -154,7 +162,10 @@ export function useDelete<TData = void>(
 /**
  * Hook for paginated queries with React Query's built-in functionality
  */
-export function usePagination<TData, TParams = {}>(
+export function usePagination<
+  TData,
+  TParams extends Record<string, any> = Record<string, any>,
+>(
   entityType: string,
   endpoint: string,
   params?: TParams & PaginationParams,
@@ -189,26 +200,96 @@ export function usePagination<TData, TParams = {}>(
   >({
     queryKey,
     queryFn: async () => {
-      const response = await apiClient.get(endpoint, { params });
+      // Build URL with query parameters
+      const url = buildUrlWithParams(endpoint, params);
 
-      // Extract pagination data from headers
-      const nextCursor = response.headers["x-next-cursor"];
-      const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+      // Make the API request
+      const response = await apiClient.get(url);
 
-      // Determine if there are more pages
-      const hasMore =
-        response.data.length === (params?.perPage || 30) &&
-        response.data.length > 0;
+      // Extract pagination info from response headers
+      const pageSize = params?.perPage || 30;
+      const pagination = extractPaginationInfo(
+        response.headers,
+        response.data.length,
+        pageSize,
+      );
 
       return {
         data: response.data,
-        pagination: {
-          hasMore,
-          nextCursor,
-          totalCount: isNaN(totalCount) ? undefined : totalCount,
-        },
+        pagination,
       };
     },
     ...createQueryOptions(entityType as any, options),
+  });
+}
+
+/**
+ * Hook for searching entities
+ */
+export function useSearch<
+  TData,
+  TParams extends Record<string, any> = Record<string, any>,
+>(
+  entityType: string,
+  endpoint: string,
+  searchTerm?: string,
+  params?: TParams,
+  options?: Partial<UseQueryOptions<TData[], ApiError>>,
+) {
+  // Only enable the query if there's a search term
+  const enabled = !!searchTerm && searchTerm.trim().length > 0;
+
+  // Create complete search params
+  const searchParams = searchTerm ? { ...params, term: searchTerm } : params;
+
+  const queryKey = [entityType, "search", searchTerm, params];
+
+  return useQuery<TData[], ApiError>({
+    queryKey,
+    queryFn: async () => {
+      // Build URL with query parameters
+      const url = buildUrlWithParams(endpoint, searchParams);
+
+      // Make the API request
+      const response = await apiClient.get<TData[]>(url);
+      return response.data;
+    },
+    enabled,
+    ...createQueryOptions(entityType as any, {
+      // Default: Short cache time for search queries
+      staleTime: 30 * 1000, // 30 seconds
+      ...options,
+    }),
+  });
+}
+
+/**
+ * Hook for executing a custom API request
+ */
+export function useCustomQuery<
+  TData,
+  TParams extends Record<string, any> = Record<string, any>,
+>(
+  queryKey: QueryKey,
+  endpoint: string,
+  method: "GET" | "POST" = "GET",
+  params?: TParams,
+  body?: any,
+  options?: Partial<UseQueryOptions<TData, ApiError>>,
+) {
+  return useQuery<TData, ApiError>({
+    queryKey,
+    queryFn: async () => {
+      if (method === "GET") {
+        const url = buildUrlWithParams(endpoint, params);
+        const response = await apiClient.get<TData>(url);
+        return response.data;
+      } else {
+        const url = buildUrlWithParams(endpoint, params);
+        const response = await apiClient.post<TData>(url, body);
+        return response.data;
+      }
+    },
+    ...options,
   });
 }

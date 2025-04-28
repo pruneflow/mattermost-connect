@@ -21,6 +21,8 @@ export interface RequestOptions {
   requireAuth?: boolean;
   /** Request timeout in milliseconds */
   timeout?: number;
+  /** Query parameters for GET requests */
+  params?: Record<string, any>;
 }
 
 /**
@@ -269,9 +271,25 @@ class ApiClient {
       headers = {},
       requireAuth = true,
       timeout = 30000, // 30 seconds default timeout
+      params,
     } = options;
 
-    const fullUrl = this.getFullUrl(path);
+    let fullUrl = this.getFullUrl(path);
+
+    if (params && method === "GET") {
+      const queryParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+
+      // Add parameters to URL if not empty
+      const queryString = queryParams.toString();
+      if (queryString) {
+        fullUrl += (fullUrl.includes("?") ? "&" : "?") + queryString;
+      }
+    }
 
     // Combine headers
     let requestHeaders = {
@@ -359,7 +377,7 @@ class ApiClient {
    */
   public async get<T = any>(
     path: string,
-    options: Omit<RequestOptions, "method"> = {},
+    options: Omit<RequestOptions, "method" | "body"> = {},
   ): Promise<ApiResponse<T>> {
     return this.request<T>(path, { ...options, method: "GET" });
   }

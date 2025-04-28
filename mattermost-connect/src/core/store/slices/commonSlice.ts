@@ -3,7 +3,6 @@
  * Common slice for Zustand stores
  * Provides reusable state and actions using Zustand's native patterns
  */
-import { type StateCreator } from "zustand";
 import { LoadingState, ErrorState, StoreState } from "../../../types";
 
 /**
@@ -44,13 +43,16 @@ export const initialCommonState: CommonSlice = {
 
 /**
  * Creates a common slice with standard loading/error state management
+ * Compatible with immer middleware in Zustand
  */
-export const createCommonSlice: StateCreator<
-  CommonState,
-  [["zustand/immer", never]],
-  [],
-  CommonState
-> = (set) => ({
+export const createCommonSlice = <
+  T extends CommonState & {
+    errors: Record<string, Error | null>;
+    loadingIds: string[];
+  },
+>(
+  set: (fn: (state: T) => void) => void,
+): CommonState => ({
   ...initialCommonState,
 
   setLoading: (isLoading) => {
@@ -90,7 +92,11 @@ export const createCommonSlice: StateCreator<
 
   setErrorForId: (id, error) => {
     set((state) => {
-      state.errors[id] = error;
+      if (error) {
+        state.errors[id] = error;
+      } else if (state.errors[id]) {
+        delete state.errors[id];
+      }
       state.lastUpdated = Date.now();
     });
   },
@@ -103,6 +109,11 @@ export const createCommonSlice: StateCreator<
   },
 
   reset: () => {
-    set(initialCommonState);
+    set((state) => {
+      // Reset to initial state
+      Object.assign(state, initialCommonState, {
+        lastUpdated: Date.now(),
+      });
+    });
   },
 });

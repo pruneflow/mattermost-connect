@@ -4,7 +4,7 @@
  * Using established libraries for reliable formatting
  */
 import { format, formatDistance, formatRelative, isToday } from "date-fns";
-import filesize from "filesize";
+import { filesize } from "filesize";
 
 /**
  * Date formatting options

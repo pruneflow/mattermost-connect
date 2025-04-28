@@ -16,6 +16,7 @@ import {
   createMutationOptions,
   invalidateRelated,
 } from "../core/api/queryUtils";
+import { buildUrlWithParams } from "../core/api/apiUtils";
 import { PaginationParams, ApiError, Entity } from "../types";
 
 /**
@@ -55,9 +56,8 @@ export function useEntityQuery<T extends Entity>(
   const query = useQuery<T[], ApiError>({
     queryKey,
     queryFn: async () => {
-      const response = await apiClient.get<T[]>(endpoint, {
-        params: initialParams,
-      });
+      const url = buildUrlWithParams(endpoint, initialParams);
+      const response = await apiClient.get<T[]>(url);
       return response.data;
     },
     ...createQueryOptions(entityType, {
@@ -69,7 +69,10 @@ export function useEntityQuery<T extends Entity>(
 
   // Mutation for creating entities
   const createMutation = useMutation<T, ApiError, Partial<T>>({
-    mutationFn: (data) => apiClient.post<T>(endpoint, data),
+    mutationFn: async (data) => {
+      const response = await apiClient.post<T>(endpoint, data);
+      return response.data; // Return just the data property
+    },
     onSuccess: () => {
       invalidateRelated(queryClient, entityType);
     },
@@ -82,7 +85,10 @@ export function useEntityQuery<T extends Entity>(
     ApiError,
     { id: string; data: Partial<T> }
   >({
-    mutationFn: ({ id, data }) => apiClient.put<T>(`${endpoint}/${id}`, data),
+    mutationFn: async ({ id, data }) => {
+      const response = await apiClient.put<T>(`${endpoint}/${id}`, data);
+      return response.data; // Return just the data property
+    },
     onSuccess: (_, { id }) => {
       invalidateRelated(queryClient, entityType, id);
     },
@@ -91,7 +97,10 @@ export function useEntityQuery<T extends Entity>(
 
   // Mutation for deleting entities
   const deleteMutation = useMutation<void, ApiError, string>({
-    mutationFn: (id) => apiClient.delete(`${endpoint}/${id}`),
+    mutationFn: async (id) => {
+      const response = await apiClient.delete(`${endpoint}/${id}`);
+      return response.data; // Return just the data property
+    },
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: [entityType, id] });
       invalidateRelated(queryClient, entityType);
