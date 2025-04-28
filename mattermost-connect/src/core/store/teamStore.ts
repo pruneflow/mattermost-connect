@@ -1,24 +1,30 @@
 // src/core/store/teamStore.ts
 /**
  * Team store
- * Manages team data and active team selection
+ * Manages team data and state
  */
 import { create } from "zustand";
-import {
-  Team,
-  TeamState,
-  TeamStats,
-  TeamMember,
-  EventType,
-  ErrorSource,
-} from "../../types";
-import { emitEvent } from "./eventStore";
+import { Team, TeamMember, TeamStats, ErrorSource } from "../../types";
 import { handleError } from "./errorStore";
+import { createLoadingSlice } from "./storeUtils";
 
 /**
- * Team store state and actions
+ * Team state interface
  */
-interface TeamStoreState extends TeamState {
+export interface TeamState {
+  // Data
+  teams: Team[];
+  activeTeam: Team | null;
+  teamStats: Record<string, TeamStats>;
+  teamMembers: Record<string, TeamMember[]>;
+  lastFetchTimes: Record<string, number>;
+
+  // Loading/Error
+  isLoading: boolean;
+  loadingIds: string[];
+  error: Error | null;
+  errors: Record<string, Error | null>;
+
   // Actions
   setTeams: (teams: Team[]) => void;
   setTeam: (team: Team) => void;
@@ -26,11 +32,8 @@ interface TeamStoreState extends TeamState {
   setActiveTeam: (team: Team | null) => void;
   setTeamStats: (teamId: string, stats: TeamStats) => void;
   setTeamMembers: (teamId: string, members: TeamMember[]) => void;
-  setLoading: (isLoading: boolean) => void;
-  setError: (error: Error | null) => void;
   updateTeam: (team: Partial<Team> & { id: string }) => void;
-  isLoading: boolean;
-  error: Error | null;
+  clearTeams: () => void;
 
   // Selectors
   getTeamById: (teamId: string) => Team | null;
@@ -42,17 +45,18 @@ interface TeamStoreState extends TeamState {
 }
 
 /**
- * Team store for managing team data and selection
+ * Creates the team store
  */
-export const useTeamStore = create<TeamStoreState>()((set, get) => ({
+export const useTeamStore = create<TeamState>((set, get) => ({
   // Initial state
   teams: [],
   activeTeam: null,
   teamStats: {},
   teamMembers: {},
   lastFetchTimes: {},
-  isLoading: false,
-  error: null,
+
+  // Include loading/error slice
+  ...createLoadingSlice<any>(set),
 
   /**
    * Sets all teams in the store
@@ -72,11 +76,6 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
       let activeTeam = state.activeTeam;
       if (!activeTeam && teams.length > 0) {
         activeTeam = teams[0];
-
-        // Emit team selected event
-        if (activeTeam) {
-          emitEvent(EventType.TEAM_SELECTED, { team: activeTeam });
-        }
       }
 
       return {
@@ -108,9 +107,6 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
       } else {
         // Add new team
         teams = [...state.teams, team];
-
-        // Emit team joined event
-        emitEvent(EventType.TEAM_JOINED, { team });
       }
 
       return {
@@ -143,19 +139,11 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
       let activeTeam = state.activeTeam;
       if (state.activeTeam?.id === teamId) {
         activeTeam = teams.length > 0 ? teams[0] : null;
-
-        // Emit team selected event for new active team
-        if (activeTeam) {
-          emitEvent(EventType.TEAM_SELECTED, { team: activeTeam });
-        }
       }
 
       // Remove stats and members for this team
       const { [teamId]: _, ...teamStats } = state.teamStats;
       const { [teamId]: __, ...teamMembers } = state.teamMembers;
-
-      // Emit team left event
-      emitEvent(EventType.TEAM_LEFT, { team: teamToRemove });
 
       return {
         teams,
@@ -168,7 +156,7 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
 
   /**
    * Sets the active team
-   * @param team Team to set as active or null
+   * @param team Team to set as active
    */
   setActiveTeam: (team: Team | null) => {
     set((state) => {
@@ -177,17 +165,12 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
         return state;
       }
 
-      // Emit team selected event
-      if (team) {
-        emitEvent(EventType.TEAM_SELECTED, { team });
-      }
-
       return { activeTeam: team };
     });
   },
 
   /**
-   * Sets statistics for a team
+   * Sets team statistics
    * @param teamId Team ID
    * @param stats Team statistics
    */
@@ -201,7 +184,7 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
   },
 
   /**
-   * Sets members for a team
+   * Sets team members
    * @param teamId Team ID
    * @param members Team members
    */
@@ -212,29 +195,6 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
         [teamId]: members,
       },
     }));
-  },
-
-  /**
-   * Sets the loading state
-   * @param isLoading Whether teams are loading
-   */
-  setLoading: (isLoading: boolean) => {
-    set({ isLoading });
-  },
-
-  /**
-   * Sets the error state
-   * @param error Error object or null
-   */
-  setError: (error: Error | null) => {
-    set({
-      error,
-      isLoading: false,
-    });
-
-    if (error) {
-      handleError(error, ErrorSource.API);
-    }
   },
 
   /**
@@ -265,9 +225,6 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
         activeTeam = updatedTeam;
       }
 
-      // Emit team updated event
-      emitEvent(EventType.TEAM_UPDATED, { team: updatedTeam });
-
       return {
         teams,
         activeTeam,
@@ -276,6 +233,18 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
           [team.id]: Date.now(),
         },
       };
+    });
+  },
+
+  /**
+   * Clears all teams
+   */
+  clearTeams: () => {
+    set({
+      teams: [],
+      activeTeam: null,
+      teamStats: {},
+      teamMembers: {},
     });
   },
 
@@ -317,7 +286,9 @@ export const useTeamStore = create<TeamStoreState>()((set, get) => ({
       teamMembers: {},
       lastFetchTimes: {},
       isLoading: false,
+      loadingIds: [],
       error: null,
+      errors: {},
     });
   },
 }));

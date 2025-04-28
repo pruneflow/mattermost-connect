@@ -2,10 +2,12 @@
 /**
  * React Query hooks for team operations
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { Team, useTeamStore } from "../../store/teamStore";
+import { Team, TeamMember, TeamStats } from "../../types";
+import { useTeamStore } from "../../store/teamStore";
+import { createQueryOptions, createMutationOptions } from "../queryUtils";
 
 /**
  * Fetches all teams for the current user
@@ -20,21 +22,19 @@ export const useTeamsQuery = () => {
       setLoading(true);
       try {
         const response = await apiClient.get<Team[]>("users/me/teams");
-        const teams = response.data;
 
-        // Update store
-        setTeams(teams);
+        // Update store with fetched teams
+        setTeams(response.data);
 
-        return teams;
+        return response.data;
       } catch (error) {
         setError(error as Error);
         throw error;
+      } finally {
+        setLoading(false);
       }
     },
-    // Cache data for 5 minutes
-    staleTime: 5 * 60 * 1000,
-    // Keep unused data for 30 minutes
-    gcTime: 30 * 60 * 1000,
+    ...createQueryOptions("team"),
   });
 };
 
@@ -44,7 +44,7 @@ export const useTeamsQuery = () => {
  * @returns Query hook for a team
  */
 export const useTeamQuery = (teamId: string | undefined) => {
-  const { setTeams, getTeamById, setLoading, setError } = useTeamStore();
+  const { setTeam, setLoadingId, setErrorForId, getTeamById } = useTeamStore();
 
   return useQuery({
     queryKey: teamId ? QUERY_KEYS.teams.byId(teamId) : ["teams", "undefined"],
@@ -59,24 +59,23 @@ export const useTeamQuery = (teamId: string | undefined) => {
         return cachedTeam;
       }
 
-      setLoading(true);
+      setLoadingId(teamId, true);
       try {
         const response = await apiClient.get<Team>(`teams/${teamId}`);
-        const team = response.data;
 
-        // Update store with the single team
-        setTeams([team]);
+        // Update store with fetched team
+        setTeam(response.data);
 
-        return team;
+        return response.data;
       } catch (error) {
-        setError(error as Error);
+        setErrorForId(teamId, error as Error);
         throw error;
+      } finally {
+        setLoadingId(teamId, false);
       }
     },
-    // Don't run query if teamId is not provided
     enabled: !!teamId,
-    // Cache data for 5 minutes
-    staleTime: 5 * 60 * 1000,
+    ...createQueryOptions("team"),
   });
 };
 
@@ -84,8 +83,6 @@ export const useTeamQuery = (teamId: string | undefined) => {
  * Creates a new team
  */
 export const useCreateTeamMutation = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (teamData: {
       name: string;
@@ -97,13 +94,14 @@ export const useCreateTeamMutation = () => {
       return response.data;
     },
     onSuccess: (newTeam) => {
-      // Invalidate and refetch teams queries
-      invalidateQueries.allTeams();
-
       // Update team store
-      const { setTeams, teams } = useTeamStore.getState();
-      setTeams([...teams, newTeam]);
+      const { setTeam } = useTeamStore.getState();
+      setTeam(newTeam);
+
+      // Invalidate teams queries
+      invalidateQueries.allTeams();
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -111,8 +109,6 @@ export const useCreateTeamMutation = () => {
  * Updates an existing team
  */
 export const useUpdateTeamMutation = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({
       teamId,
@@ -132,18 +128,14 @@ export const useUpdateTeamMutation = () => {
       return response.data;
     },
     onSuccess: (updatedTeam) => {
-      // Invalidate and refetch specific team query
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.teams.byId(updatedTeam.id),
-      });
-
       // Update team in store
-      const { setTeams, teams } = useTeamStore.getState();
-      const updatedTeams = teams.map((team) =>
-        team.id === updatedTeam.id ? updatedTeam : team,
-      );
-      setTeams(updatedTeams);
+      const { updateTeam } = useTeamStore.getState();
+      updateTeam(updatedTeam);
+
+      // Invalidate specific team query
+      invalidateQueries.team(updatedTeam.id);
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -151,28 +143,20 @@ export const useUpdateTeamMutation = () => {
  * Deletes a team
  */
 export const useDeleteTeamMutation = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (teamId: string) => {
       await apiClient.delete(`teams/${teamId}`);
       return teamId;
     },
     onSuccess: (teamId) => {
-      // Invalidate and refetch teams queries
+      // Remove team from store
+      const { removeTeam } = useTeamStore.getState();
+      removeTeam(teamId);
+
+      // Invalidate teams queries
       invalidateQueries.allTeams();
-
-      // Update team store
-      const { setTeams, teams, setActiveTeam, activeTeam } =
-        useTeamStore.getState();
-      const updatedTeams = teams.filter((team) => team.id !== teamId);
-      setTeams(updatedTeams);
-
-      // If the deleted team was active, set a new active team or null
-      if (activeTeam?.id === teamId) {
-        setActiveTeam(updatedTeams.length > 0 ? updatedTeams[0] : null);
-      }
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -180,23 +164,20 @@ export const useDeleteTeamMutation = () => {
  * Joins a team using an invite code
  */
 export const useJoinTeamMutation = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (inviteId: string) => {
       const response = await apiClient.post<Team>(`teams/invite/${inviteId}`);
       return response.data;
     },
     onSuccess: (newTeam) => {
-      // Invalidate and refetch teams queries
-      invalidateQueries.allTeams();
-
       // Update team store
-      const { setTeams, teams } = useTeamStore.getState();
-      if (!teams.some((team) => team.id === newTeam.id)) {
-        setTeams([...teams, newTeam]);
-      }
+      const { setTeam } = useTeamStore.getState();
+      setTeam(newTeam);
+
+      // Invalidate teams queries
+      invalidateQueries.allTeams();
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -204,28 +185,20 @@ export const useJoinTeamMutation = () => {
  * Leaves a team
  */
 export const useLeaveTeamMutation = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (teamId: string) => {
       await apiClient.delete(`teams/${teamId}/members/me`);
       return teamId;
     },
     onSuccess: (teamId) => {
-      // Invalidate and refetch teams queries
+      // Remove team from store
+      const { removeTeam } = useTeamStore.getState();
+      removeTeam(teamId);
+
+      // Invalidate teams queries
       invalidateQueries.allTeams();
-
-      // Update team store
-      const { setTeams, teams, setActiveTeam, activeTeam } =
-        useTeamStore.getState();
-      const updatedTeams = teams.filter((team) => team.id !== teamId);
-      setTeams(updatedTeams);
-
-      // If the left team was active, set a new active team or null
-      if (activeTeam?.id === teamId) {
-        setActiveTeam(updatedTeams.length > 0 ? updatedTeams[0] : null);
-      }
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -235,18 +208,26 @@ export const useLeaveTeamMutation = () => {
  * @returns Query hook for team statistics
  */
 export const useTeamStatsQuery = (teamId: string | undefined) => {
+  const { setTeamStats } = useTeamStore();
+
   return useQuery({
-    queryKey: teamId ? ["teamStats", teamId] : ["teamStats", "undefined"],
+    queryKey: teamId
+      ? QUERY_KEYS.teams.stats(teamId)
+      : ["teamStats", "undefined"],
     queryFn: async () => {
       if (!teamId) {
         throw new Error("Team ID is required");
       }
 
-      const response = await apiClient.get(`teams/${teamId}/stats`);
+      const response = await apiClient.get<TeamStats>(`teams/${teamId}/stats`);
+
+      // Update store with team stats
+      setTeamStats(teamId, response.data);
+
       return response.data;
     },
     enabled: !!teamId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes
   });
 };
 
@@ -256,17 +237,27 @@ export const useTeamStatsQuery = (teamId: string | undefined) => {
  * @returns Query hook for team members
  */
 export const useTeamMembersQuery = (teamId: string | undefined) => {
+  const { setTeamMembers } = useTeamStore();
+
   return useQuery({
-    queryKey: teamId ? ["teamMembers", teamId] : ["teamMembers", "undefined"],
+    queryKey: teamId
+      ? QUERY_KEYS.teams.members(teamId)
+      : ["teamMembers", "undefined"],
     queryFn: async () => {
       if (!teamId) {
         throw new Error("Team ID is required");
       }
 
-      const response = await apiClient.get(`teams/${teamId}/members`);
+      const response = await apiClient.get<TeamMember[]>(
+        `teams/${teamId}/members`,
+      );
+
+      // Update store with team members
+      setTeamMembers(teamId, response.data);
+
       return response.data;
     },
     enabled: !!teamId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes
   });
 };

@@ -1,9 +1,11 @@
 // src/hooks/useTeams.tsx
 /**
- * Hook for team functionality
+ * Hooks for team functionality
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTeamStore, Team } from "../core/store/teamStore";
+import { useCallback, useMemo } from "react";
+import { Team, TeamMember, TeamStats } from "../types";
+import { useTeamStore } from "../core/store/teamStore";
+import { teamService } from "../core/services/teamService";
 import {
   useTeamsQuery,
   useTeamQuery,
@@ -15,137 +17,26 @@ import {
   useTeamStatsQuery,
   useTeamMembersQuery,
 } from "../core/api/queries/teamQueries";
-import { useUnreadCounts } from "./useUnreadCounts";
-import { getTeamUnreadCounts } from "../core/store/channelStore";
 
 /**
- * Hook that provides team functionality
- * @returns Team state and actions
+ * Hook that provides teams functionality
+ * @returns Teams state and actions
  */
 export function useTeams() {
   // Get state from store
-  const {
-    teams,
-    activeTeam,
-    isLoading,
-    error,
-    setActiveTeam,
-    getTeamById,
-    updateUnreadCount,
-  } = useTeamStore();
+  const { teams, activeTeam, isLoading, error, setActiveTeam, getTeamById } =
+    useTeamStore();
 
-  // Get team queries
+  // Get teams query
   const teamsQuery = useTeamsQuery();
-
-  // Get unread counts from hook
-  const {
-    teamUnreadCounts,
-    hasUnreadsInTeam,
-    hasMentionsInTeam,
-    prefetchAllTeamUnreadCounts,
-    loadInitialUnreadCounts,
-  } = useUnreadCounts();
-
-  // State to track if unread counts have been loaded
-  const [unreadCountsLoaded, setUnreadCountsLoaded] = useState(false);
-
-  // Ref to track attempts to load unread counts
-  const unreadLoadingAttemptsRef = useRef(0);
-
-  // Function to broadcast unread counts updates
-  const broadcastUnreadCountsUpdate = useCallback(() => {
-    // Create and dispatch a custom event with the current counts
-    const event = new CustomEvent("unreadCountsUpdated", {
-      detail: teamUnreadCounts,
-    });
-    window.dispatchEvent(event);
-  }, [teamUnreadCounts]);
-
-  // Pre-fetch unread counts for all teams when teams are loaded
-  useEffect(() => {
-    // Only proceed if we have teams and haven't already loaded counts
-    if (
-      teams.length > 0 &&
-      !unreadCountsLoaded &&
-      !teamsQuery.isLoading &&
-      unreadLoadingAttemptsRef.current < 3
-    ) {
-      // Increment the attempts counter
-      unreadLoadingAttemptsRef.current += 1;
-
-      // Set a timeout to ensure this runs after other initialization
-      setTimeout(() => {
-        // Try to load unread counts
-        prefetchAllTeamUnreadCounts(teams)
-          .then(() => {
-            // Mark as loaded
-            setUnreadCountsLoaded(true);
-
-            // Broadcast an update to let components know data is available
-            // Use another small delay to ensure data is fully propagated
-            setTimeout(() => {
-              broadcastUnreadCountsUpdate();
-            }, 50);
-          })
-          .catch((error: any) => {
-            console.error("Error prefetching team unread counts:", error);
-          });
-
-        // If we have minimal data, also try a full reload
-        if (Object.keys(teamUnreadCounts).length < teams.length) {
-          void loadInitialUnreadCounts();
-        }
-      }, 200);
-    }
-  }, [
-    teams,
-    unreadCountsLoaded,
-    teamsQuery.isLoading,
-    prefetchAllTeamUnreadCounts,
-    broadcastUnreadCountsUpdate,
-    loadInitialUnreadCounts,
-    teamUnreadCounts,
-  ]);
-
-  // Effect to periodically check and broadcast unread counts
-  // This helps ensure UI components stay updated
-  useEffect(() => {
-    if (teams.length === 0) return;
-
-    // First check shortly after initial render
-    const firstCheckTimer = setTimeout(() => {
-      broadcastUnreadCountsUpdate();
-    }, 500);
-
-    // Then check again after a longer delay to catch any late data
-    const secondCheckTimer = setTimeout(() => {
-      broadcastUnreadCountsUpdate();
-    }, 2000);
-
-    return () => {
-      clearTimeout(firstCheckTimer);
-      clearTimeout(secondCheckTimer);
-    };
-  }, [teams, broadcastUnreadCountsUpdate]);
 
   /**
    * Refreshes the teams list
    * @returns Promise resolving to the refreshed teams
    */
   const refreshTeams = useCallback(async () => {
-    return teamsQuery.refetch().then((result) => {
-      const fetchedTeams = result.data || [];
-
-      if (fetchedTeams.length > 0) {
-        return prefetchAllTeamUnreadCounts(fetchedTeams).then(() => {
-          broadcastUnreadCountsUpdate();
-          return fetchedTeams;
-        });
-      }
-
-      return fetchedTeams;
-    });
-  }, [teamsQuery, prefetchAllTeamUnreadCounts, broadcastUnreadCountsUpdate]);
+    return teamsQuery.refetch().then((result) => result.data || []);
+  }, [teamsQuery]);
 
   /**
    * Sets the active team by ID
@@ -167,63 +58,35 @@ export function useTeams() {
   );
 
   /**
-   * Gets unread count for a team
-   * @param teamId Team ID
-   * @returns Unread count object
+   * Gets formatted teams
+   * @returns Formatted teams for display
    */
-  const getTeamUnreadCount = useCallback((teamId: string) => {
-    return getTeamUnreadCounts(teamId);
-  }, []);
+  const formattedTeams = useMemo(() => {
+    return teams.map((team) => teamService.formatTeam(team));
+  }, [teams]);
 
   /**
-   * Checks if a team has unread messages
-   * @param teamId Team ID
-   * @returns Whether the team has unread messages
+   * Sorts teams by display name
+   * @returns Sorted teams
    */
-  const teamHasUnreads = useCallback(
-    (teamId: string) => {
-      return hasUnreadsInTeam(teamId);
-    },
-    [hasUnreadsInTeam],
-  );
-
-  /**
-   * Checks if a team has mentions
-   * @param teamId Team ID
-   * @returns Whether the team has mentions
-   */
-  const teamHasMentions = useCallback(
-    (teamId: string) => {
-      return hasMentionsInTeam(teamId);
-    },
-    [hasMentionsInTeam],
-  );
-
-  // Force a recomputation of teamUnreadCounts to help with propagation
-  const computedTeamUnreadCounts = useMemo(() => {
-    // This simply creates a new reference to help trigger UI updates
-    return { ...teamUnreadCounts };
-  }, [teamUnreadCounts, unreadCountsLoaded]);
+  const sortedTeams = useMemo(() => {
+    return teamService.sortTeams(teams);
+  }, [teams]);
 
   return {
     // State
     teams,
+    formattedTeams,
+    sortedTeams,
     activeTeam,
     isLoading: isLoading || teamsQuery.isLoading || teamsQuery.isFetching,
     error: error || teamsQuery.error,
-    teamUnreadCounts: computedTeamUnreadCounts,
-    unreadCountsLoaded,
 
     // Actions
     setActiveTeam,
     setActiveTeamById,
     refreshTeams,
-    updateUnreadCount,
     getTeamById,
-    getTeamUnreadCount,
-    teamHasUnreads,
-    teamHasMentions,
-    broadcastUnreadCountsUpdate,
 
     // Query states
     isRefreshing: teamsQuery.isRefetching,
@@ -231,21 +94,37 @@ export function useTeams() {
 }
 
 /**
+ * Interface for team detail return
+ */
+export interface TeamDetailResult {
+  team: Team | null;
+  stats: TeamStats | null;
+  members: TeamMember[];
+  isLoading: boolean;
+  isUpdating: boolean;
+  isDeleting: boolean;
+  isLeaving: boolean;
+  error: Error | null;
+  updateTeam: (data: Partial<Team>) => Promise<Team>;
+  deleteTeam: () => Promise<void>;
+  leaveTeam: () => Promise<void>;
+  setAsActive: () => void;
+  refreshTeam: () => Promise<Team | null>;
+}
+
+/**
  * Hook that provides functionality for a specific team
  * @param teamId Team ID
- * @returns Team state and actions
+ * @returns Team detail state and actions
  */
-export function useTeam(teamId: string | undefined) {
+export function useTeam(teamId: string | undefined): TeamDetailResult {
   // Get state from store
   const { setActiveTeam, getTeamById } = useTeamStore();
 
-  // Get team query
+  // Get team queries
   const teamQuery = useTeamQuery(teamId);
   const teamStatsQuery = useTeamStatsQuery(teamId);
   const teamMembersQuery = useTeamMembersQuery(teamId);
-
-  // Get unread counts for this team
-  const { getUnreadCountsByTeam, markTeamAsRead } = useUnreadCounts();
 
   // Get team mutations
   const updateTeamMutation = useUpdateTeamMutation();
@@ -273,26 +152,26 @@ export function useTeam(teamId: string | undefined) {
 
   /**
    * Deletes a team
-   * @returns Promise resolving to the deleted team ID
+   * @returns Promise resolving to void
    */
   const deleteTeam = useCallback(async () => {
     if (!teamId) {
       throw new Error("Team ID is required for deletion");
     }
 
-    return deleteTeamMutation.mutateAsync(teamId);
+    await deleteTeamMutation.mutateAsync(teamId);
   }, [teamId, deleteTeamMutation]);
 
   /**
    * Leaves a team
-   * @returns Promise resolving to the left team ID
+   * @returns Promise resolving to void
    */
   const leaveTeam = useCallback(async () => {
     if (!teamId) {
       throw new Error("Team ID is required to leave");
     }
 
-    return leaveTeamMutation.mutateAsync(teamId);
+    await leaveTeamMutation.mutateAsync(teamId);
   }, [teamId, leaveTeamMutation]);
 
   /**
@@ -315,28 +194,11 @@ export function useTeam(teamId: string | undefined) {
     return teamQuery.refetch().then((result) => result.data || null);
   }, [teamQuery]);
 
-  /**
-   * Gets unread counts for this team
-   */
-  const unreadCounts = useMemo(() => {
-    if (!teamId) return { msg_count: 0, mention_count: 0 };
-    return getUnreadCountsByTeam(teamId);
-  }, [teamId, getUnreadCountsByTeam]);
-
-  /**
-   * Marks all channels in this team as read
-   */
-  const markAllAsRead = useCallback(async () => {
-    if (!teamId) return;
-    return markTeamAsRead(teamId);
-  }, [teamId, markTeamAsRead]);
-
   return {
     // State
     team: teamQuery.data,
     stats: teamStatsQuery.data,
-    members: teamMembersQuery.data,
-    unreadCounts,
+    members: teamMembersQuery.data || [],
     isLoading: teamQuery.isLoading || teamQuery.isFetching,
     isUpdating: updateTeamMutation.isPending,
     isDeleting: deleteTeamMutation.isPending,
@@ -349,16 +211,14 @@ export function useTeam(teamId: string | undefined) {
     leaveTeam,
     setAsActive,
     refreshTeam,
-    markAllAsRead,
   };
 }
 
 /**
- * Hook that provides team creation functionality
- * @returns Team creation actions and state
+ * Hook that provides team creation and joining functionality
  */
 export function useTeamCreation() {
-  // Get team creation mutation
+  // Get team creation and join mutations
   const createTeamMutation = useCreateTeamMutation();
   const joinTeamMutation = useJoinTeamMutation();
 
@@ -374,6 +234,11 @@ export function useTeamCreation() {
       type: "O" | "I";
       description?: string;
     }) => {
+      // Validate team name
+      if (!teamService.validateTeamName(teamData.name)) {
+        throw new Error("Invalid team name format");
+      }
+
       return createTeamMutation.mutateAsync(teamData);
     },
     [createTeamMutation],
@@ -391,6 +256,15 @@ export function useTeamCreation() {
     [joinTeamMutation],
   );
 
+  /**
+   * Creates a URL-friendly team name from display name
+   * @param displayName Display name
+   * @returns URL-friendly team name
+   */
+  const generateTeamName = useCallback((displayName: string) => {
+    return teamService.sanitizeTeamName(displayName);
+  }, []);
+
   return {
     // State
     isCreating: createTeamMutation.isPending,
@@ -401,5 +275,6 @@ export function useTeamCreation() {
     // Actions
     createTeam,
     joinTeamByInvite,
+    generateTeamName,
   };
 }
