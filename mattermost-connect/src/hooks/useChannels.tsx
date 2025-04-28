@@ -3,12 +3,9 @@
  * Hook for channel functionality
  */
 import { useCallback, useMemo } from "react";
-import {
-  useChannelStore,
-  Channel,
-  getChannelsByType,
-  ChannelGroupType,
-} from "../core/store/channelStore";
+import { Channel, ChannelGroupType, ChannelMember } from "../types";
+import { useChannelStore } from "../core/store/channelStore";
+import { channelService } from "../core/services/channelService";
 import {
   useChannelsQuery,
   useChannelQuery,
@@ -23,6 +20,7 @@ import {
   useToggleChannelMutedMutation,
 } from "../core/api/queries/channelQueries";
 import { useUnreadCounts } from "./useUnreadCounts";
+import { useAuthStore } from "../core/store/authStore";
 
 /**
  * Hook that provides channels functionality for a team
@@ -30,8 +28,11 @@ import { useUnreadCounts } from "./useUnreadCounts";
  * @returns Channels state and actions
  */
 export function useChannels(teamId: string | undefined) {
+  // Get auth state
+  const { currentUser } = useAuthStore();
+
   // Get state from store
-  const { activeChannel, setActiveChannel, getChannelById, updateTypingUsers } =
+  const { activeChannel, setActiveChannel, getChannelById, getChannelsByType } =
     useChannelStore();
 
   // Get channels query
@@ -39,7 +40,6 @@ export function useChannels(teamId: string | undefined) {
 
   // Get unread counts hook
   const {
-    getChannelUnreadCountsByTeam,
     markChannelAsRead,
     markTeamAsRead,
     toggleChannelMuted,
@@ -49,19 +49,6 @@ export function useChannels(teamId: string | undefined) {
     unreadCounts,
     teamUnreadCounts,
   } = useUnreadCounts();
-
-  /**
-   * Gets channels of a specific type for the team
-   * @param type Channel type
-   * @returns List of channels of the specified type
-   */
-  const getChannelsByGroup = useCallback(
-    (type: ChannelGroupType) => {
-      if (!teamId) return [];
-      return getChannelsByType(teamId, type);
-    },
-    [teamId],
-  );
 
   /**
    * Sets the active channel by ID
@@ -94,11 +81,23 @@ export function useChannels(teamId: string | undefined) {
   }, [channelsQuery]);
 
   /**
+   * Gets channels by group type
+   * @param type Channel group type
+   * @returns Filtered channels
+   */
+  const getChannelsByGroupType = useCallback(
+    (type: ChannelGroupType): Channel[] => {
+      if (!teamId) return [];
+      return getChannelsByType(teamId, type);
+    },
+    [teamId, getChannelsByType],
+  );
+
+  /**
    * Gets current unread data in a format suitable for UI components
-   * @returns Object with unread data for UI
    */
   const unreadData = useMemo(() => {
-    // Return format expected by ChannelListUI
+    // Return format expected by UI components
     if (!teamId) {
       return {
         unreadCounts: {},
@@ -107,10 +106,10 @@ export function useChannels(teamId: string | undefined) {
       };
     }
 
-    const teamChannels = getChannelsByGroup("public")
-      .concat(getChannelsByGroup("private"))
-      .concat(getChannelsByGroup("direct"))
-      .concat(getChannelsByGroup("group"));
+    const teamChannels = getChannelsByGroupType("public")
+      .concat(getChannelsByGroupType("private"))
+      .concat(getChannelsByGroupType("direct"))
+      .concat(getChannelsByGroupType("group"));
 
     // Build sets for favorites and muted channels
     const mutedChannels = new Set<string>();
@@ -134,16 +133,16 @@ export function useChannels(teamId: string | undefined) {
       favoriteChannels,
       mutedChannels,
     };
-  }, [teamId, getChannelsByGroup, isChannelMuted, unreadCounts]);
+  }, [teamId, getChannelsByGroupType, isChannelMuted, unreadCounts]);
 
   return {
     // State
     channels: channelsQuery.data || [],
-    publicChannels: getChannelsByGroup("public"),
-    privateChannels: getChannelsByGroup("private"),
-    directChannels: getChannelsByGroup("direct"),
-    groupChannels: getChannelsByGroup("group"),
-    favoriteChannels: getChannelsByGroup("favorite"),
+    publicChannels: getChannelsByGroupType("public"),
+    privateChannels: getChannelsByGroupType("private"),
+    directChannels: getChannelsByGroupType("direct"),
+    groupChannels: getChannelsByGroupType("group"),
+    favoriteChannels: getChannelsByGroupType("favorite"),
     activeChannel,
     isLoading: channelsQuery.isLoading || channelsQuery.isFetching,
     error: channelsQuery.error,
@@ -161,7 +160,6 @@ export function useChannels(teamId: string | undefined) {
     setActiveChannelById,
     getChannelById,
     refreshChannels,
-    updateTypingUsers,
 
     // Unread count actions (exposed from useUnreadCounts)
     markChannelAsRead,
@@ -376,7 +374,7 @@ export function useChannel(channelId: string | undefined) {
     deleteChannel,
     leaveChannel,
     viewChannel,
-    markChannelAsRead,
+    markAsRead: markChannelAsRead,
     addToFavorites,
     removeFromFavorites,
     toggleMuted,
