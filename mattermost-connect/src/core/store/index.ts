@@ -10,10 +10,8 @@ import { useUserStore } from "./userStore";
 import { useTeamStore } from "./teamStore";
 import { useChannelStore } from "./channelStore";
 import { useMessageStore } from "./messageStore";
-import { useReactionStore } from "./reactionStore";
 import { useUnreadStore } from "./unreadStore";
 import { useWsStore } from "./wsStore";
-import { useEventStore } from "./eventStore";
 import { useErrorStore } from "./errorStore";
 import { useUserSettingsStore } from "./userSettingsStore";
 
@@ -48,9 +46,6 @@ export {
   getSortedThreadMessages,
 } from "./messageStore";
 
-// Reactions
-export { useReactionStore } from "./reactionStore";
-
 // Unread Counts
 export {
   useUnreadStore,
@@ -58,22 +53,17 @@ export {
   getTotalUnreadCounts,
 } from "./unreadStore";
 
-// WebSocket
+// WebSocket - Updated exports with new pattern
 export { useWsStore, registerWsHandler, registerWsHandlers } from "./wsStore";
-
-// Events
-export {
-  useEventStore,
-  registerEventHandler,
-  registerEventHandlers,
-  emitEvent,
-} from "./eventStore";
 
 // Error Handling
 export { useErrorStore, handleError } from "./errorStore";
 
 // User Settings
 export { useUserSettingsStore } from "./userSettingsStore";
+
+// Event utilities - Now exported from api/eventUtils
+export { emitEvent, onEvent, onEvents } from "../api/eventUtils";
 
 /**
  * Resets all stores to their initial state
@@ -86,9 +76,7 @@ export const resetAllStores = () => {
   useTeamStore.getState().reset();
   useChannelStore.getState().reset();
   useMessageStore.getState().reset();
-  useReactionStore.getState().reset();
   useUnreadStore.getState().reset();
-  useEventStore.getState().reset();
   useErrorStore.getState().reset();
   useUserSettingsStore.getState().reset();
 };

@@ -1,5 +1,6 @@
 /**
  * WebSocket related type definitions
+ * Provides comprehensive types for WebSocket functionality
  */
 
 /**
@@ -72,24 +73,68 @@ export interface WebSocketMessage {
 }
 
 /**
+ * WebSocket connection event
+ */
+export interface WebSocketConnectionEvent {
+  /** Whether the connection is established */
+  isConnected: boolean;
+  /** Timestamp of the event */
+  timestamp: number;
+  /** Close code (for disconnection events) */
+  code?: number;
+  /** Close reason (for disconnection events) */
+  reason?: string;
+  /** Whether disconnection was user initiated */
+  userInitiated?: boolean;
+  /** Whether this is a reconnection event */
+  reconnected?: boolean;
+}
+
+/**
+ * WebSocket error event
+ */
+export interface WebSocketErrorEvent {
+  /** Error object */
+  error: Error;
+  /** Original event that caused the error */
+  originalEvent?: Event;
+  /** Timestamp of the error */
+  timestamp: number;
+  /** Additional context */
+  context?: string;
+}
+
+/**
  * Typing indicator data from WebSocket
  */
 export interface TypingData {
+  /** Channel ID where typing is occurring */
   channel_id: string;
-  parent_id?: string; // For threads
+  /** Parent message ID for thread typing */
+  parent_id?: string;
+  /** User ID who is typing */
   user_id: string;
+  /** Timestamp when typing started */
+  timestamp?: number;
 }
 
 /**
  * Posted message data from WebSocket
  */
 export interface PostedData {
+  /** Display name of the channel */
   channel_display_name: string;
+  /** Name of the channel */
   channel_name: string;
+  /** Type of the channel */
   channel_type: string;
+  /** ID of the channel */
   channel_id: string;
-  post: string; // JSON string of the message
+  /** Post data (JSON string of the message) */
+  post: string;
+  /** Name of the sender */
   sender_name: string;
+  /** Team ID */
   team_id: string;
 }
 
@@ -97,22 +142,94 @@ export interface PostedData {
  * Status change data from WebSocket
  */
 export interface StatusChangeData {
+  /** User ID whose status changed */
   user_id: string;
+  /** New status */
   status: string;
+  /** Whether the change was manual or automatic */
   manual?: boolean;
+  /** Timestamp of last activity */
   last_activity_at?: number;
 }
 
 /**
- * WebSocket state for the store
+ * Channel updated data from WebSocket
  */
-export interface WebsocketState {
+export interface ChannelUpdatedData {
+  /** Channel ID */
+  channel_id: string;
+  /** Team ID */
+  team_id?: string;
+  /** Updated channel data */
+  channel: string; // JSON string
+}
+
+/**
+ * Channel viewed data from WebSocket
+ */
+export interface ChannelViewedData {
+  /** Channel ID */
+  channel_id: string;
+  /** User ID who viewed the channel */
+  user_id: string;
+}
+
+/**
+ * Reaction data from WebSocket
+ */
+export interface ReactionData {
+  /** Reaction data */
+  reaction: string; // JSON string
+  /** User ID who reacted */
+  user_id: string;
+  /** Post ID */
+  post_id: string;
+  /** Emoji name */
+  emoji_name: string;
+}
+
+/**
+ * WebSocket state
+ */
+export interface WebSocketState {
+  /** Whether WebSocket is connected */
   isConnected: boolean;
+  /** Whether WebSocket is connecting */
   isConnecting: boolean;
+  /** WebSocket URL */
   url: string | null;
+  /** Number of reconnect attempts */
   reconnectAttempts: number;
+  /** Timestamp of last connection */
   lastConnectedAt: number | null;
+  /** Timestamp of last disconnection */
   lastDisconnectedAt: number | null;
+  /** Whether WebSocket has been disconnected */
   hasBeenDisconnected: boolean;
+  /** Error if connection failed */
   error: Error | null;
+}
+
+/**
+ * WebSocket event listener registration options
+ */
+export interface WebSocketListenerOptions {
+  /** Whether to receive past events that occurred before registration */
+  receivePastEvents?: boolean;
+  /** Maximum number of past events to receive */
+  maxPastEvents?: number;
+  /** Whether to automatically unregister when component unmounts */
+  autoUnregister?: boolean;
+}
+
+/**
+ * WebSocket message event with strongly typed data
+ */
+export interface WebSocketMessageEvent<T> {
+  /** Event type */
+  type: WebSocketEventType;
+  /** Event data */
+  data: T;
+  /** Timestamp */
+  timestamp: number;
 }
