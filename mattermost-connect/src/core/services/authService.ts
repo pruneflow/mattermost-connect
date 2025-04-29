@@ -1,33 +1,17 @@
 // src/core/services/authService.ts
 /**
  * Authentication service
- * Handles user login, logout, and token management
+ * Handles user login, logout, token management, and session persistence
  */
 import { apiClient } from "../api/client";
-
-/**
- * User interface
- */
-export interface User {
-  id: string;
-  username: string;
-  email?: string;
-  first_name?: string;
-  last_name?: string;
-  nickname?: string;
-  roles?: string;
-  props?: Record<string, unknown>;
-  last_picture_update?: number;
-  update_at: number;
-}
-
-/**
- * Login response interface
- */
-export interface LoginResponse {
-  token: string;
-  user: User;
-}
+import { handleError } from "../store/errorStore";
+import {
+  ErrorSource,
+  User,
+  LoginParams,
+  LoginResponse,
+  AuthMode,
+} from "../../types";
 
 /**
  * Authentication service configuration options
@@ -39,25 +23,40 @@ export interface AuthServiceConfig {
   storageKey?: string;
   /** Key to use in localStorage for server URL */
   serverStorageKey?: string;
+  /** Auth mode to use */
+  mode?: AuthMode;
 }
 
 /**
+ * Default configuration for authentication service
+ */
+const DEFAULT_CONFIG: AuthServiceConfig = {
+  useLocalStorage: true,
+  storageKey: "mattermost_token",
+  serverStorageKey: "mattermost_server",
+  mode: "direct",
+};
+
+/**
  * Authentication service for Mattermost
- * Handles login, logout, token management, and session persistence
+ * Centralized service for handling user authentication
  */
 class AuthService {
   private useLocalStorage: boolean;
   private storageKey: string;
   private serverStorageKey: string;
+  private mode: AuthMode;
 
   /**
    * Creates an instance of the authentication service
    * @param config Configuration options
    */
   constructor(config: AuthServiceConfig = {}) {
-    this.useLocalStorage = config.useLocalStorage ?? true;
-    this.storageKey = config.storageKey ?? "mattermost_token";
-    this.serverStorageKey = config.serverStorageKey ?? "mattermost_server";
+    const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+    this.useLocalStorage = mergedConfig.useLocalStorage!;
+    this.storageKey = mergedConfig.storageKey!;
+    this.serverStorageKey = mergedConfig.serverStorageKey!;
+    this.mode = mergedConfig.mode!;
   }
 
   /**
@@ -78,15 +77,23 @@ class AuthService {
 
       // Handle direct mode login
       if (apiClient.getMode() === "direct") {
+        // Configure API client with server URL if provided
+        if (serverUrl) {
+          apiClient.configure({
+            mode: "direct",
+            serverUrl,
+          });
+        }
+
         // Log in to Mattermost server
-        const loginResponse = await apiClient.post("users/login", {
+        const loginResponse = await apiClient.post<User>("users/login", {
           login_id: username,
           password,
         });
 
         // Extract token from headers
         token = loginResponse.headers["token"];
-        user = loginResponse.data as User;
+        user = loginResponse.data;
 
         // Update API client with token
         apiClient.setToken(token);
@@ -99,23 +106,25 @@ class AuthService {
       // Handle proxy mode login
       else {
         // Log in via proxy
-        const response = await apiClient.post("auth/login", {
+        const response = await apiClient.post<{
+          token: string;
+          user_id: string;
+        }>("auth/login", {
           username,
           password,
         });
 
-        const { token: proxyToken, user_id } = response.data;
-        token = proxyToken;
+        token = response.data.token;
 
         // Configure API client with token and user ID
         apiClient.setToken(token);
-        if (user_id) {
-          apiClient.setUserId(user_id);
+        if (response.data.user_id) {
+          apiClient.setUserId(response.data.user_id);
         }
 
         // Get current user information
-        const userResponse = await apiClient.get("users/me");
-        user = userResponse.data as User;
+        const userResponse = await apiClient.get<User>("users/me");
+        user = userResponse.data;
 
         // Store credentials if localStorage is enabled
         if (this.useLocalStorage) {
@@ -125,6 +134,8 @@ class AuthService {
 
       return { token, user };
     } catch (error) {
+      // Handle and report error
+      handleError(error as Error, ErrorSource.AUTH);
       throw error;
     }
   }
@@ -147,8 +158,8 @@ class AuthService {
    */
   public async getCurrentUser(): Promise<User | null> {
     try {
-      const response = await apiClient.get("users/me");
-      const currentUser = response.data as User;
+      const response = await apiClient.get<User>("users/me");
+      const currentUser = response.data;
 
       // Update user ID in API client
       apiClient.setUserId(currentUser.id);
@@ -159,6 +170,7 @@ class AuthService {
       if ((error as any).status === 401) {
         this.logout();
       }
+      handleError(error as Error, ErrorSource.AUTH);
       return null;
     }
   }
@@ -184,6 +196,15 @@ class AuthService {
       // Configure API client with token
       apiClient.setToken(token);
 
+      // Set server URL if in direct mode and URL is stored
+      if (apiClient.getMode() === "direct" && serverUrl) {
+        apiClient.configure({
+          mode: "direct",
+          serverUrl,
+          token,
+        });
+      }
+
       // Validate token by getting current user
       const user = await this.getCurrentUser();
 
@@ -197,8 +218,25 @@ class AuthService {
       // Clear invalid credentials
       this.clearStoredCredentials();
       apiClient.setToken(null);
+      handleError(error as Error, ErrorSource.AUTH);
       return false;
     }
+  }
+
+  /**
+   * Sets the authentication mode
+   * @param mode Authentication mode
+   */
+  public setMode(mode: AuthMode): void {
+    this.mode = mode;
+  }
+
+  /**
+   * Gets the current authentication mode
+   * @returns Current authentication mode
+   */
+  public getMode(): AuthMode {
+    return this.mode;
   }
 
   /**

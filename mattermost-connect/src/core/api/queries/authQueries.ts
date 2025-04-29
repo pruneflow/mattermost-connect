@@ -1,35 +1,42 @@
 // src/core/api/queries/authQueries.ts
 /**
  * React Query hooks for authentication operations
+ * Provides standardized queries for authentication operations
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { User, LoginParams, ApiError } from "../../../types";
+import { useAuthStore } from "../../store";
 import { apiClient } from "../client";
 import { QUERY_KEYS } from "../queryClient";
-import { User, authService } from "../../services/authService";
-import { useAuthStore } from "../../store/authStore";
+import { createQueryOptions, createMutationOptions } from "../queryUtils";
 
 /**
  * Fetches the current authenticated user
  * @returns Query hook for current user
  */
 export const useCurrentUserQuery = () => {
-  const { setCurrentUser } = useAuthStore();
+  const { refreshCurrentUser } = useAuthStore();
 
-  return useQuery({
+  return useQuery<User, ApiError>({
     queryKey: QUERY_KEYS.auth.current,
     queryFn: async () => {
-      const response = await apiClient.get<User>("users/me");
-      const user = response.data;
+      const user = await refreshCurrentUser();
 
-      // Update auth store
-      setCurrentUser(user);
+      if (!user) {
+        throw new Error("Failed to fetch current user");
+      }
 
       return user;
     },
-    // Cache data for 5 minutes
-    staleTime: 5 * 60 * 1000,
     // Only fetch if authenticated
     enabled: useAuthStore.getState().isAuthenticated,
+    // Use optimized query options
+    ...createQueryOptions("user", {
+      // Cache data for 5 minutes
+      staleTime: 5 * 60 * 1000,
+      // Don't refetch on window focus (handled by WebSocket events)
+      refetchOnWindowFocus: false,
+    }),
   });
 };
 
@@ -39,18 +46,14 @@ export const useCurrentUserQuery = () => {
 export const useLoginMutation = () => {
   const { login } = useAuthStore();
 
-  return useMutation({
-    mutationFn: async ({
-      username,
-      password,
-      serverUrl,
-    }: {
-      username: string;
-      password: string;
-      serverUrl?: string;
-    }) => {
-      return login(username, password, serverUrl);
+  return useMutation<User, ApiError, LoginParams>({
+    mutationFn: async ({ username, password, serverUrl }: LoginParams) => {
+      return login({ username, password, serverUrl });
     },
+    ...createMutationOptions({
+      // Don't retry login attempts
+      retry: false,
+    }),
   });
 };
 
@@ -60,11 +63,12 @@ export const useLoginMutation = () => {
 export const useLogoutMutation = () => {
   const { logout } = useAuthStore();
 
-  return useMutation({
+  return useMutation<boolean, ApiError, void>({
     mutationFn: async () => {
       logout();
       return true;
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -72,11 +76,12 @@ export const useLogoutMutation = () => {
  * Forgot password mutation
  */
 export const useForgotPasswordMutation = () => {
-  return useMutation({
+  return useMutation<boolean, ApiError, string>({
     mutationFn: async (email: string) => {
       await apiClient.post("users/password/reset", { email });
       return true;
     },
+    ...createMutationOptions(),
   });
 };
 
@@ -84,21 +89,18 @@ export const useForgotPasswordMutation = () => {
  * Reset password mutation
  */
 export const useResetPasswordMutation = () => {
-  return useMutation({
-    mutationFn: async ({
-      token,
-      newPassword,
-    }: {
-      token: string;
-      newPassword: string;
-    }) => {
-      await apiClient.post("users/password/reset/complete", {
-        token,
-        new_password: newPassword,
-      });
-      return true;
+  return useMutation<boolean, ApiError, { token: string; newPassword: string }>(
+    {
+      mutationFn: async ({ token, newPassword }) => {
+        await apiClient.post("users/password/reset/complete", {
+          token,
+          new_password: newPassword,
+        });
+        return true;
+      },
+      ...createMutationOptions(),
     },
-  });
+  );
 };
 
 /**
@@ -108,16 +110,19 @@ export const useResetPasswordMutation = () => {
 export const useInitializeAuthQuery = () => {
   const { initialize } = useAuthStore();
 
-  return useQuery({
-    queryKey: ["auth", "initialize"],
+  return useQuery<boolean, ApiError>({
+    queryKey: QUERY_KEYS.auth.initialize,
     queryFn: async () => {
       return initialize();
     },
-    // Don't automatically refetch
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    // Don't cache the result
-    staleTime: 0,
+    // Run only once at mount
+    ...createQueryOptions("auth", {
+      // Don't automatically refetch
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+      // Don't cache the result
+      staleTime: 0,
+    }),
   });
 };

@@ -1,27 +1,17 @@
 // src/hooks/useAuth.tsx
 /**
  * Hook for authentication functionality
+ * Provides a simplified interface for working with authentication
  */
-import { useCallback } from "react";
-import { useAuthStore } from "../core/store/authStore";
+import { useCallback, useEffect, useState } from "react";
+import { useAuthStore } from "../core/store";
 import {
   useCurrentUserQuery,
   useLoginMutation,
   useLogoutMutation,
+  useInitializeAuthQuery,
 } from "../core/api/queries/authQueries";
-import { User } from "../core/services/authService";
-
-/**
- * Login parameters
- */
-export interface LoginParams {
-  /** Username or email */
-  username: string;
-  /** Password */
-  password: string;
-  /** Server URL (for direct mode) */
-  serverUrl?: string;
-}
+import { User, LoginParams } from "../types";
 
 /**
  * Hook that provides authentication functionality
@@ -29,15 +19,32 @@ export interface LoginParams {
  */
 export function useAuth() {
   // Get state from store
-  const { isAuthenticated, isAuthenticating, currentUser, error, serverUrl } =
-    useAuthStore();
+  const {
+    isAuthenticated,
+    isAuthenticating,
+    currentUser,
+    error,
+    serverUrl,
+    refreshCurrentUser,
+  } = useAuthStore();
 
-  // Get mutations
+  // Get queries and mutations
   const loginMutation = useLoginMutation();
   const logoutMutation = useLogoutMutation();
-
-  // Get current user query
   const currentUserQuery = useCurrentUserQuery();
+  const initializeAuthQuery = useInitializeAuthQuery();
+
+  // Track initialization status
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Initialize authentication on mount
+  useEffect(() => {
+    if (!isInitialized && !isAuthenticated && !isAuthenticating) {
+      initializeAuthQuery.refetch().then(() => {
+        setIsInitialized(true);
+      });
+    }
+  }, [isInitialized, isAuthenticated, isAuthenticating, initializeAuthQuery]);
 
   /**
    * Login with username and password
@@ -46,11 +53,7 @@ export function useAuth() {
    */
   const login = useCallback(
     async (params: LoginParams): Promise<User> => {
-      return loginMutation.mutateAsync({
-        username: params.username,
-        password: params.password,
-        serverUrl: params.serverUrl,
-      });
+      return loginMutation.mutateAsync(params);
     },
     [loginMutation],
   );
@@ -66,15 +69,16 @@ export function useAuth() {
    * Refresh the current user
    * @returns Promise resolving to the refreshed user
    */
-  const refreshCurrentUser = useCallback(async () => {
+  const refresh = useCallback(async () => {
     if (!isAuthenticated) return null;
-    return currentUserQuery.refetch().then((result) => result.data || null);
-  }, [isAuthenticated, currentUserQuery]);
+    return refreshCurrentUser();
+  }, [isAuthenticated, refreshCurrentUser]);
 
   return {
     // State
     isAuthenticated,
     isAuthenticating: isAuthenticating || loginMutation.isPending,
+    isInitialized,
     currentUser,
     error: error || loginMutation.error,
     serverUrl,
@@ -83,26 +87,36 @@ export function useAuth() {
     isLoggingIn: loginMutation.isPending,
     isLoggingOut: logoutMutation.isPending,
     isRefreshing: currentUserQuery.isRefetching,
+    isInitializing: initializeAuthQuery.isRefetching,
 
     // Actions
     login,
     logout,
-    refreshCurrentUser,
+    refresh,
   };
 }
 
 /**
  * Hook that requires authentication
+ * If user is not authenticated, redirects to login page
+ *
  * @param redirectUrl URL to redirect to if not authenticated
  * @returns Authentication state and actions
  */
 export function useRequireAuth(redirectUrl: string = "/login") {
-  const { isAuthenticated, isAuthenticating } = useAuth();
+  const { isAuthenticated, isAuthenticating, isInitialized } = useAuth();
 
-  // If we're in a browser environment, redirect if not authenticated
-  if (typeof window !== "undefined" && !isAuthenticated && !isAuthenticating) {
-    window.location.href = redirectUrl;
-  }
+  // Redirect to login if not authenticated and not in the process of authenticating
+  useEffect(() => {
+    if (
+      isInitialized &&
+      !isAuthenticated &&
+      !isAuthenticating &&
+      typeof window !== "undefined"
+    ) {
+      window.location.href = redirectUrl;
+    }
+  }, [isAuthenticated, isAuthenticating, isInitialized, redirectUrl]);
 
   return useAuth();
 }

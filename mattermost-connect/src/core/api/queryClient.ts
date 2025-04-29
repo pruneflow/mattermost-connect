@@ -1,6 +1,7 @@
 // src/core/api/queryClient.ts
 /**
  * Configuration for React Query client
+ * Centralized query client and key definitions
  */
 import { QueryClient } from "@tanstack/react-query";
 
@@ -38,6 +39,8 @@ export const QUERY_KEYS = {
   // Auth-related queries
   auth: {
     current: ["auth", "current"],
+    initialize: ["auth", "initialize"],
+    session: ["auth", "session"],
   },
 
   // Team-related queries
@@ -89,10 +92,23 @@ export const QUERY_KEYS = {
     byChannel: (channelId: string) => ["unread", "byChannel", channelId],
   },
 };
+
 /**
  * Utility for invalidating related queries when data changes
  */
 export const invalidateQueries = {
+  /**
+   * Invalidates auth-related queries
+   */
+  auth: {
+    all: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
+    },
+    currentUser: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.auth.current });
+    },
+  },
+
   /**
    * Invalidates all team-related queries
    */
