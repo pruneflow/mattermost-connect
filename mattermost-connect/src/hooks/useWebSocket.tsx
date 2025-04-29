@@ -8,10 +8,14 @@ import {
   useWsStore,
   registerWsHandler,
   registerWsHandlers,
-} from "../core/store/wsStore";
+  useAuthStore,
+  useUnreadStore,
+  useMessageStore,
+  useChannelStore,
+} from "../core/store";
 import { WebSocketEventType } from "../types";
-import { useAuthStore } from "../core/store/authStore";
 import { debounce } from "../utils/performance";
+import { unreadService } from "../core/services/unreadService";
 
 /**
  * Hook for general WebSocket functionality
@@ -48,7 +52,6 @@ export function useWebSocket() {
     if (isConnected && connectionStatusRef.current.hasDisconnected) {
       // Reset the disconnection flag
       connectionStatusRef.current.hasDisconnected = false;
-      // Todo: Add logic to refresh critical data if needed
     }
 
     // If we've disconnected, mark the disconnect state
@@ -222,55 +225,173 @@ export function useTypingIndicator(channelId: string | undefined) {
  */
 export function useUnreadWebSocketEvents() {
   const { currentUser } = useAuthStore();
+  const { incrementUnreadCount, markAsRead, updateUnreadCount } =
+    useUnreadStore();
+  const { addMessage, updateMessage } = useMessageStore();
 
   // Register handlers for events that affect unread counts
   const eventHandlers = useMemo(() => {
-    if (!currentUser) return {};
+    // Only create handlers if we have a current user
+    // This ensures we don't perform any actions when not authenticated
+    if (!currentUser) {
+      // Return empty object that satisfies the Record<string, MessageHandler<any>> type
+      return {} as Record<string, (data: any) => void>;
+    }
 
     return {
       // New message posted
       [WebSocketEventType.POSTED]: (data: any) => {
-        const { post, channel_id: channelId } = data;
+        const { post: postData, channel_id: channelId } = data;
 
-        if (!post || !channelId) return;
+        if (!postData || !channelId) return;
 
-        // Processing logic for new messages...
-        // This is delegated to the unreadStore in implementation
+        try {
+          // Parse post data if it's a string
+          const post =
+            typeof postData === "string" ? JSON.parse(postData) : postData;
+
+          // Skip if message is from the current user
+          if (post.user_id === currentUser.id) return;
+
+          // Add the message to our store
+          addMessage(post);
+
+          // Check if this is the active channel - if so, we might want to mark as read after a delay
+          const activeChannel = useChannelStore.getState().activeChannel;
+          if (activeChannel?.id === channelId) {
+            // For active channel, mark as read after a short delay
+            setTimeout(() => markAsRead(channelId), 2000);
+            return;
+          }
+
+          // Check for mentions
+          const mentionsUser = unreadService.messageContainsMention(
+            post,
+            currentUser.id,
+          );
+
+          // Increment unread counts - one message, and mentionCount if mentioned
+          incrementUnreadCount(
+            channelId,
+            1, // One new message
+            mentionsUser ? 1 : 0, // Increment mentions if user is mentioned
+            post.id, // Message ID for tracking
+          );
+        } catch (err) {
+          console.error("Error processing new message event:", err);
+        }
       },
 
       // Message edited
       [WebSocketEventType.POST_EDITED]: (data: any) => {
-        const { post, channel_id: channelId } = data;
+        const { post: postData, channel_id: channelId } = data;
 
-        if (!post || !channelId) return;
+        if (!postData || !channelId) return;
 
-        // Processing logic for edited messages...
-        // This is delegated to the unreadStore in implementation
+        try {
+          // Parse post data if it's a string
+          const post =
+            typeof postData === "string" ? JSON.parse(postData) : postData;
+
+          // Update the message in our store
+          updateMessage(post);
+
+          // If this post now mentions the user but didn't before, we need to update unread counts
+          const mentionsUser = unreadService.messageContainsMention(
+            post,
+            currentUser.id,
+          );
+
+          if (mentionsUser) {
+            // Get current unread count
+            const unreadCount = useUnreadStore
+              .getState()
+              .getChannelUnreadCount(channelId);
+
+            // If we weren't already mentioned, increment mention count
+            if (unreadCount.mention_count === 0) {
+              updateUnreadCount(
+                channelId,
+                unreadCount.msg_count,
+                unreadCount.mention_count + 1,
+                post.id,
+                unreadCount.lastViewedAt,
+              );
+            }
+          }
+        } catch (err) {
+          console.error("Error processing message edit event:", err);
+        }
       },
 
       // Channel viewed
       [WebSocketEventType.CHANNEL_VIEWED]: (data: any) => {
         const { channel_id: channelId, user_id: userId } = data;
 
-        // Only process for current user
-        if (userId === currentUser?.id && channelId) {
+        // Only process for current user's events
+        if (userId === currentUser.id && channelId) {
           // Mark channel as read
-          // This is delegated to the unreadStore in implementation
+          markAsRead(channelId);
         }
       },
     };
-  }, [currentUser]);
+  }, [
+    currentUser,
+    addMessage,
+    updateMessage,
+    incrementUnreadCount,
+    markAsRead,
+    updateUnreadCount,
+  ]);
 
-  // Setup event handlers
-  useWebSocketEvents(eventHandlers, [currentUser?.id]);
+  // Only setup event handlers if we have a current user
+  useEffect(() => {
+    if (!currentUser) return;
 
-  // Return a handler for reconnection events
+    // Register handlers
+    const unregister = registerWsHandlers(eventHandlers);
+
+    // Clean up on unmount
+    return () => {
+      unregister();
+    };
+  }, [currentUser, eventHandlers]);
+
+  // Handle reconnection events
+  const handleReconnect = useCallback(() => {
+    // Only process when user is authenticated
+    if (!currentUser) return;
+
+    // On reconnection, we should refresh unread counts from the server
+    const channels = Object.values(
+      useChannelStore.getState().channelsByTeam,
+    ).flat();
+
+    // For each channel, we could fetch the current unread status from the server
+    channels.forEach((channel) => {
+      // Here we would typically make an API call to get the latest unread count
+      // This is just a placeholder for the actual implementation
+      const unreadStatus = {
+        msg_count: 0,
+        mention_count: 0,
+        lastViewedAt: Date.now(),
+      };
+
+      // Update our local state
+      updateUnreadCount(
+        channel.id,
+        unreadStatus.msg_count,
+        unreadStatus.mention_count,
+        undefined,
+        unreadStatus.lastViewedAt,
+      );
+    });
+
+    console.log("WebSocket reconnected - refreshed unread counts");
+  }, [currentUser, updateUnreadCount]);
+
   return {
-    onWebSocketReconnect: useCallback(() => {
-      // Refresh unread counts on reconnection
-      console.log("WebSocket reconnected - refreshing unread counts");
-      // Implementation would typically trigger a refresh of unread counts
-    }, []),
+    onWebSocketReconnect: handleReconnect,
   };
 }
 
