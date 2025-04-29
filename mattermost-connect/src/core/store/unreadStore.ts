@@ -12,6 +12,7 @@ import {
   EventType,
   ErrorSource,
   UnreadState,
+  UnreadStore,
 } from "../../types";
 import { unreadService } from "../services/unreadService";
 import { createCommonSlice } from "./slices/commonSlice";
@@ -23,54 +24,7 @@ import { handleError } from "./errorStore";
  * Uses immer middleware for immutable state updates
  * Uses subscribeWithSelector for observing state changes
  */
-export const useUnreadStore = create<
-  UnreadState & {
-    // Actions - Basic updates
-    updateUnreadCount: (
-      channelId: string,
-      msgCount: number,
-      mentionCount: number,
-      lastMessageId?: string,
-      lastViewedAt?: number,
-      totalMessageCount?: number,
-    ) => void;
-    incrementUnreadCount: (
-      channelId: string,
-      messageIncrement: number,
-      mentionIncrement: number,
-      messageId?: string,
-    ) => void;
-    markAsRead: (channelId: string) => void;
-    markAllAsRead: (teamId: string, channelIds?: string[]) => void;
-
-    // Actions - Mute management
-    setChannelMuted: (channelId: string, isMuted: boolean) => void;
-
-    // Actions - Message tracking
-    addProcessedMessageId: (messageId: string, channelId?: string) => void;
-    clearProcessedMessageIds: () => void;
-
-    // Selectors - Channel unread state
-    getChannelUnreadCount: (channelId: string) => ChannelUnreadCount;
-    hasUnreadsInChannel: (channelId: string) => boolean;
-    hasMentionsInChannel: (channelId: string) => boolean;
-    isChannelMuted: (channelId: string) => boolean;
-
-    // Selectors - Team unread state
-    getTeamUnreadCount: (
-      teamId: string,
-      channels: Channel[],
-    ) => { msg_count: number; mention_count: number };
-    hasUnreadsInTeam: (teamId: string, channels: Channel[]) => boolean;
-    hasMentionsInTeam: (teamId: string, channels: Channel[]) => boolean;
-
-    // Selectors - Global unread state
-    getTotalUnreadCount: () => { msg_count: number; mention_count: number };
-
-    // Reset
-    reset: () => void;
-  }
->()(
+export const useUnreadStore = create<UnreadState & UnreadStore>()(
   subscribeWithSelector(
     immer((set, get) => {
       // Create common slice for standardized loading/error state

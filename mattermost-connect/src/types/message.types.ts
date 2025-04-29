@@ -173,3 +173,53 @@ export interface MessageState extends CommonState {
   replyToMessage: Message | null;
   editingMessageId: string | null;
 }
+
+export interface MessageStore {
+  // Message-specific loading states
+  loadingChannelIds: string[];
+  threadLoadingIds: string[];
+
+  // Actions - Messages
+  setMessages: (channelId: string, messages: Message[]) => void;
+  addMessage: (message: Message) => void;
+  updateMessage: (message: Message) => void;
+  deleteMessage: (messageId: string, channelId: string) => void;
+
+  // Actions - Threads
+  setThreadMessages: (rootMessageId: string, messages: Message[]) => void;
+  addThreadMessage: (rootMessageId: string, message: Message) => void;
+
+  // Actions - Pinned Messages
+  setPinnedMessages: (channelId: string, messages: Message[]) => void;
+  addPinnedMessage: (message: Message) => void;
+  removePinnedMessage: (messageId: string, channelId: string) => void;
+
+  // Actions - Reactions
+  addReaction: (messageId: string, userId: string, emoji: string) => void;
+  removeReaction: (messageId: string, userId: string, emoji: string) => void;
+
+  // Actions - UI State
+  setHighlightedMessage: (messageId: string | null) => void;
+  setReplyToMessage: (message: Message | null) => void;
+  setEditingMessage: (messageId: string | null) => void;
+
+  // Actions - Loading State
+  setLoading: (channelId: string, isLoading: boolean) => void;
+  setThreadLoading: (rootMessageId: string, isLoading: boolean) => void;
+  setError: (channelId: string, error: Error | null) => void;
+
+  // Selectors
+  getMessageById: (messageId: string) => Message | null;
+  getChannelMessages: (channelId: string) => Message[];
+  getThreadMessages: (rootMessageId: string) => Message[];
+  getPinnedMessages: (channelId: string) => Message[];
+  getMessageReactions: (messageId: string) => MessageReaction[];
+  getReactionsByEmoji: (messageId: string) => Record<string, MessageReaction[]>;
+  getReactionCounts: (messageId: string) => ReactionCount[];
+  hasUserReacted: (messageId: string, userId: string, emoji: string) => boolean;
+  isChannelLoading: (channelId: string) => boolean;
+  isThreadLoading: (rootMessageId: string) => boolean;
+
+  // Reset
+  reset: () => void;
+}

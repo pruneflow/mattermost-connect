@@ -153,3 +153,65 @@ export interface ChannelState extends CommonState {
   activeChannel: Channel | null;
   members: Record<string, ChannelMember[]>;
 }
+
+export interface ChannelStore {
+  // Actions - Channel Data
+  setChannels: (teamId: string, channels: Channel[]) => void;
+  setChannel: (channel: Channel) => void;
+  removeChannel: (channelId: string) => void;
+  setActiveChannel: (channel: Channel | null) => void;
+  updateChannel: (channel: Partial<Channel> & { id: string }) => void;
+  setChannelProperty: <K extends keyof Channel>(
+    channelId: string,
+    key: K,
+    value: Channel[K],
+  ) => void;
+
+  // Actions - Channel Members
+  setChannelMembers: (channelId: string, members: ChannelMember[]) => void;
+
+  // Selectors
+  getChannelById: (channelId: string) => Channel | null;
+  getChannelsByTeam: (teamId: string) => Channel[];
+  getChannelsByType: (teamId: string, type: ChannelGroupType) => Channel[];
+  getChannelMembers: (channelId: string) => ChannelMember[];
+
+  // Reset
+  reset: () => void;
+}
+
+/**
+ * Direct channel store state interface
+ */
+export interface DirectChannelState extends CommonState {
+  // Data
+  directChannelInfoById: Record<string, DirectChannelInfo>;
+  pendingUserIds: string[];
+}
+
+export interface DirectChannelStore {
+  // Actions - Direct Channel Info
+  setDirectChannelInfo: (channelId: string, info: DirectChannelInfo) => void;
+  updateDirectChannelInfo: <K extends keyof DirectChannelInfo>(
+    channelId: string,
+    key: K,
+    value: DirectChannelInfo[K],
+  ) => void;
+
+  // Actions - User Status & Image
+  setDirectChannelUserStatus: (channelId: string, status: UserStatus) => void;
+  setDirectChannelUserImage: (channelId: string, imageUrl: string) => void;
+
+  // Actions - Pending Users
+  addPendingUser: (userId: string) => void;
+  removePendingUser: (userId: string) => void;
+
+  // Selectors
+  getDirectChannelInfo: (channelId: string) => DirectChannelInfo | null;
+  isDirectChannelLoading: (channelId: string) => boolean;
+  isPendingUser: (userId: string) => boolean;
+  refreshDirectChannelInfo: (channelId: string, currentUserId: string) => void;
+
+  // Reset
+  reset: () => void;
+}

@@ -12,6 +12,7 @@ import {
   UserStatus,
   UserStatusInfo,
   EventType,
+  UserStore,
 } from "../../types";
 import { userService } from "../services/userService";
 import { createCommonSlice } from "./slices/commonSlice";
@@ -24,42 +25,7 @@ const TYPING_TIMEOUT = 5000;
  * Create the user store with immer middleware for simplified updates
  * and subscribeWithSelector for observing state changes
  */
-export const useUserStore = create<
-  UserState & {
-    // Actions - User Data
-    setUser: (user: User) => void;
-    setUsers: (users: User[]) => void;
-    updateUser: (user: Partial<User> & { id: string }) => void;
-    removeUser: (userId: string) => void;
-
-    // Actions - User Status
-    setUserStatus: (userId: string, status: UserStatus) => void;
-    setUserStatuses: (
-      statuses: UserStatusInfo[] | Record<string, UserStatus>,
-    ) => void;
-
-    // Actions - Typing Indicators
-    setTyping: (channelId: string, userId: string) => void;
-    clearTyping: (channelId: string, userId: string) => void;
-    cleanupExpiredTyping: () => void;
-
-    // Selectors
-    getUserById: (userId: string) => User | null;
-    getUserStatus: (userId: string) => UserStatus;
-    getUserDisplayName: (userId: string) => string;
-    getUsersByIds: (userIds: string[]) => User[];
-    getTypingUsers: (channelId: string) => string[];
-    getUsersWithStatus: (userIds: string[]) => Array<{
-      user: User;
-      status: UserStatus;
-      displayName: string;
-    }>;
-    isPendingUser: (userId: string) => boolean;
-
-    // Reset
-    reset: () => void;
-  }
->()(
+export const useUserStore = create<UserState & UserStore>()(
   subscribeWithSelector(
     immer((set, get) => {
       // Create common slice for standardized loading/error state

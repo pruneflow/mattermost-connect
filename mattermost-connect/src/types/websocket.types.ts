@@ -212,6 +212,43 @@ export interface WebSocketState extends CommonState {
   error: Error | null;
 }
 
+export interface WebSocketStore {
+  // Actions - Connection
+  connect: (
+    url: string,
+    token: string,
+    options?: WebSocketOptions,
+  ) => Promise<void>;
+  disconnect: (code?: number, reason?: string) => void;
+  reconnect: (
+    url?: string,
+    token?: string,
+    options?: WebSocketOptions,
+  ) => Promise<void>;
+
+  // Actions - Messaging
+  sendMessage: (message: WebSocketMessage | string) => boolean;
+
+  // Actions - Event Handling
+  addMessageHandler: <T = any>(
+    eventType: string,
+    handler: (data: T) => void,
+  ) => () => void;
+  addMessageHandlers: <T = any>(
+    handlers: Record<string, (data: T) => void>,
+  ) => () => void;
+
+  // Actions - State Management
+  setConnected: (isConnected: boolean) => void;
+  setConnecting: (isConnecting: boolean) => void;
+  setUrl: (url: string | null) => void;
+  setError: (error: Error | null) => void;
+  resetDisconnectedState: () => void;
+
+  // Reset
+  reset: () => void;
+}
+
 /**
  * WebSocket event listener registration options
  */

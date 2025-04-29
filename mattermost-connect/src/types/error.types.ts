@@ -114,6 +114,32 @@ export interface ErrorState {
   lastFetchTimes: Record<string, number>;
 }
 
+export interface ErrorStore {
+  // Actions - Error Management
+  addError: (
+    error: Error | ApiError,
+    source: ErrorSource,
+    severity?: ErrorSeverity,
+    metadata?: Record<string, any>,
+  ) => AppError;
+  handleError: (errorId: string) => void;
+  handleAllErrors: () => void;
+  clearErrors: (filter?: ErrorFilter) => void;
+  clearAllErrors: () => void;
+  clearErrorsBySource: (source: ErrorSource) => void;
+
+  // Selectors - Error Retrieval
+  getErrors: (filter?: ErrorFilter) => AppError[];
+  getErrorsBySource: (source: ErrorSource) => AppError[];
+  getErrorsBySeverity: (severity: ErrorSeverity) => AppError[];
+  getLastError: () => AppError | null;
+  hasErrors: (filter?: ErrorFilter) => boolean;
+  getUnhandledErrors: () => AppError[];
+
+  // Reset
+  reset: () => void;
+}
+
 /**
  * Error event data
  */

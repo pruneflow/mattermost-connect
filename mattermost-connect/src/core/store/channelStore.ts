@@ -13,6 +13,7 @@ import {
   EventType,
   ErrorSource,
   ChannelState,
+  ChannelStore,
 } from "../../types";
 import { channelService } from "../services/channelService";
 import { createCommonSlice } from "./slices/commonSlice";
@@ -24,33 +25,7 @@ import { handleError } from "./errorStore";
  * Uses immer middleware for immutable state updates
  * Uses subscribeWithSelector for observing state changes
  */
-export const useChannelStore = create<
-  ChannelState & {
-    // Actions - Channel Data
-    setChannels: (teamId: string, channels: Channel[]) => void;
-    setChannel: (channel: Channel) => void;
-    removeChannel: (channelId: string) => void;
-    setActiveChannel: (channel: Channel | null) => void;
-    updateChannel: (channel: Partial<Channel> & { id: string }) => void;
-    setChannelProperty: <K extends keyof Channel>(
-      channelId: string,
-      key: K,
-      value: Channel[K],
-    ) => void;
-
-    // Actions - Channel Members
-    setChannelMembers: (channelId: string, members: ChannelMember[]) => void;
-
-    // Selectors
-    getChannelById: (channelId: string) => Channel | null;
-    getChannelsByTeam: (teamId: string) => Channel[];
-    getChannelsByType: (teamId: string, type: ChannelGroupType) => Channel[];
-    getChannelMembers: (channelId: string) => ChannelMember[];
-
-    // Reset
-    reset: () => void;
-  }
->()(
+export const useChannelStore = create<ChannelState & ChannelStore>()(
   subscribeWithSelector(
     immer((set, get) => {
       // Create common slice for standardized loading/error state

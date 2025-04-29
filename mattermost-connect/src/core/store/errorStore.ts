@@ -14,6 +14,7 @@ import {
   ErrorSource,
   ErrorState,
   EventType,
+  ErrorStore,
 } from "../../types";
 import { emitEvent } from "../api/eventUtils";
 import { createCommonSlice } from "./slices/commonSlice";
@@ -51,33 +52,7 @@ function createAppError(
  * Error store implementation with Zustand and immer middleware
  * Now uses CommonSlice for standardized state management
  */
-export const useErrorStore = create<
-  ErrorState & {
-    // Actions - Error Management
-    addError: (
-      error: Error | ApiError,
-      source: ErrorSource,
-      severity?: ErrorSeverity,
-      metadata?: Record<string, any>,
-    ) => AppError;
-    handleError: (errorId: string) => void;
-    handleAllErrors: () => void;
-    clearErrors: (filter?: ErrorFilter) => void;
-    clearAllErrors: () => void;
-    clearErrorsBySource: (source: ErrorSource) => void;
-
-    // Selectors - Error Retrieval
-    getErrors: (filter?: ErrorFilter) => AppError[];
-    getErrorsBySource: (source: ErrorSource) => AppError[];
-    getErrorsBySeverity: (severity: ErrorSeverity) => AppError[];
-    getLastError: () => AppError | null;
-    hasErrors: (filter?: ErrorFilter) => boolean;
-    getUnhandledErrors: () => AppError[];
-
-    // Reset
-    reset: () => void;
-  }
->()(
+export const useErrorStore = create<ErrorState & ErrorStore>()(
   immer((set, get) => {
     // Create common slice for standardized loading/error state
     const commonSlice = createCommonSlice<ErrorState>(set);

@@ -10,20 +10,12 @@ import {
   DirectChannelInfo,
   UserStatus,
   ErrorSource,
-  CommonState,
+  DirectChannelState,
+  DirectChannelStore,
 } from "../../types";
 import { channelService } from "../services/channelService";
 import { createCommonSlice } from "./slices/commonSlice";
 import { handleError } from "./errorStore";
-
-/**
- * Direct channel store state interface
- */
-export interface DirectChannelState extends CommonState {
-  // Data
-  directChannelInfoById: Record<string, DirectChannelInfo>;
-  pendingUserIds: string[];
-}
 
 /**
  * Default direct channel info object
@@ -42,35 +34,7 @@ const DEFAULT_CHANNEL_INFO: DirectChannelInfo = {
  * Uses subscribeWithSelector for observing state changes
  */
 export const useDirectChannelStore = create<
-  DirectChannelState & {
-    // Actions - Direct Channel Info
-    setDirectChannelInfo: (channelId: string, info: DirectChannelInfo) => void;
-    updateDirectChannelInfo: <K extends keyof DirectChannelInfo>(
-      channelId: string,
-      key: K,
-      value: DirectChannelInfo[K],
-    ) => void;
-
-    // Actions - User Status & Image
-    setDirectChannelUserStatus: (channelId: string, status: UserStatus) => void;
-    setDirectChannelUserImage: (channelId: string, imageUrl: string) => void;
-
-    // Actions - Pending Users
-    addPendingUser: (userId: string) => void;
-    removePendingUser: (userId: string) => void;
-
-    // Selectors
-    getDirectChannelInfo: (channelId: string) => DirectChannelInfo | null;
-    isDirectChannelLoading: (channelId: string) => boolean;
-    isPendingUser: (userId: string) => boolean;
-    refreshDirectChannelInfo: (
-      channelId: string,
-      currentUserId: string,
-    ) => void;
-
-    // Reset
-    reset: () => void;
-  }
+  DirectChannelState & DirectChannelStore
 >()(
   subscribeWithSelector(
     immer((set, get) => {

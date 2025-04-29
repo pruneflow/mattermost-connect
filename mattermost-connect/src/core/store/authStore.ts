@@ -12,6 +12,7 @@ import {
   LoginParams,
   EventType,
   ErrorSource,
+  AuthStore,
 } from "../../types";
 import { authService } from "../services/authService";
 import { emitEvent } from "../api/eventUtils";
@@ -36,17 +37,7 @@ const authPersistConfig = {
  * Uses persist middleware for token persistence
  * Uses immer for immutable state updates
  */
-export const useAuthStore = create<
-  AuthState & {
-    // Actions
-    initialize: () => Promise<boolean>;
-    login: (params: LoginParams) => Promise<User>;
-    logout: () => void;
-    refreshCurrentUser: () => Promise<User | null>;
-    setCurrentUser: (user: User) => void;
-    reset: () => void;
-  }
->()(
+export const useAuthStore = create<AuthState & AuthStore>()(
   persist(
     immer((set, get) => {
       // Create common slice for standardized loading/error state

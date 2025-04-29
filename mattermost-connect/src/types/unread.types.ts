@@ -2,6 +2,7 @@
  * Types for unread count related data and functions
  */
 import { CommonState, PaginationParams } from "./common";
+import { Channel } from "./channel.types";
 
 /**
  * Unread count information for a channel
@@ -94,6 +95,53 @@ export interface UnreadState extends CommonState {
   processedMessageIds: Set<string>;
   teamUnreadCounts: Record<string, TeamUnreadCount>;
   lastFetchTimes: Record<string, number>;
+}
+
+export interface UnreadStore {
+  // Actions - Basic updates
+  updateUnreadCount: (
+    channelId: string,
+    msgCount: number,
+    mentionCount: number,
+    lastMessageId?: string,
+    lastViewedAt?: number,
+    totalMessageCount?: number,
+  ) => void;
+  incrementUnreadCount: (
+    channelId: string,
+    messageIncrement: number,
+    mentionIncrement: number,
+    messageId?: string,
+  ) => void;
+  markAsRead: (channelId: string) => void;
+  markAllAsRead: (teamId: string, channelIds?: string[]) => void;
+
+  // Actions - Mute management
+  setChannelMuted: (channelId: string, isMuted: boolean) => void;
+
+  // Actions - Message tracking
+  addProcessedMessageId: (messageId: string, channelId?: string) => void;
+  clearProcessedMessageIds: () => void;
+
+  // Selectors - Channel unread state
+  getChannelUnreadCount: (channelId: string) => ChannelUnreadCount;
+  hasUnreadsInChannel: (channelId: string) => boolean;
+  hasMentionsInChannel: (channelId: string) => boolean;
+  isChannelMuted: (channelId: string) => boolean;
+
+  // Selectors - Team unread state
+  getTeamUnreadCount: (
+    teamId: string,
+    channels: Channel[],
+  ) => { msg_count: number; mention_count: number };
+  hasUnreadsInTeam: (teamId: string, channels: Channel[]) => boolean;
+  hasMentionsInTeam: (teamId: string, channels: Channel[]) => boolean;
+
+  // Selectors - Global unread state
+  getTotalUnreadCount: () => { msg_count: number; mention_count: number };
+
+  // Reset
+  reset: () => void;
 }
 
 /**

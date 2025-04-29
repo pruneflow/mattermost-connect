@@ -123,3 +123,25 @@ export interface TeamState extends CommonState {
   teamStats: Record<string, TeamStats>;
   teamMembers: Record<string, TeamMember[]>;
 }
+
+export interface TeamStore {
+  // Actions - Teams
+  setTeams: (teams: Team[]) => void;
+  setTeam: (team: Team) => void;
+  removeTeam: (teamId: string) => void;
+  setActiveTeam: (team: Team | null) => void;
+  updateTeam: (team: Partial<Team> & { id: string }) => void;
+  clearTeams: () => void;
+
+  // Actions - Team Stats & Members
+  setTeamStats: (teamId: string, stats: TeamStats) => void;
+  setTeamMembers: (teamId: string, members: TeamMember[]) => void;
+
+  // Selectors
+  getTeamById: (teamId: string) => Team | null;
+  getTeamStats: (teamId: string) => TeamStats | null;
+  getTeamMembers: (teamId: string) => TeamMember[];
+
+  // Reset
+  reset: () => void;
+}

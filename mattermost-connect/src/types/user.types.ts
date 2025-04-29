@@ -110,3 +110,38 @@ export interface UserState extends CommonState {
   typingUsers: Record<string, Record<string, number>>;
   isInitialized: boolean;
 }
+
+export interface UserStore {
+  // Actions - User Data
+  setUser: (user: User) => void;
+  setUsers: (users: User[]) => void;
+  updateUser: (user: Partial<User> & { id: string }) => void;
+  removeUser: (userId: string) => void;
+
+  // Actions - User Status
+  setUserStatus: (userId: string, status: UserStatus) => void;
+  setUserStatuses: (
+    statuses: UserStatusInfo[] | Record<string, UserStatus>,
+  ) => void;
+
+  // Actions - Typing Indicators
+  setTyping: (channelId: string, userId: string) => void;
+  clearTyping: (channelId: string, userId: string) => void;
+  cleanupExpiredTyping: () => void;
+
+  // Selectors
+  getUserById: (userId: string) => User | null;
+  getUserStatus: (userId: string) => UserStatus;
+  getUserDisplayName: (userId: string) => string;
+  getUsersByIds: (userIds: string[]) => User[];
+  getTypingUsers: (channelId: string) => string[];
+  getUsersWithStatus: (userIds: string[]) => Array<{
+    user: User;
+    status: UserStatus;
+    displayName: string;
+  }>;
+  isPendingUser: (userId: string) => boolean;
+
+  // Reset
+  reset: () => void;
+}

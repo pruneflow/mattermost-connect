@@ -43,6 +43,16 @@ export interface AuthState extends CommonState {
   serverUrl: string | null;
 }
 
+export interface AuthStore {
+  // Actions
+  initialize: () => Promise<boolean>;
+  login: (params: LoginParams) => Promise<User>;
+  logout: () => void;
+  refreshCurrentUser: () => Promise<User | null>;
+  setCurrentUser: (user: User) => void;
+  reset: () => void;
+}
+
 /**
  * Authentication response from the server
  */

@@ -179,6 +179,72 @@ export interface UserSettingsState extends CommonState {
   advanced: AdvancedSettings;
 }
 
+export interface UserSettingsStore {
+  // Favorites Actions
+  toggleFavorite: (channelId: string) => void;
+  addFavorite: (channelId: string) => void;
+  removeFavorite: (channelId: string) => void;
+  getFavorites: () => string[];
+  isFavorite: (channelId: string) => boolean;
+
+  // Muted Channels Actions
+  toggleMuted: (channelId: string) => void;
+  muteChannel: (channelId: string, expirationTime?: number) => void;
+  unmuteChannel: (channelId: string) => void;
+  getMutedChannels: () => string[];
+  isChannelMuted: (channelId: string) => boolean;
+
+  // Appearance Actions
+  setTheme: (theme: ThemeOption) => void;
+  setAppearanceSetting: <K extends keyof AppearanceSettings>(
+    key: K,
+    value: AppearanceSettings[K],
+  ) => void;
+  getAppearanceSettings: () => AppearanceSettings;
+
+  // Notification Actions
+  setNotificationSetting: <K extends keyof NotificationSettings>(
+    key: K,
+    value: NotificationSettings[K],
+  ) => void;
+  setChannelNotificationOverride: (
+    channelId: string,
+    setting: "desktop" | "mobile" | "email",
+    level: NotificationLevel,
+  ) => void;
+  getNotificationSettings: () => NotificationSettings;
+  getChannelNotificationOverride: (
+    channelId: string,
+    setting: "desktop" | "mobile" | "email",
+  ) => NotificationLevel | undefined;
+
+  // Privacy Actions
+  setPrivacySetting: <K extends keyof PrivacySettings>(
+    key: K,
+    value: PrivacySettings[K],
+  ) => void;
+  getPrivacySettings: () => PrivacySettings;
+
+  // Advanced Actions
+  setAdvancedSetting: <K extends keyof AdvancedSettings>(
+    key: K,
+    value: AdvancedSettings[K],
+  ) => void;
+  getAdvancedSettings: () => AdvancedSettings;
+
+  // Language Setting
+  setLanguage: (langCode: string) => void;
+  getLanguage: () => string;
+
+  // Reset Actions
+  resetAppearanceSettings: () => void;
+  resetNotificationSettings: () => void;
+  resetPrivacySettings: () => void;
+  resetAdvancedSettings: () => void;
+  resetAllSettings: (preservePreferences?: boolean) => void;
+  reset: () => void;
+}
+
 /**
  * Settings change event data
  */

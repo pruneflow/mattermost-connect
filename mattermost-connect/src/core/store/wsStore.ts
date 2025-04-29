@@ -12,6 +12,7 @@ import {
   EventType,
   ErrorSource,
   WebSocketState,
+  WebSocketStore,
 } from "../../types";
 import { wsService } from "../services/wsService";
 import { createCommonSlice } from "./slices/commonSlice";
@@ -23,44 +24,7 @@ import { handleError } from "./errorStore";
  * Uses immer middleware for immutable state updates
  * Uses subscribeWithSelector for observing state changes
  */
-export const useWsStore = create<
-  WebSocketState & {
-    // Actions - Connection
-    connect: (
-      url: string,
-      token: string,
-      options?: WebSocketOptions,
-    ) => Promise<void>;
-    disconnect: (code?: number, reason?: string) => void;
-    reconnect: (
-      url?: string,
-      token?: string,
-      options?: WebSocketOptions,
-    ) => Promise<void>;
-
-    // Actions - Messaging
-    sendMessage: (message: WebSocketMessage | string) => boolean;
-
-    // Actions - Event Handling
-    addMessageHandler: <T = any>(
-      eventType: string,
-      handler: (data: T) => void,
-    ) => () => void;
-    addMessageHandlers: <T = any>(
-      handlers: Record<string, (data: T) => void>,
-    ) => () => void;
-
-    // Actions - State Management
-    setConnected: (isConnected: boolean) => void;
-    setConnecting: (isConnecting: boolean) => void;
-    setUrl: (url: string | null) => void;
-    setError: (error: Error | null) => void;
-    resetDisconnectedState: () => void;
-
-    // Reset
-    reset: () => void;
-  }
->()(
+export const useWsStore = create<WebSocketState & WebSocketStore>()(
   subscribeWithSelector(
     immer((set, get) => {
       // Create common slice for standardized loading/error state
