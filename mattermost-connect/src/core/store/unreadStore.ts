@@ -10,95 +10,81 @@ import {
   Channel,
   ChannelUnreadCount,
   EventType,
+  ErrorSource,
   UnreadState,
 } from "../../types";
 import { unreadService } from "../services/unreadService";
-import { createLoadingSlice } from "./storeUtils";
-import { emitEvent } from "./eventStore";
+import { createCommonSlice } from "./slices/commonSlice";
+import { emitEvent } from "../api/eventUtils";
+import { handleError } from "./errorStore";
 
 /**
- * Enhanced unread store state with actions
+ * Unread store implementation with Zustand
+ * Uses immer middleware for immutable state updates
+ * Uses subscribeWithSelector for observing state changes
  */
-interface UnreadStoreState extends UnreadState {
-  // Actions - Basic updates
-  updateUnreadCount: (
-    channelId: string,
-    msgCount: number,
-    mentionCount: number,
-    lastMessageId?: string,
-    lastViewedAt?: number,
-    totalMessageCount?: number,
-  ) => void;
-  incrementUnreadCount: (
-    channelId: string,
-    messageIncrement: number,
-    mentionIncrement: number,
-    messageId?: string,
-  ) => void;
-  markAsRead: (channelId: string) => void;
-  markAllAsRead: (teamId: string, channelIds?: string[]) => void;
+export const useUnreadStore = create<
+  UnreadState & {
+    // Actions - Basic updates
+    updateUnreadCount: (
+      channelId: string,
+      msgCount: number,
+      mentionCount: number,
+      lastMessageId?: string,
+      lastViewedAt?: number,
+      totalMessageCount?: number,
+    ) => void;
+    incrementUnreadCount: (
+      channelId: string,
+      messageIncrement: number,
+      mentionIncrement: number,
+      messageId?: string,
+    ) => void;
+    markAsRead: (channelId: string) => void;
+    markAllAsRead: (teamId: string, channelIds?: string[]) => void;
 
-  // Actions - Mute management
-  setChannelMuted: (channelId: string, isMuted: boolean) => void;
+    // Actions - Mute management
+    setChannelMuted: (channelId: string, isMuted: boolean) => void;
 
-  // Actions - Message tracking
-  addProcessedMessageId: (messageId: string, channelId?: string) => void;
-  clearProcessedMessageIds: () => void;
+    // Actions - Message tracking
+    addProcessedMessageId: (messageId: string, channelId?: string) => void;
+    clearProcessedMessageIds: () => void;
 
-  // Selectors - Channel unread state
-  getChannelUnreadCount: (channelId: string) => ChannelUnreadCount;
-  hasUnreadsInChannel: (channelId: string) => boolean;
-  hasMentionsInChannel: (channelId: string) => boolean;
-  isChannelMuted: (channelId: string) => boolean;
+    // Selectors - Channel unread state
+    getChannelUnreadCount: (channelId: string) => ChannelUnreadCount;
+    hasUnreadsInChannel: (channelId: string) => boolean;
+    hasMentionsInChannel: (channelId: string) => boolean;
+    isChannelMuted: (channelId: string) => boolean;
 
-  // Selectors - Team unread state
-  getTeamUnreadCount: (
-    teamId: string,
-    channels: Channel[],
-  ) => { msg_count: number; mention_count: number };
-  hasUnreadsInTeam: (teamId: string, channels: Channel[]) => boolean;
-  hasMentionsInTeam: (teamId: string, channels: Channel[]) => boolean;
+    // Selectors - Team unread state
+    getTeamUnreadCount: (
+      teamId: string,
+      channels: Channel[],
+    ) => { msg_count: number; mention_count: number };
+    hasUnreadsInTeam: (teamId: string, channels: Channel[]) => boolean;
+    hasMentionsInTeam: (teamId: string, channels: Channel[]) => boolean;
 
-  // Selectors - Global unread state
-  getTotalUnreadCount: () => { msg_count: number; mention_count: number };
+    // Selectors - Global unread state
+    getTotalUnreadCount: () => { msg_count: number; mention_count: number };
 
-  // Loading/Error State
-  setLoading: (isLoading: boolean) => void;
-  setLoadingId: (id: string, isLoading: boolean) => void;
-  setError: (error: Error | null) => void;
-
-  // Reset
-  reset: () => void;
-}
-
-/**
- * Creates the unread store with immer middleware for easy updates
- * and subscribeWithSelector for observing state changes
- */
-export const useUnreadStore = create<UnreadStoreState>()(
+    // Reset
+    reset: () => void;
+  }
+>()(
   subscribeWithSelector(
     immer((set, get) => {
-      // Create loading slice for standardized loading/error state management
-      const loadingSlice = createLoadingSlice<UnreadStoreState>(set);
+      // Create common slice for standardized loading/error state
+      const commonSlice = createCommonSlice<UnreadState>(set);
 
       return {
+        // Include common slice for standardized state
+        ...commonSlice,
+
         // Initial state
         unreadCounts: {},
         mutedChannels: new Set<string>(),
         processedMessageIds: new Set<string>(),
         teamUnreadCounts: {},
-        lastFetchTimes: {},
-
-        // Include loading/error state from slice
-        isLoading: loadingSlice.isLoading,
-        loadingIds: loadingSlice.loadingIds,
-        error: loadingSlice.error,
-        errors: {},
-
-        // Include loading/error actions from slice
-        setLoading: loadingSlice.setLoading,
-        setLoadingId: loadingSlice.setLoadingId,
-        setError: loadingSlice.setError,
 
         /**
          * Updates unread count for a channel
@@ -117,35 +103,50 @@ export const useUnreadStore = create<UnreadStoreState>()(
           lastViewedAt,
           totalMessageCount,
         ) => {
-          set((state) => {
-            const existingUnread = state.unreadCounts[channelId] || {
-              msg_count: 0,
-              mention_count: 0,
-            };
+          try {
+            set((state) => {
+              const existingUnread = state.unreadCounts[channelId] || {
+                msg_count: 0,
+                mention_count: 0,
+              };
 
-            const unreadCount: ChannelUnreadCount = {
-              ...existingUnread,
-              msg_count: msgCount,
-              mention_count: mentionCount,
-              lastMessageId: lastMessageId || existingUnread.lastMessageId,
-              lastViewedAt: lastViewedAt || existingUnread.lastViewedAt,
-              totalMessageCount:
-                totalMessageCount || existingUnread.totalMessageCount,
-              isMuted: state.mutedChannels.has(channelId),
-            };
+              const unreadCount: ChannelUnreadCount = {
+                ...existingUnread,
+                msg_count: msgCount,
+                mention_count: mentionCount,
+                lastMessageId: lastMessageId || existingUnread.lastMessageId,
+                lastViewedAt: lastViewedAt || existingUnread.lastViewedAt,
+                totalMessageCount:
+                  totalMessageCount || existingUnread.totalMessageCount,
+                isMuted: state.mutedChannels.has(channelId),
+              };
 
-            // Create updated unread counts
-            state.unreadCounts[channelId] = unreadCount;
+              // Create updated unread counts
+              state.unreadCounts[channelId] = unreadCount;
 
-            // Update last fetch time
-            state.lastFetchTimes[channelId] = Date.now();
+              // Update last fetch time
+              state.lastFetchTimes[channelId] = Date.now();
+              state.lastUpdated = Date.now();
+            });
+
+            // Get updated unread count for event
+            const unreadCount = get().unreadCounts[channelId];
 
             // Emit unread updated event
             emitEvent(EventType.UNREAD_UPDATED, {
               channelId,
               unreadCount,
+              timestamp: Date.now(),
             });
-          });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "updateUnreadCount",
+              channelId,
+              msgCount,
+              mentionCount,
+            });
+          }
         },
 
         /**
@@ -161,64 +162,80 @@ export const useUnreadStore = create<UnreadStoreState>()(
           mentionIncrement: number,
           messageId?: string,
         ) => {
-          // Skip if message ID is already processed
-          if (messageId) {
-            const isProcessed = unreadService.isMessageProcessed(
-              messageId,
-              get().processedMessageIds,
-              channelId,
-            );
+          try {
+            // Skip if message ID is already processed
+            if (messageId) {
+              const isProcessed = unreadService.isMessageProcessed(
+                messageId,
+                get().processedMessageIds,
+                channelId,
+              );
 
-            if (isProcessed) {
-              return;
+              if (isProcessed) {
+                return;
+              }
+
+              // Add to processed IDs if provided
+              get().addProcessedMessageId(messageId, channelId);
             }
 
-            // Add to processed IDs if provided
-            get().addProcessedMessageId(messageId, channelId);
-          }
+            set((state) => {
+              const existingUnread = state.unreadCounts[channelId] || {
+                msg_count: 0,
+                mention_count: 0,
+              };
 
-          set((state) => {
-            const existingUnread = state.unreadCounts[channelId] || {
-              msg_count: 0,
-              mention_count: 0,
-            };
+              // Don't increment for muted channels unless there are mentions
+              const isMuted = state.mutedChannels.has(channelId);
+              if (isMuted && mentionIncrement === 0) {
+                return;
+              }
 
-            // Don't increment for muted channels unless there are mentions
-            const isMuted = state.mutedChannels.has(channelId);
-            if (isMuted && mentionIncrement === 0) {
-              return;
-            }
+              // Calculate new counts
+              const newMsgCount = Math.max(
+                0,
+                existingUnread.msg_count + messageIncrement,
+              );
+              const newMentionCount = Math.max(
+                0,
+                existingUnread.mention_count + mentionIncrement,
+              );
 
-            // Calculate new counts
-            const newMsgCount = Math.max(
-              0,
-              existingUnread.msg_count + messageIncrement,
-            );
-            const newMentionCount = Math.max(
-              0,
-              existingUnread.mention_count + mentionIncrement,
-            );
+              const unreadCount: ChannelUnreadCount = {
+                ...existingUnread,
+                msg_count: newMsgCount,
+                mention_count: newMentionCount,
+                lastMessageId: messageId || existingUnread.lastMessageId,
+                isMuted,
+              };
 
-            const unreadCount: ChannelUnreadCount = {
-              ...existingUnread,
-              msg_count: newMsgCount,
-              mention_count: newMentionCount,
-              lastMessageId: messageId || existingUnread.lastMessageId,
-              isMuted,
-            };
+              // Update unread counts
+              state.unreadCounts[channelId] = unreadCount;
 
-            // Update unread counts
-            state.unreadCounts[channelId] = unreadCount;
+              // Update last fetch time
+              state.lastFetchTimes[channelId] = Date.now();
+              state.lastUpdated = Date.now();
+            });
 
-            // Update last fetch time
-            state.lastFetchTimes[channelId] = Date.now();
+            // Get updated unread count for event
+            const unreadCount = get().unreadCounts[channelId];
 
             // Emit unread updated event
             emitEvent(EventType.UNREAD_UPDATED, {
               channelId,
               unreadCount,
+              timestamp: Date.now(),
             });
-          });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "incrementUnreadCount",
+              channelId,
+              messageIncrement,
+              mentionIncrement,
+              messageId,
+            });
+          }
         },
 
         /**
@@ -226,37 +243,44 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @param channelId Channel ID
          */
         markAsRead: (channelId: string) => {
-          set((state) => {
-            const existingUnread = state.unreadCounts[channelId] || {
-              msg_count: 0,
-              mention_count: 0,
-            };
+          try {
+            set((state) => {
+              const existingUnread = state.unreadCounts[channelId] || {
+                msg_count: 0,
+                mention_count: 0,
+              };
 
-            // Channel is already read
-            if (
-              existingUnread.msg_count === 0 &&
-              existingUnread.mention_count === 0
-            ) {
-              return;
-            }
+              // Channel is already read
+              if (
+                existingUnread.msg_count === 0 &&
+                existingUnread.mention_count === 0
+              ) {
+                return;
+              }
 
-            // Update unread counts
-            state.unreadCounts[channelId] = {
-              ...existingUnread,
-              msg_count: 0,
-              mention_count: 0,
-              lastViewedAt: Date.now(),
-              isMuted: state.mutedChannels.has(channelId),
-            };
+              // Update unread counts
+              state.unreadCounts[channelId] = {
+                ...existingUnread,
+                msg_count: 0,
+                mention_count: 0,
+                lastViewedAt: Date.now(),
+                isMuted: state.mutedChannels.has(channelId),
+              };
 
-            // Update last fetch time
-            state.lastFetchTimes[channelId] = Date.now();
+              // Update last fetch time
+              state.lastFetchTimes[channelId] = Date.now();
+              state.lastUpdated = Date.now();
+            });
 
             // Emit marked read event
-            emitEvent(EventType.UNREAD_MARKED_READ, {
+            unreadService.notifyMarkedRead(channelId);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "markAsRead",
               channelId,
             });
-          });
+          }
         },
 
         /**
@@ -265,34 +289,45 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @param channelIds Optional specific channel IDs
          */
         markAllAsRead: (teamId: string, channelIds?: string[]) => {
-          set((state) => {
-            const now = Date.now();
-            const channelsToMark =
-              channelIds || Object.keys(state.unreadCounts);
+          try {
+            set((state) => {
+              const now = Date.now();
+              const channelsToMark =
+                channelIds || Object.keys(state.unreadCounts);
 
-            // Mark each channel as read
-            channelsToMark.forEach((channelId) => {
-              const existingUnread = state.unreadCounts[channelId];
-              if (existingUnread) {
-                state.unreadCounts[channelId] = {
-                  ...existingUnread,
-                  msg_count: 0,
-                  mention_count: 0,
-                  lastViewedAt: now,
-                  isMuted: state.mutedChannels.has(channelId),
-                };
-              }
+              // Mark each channel as read
+              channelsToMark.forEach((channelId) => {
+                const existingUnread = state.unreadCounts[channelId];
+                if (existingUnread) {
+                  state.unreadCounts[channelId] = {
+                    ...existingUnread,
+                    msg_count: 0,
+                    mention_count: 0,
+                    lastViewedAt: now,
+                    isMuted: state.mutedChannels.has(channelId),
+                  };
+                }
+              });
+
+              // Update team last fetch time
+              state.lastFetchTimes[teamId] = now;
+              state.lastUpdated = now;
             });
-
-            // Update team last fetch time
-            state.lastFetchTimes[teamId] = now;
 
             // Emit team marked read event
             emitEvent(EventType.UNREAD_MARKED_READ, {
               teamId,
-              channelIds: channelsToMark,
+              channelIds: channelIds || Object.keys(get().unreadCounts),
+              timestamp: Date.now(),
             });
-          });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "markAllAsRead",
+              teamId,
+              channelIds,
+            });
+          }
         },
 
         /**
@@ -301,23 +336,42 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @param isMuted Whether to mute
          */
         setChannelMuted: (channelId: string, isMuted: boolean) => {
-          set((state) => {
-            // Update muted channels set
-            if (isMuted) {
-              state.mutedChannels.add(channelId);
-            } else {
-              state.mutedChannels.delete(channelId);
-            }
+          try {
+            set((state) => {
+              // Update muted channels set
+              if (isMuted) {
+                state.mutedChannels.add(channelId);
+              } else {
+                state.mutedChannels.delete(channelId);
+              }
 
-            // Update unread count to reflect muted status
-            const existingUnread = state.unreadCounts[channelId];
-            if (existingUnread) {
-              state.unreadCounts[channelId] = {
-                ...existingUnread,
-                isMuted,
-              };
-            }
-          });
+              // Update unread count to reflect muted status
+              const existingUnread = state.unreadCounts[channelId];
+              if (existingUnread) {
+                state.unreadCounts[channelId] = {
+                  ...existingUnread,
+                  isMuted,
+                };
+              }
+
+              state.lastUpdated = Date.now();
+            });
+
+            // Emit settings changed event for muted channel
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: "MUTED_CHANNELS",
+              channelId,
+              value: isMuted,
+              timestamp: Date.now(),
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setChannelMuted",
+              channelId,
+              isMuted,
+            });
+          }
         },
 
         /**
@@ -326,32 +380,51 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @param channelId Optional channel ID for scoping
          */
         addProcessedMessageId: (messageId: string, channelId?: string) => {
-          set((state) => {
-            // Generate key for the processed message
-            const key = unreadService.createProcessedMessageKey(
+          try {
+            set((state) => {
+              // Generate key for the processed message
+              const key = unreadService.createProcessedMessageKey(
+                messageId,
+                channelId,
+              );
+
+              // Add to processed IDs set
+              state.processedMessageIds.add(key);
+
+              // Limit size to prevent memory issues - keep last 1000 messages
+              if (state.processedMessageIds.size > 1000) {
+                const messagesArray = Array.from(state.processedMessageIds);
+                const toKeep = messagesArray.slice(-1000); // Keep most recent 1000
+                state.processedMessageIds = new Set(toKeep);
+              }
+
+              state.lastUpdated = Date.now();
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "addProcessedMessageId",
               messageId,
               channelId,
-            );
-
-            // Add to processed IDs set
-            state.processedMessageIds.add(key);
-
-            // Limit size to prevent memory issues - keep last 1000 messages
-            if (state.processedMessageIds.size > 1000) {
-              const messagesArray = Array.from(state.processedMessageIds);
-              const toKeep = messagesArray.slice(-1000); // Keep most recent 1000
-              state.processedMessageIds = new Set(toKeep);
-            }
-          });
+            });
+          }
         },
 
         /**
          * Clears all processed message IDs
          */
         clearProcessedMessageIds: () => {
-          set((state) => {
-            state.processedMessageIds.clear();
-          });
+          try {
+            set((state) => {
+              state.processedMessageIds.clear();
+              state.lastUpdated = Date.now();
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "clearProcessedMessageIds",
+            });
+          }
         },
 
         /**
@@ -360,15 +433,30 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @returns Channel unread count
          */
         getChannelUnreadCount: (channelId: string): ChannelUnreadCount => {
-          const { unreadCounts, mutedChannels } = get();
+          try {
+            const { unreadCounts, mutedChannels } = get();
 
-          return (
-            unreadCounts[channelId] || {
+            return (
+              unreadCounts[channelId] || {
+                msg_count: 0,
+                mention_count: 0,
+                isMuted: mutedChannels.has(channelId),
+              }
+            );
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getChannelUnreadCount",
+              channelId,
+            });
+
+            // Return safe default
+            return {
               msg_count: 0,
               mention_count: 0,
-              isMuted: mutedChannels.has(channelId),
-            }
-          );
+              isMuted: false,
+            };
+          }
         },
 
         /**
@@ -377,8 +465,17 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @returns Whether channel has unreads
          */
         hasUnreadsInChannel: (channelId: string): boolean => {
-          const unreadCount = get().getChannelUnreadCount(channelId);
-          return unreadCount.msg_count > 0 || unreadCount.mention_count > 0;
+          try {
+            const unreadCount = get().getChannelUnreadCount(channelId);
+            return unreadCount.msg_count > 0 || unreadCount.mention_count > 0;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "hasUnreadsInChannel",
+              channelId,
+            });
+            return false;
+          }
         },
 
         /**
@@ -387,8 +484,17 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @returns Whether channel has mentions
          */
         hasMentionsInChannel: (channelId: string): boolean => {
-          const unreadCount = get().getChannelUnreadCount(channelId);
-          return unreadCount.mention_count > 0;
+          try {
+            const unreadCount = get().getChannelUnreadCount(channelId);
+            return unreadCount.mention_count > 0;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "hasMentionsInChannel",
+              channelId,
+            });
+            return false;
+          }
         },
 
         /**
@@ -397,7 +503,16 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @returns Whether channel is muted
          */
         isChannelMuted: (channelId: string): boolean => {
-          return get().mutedChannels.has(channelId);
+          try {
+            return get().mutedChannels.has(channelId);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "isChannelMuted",
+              channelId,
+            });
+            return false;
+          }
         },
 
         /**
@@ -410,17 +525,29 @@ export const useUnreadStore = create<UnreadStoreState>()(
           teamId: string,
           channels: Channel[],
         ): { msg_count: number; mention_count: number } => {
-          // Create a map of channels by team for calculation
-          const channelsByTeam: Record<string, Channel[]> = {
-            [teamId]: channels.filter((c) => c.team_id === teamId),
-          };
+          try {
+            // Create a map of channels by team for calculation
+            const channelsByTeam: Record<string, Channel[]> = {
+              [teamId]: channels.filter((c) => c.team_id === teamId),
+            };
 
-          // Use the unread service for calculation
-          return unreadService.calculateTeamUnreadCounts(
-            channelsByTeam,
-            get(),
-            teamId,
-          );
+            // Use the unread service for calculation
+            return unreadService.calculateTeamUnreadCounts(
+              channelsByTeam,
+              get(),
+              teamId,
+            );
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getTeamUnreadCount",
+              teamId,
+              channelCount: channels.length,
+            });
+
+            // Return safe default
+            return { msg_count: 0, mention_count: 0 };
+          }
         },
 
         /**
@@ -430,8 +557,17 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @returns Whether team has unreads
          */
         hasUnreadsInTeam: (teamId: string, channels: Channel[]): boolean => {
-          const counts = get().getTeamUnreadCount(teamId, channels);
-          return counts.msg_count > 0 || counts.mention_count > 0;
+          try {
+            const counts = get().getTeamUnreadCount(teamId, channels);
+            return counts.msg_count > 0 || counts.mention_count > 0;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "hasUnreadsInTeam",
+              teamId,
+            });
+            return false;
+          }
         },
 
         /**
@@ -441,8 +577,17 @@ export const useUnreadStore = create<UnreadStoreState>()(
          * @returns Whether team has mentions
          */
         hasMentionsInTeam: (teamId: string, channels: Channel[]): boolean => {
-          const counts = get().getTeamUnreadCount(teamId, channels);
-          return counts.mention_count > 0;
+          try {
+            const counts = get().getTeamUnreadCount(teamId, channels);
+            return counts.mention_count > 0;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "hasMentionsInTeam",
+              teamId,
+            });
+            return false;
+          }
         },
 
         /**
@@ -453,40 +598,63 @@ export const useUnreadStore = create<UnreadStoreState>()(
           msg_count: number;
           mention_count: number;
         } => {
-          let totalMessages = 0;
-          let totalMentions = 0;
+          try {
+            let totalMessages = 0;
+            let totalMentions = 0;
 
-          // Calculate manually to avoid circular dependencies
-          Object.entries(get().unreadCounts).forEach(([channelId, counts]) => {
-            const isMuted = get().mutedChannels.has(channelId);
+            // Calculate manually to avoid circular dependencies
+            Object.entries(get().unreadCounts).forEach(
+              ([channelId, counts]) => {
+                const isMuted = get().mutedChannels.has(channelId);
 
-            // Always count mentions
-            totalMentions += counts.mention_count;
+                // Always count mentions
+                totalMentions += counts.mention_count;
 
-            // Only count messages for non-muted channels
-            if (!isMuted) {
-              totalMessages += counts.msg_count;
-            }
-          });
+                // Only count messages for non-muted channels
+                if (!isMuted) {
+                  totalMessages += counts.msg_count;
+                }
+              },
+            );
 
-          return { msg_count: totalMessages, mention_count: totalMentions };
+            return { msg_count: totalMessages, mention_count: totalMentions };
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getTotalUnreadCount",
+            });
+
+            // Return safe default
+            return { msg_count: 0, mention_count: 0 };
+          }
         },
 
         /**
          * Resets the store to initial state
          */
         reset: () => {
-          set((state) => {
-            state.unreadCounts = {};
-            state.mutedChannels.clear();
-            state.processedMessageIds.clear();
-            state.teamUnreadCounts = {};
-            state.lastFetchTimes = {};
-            state.isLoading = false;
-            state.loadingIds = [];
-            state.error = null;
-            state.errors = {};
-          });
+          try {
+            set((state) => {
+              // Reset domain-specific state
+              state.unreadCounts = {};
+              state.mutedChannels = new Set();
+              state.processedMessageIds = new Set();
+              state.teamUnreadCounts = {};
+
+              // Reset common state from CommonSlice
+              state.isLoading = false;
+              state.loadingIds = [];
+              state.error = null;
+              state.errors = {};
+              state.lastFetchTimes = {};
+              state.lastUpdated = Date.now();
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "reset",
+            });
+          }
         },
       };
     }),
@@ -503,7 +671,15 @@ export function getTeamUnreadCounts(
   teamId: string,
   channels: Channel[],
 ): { msg_count: number; mention_count: number } {
-  return useUnreadStore.getState().getTeamUnreadCount(teamId, channels);
+  try {
+    return useUnreadStore.getState().getTeamUnreadCount(teamId, channels);
+  } catch (error) {
+    handleError(error as Error, ErrorSource.UI, undefined, {
+      action: "getTeamUnreadCounts",
+      teamId,
+    });
+    return { msg_count: 0, mention_count: 0 };
+  }
 }
 
 /**
@@ -514,5 +690,47 @@ export function getTotalUnreadCounts(): {
   msg_count: number;
   mention_count: number;
 } {
-  return useUnreadStore.getState().getTotalUnreadCount();
+  try {
+    return useUnreadStore.getState().getTotalUnreadCount();
+  } catch (error) {
+    handleError(error as Error, ErrorSource.UI, undefined, {
+      action: "getTotalUnreadCounts",
+    });
+    return { msg_count: 0, mention_count: 0 };
+  }
+}
+
+/**
+ * Formats unread counts for display
+ * @param channelId Channel ID
+ * @param maxCount Maximum count to display before abbreviating
+ * @returns Formatted unread count display
+ */
+export function formatUnreadDisplay(
+  channelId: string,
+  maxCount: number = 99,
+): string {
+  try {
+    const unreadStore = useUnreadStore.getState();
+    const { msg_count, mention_count } =
+      unreadStore.getChannelUnreadCount(channelId);
+
+    if (mention_count > 0) {
+      // Priority to mentions
+      return mention_count > maxCount
+        ? `${maxCount}+`
+        : mention_count.toString();
+    } else if (msg_count > 0) {
+      // Then unreads
+      return msg_count > maxCount ? `${maxCount}+` : msg_count.toString();
+    }
+
+    return "";
+  } catch (error) {
+    handleError(error as Error, ErrorSource.UI, undefined, {
+      action: "formatUnreadDisplay",
+      channelId,
+    });
+    return "";
+  }
 }

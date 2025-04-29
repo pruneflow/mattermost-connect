@@ -3,6 +3,8 @@
  * Provides comprehensive types for WebSocket functionality
  */
 
+import { CommonState } from "./common";
+
 /**
  * Standard Mattermost WebSocket event types
  */
@@ -191,7 +193,7 @@ export interface ReactionData {
 /**
  * WebSocket state
  */
-export interface WebSocketState {
+export interface WebSocketState extends CommonState {
   /** Whether WebSocket is connected */
   isConnected: boolean;
   /** Whether WebSocket is connecting */

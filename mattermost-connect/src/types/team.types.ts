@@ -1,7 +1,7 @@
 /**
  * Team related type definitions
  */
-import { Entity, PaginationParams } from "./common";
+import { CommonState, Entity, PaginationParams } from "./common";
 
 /**
  * Team types
@@ -117,10 +117,9 @@ export interface TeamInviteInfo {
 /**
  * Team state
  */
-export interface TeamState {
+export interface TeamState extends CommonState {
   teams: Team[];
   activeTeam: Team | null;
   teamStats: Record<string, TeamStats>;
   teamMembers: Record<string, TeamMember[]>;
-  lastFetchTimes: Record<string, number>;
 }

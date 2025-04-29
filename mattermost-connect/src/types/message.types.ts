@@ -1,7 +1,7 @@
 /**
  * Message related type definitions
  */
-import { Entity, PaginationParams } from "./common";
+import { CommonState, Entity, PaginationParams } from "./common";
 
 /**
  * Message attachment interface
@@ -165,12 +165,11 @@ export interface ReactionCount {
 /**
  * Message state
  */
-export interface MessageState {
+export interface MessageState extends CommonState {
   messagesByChannel: Record<string, Message[]>;
   threadMessages: Record<string, Message[]>;
   pinnedMessages: Record<string, Message[]>;
   highlightedMessageId: string | null;
   replyToMessage: Message | null;
   editingMessageId: string | null;
-  lastFetchTimes: Record<string, number>;
 }

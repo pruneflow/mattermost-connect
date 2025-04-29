@@ -9,6 +9,7 @@ import { useAuthStore } from "./authStore";
 import { useUserStore } from "./userStore";
 import { useTeamStore } from "./teamStore";
 import { useChannelStore } from "./channelStore";
+import { useDirectChannelStore } from "./directChannelStore";
 import { useMessageStore } from "./messageStore";
 import { useUnreadStore } from "./unreadStore";
 import { useWsStore } from "./wsStore";
@@ -28,7 +29,7 @@ export {
 } from "./userStore";
 
 // Teams
-export { useTeamStore } from "./teamStore";
+export { useTeamStore, getFormattedTeamName, isTeamAdmin } from "./teamStore";
 
 // Channels
 export {
@@ -37,13 +38,22 @@ export {
   isDirectChannel,
   isGroupChannel,
   isDirectOrGroupChannel,
+  getChannelDisplayName,
 } from "./channelStore";
+
+// Direct Channels
+export {
+  useDirectChannelStore,
+  getDirectChannelDisplayName,
+  hasDirectChannelStatus,
+} from "./directChannelStore";
 
 // Messages
 export {
   useMessageStore,
   getSortedChannelMessages,
   getSortedThreadMessages,
+  getMessageDisplayText,
 } from "./messageStore";
 
 // Unread Counts
@@ -51,10 +61,16 @@ export {
   useUnreadStore,
   getTeamUnreadCounts,
   getTotalUnreadCounts,
+  formatUnreadDisplay,
 } from "./unreadStore";
 
-// WebSocket - Updated exports with new pattern
-export { useWsStore, registerWsHandler, registerWsHandlers } from "./wsStore";
+// WebSocket
+export {
+  useWsStore,
+  registerWsHandler,
+  registerWsHandlers,
+  isWsConnected,
+} from "./wsStore";
 
 // Error Handling
 export { useErrorStore, handleError } from "./errorStore";
@@ -62,7 +78,7 @@ export { useErrorStore, handleError } from "./errorStore";
 // User Settings
 export { useUserSettingsStore } from "./userSettingsStore";
 
-// Event utilities - Now exported from api/eventUtils
+// Event utilities - exported from api/eventUtils
 export { emitEvent, onEvent, onEvents } from "../api/eventUtils";
 
 /**
@@ -70,13 +86,48 @@ export { emitEvent, onEvent, onEvents } from "../api/eventUtils";
  * Useful for logout or testing
  */
 export const resetAllStores = () => {
-  useWsStore.getState().reset();
-  useAuthStore.getState().reset();
-  useUserStore.getState().reset();
-  useTeamStore.getState().reset();
-  useChannelStore.getState().reset();
-  useMessageStore.getState().reset();
-  useUnreadStore.getState().reset();
-  useErrorStore.getState().reset();
-  useUserSettingsStore.getState().reset();
+  try {
+    // Reset in specific order to handle dependencies properly
+    // WebSocket first to close connections
+    useWsStore.getState().reset();
+
+    // Auth related
+    useAuthStore.getState().reset();
+    useUserStore.getState().reset();
+
+    // Data stores
+    useTeamStore.getState().reset();
+    useChannelStore.getState().reset();
+    useDirectChannelStore.getState().reset();
+    useMessageStore.getState().reset();
+    useUnreadStore.getState().reset();
+
+    // Settings
+    useUserSettingsStore.getState().reset();
+
+    // Error store last to clear any errors that might have occurred during reset
+    useErrorStore.getState().reset();
+  } catch (error) {
+    console.error("Error resetting stores:", error);
+  }
+};
+
+/**
+ * Creates a snapshot of the current store state
+ * Useful for debugging
+ * @returns Object with current state of all stores
+ */
+export const getStoresSnapshot = () => {
+  return {
+    auth: useAuthStore.getState(),
+    user: useUserStore.getState(),
+    team: useTeamStore.getState(),
+    channel: useChannelStore.getState(),
+    directChannel: useDirectChannelStore.getState(),
+    message: useMessageStore.getState(),
+    unread: useUnreadStore.getState(),
+    ws: useWsStore.getState(),
+    error: useErrorStore.getState(),
+    userSettings: useUserSettingsStore.getState(),
+  };
 };

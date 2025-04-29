@@ -1,7 +1,7 @@
 /**
  * Channel related type definitions
  */
-import { Entity, PaginationParams } from "./common";
+import { CommonState, Entity, PaginationParams } from "./common";
 import { UserStatus } from "./user.types";
 
 /**
@@ -148,11 +148,8 @@ export interface DirectChannelInfo {
 /**
  * Channel state
  */
-export interface ChannelState {
+export interface ChannelState extends CommonState {
   channelsByTeam: Record<string, Channel[]>;
   activeChannel: Channel | null;
   members: Record<string, ChannelMember[]>;
-  directChannelInfoById: Record<string, DirectChannelInfo>;
-  pendingUserIds: string[];
-  lastFetchTimes: Record<string, number>;
 }

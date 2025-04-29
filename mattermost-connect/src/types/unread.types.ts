@@ -1,7 +1,7 @@
 /**
  * Types for unread count related data and functions
  */
-import { PaginationParams } from "./common";
+import { CommonState, PaginationParams } from "./common";
 
 /**
  * Unread count information for a channel
@@ -88,7 +88,7 @@ export interface ChannelUnreadOptions {
 /**
  * Unread count state for the store
  */
-export interface UnreadState {
+export interface UnreadState extends CommonState {
   unreadCounts: Record<string, ChannelUnreadCount>;
   mutedChannels: Set<string>;
   processedMessageIds: Set<string>;
