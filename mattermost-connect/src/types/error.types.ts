@@ -2,6 +2,7 @@
  * Types for error handling
  * Comprehensive type definitions for centralized error management
  */
+import { ApiError } from "./common";
 
 /**
  * Error severity levels
@@ -23,18 +24,6 @@ export enum ErrorSource {
   UI = "ui",
   STORAGE = "storage",
   UNKNOWN = "unknown",
-}
-
-/**
- * API Error extended from Error
- */
-export interface ApiError extends Error {
-  status?: number;
-  data?: any;
-  request?: {
-    url: string;
-    method: string;
-  };
 }
 
 /**

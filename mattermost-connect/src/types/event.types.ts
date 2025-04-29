@@ -1,4 +1,3 @@
-// types/event.types.ts
 /**
  * Types for event handling system
  */

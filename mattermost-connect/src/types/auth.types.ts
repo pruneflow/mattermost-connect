@@ -1,7 +1,7 @@
 /**
  * Authentication related type definitions
  */
-import { Entity, WithId, WithTimestamps } from "./common";
+import { Entity } from "./common";
 
 /**
  * Authentication modes
@@ -32,36 +32,16 @@ export interface AuthToken {
 }
 
 /**
- * Authentication state - discriminated union for type safety
+ * Authentication state
  */
-export type AuthState =
-  | {
-      status: "unauthenticated";
-      isAuthenticated: false;
-      currentUser: null;
-      token: null;
-      serverUrl: null | string;
-      isAuthenticating: boolean;
-      error: Error | null;
-    }
-  | {
-      status: "authenticating";
-      isAuthenticated: false;
-      currentUser: null;
-      token: null;
-      serverUrl: null | string;
-      isAuthenticating: true;
-      error: Error | null;
-    }
-  | {
-      status: "authenticated";
-      isAuthenticated: true;
-      currentUser: User;
-      token: string;
-      serverUrl?: string;
-      isAuthenticating: false;
-      error: Error | null;
-    };
+export interface AuthState {
+  isAuthenticated: boolean;
+  isAuthenticating: boolean;
+  currentUser: User | null;
+  token: string | null;
+  serverUrl: string | null;
+  error: Error | null;
+}
 
 /**
  * Authentication response from the server
@@ -126,41 +106,4 @@ export interface ApiClientConfig {
   userId?: string;
   defaultHeaders?: Record<string, string>;
   onError?: (error: any) => void;
-}
-
-/**
- * Event types specific to authentication
- */
-export enum AuthEventType {
-  LOGIN_SUCCESS = "auth:login_success",
-  LOGOUT = "auth:logout",
-  SESSION_EXPIRED = "auth:session_expired",
-  TOKEN_REFRESH = "auth:token_refresh",
-  UNAUTHORIZED = "auth:unauthorized",
-}
-
-/**
- * Authentication error types
- */
-export enum AuthErrorType {
-  INVALID_CREDENTIALS = "invalid_credentials",
-  SESSION_EXPIRED = "session_expired",
-  NETWORK_ERROR = "network_error",
-  SERVER_ERROR = "server_error",
-  UNAUTHORIZED = "unauthorized",
-}
-
-/**
- * Authentication state for React components
- */
-export interface AuthContextState {
-  isAuthenticated: boolean;
-  isAuthenticating: boolean;
-  isInitialized: boolean;
-  currentUser: User | null;
-  error: Error | null;
-  serverUrl: string | null;
-  login: (params: LoginParams) => Promise<User>;
-  logout: () => void;
-  refresh: () => Promise<User | null>;
 }

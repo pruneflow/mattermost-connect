@@ -94,10 +94,6 @@ export interface UnreadState {
   processedMessageIds: Set<string>;
   teamUnreadCounts: Record<string, TeamUnreadCount>;
   lastFetchTimes: Record<string, number>;
-  isLoading: boolean;
-  loadingIds: string[];
-  error: Error | null;
-  errors: Record<string, Error | null>;
 }
 
 /**

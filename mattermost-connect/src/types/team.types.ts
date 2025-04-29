@@ -65,7 +65,6 @@ export interface TeamMember {
  * Team member with user information
  */
 export interface TeamMemberWithUser extends TeamMember {
-  user_id: string;
   username?: string;
   first_name?: string;
   last_name?: string;
@@ -124,8 +123,4 @@ export interface TeamState {
   teamStats: Record<string, TeamStats>;
   teamMembers: Record<string, TeamMember[]>;
   lastFetchTimes: Record<string, number>;
-  isLoading: boolean;
-  loadingIds: string[];
-  error: Error | null;
-  errors: Record<string, Error | null>;
 }

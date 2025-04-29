@@ -198,15 +198,3 @@ export interface SettingsChangeEventData {
   /** Expiration time for temporary settings */
   expirationTime?: number;
 }
-
-/**
- * Muted channel information
- */
-export interface MutedChannelInfo {
-  /** Channel ID */
-  channelId: string;
-  /** Whether the channel is muted */
-  isMuted: boolean;
-  /** Optional timestamp for temporary mutes */
-  expiresAt?: number;
-}
