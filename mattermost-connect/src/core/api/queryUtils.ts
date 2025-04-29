@@ -73,19 +73,20 @@ export function createQueryOptions<TData, TError, TQueryKey extends QueryKey>(
     refetchOnMount: false,
     refetchOnReconnect: entityType === "unread" || entityType === "message",
     ...options,
-    onError: (error: Error) => {
-      // Use standardized error handling from Group 2
+    onError: (error: TError) => {
+      // Use standardized error handling
       handleError(error as Error, ErrorSource.API, undefined, {
         entityType,
         queryKey: options?.queryKey,
       });
 
-      // Also call custom error handler if provided
-      if (options?.onError) {
-        options.onError(error);
+      // Call custom error handler if provided
+      const customOnError = (options as any)?.onError;
+      if (typeof customOnError === "function") {
+        customOnError(error);
       }
     },
-  };
+  } as Partial<UseQueryOptions<TData, TError, TData, TQueryKey>>;
 }
 
 /**
