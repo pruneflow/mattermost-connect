@@ -10,7 +10,6 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { normalize, schema } from "normalizr";
-import { ApiError } from "../../types";
 
 /**
  * Standard query configuration by entity type
@@ -35,6 +34,10 @@ export const QUERY_CONFIG = {
   unread: {
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 2 * 60 * 1000, // 2 minutes
+  },
+  auth: {
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
   },
 };
 

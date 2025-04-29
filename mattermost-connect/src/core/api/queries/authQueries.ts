@@ -115,13 +115,10 @@ export const useInitializeAuthQuery = () => {
     queryFn: async () => {
       return initialize();
     },
-    // Run only once at mount
     ...createQueryOptions("auth", {
-      // Don't automatically refetch
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       refetchOnReconnect: false,
-      // Don't cache the result
       staleTime: 0,
     }),
   });
