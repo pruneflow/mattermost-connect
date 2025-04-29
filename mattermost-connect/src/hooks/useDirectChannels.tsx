@@ -1,237 +1,324 @@
 // src/hooks/useDirectChannels.tsx
 /**
- * Hook for direct channel functionality
+ * Direct channel hooks
+ * Provides access to direct and group message functionality
  */
-import { useCallback, useEffect, useMemo } from "react";
-import { Channel, User, DirectChannelInfo } from "../types";
-import { useChannelStore } from "../core/store/channelStore";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useChannelQuery } from "../core/api/queries/channelQueries";
 import { useDirectChannelStore } from "../core/store/directChannelStore";
-import { useAuthStore } from "../core/store/authStore";
+import { useChannelStore } from "../core/store/channelStore";
 import { useUserStore } from "../core/store/userStore";
 import { channelService } from "../core/services/channelService";
-import { useUsersQuery } from "../core/api/queries/userQueries";
+import { Channel, DirectChannelInfo, UserWithStatus, User } from "../types";
+import { useAuthStore } from "../core/store/authStore";
+import { handleError } from "../core/store/errorStore";
+import { ErrorSource } from "../types";
+import { apiClient } from "../core/api/client";
+import { userService } from "../core/services/userService";
 
 /**
- * Hook that provides utilities for working with direct channels
+ * Hook for direct channel functionality
+ * @returns Direct channel operations and data
  */
 export function useDirectChannels() {
-  // Get current user
   const { currentUser } = useAuthStore();
-  const currentUserId = currentUser?.id || "";
-
-  // Get user store
-  const { byId: users, statusByUserId: statuses } = useUserStore();
-
-  // Get direct channel store
   const {
-    getDirectChannelInfo,
+    directChannelInfoById,
     setDirectChannelInfo,
-    refreshDirectChannelInfo,
+    updateDirectChannelInfo,
+    setDirectChannelUserStatus,
   } = useDirectChannelStore();
 
+  const { getChannelsByType } = useChannelStore();
+  const { getUserById, getUserStatus } = useUserStore();
+
+  // Get all direct and group channels
+  const directChannels = useMemo(() => {
+    // We don't filter by team here since direct channels can be accessed from any team
+    const allChannels = getChannelsByType("", "direct");
+    return allChannels;
+  }, [getChannelsByType]);
+
+  const groupChannels = useMemo(() => {
+    // We don't filter by team here since group channels can be accessed from any team
+    const allChannels = getChannelsByType("", "group");
+    return allChannels;
+  }, [getChannelsByType]);
+
   /**
-   * Gets detailed information about a direct or group channel
-   * @param channel Channel to process
-   * @returns Direct channel information
+   * Creates a direct channel with a user
+   * @param userId User ID to create a direct channel with
    */
-  const getChannelInfo = useCallback(
-    (channel: Channel): DirectChannelInfo => {
-      // Check existing info
-      const existingInfo = getDirectChannelInfo(channel.id);
-      if (existingInfo) {
-        return existingInfo;
+  const createDirectChannel = useCallback(
+    async (userId: string): Promise<Channel | null> => {
+      if (!currentUser) {
+        throw new Error("Must be authenticated to create direct channels");
       }
 
-      // If not direct or group, return minimal default info
-      if (!channelService.isDirectOrGroupChannel(channel)) {
-        return {
-          isDirect: false,
-          isGroup: false,
-          displayName: channel.display_name || "Channel",
-          userIds: [],
-          status: "complete",
-        };
+      try {
+        // Generate direct channel name
+        const channelName = channelService.generateDirectChannelName(
+          currentUser.id,
+          userId,
+        );
+
+        // Check if channel already exists
+        const existingChannel = directChannels.find(
+          (channel) => channel.name === channelName,
+        );
+
+        if (existingChannel) {
+          return existingChannel;
+        }
+
+        // Create channel
+        const response = await apiClient.post<Channel>("channels/direct", [
+          currentUser.id,
+          userId,
+        ]);
+
+        // Get the channel from store or response
+        const channel = response.data;
+
+        // Get other user
+        const otherUser = getUserById(userId);
+
+        // Create direct channel info
+        if (otherUser && channel) {
+          const directInfo: DirectChannelInfo = {
+            isDirect: true,
+            isGroup: false,
+            displayName: channelService.getDirectChannelDisplayName(otherUser),
+            userIds: [currentUser.id, userId],
+            otherUserId: userId,
+            userStatus: getUserStatus(userId),
+            status: "complete",
+          };
+
+          setDirectChannelInfo(channel.id, directInfo);
+        }
+
+        return channel;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return null;
       }
-
-      // Create info
-      const info = channelService.createDirectChannelInfo(
-        channel,
-        currentUserId,
-        users,
-        statuses,
-      );
-
-      // Cache the result
-      setDirectChannelInfo(channel.id, info);
-
-      return info;
     },
     [
-      currentUserId,
-      users,
-      statuses,
-      getDirectChannelInfo,
+      currentUser,
+      directChannels,
+      getUserById,
+      getUserStatus,
       setDirectChannelInfo,
     ],
   );
 
   /**
-   * Processes a list of channels to get direct channel information
-   * @param channels List of channels to process
-   * @returns Map of channel IDs to direct channel information
+   * Creates a group channel with multiple users
+   * @param userIds User IDs to include in the group channel
    */
-  const getChannelsInfo = useCallback(
-    (channels: Channel[]): Record<string, DirectChannelInfo> => {
-      const channelsInfo: Record<string, DirectChannelInfo> = {};
-
-      channels.forEach((channel) => {
-        channelsInfo[channel.id] = getChannelInfo(channel);
-      });
-
-      return channelsInfo;
-    },
-    [getChannelInfo],
-  );
-
-  /**
-   * Gets direct message display names for a list of channels
-   * @param channels List of channels
-   * @returns Record of channel IDs to display names
-   */
-  const getDirectMessageDisplayNames = useCallback(
-    (channels: Channel[]): Record<string, string[]> => {
-      const displayNames: Record<string, string[]> = {};
-
-      channels.forEach((channel) => {
-        const info = getChannelInfo(channel);
-        displayNames[channel.id] = [info.displayName];
-      });
-
-      return displayNames;
-    },
-    [getChannelInfo],
-  );
-
-  /**
-   * Checks if all direct channel users are loaded
-   * @param channels List of channels to check
-   * @returns Whether all direct channel users are loaded
-   */
-  const areAllDirectChannelUsersLoaded = useCallback(
-    (channels: Channel[]): boolean => {
-      for (const channel of channels) {
-        if (
-          !channelService.areDirectChannelUsersLoaded(
-            channel,
-            users,
-            currentUserId,
-          )
-        ) {
-          return false;
-        }
+  const createGroupChannel = useCallback(
+    async (userIds: string[]): Promise<Channel | null> => {
+      if (!currentUser) {
+        throw new Error("Must be authenticated to create group channels");
       }
-      return true;
+
+      if (userIds.length < 2) {
+        throw new Error(
+          "Group channels require at least 3 participants (including you)",
+        );
+      }
+
+      try {
+        // Ensure current user is included
+        const allUserIds = [
+          currentUser.id,
+          ...userIds.filter((id) => id !== currentUser.id),
+        ];
+
+        // Create channel
+        const response = await apiClient.post<Channel>(
+          "channels/group",
+          allUserIds,
+        );
+
+        // Get the created channel
+        const channel = response.data;
+
+        // Get users
+        const users = allUserIds
+          .map((id) => getUserById(id))
+          .filter((user): user is User => !!user);
+
+        // Create group channel info
+        if (channel) {
+          const directInfo: DirectChannelInfo = {
+            isDirect: false,
+            isGroup: true,
+            displayName: channelService.getGroupChannelDisplayName(
+              users,
+              currentUser.id,
+            ),
+            userIds: allUserIds,
+            status: "complete",
+          };
+
+          setDirectChannelInfo(channel.id, directInfo);
+        }
+
+        return channel;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return null;
+      }
     },
-    [users, currentUserId],
+    [currentUser, getUserById, setDirectChannelInfo],
   );
 
   /**
-   * Gets a list of user IDs needed to properly display all direct channels
-   * @param channels List of channels
-   * @returns Array of user IDs that need to be loaded
+   * Gets direct channel info
+   * @param channelId Channel ID
    */
-  const getNeededUserIds = useCallback(
-    (channels: Channel[]): string[] => {
-      return channelService.getNeededUserIdsForDirectChannels(
-        channels,
-        users,
-        currentUserId,
-      );
+  const getDirectChannelInfo = useCallback(
+    (channelId: string): DirectChannelInfo | null => {
+      return directChannelInfoById[channelId] || null;
     },
-    [users, currentUserId],
+    [directChannelInfoById],
+  );
+
+  /**
+   * Refreshes direct channel info
+   * @param channelId Channel ID
+   */
+  const refreshDirectChannelInfo = useCallback(
+    (channelId: string) => {
+      if (!currentUser) return;
+
+      const directChannelStore = useDirectChannelStore.getState();
+      directChannelStore.refreshDirectChannelInfo(channelId, currentUser.id);
+    },
+    [currentUser],
   );
 
   return {
-    getChannelInfo,
-    getChannelsInfo,
-    getDirectMessageDisplayNames,
-    areAllDirectChannelUsersLoaded,
-    getNeededUserIds,
+    // Data
+    directChannels,
+    groupChannels,
+
+    // Actions
+    createDirectChannel,
+    createGroupChannel,
+    getDirectChannelInfo,
+    refreshDirectChannelInfo,
   };
 }
 
 /**
- * Hook that ensures users for direct channels are loaded
- * @param channels Channels to load users for
+ * Hook for a specific direct channel
+ * @param channelId Channel ID
+ * @returns Direct channel data and operations
  */
-export function useDirectChannelUsers(channels: Channel[] = []) {
-  // Get current user
+export function useDirectChannel(channelId: string | undefined) {
   const { currentUser } = useAuthStore();
-  const currentUserId = currentUser?.id || "";
+  const { channelQuery, channel } = useChannelInfo(channelId);
 
-  // Get needed user IDs
-  const { getNeededUserIds } = useDirectChannels();
-
-  // Compute user IDs to load
-  const userIdsToLoad = useMemo(
-    () => getNeededUserIds(channels),
-    [channels, getNeededUserIds],
-  );
-
-  // Use query to load users
   const {
-    isLoading: isLoadingUsers,
-    data: loadedUsers,
-    error,
-  } = useUsersQuery({
-    userIds: userIdsToLoad.length > 0 ? userIdsToLoad : undefined,
-  });
+    directChannelInfoById,
+    getDirectChannelInfo,
+    setDirectChannelUserStatus,
+    refreshDirectChannelInfo,
+  } = useDirectChannelStore();
 
-  // Update direct channel info when users load
-  const { refreshDirectChannelInfo } = useDirectChannelStore();
+  const { getUserById, getUserStatus } = useUserStore();
 
+  // Get direct channel info
+  const directInfo = useMemo(() => {
+    if (!channelId) return null;
+    return getDirectChannelInfo(channelId);
+  }, [channelId, getDirectChannelInfo]);
+
+  // Refresh direct channel info if needed
   useEffect(() => {
-    if (loadedUsers && loadedUsers.length > 0) {
-      // Refresh all direct channel info that involves these users
-      channels.forEach((channel) => {
-        if (channelService.isDirectOrGroupChannel(channel)) {
-          refreshDirectChannelInfo(channel.id, currentUserId);
-        }
-      });
+    if (
+      channel &&
+      currentUser &&
+      channelService.isDirectOrGroupChannel(channel) &&
+      (!directInfo || directInfo.status === "loading")
+    ) {
+      refreshDirectChannelInfo(channelId!, currentUser.id);
     }
-  }, [loadedUsers, channels, currentUserId, refreshDirectChannelInfo]);
+  }, [channel, currentUser, directInfo, channelId, refreshDirectChannelInfo]);
+
+  // Get other user for direct channels
+  const otherUser = useMemo(() => {
+    if (!directInfo || !directInfo.isDirect || !directInfo.otherUserId)
+      return null;
+
+    return getUserById(directInfo.otherUserId);
+  }, [directInfo, getUserById]);
+
+  // Get other users for group channels
+  const groupUsers = useMemo(() => {
+    if (!directInfo || !directInfo.isGroup || !directInfo.userIds) return [];
+
+    return directInfo.userIds
+      .filter((id) => id !== currentUser?.id)
+      .map((id) => {
+        const user = getUserById(id);
+        if (!user) return null;
+
+        return {
+          user,
+          status: getUserStatus(id),
+          displayName: userService.formatUserName(user),
+        } as UserWithStatus;
+      })
+      .filter((u): u is UserWithStatus => !!u);
+  }, [directInfo, currentUser, getUserById, getUserStatus]);
+
+  // Update user status when it changes
+  useEffect(() => {
+    if (directInfo?.isDirect && directInfo.otherUserId && channelId) {
+      const status = getUserStatus(directInfo.otherUserId);
+      setDirectChannelUserStatus(channelId, status);
+    }
+  }, [directInfo, channelId, getUserStatus, setDirectChannelUserStatus]);
 
   return {
-    isLoadingUsers,
-    userIdsToLoad,
-    userIdsCount: userIdsToLoad.length,
-    loadedUsers,
-    loadedCount: loadedUsers?.length || 0,
-    stillMissingCount: userIdsToLoad.length - (loadedUsers?.length || 0),
-    error,
+    // Data
+    channel,
+    directInfo,
+    otherUser,
+    groupUsers,
+
+    // State
+    isLoading: channelQuery.isLoading,
+    error: channelQuery.error,
+    isDirect: directInfo?.isDirect || false,
+    isGroup: directInfo?.isGroup || false,
+
+    // Actions
+    refreshDirectInfo: () => {
+      if (channelId && currentUser) {
+        refreshDirectChannelInfo(channelId, currentUser.id);
+      }
+    },
   };
 }
 
 /**
- * Hook that provides information for a single direct channel
- * @param channel Channel to get information for
- * @returns Direct channel information
+ * Helper hook to get channel info
+ * @param channelId Channel ID
  */
-export function useDirectChannel(channel: Channel | null | undefined) {
-  const { getChannelInfo } = useDirectChannels();
+function useChannelInfo(channelId: string | undefined) {
+  const channelQuery = useChannelQuery(channelId);
+  const { getChannelById } = useChannelStore();
 
-  // Memoize the channel info
-  return useMemo(() => {
-    if (!channel) {
-      return {
-        isDirect: false,
-        isGroup: false,
-        displayName: "",
-        userIds: [],
-        status: "complete" as const,
-      };
-    }
+  // Get channel from store or query
+  const channel = useMemo(() => {
+    if (!channelId) return null;
+    return getChannelById(channelId) || channelQuery.data || null;
+  }, [channelId, getChannelById, channelQuery.data]);
 
-    return getChannelInfo(channel);
-  }, [channel, getChannelInfo]);
+  return { channelQuery, channel };
 }

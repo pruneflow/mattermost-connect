@@ -1,704 +1,717 @@
 // src/hooks/useMessages.tsx
 /**
- * Hooks for message functionality
- * Optimized and modular hooks for different message use cases
+ * Message hooks
+ * Provides access to message functionality
  */
-import { useCallback, useState, useMemo, useEffect } from "react";
-import { Message, MessagePaginationOptions, ReactionCount } from "../types";
-import {
-  useMessageStore,
-  getSortedChannelMessages,
-  getSortedThreadMessages,
-  useAuthStore,
-} from "../core/store";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   useMessagesQuery,
   useThreadMessagesQuery,
+  usePinnedMessagesQuery,
   useSendMessageMutation,
   useReplyToMessageMutation,
   useEditMessageMutation,
   useDeleteMessageMutation,
   usePinMessageMutation,
   useUnpinMessageMutation,
-  usePinnedMessagesQuery,
+  useAddReactionMutation,
+  useRemoveReactionMutation,
   useUploadFilesMutation,
+  useFileInfoQuery,
 } from "../core/api/queries/messageQueries";
-import { debounce } from "../utils/performance";
+import { useMessageStore } from "../core/store/messageStore";
+import { useUserStore } from "../core/store/userStore";
+import { messageService } from "../core/services/messageService";
+import {
+  Message,
+  MessageAttachment,
+  MessageReaction,
+  SendMessageParams,
+  MessagePaginationOptions,
+} from "../types";
+import { useAuthStore } from "../core/store/authStore";
+import { handleError } from "../core/store/errorStore";
+import { ErrorSource } from "../types";
 
 /**
- * Main hook for channel messages management
- * @param channelId - Channel ID
- * @param options - Pagination options
- * @returns Message state and actions
+ * Hook for messages in a channel
+ * @param channelId Channel ID
+ * @param options Pagination options
+ * @returns Message operations and data
  */
 export function useMessages(
   channelId: string | undefined,
-  options: MessagePaginationOptions = { channelId: "your-channel-id" },
+  options: MessagePaginationOptions = {},
 ) {
-  // Get state from store
-  const {
-    highlightedMessageId,
-    replyToMessage,
-    editingMessageId,
-    setHighlightedMessage,
-    setReplyToMessage,
-    setEditingMessage,
-    addReaction,
-    removeReaction,
-    hasUserReacted,
-    getReactionCounts,
-  } = useMessageStore();
-
-  // Get current user
   const { currentUser } = useAuthStore();
 
-  // Message queries
+  // Get messages using React Query
   const messagesQuery = useMessagesQuery(channelId, options);
-  const pinnedMessagesQuery = usePinnedMessagesQuery(channelId);
 
-  // Message mutations
-  const sendMessageMutation = useSendMessageMutation();
-  const editMessageMutation = useEditMessageMutation();
-  const deleteMessageMutation = useDeleteMessageMutation();
-  const pinMessageMutation = usePinMessageMutation();
-  const unpinMessageMutation = useUnpinMessageMutation();
-  const uploadFilesMutation = useUploadFilesMutation();
+  // Get message state from store
+  const {
+    getChannelMessages,
+    getMessageById,
+    hasUserReacted,
+    setReplyToMessage,
+    setEditingMessage,
+    editingMessageId,
+    replyToMessage,
+    isChannelLoading,
+  } = useMessageStore();
+
+  // Get user store
+  const { getUserById } = useUserStore();
+
+  // Get message mutations
+  const sendMutation = useSendMessageMutation();
+  const deleteMutation = useDeleteMessageMutation();
+  const pinMutation = usePinMessageMutation();
+  const unpinMutation = useUnpinMessageMutation();
+  const addReactionMutation = useAddReactionMutation();
+  const removeReactionMutation = useRemoveReactionMutation();
+  const uploadMutation = useUploadFilesMutation();
+
+  // Messages from store or query
+  const messages = useMemo(() => {
+    if (!channelId) return [];
+
+    const storeMessages = getChannelMessages(channelId);
+
+    // If we have paginated options, use query results
+    if (
+      (options.page && options.page > 0) ||
+      options.perPage ||
+      options.since ||
+      options.before ||
+      options.after
+    ) {
+      return messagesQuery.data || [];
+    }
+
+    return storeMessages.length > 0 ? storeMessages : messagesQuery.data || [];
+  }, [channelId, getChannelMessages, messagesQuery.data, options]);
+
+  // Sort messages by date, oldest first
+  const sortedMessages = useMemo(() => {
+    return messageService.sortMessages(messages);
+  }, [messages]);
+
+  // Group messages by date for display
+  const messagesByDate = useMemo(() => {
+    return messageService.groupMessagesByDate(sortedMessages);
+  }, [sortedMessages]);
 
   /**
-   * Refreshes the messages list
-   * @returns Promise resolving to refreshed messages
-   */
-  const refreshMessages = useCallback(async () => {
-    return messagesQuery.refetch().then((result) => result.data || []);
-  }, [messagesQuery]);
-
-  /**
-   * Sends a new message
-   * @param content - Message content
-   * @param fileIds - Optional file IDs to attach
-   * @returns Promise resolving to the sent message
+   * Sends a message to the channel
+   * @param text Message text
+   * @param fileIds Optional file IDs to attach
    */
   const sendMessage = useCallback(
-    async (content: string, fileIds: string[] = []) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to send a message");
-      }
+    async (text: string, fileIds: string[] = []): Promise<Message | null> => {
+      if (!channelId) return null;
 
-      return sendMessageMutation.mutateAsync({
-        channelId,
-        message: content,
-        fileIds,
-      });
+      try {
+        // Validate message
+        if (!messageService.validateMessage(text) && fileIds.length === 0) {
+          throw new Error("Invalid message content");
+        }
+
+        const params: SendMessageParams = {
+          channelId,
+          message: text,
+          fileIds,
+        };
+
+        return await sendMutation.mutateAsync(params);
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return null;
+      }
     },
-    [channelId, sendMessageMutation],
+    [channelId, sendMutation],
   );
 
   /**
-   * Edits a message
-   * @param messageId - Message ID
-   * @param content - New content
-   * @returns Promise resolving to the edited message
+   * Uploads files to the channel
+   * @param files Files to upload
    */
-  const editMessage = useCallback(
-    async (messageId: string, content: string) => {
-      return editMessageMutation.mutateAsync({ messageId, message: content });
+  const uploadFiles = useCallback(
+    async (files: File[]): Promise<string[]> => {
+      if (!channelId) return [];
+
+      try {
+        const result = await uploadMutation.mutateAsync({ channelId, files });
+
+        if (result && result.file_infos) {
+          return result.file_infos.map((file) => file.id);
+        }
+
+        return [];
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return [];
+      }
     },
-    [editMessageMutation],
+    [channelId, uploadMutation],
   );
 
   /**
    * Deletes a message
-   * @param messageId - Message ID
-   * @returns Promise resolving when deletion completes
+   * @param messageId Message ID
    */
   const deleteMessage = useCallback(
-    async (messageId: string) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to delete a message");
-      }
+    async (messageId: string): Promise<boolean> => {
+      if (!channelId) return false;
 
-      return deleteMessageMutation.mutateAsync({ messageId, channelId });
+      try {
+        await deleteMutation.mutateAsync({ messageId, channelId });
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [channelId, deleteMessageMutation],
+    [channelId, deleteMutation],
   );
 
   /**
-   * Pins a message
-   * @param messageId - Message ID
-   * @returns Promise resolving when action completes
+   * Toggles pin status for a message
+   * @param messageId Message ID
+   * @param isPinned Whether the message is currently pinned
    */
-  const pinMessage = useCallback(
-    async (messageId: string) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to pin a message");
-      }
+  const togglePin = useCallback(
+    async (messageId: string, isPinned: boolean): Promise<boolean> => {
+      if (!channelId) return false;
 
-      return pinMessageMutation.mutateAsync({ messageId, channelId });
+      try {
+        if (isPinned) {
+          await unpinMutation.mutateAsync({ messageId, channelId });
+        } else {
+          await pinMutation.mutateAsync({ messageId, channelId });
+        }
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [channelId, pinMessageMutation],
+    [channelId, pinMutation, unpinMutation],
   );
 
   /**
-   * Unpins a message
-   * @param messageId - Message ID
-   * @returns Promise resolving when action completes
-   */
-  const unpinMessage = useCallback(
-    async (messageId: string) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to unpin a message");
-      }
-
-      return unpinMessageMutation.mutateAsync({ messageId, channelId });
-    },
-    [channelId, unpinMessageMutation],
-  );
-
-  /**
-   * Uploads files to attach to a message
-   * @param files - Files to upload
-   * @returns Promise resolving with the uploaded file IDs
-   */
-  const uploadFiles = useCallback(
-    async (files: File[]) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to upload files");
-      }
-
-      const result = (await uploadFilesMutation.mutateAsync({
-        channelId,
-        files,
-      })) as unknown as { file_infos: Array<{ id: string }> };
-
-      if (result && result.file_infos) {
-        return result.file_infos.map((info: any) => info.id);
-      } else {
-        return [];
-      }
-    },
-    [channelId, uploadFilesMutation],
-  );
-
-  /**
-   * Adds or removes a reaction on a message
-   * @param messageId - Message ID
-   * @param emoji - Emoji name
-   * @returns Promise resolving when action completes
+   * Toggles reaction on a message
+   * @param messageId Message ID
+   * @param emoji Emoji name
    */
   const toggleReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      if (!currentUser) {
-        throw new Error("User not authenticated");
-      }
+    async (messageId: string, emoji: string): Promise<boolean> => {
+      if (!channelId || !currentUser) return false;
 
-      const alreadyReacted = hasUserReacted(messageId, currentUser.id, emoji);
+      try {
+        const hasReacted = hasUserReacted(messageId, currentUser.id, emoji);
 
-      if (alreadyReacted) {
-        removeReaction(messageId, currentUser.id, emoji);
-      } else {
-        addReaction(messageId, currentUser.id, emoji);
+        if (hasReacted) {
+          await removeReactionMutation.mutateAsync({
+            messageId,
+            emoji,
+            channelId,
+          });
+        } else {
+          await addReactionMutation.mutateAsync({
+            messageId,
+            emoji,
+            channelId,
+          });
+        }
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
       }
     },
-    [currentUser, addReaction, removeReaction, hasUserReacted],
+    [
+      channelId,
+      currentUser,
+      hasUserReacted,
+      addReactionMutation,
+      removeReactionMutation,
+    ],
   );
 
   /**
-   * Gets sorted messages for the channel
-   * @returns Sorted messages
+   * Sets message to reply to
+   * @param message Message to reply to
    */
-  const getSortedMessages = useCallback(() => {
-    if (!channelId) return [];
-    return getSortedChannelMessages(channelId);
-  }, [channelId]);
-
-  // Use memoized values for better performance
-  const messages = useMemo(() => getSortedMessages(), [getSortedMessages]);
-  const pinnedMessages = useMemo(
-    () => pinnedMessagesQuery.data || [],
-    [pinnedMessagesQuery.data],
+  const replyTo = useCallback(
+    (message: Message | null) => {
+      setReplyToMessage(message);
+    },
+    [setReplyToMessage],
   );
 
   /**
-   * Gets reaction counts for a message
-   * @param messageId - Message ID
-   * @returns Reaction counts by emoji
+   * Sets message to edit
+   * @param messageId Message ID to edit
    */
-  const getMessageReactionCounts = useCallback(
-    (messageId: string): ReactionCount[] => {
-      return getReactionCounts(messageId);
+  const startEditing = useCallback(
+    (messageId: string | null) => {
+      setEditingMessage(messageId);
     },
-    [getReactionCounts],
+    [setEditingMessage],
   );
+
+  /**
+   * Formats message text with mentions and emojis
+   * @param text Message text
+   */
+  const formatMessageText = useCallback((text: string): string => {
+    // Get users for mention processing
+    const usersMap: Record<string, any> = {};
+
+    // We could create a usersMap from the store, but in this case
+    // we delegate to the messageService for formatting
+    return messageService.formatMessageText(text, usersMap);
+  }, []);
+
+  /**
+   * Refreshes messages
+   */
+  const refreshMessages = useCallback(() => {
+    return messagesQuery.refetch();
+  }, [messagesQuery]);
 
   return {
-    // State
-    messages,
-    pinnedMessages,
-    highlightedMessageId,
+    // Data
+    messages: sortedMessages,
+    messagesByDate,
     replyToMessage,
     editingMessageId,
-    isLoading: messagesQuery.isLoading || messagesQuery.isFetching,
-    isSending: sendMessageMutation.isPending,
-    isEditing: editMessageMutation.isPending,
-    isDeleting: deleteMessageMutation.isPending,
-    isUploading: uploadFilesMutation.isPending,
-    isPinning: pinMessageMutation.isPending || unpinMessageMutation.isPending,
+
+    // State
+    isLoading: messagesQuery.isLoading || isChannelLoading(channelId || ""),
+    isFetching: messagesQuery.isFetching,
     error: messagesQuery.error,
+    isSending: sendMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+    isUploading: uploadMutation.isPending,
 
     // Actions
-    refreshMessages,
     sendMessage,
-    editMessage,
     deleteMessage,
-    pinMessage,
-    unpinMessage,
-    uploadFiles,
+    togglePin,
     toggleReaction,
-    setHighlightedMessage,
-    setReplyToMessage,
-    setEditingMessage,
-    getMessageReactionCounts,
-    hasUserReacted: (messageId: string, emoji: string) =>
-      currentUser ? hasUserReacted(messageId, currentUser.id, emoji) : false,
+    uploadFiles,
+    replyTo,
+    startEditing,
+    refreshMessages,
+
+    // Helpers
+    formatMessageText,
+    hasUserReacted: (messageId: string, emoji: string) => {
+      return currentUser
+        ? hasUserReacted(messageId, currentUser.id, emoji)
+        : false;
+    },
+    getMessageById,
   };
 }
 
 /**
- * Specialized hook for thread management
- * @param rootMessageId - Root message ID
- * @param channelId - Channel ID
- * @returns Thread state and actions
+ * Hook for a message thread
+ * @param rootMessageId Root message ID
+ * @returns Thread messages and operations
  */
-export function useThread(
-  rootMessageId: string | undefined,
-  channelId: string,
-) {
-  // Get state from store
-  const {
-    setReplyToMessage,
-    addReaction,
-    removeReaction,
-    hasUserReacted,
-    getReactionCounts,
-  } = useMessageStore();
-
-  // Get current user
+export function useThread(rootMessageId: string | undefined) {
   const { currentUser } = useAuthStore();
 
-  // Thread messages query
-  const threadMessagesQuery = useThreadMessagesQuery(rootMessageId);
+  // Get thread messages using React Query
+  const threadQuery = useThreadMessagesQuery(rootMessageId);
 
-  // Thread-related mutations
-  const replyToMessageMutation = useReplyToMessageMutation();
-  const editMessageMutation = useEditMessageMutation();
-  const deleteMessageMutation = useDeleteMessageMutation();
-  const uploadFilesMutation = useUploadFilesMutation();
+  // Get message state from store
+  const { getThreadMessages, getMessageById, hasUserReacted, isThreadLoading } =
+    useMessageStore();
+
+  // Get thread mutations
+  const replyMutation = useReplyToMessageMutation();
+  const addReactionMutation = useAddReactionMutation();
+  const removeReactionMutation = useRemoveReactionMutation();
+  const uploadMutation = useUploadFilesMutation();
+
+  // Root message from store
+  const rootMessage = useMemo(() => {
+    if (!rootMessageId) return null;
+    return getMessageById(rootMessageId);
+  }, [rootMessageId, getMessageById]);
+
+  // Channel ID from root message
+  const channelId = useMemo(() => {
+    return rootMessage?.channel_id;
+  }, [rootMessage]);
+
+  // Thread messages from store or query
+  const threadMessages = useMemo(() => {
+    if (!rootMessageId) return [];
+
+    const storeMessages = getThreadMessages(rootMessageId);
+    return storeMessages.length > 0 ? storeMessages : threadQuery.data || [];
+  }, [rootMessageId, getThreadMessages, threadQuery.data]);
+
+  // Sort thread messages by date, oldest first
+  const sortedThreadMessages = useMemo(() => {
+    return messageService.sortMessages(threadMessages);
+  }, [threadMessages]);
+
+  /**
+   * Sends a reply to the thread
+   * @param text Reply text
+   * @param fileIds Optional file IDs to attach
+   */
+  const sendReply = useCallback(
+    async (text: string, fileIds: string[] = []): Promise<Message | null> => {
+      if (!rootMessageId || !channelId) return null;
+
+      try {
+        // Validate message
+        if (!messageService.validateMessage(text) && fileIds.length === 0) {
+          throw new Error("Invalid message content");
+        }
+
+        return await replyMutation.mutateAsync({
+          channelId,
+          rootMessageId,
+          message: text,
+          fileIds,
+        });
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return null;
+      }
+    },
+    [rootMessageId, channelId, replyMutation],
+  );
+
+  /**
+   * Uploads files to attach to a reply
+   * @param files Files to upload
+   */
+  const uploadFiles = useCallback(
+    async (files: File[]): Promise<string[]> => {
+      if (!channelId) return [];
+
+      try {
+        const result = await uploadMutation.mutateAsync({ channelId, files });
+
+        if (result && result.file_infos) {
+          return result.file_infos.map((file) => file.id);
+        }
+
+        return [];
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return [];
+      }
+    },
+    [channelId, uploadMutation],
+  );
+
+  /**
+   * Toggles reaction on a message
+   * @param messageId Message ID
+   * @param emoji Emoji name
+   */
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string): Promise<boolean> => {
+      if (!channelId || !currentUser) return false;
+
+      try {
+        const hasReacted = hasUserReacted(messageId, currentUser.id, emoji);
+
+        if (hasReacted) {
+          await removeReactionMutation.mutateAsync({
+            messageId,
+            emoji,
+            channelId,
+          });
+        } else {
+          await addReactionMutation.mutateAsync({
+            messageId,
+            emoji,
+            channelId,
+          });
+        }
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
+    },
+    [
+      channelId,
+      currentUser,
+      hasUserReacted,
+      addReactionMutation,
+      removeReactionMutation,
+    ],
+  );
 
   /**
    * Refreshes thread messages
-   * @returns Promise resolving to refreshed thread messages
    */
-  const refreshThreadMessages = useCallback(async () => {
-    return threadMessagesQuery.refetch().then((result) => result.data || []);
-  }, [threadMessagesQuery]);
-
-  /**
-   * Replies to the thread
-   * @param content - Reply content
-   * @param fileIds - Optional file IDs to attach
-   * @returns Promise resolving to the sent reply
-   */
-  const replyToThread = useCallback(
-    async (content: string, fileIds: string[] = []) => {
-      if (!rootMessageId) {
-        throw new Error("Root message ID is required to reply to a thread");
-      }
-
-      return replyToMessageMutation.mutateAsync({
-        channelId,
-        rootMessageId,
-        message: content,
-        fileIds,
-      });
-    },
-    [channelId, rootMessageId, replyToMessageMutation],
-  );
-
-  /**
-   * Edits a message in the thread
-   * @param messageId - Message ID
-   * @param content - New content
-   * @returns Promise resolving to the edited message
-   */
-  const editThreadMessage = useCallback(
-    async (messageId: string, content: string) => {
-      return editMessageMutation.mutateAsync({ messageId, message: content });
-    },
-    [editMessageMutation],
-  );
-
-  /**
-   * Deletes a message from the thread
-   * @param messageId - Message ID
-   * @returns Promise resolving when deletion completes
-   */
-  const deleteThreadMessage = useCallback(
-    async (messageId: string) => {
-      return deleteMessageMutation.mutateAsync({ messageId, channelId });
-    },
-    [channelId, deleteMessageMutation],
-  );
-
-  /**
-   * Uploads files to attach to a thread reply
-   * @param files - Files to upload
-   * @returns Promise resolving with the uploaded file IDs
-   */
-  const uploadThreadFiles = useCallback(
-    async (files: File[]) => {
-      const result = (await uploadFilesMutation.mutateAsync({
-        channelId,
-        files,
-      })) as unknown as { file_infos: Array<{ id: string }> };
-
-      if (result && result.file_infos) {
-        return result.file_infos.map((info: any) => info.id);
-      } else {
-        return [];
-      }
-    },
-    [channelId, uploadFilesMutation],
-  );
-
-  /**
-   * Adds or removes a reaction on a thread message
-   * @param messageId - Message ID
-   * @param emoji - Emoji name
-   * @returns Promise resolving when action completes
-   */
-  const toggleThreadReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      if (!currentUser) {
-        throw new Error("User not authenticated");
-      }
-
-      const alreadyReacted = hasUserReacted(messageId, currentUser.id, emoji);
-
-      if (alreadyReacted) {
-        removeReaction(messageId, currentUser.id, emoji);
-      } else {
-        addReaction(messageId, currentUser.id, emoji);
-      }
-    },
-    [currentUser, addReaction, removeReaction, hasUserReacted],
-  );
-
-  /**
-   * Gets sorted messages for the thread
-   * @returns Sorted thread messages
-   */
-  const getThreadMessages = useCallback(() => {
-    if (!rootMessageId) return [];
-    return getSortedThreadMessages(rootMessageId);
-  }, [rootMessageId]);
-
-  // Use memoized values for better performance
-  const threadMessages = useMemo(
-    () => getThreadMessages(),
-    [getThreadMessages],
-  );
-
-  /**
-   * Gets reaction counts for a thread message
-   * @param messageId - Message ID
-   * @returns Reaction counts by emoji
-   */
-  const getThreadReactionCounts = useCallback(
-    (messageId: string): ReactionCount[] => {
-      return getReactionCounts(messageId);
-    },
-    [getReactionCounts],
-  );
+  const refreshThread = useCallback(() => {
+    return threadQuery.refetch();
+  }, [threadQuery]);
 
   return {
+    // Data
+    rootMessage,
+    threadMessages: sortedThreadMessages,
+    replyCount: rootMessage?.reply_count || 0,
+
     // State
-    threadMessages,
-    isLoading: threadMessagesQuery.isLoading || threadMessagesQuery.isFetching,
-    isReplying: replyToMessageMutation.isPending,
-    isEditing: editMessageMutation.isPending,
-    isDeleting: deleteMessageMutation.isPending,
-    isUploading: uploadFilesMutation.isPending,
-    error: threadMessagesQuery.error,
+    isLoading: threadQuery.isLoading || isThreadLoading(rootMessageId || ""),
+    isFetching: threadQuery.isFetching,
+    error: threadQuery.error,
+    isReplying: replyMutation.isPending,
+    isUploading: uploadMutation.isPending,
 
     // Actions
-    refreshThreadMessages,
-    replyToThread,
-    editThreadMessage,
-    deleteThreadMessage,
-    uploadThreadFiles,
-    toggleThreadReaction,
-    setReplyToMessage,
-    getThreadReactionCounts,
-    hasUserReacted: (messageId: string, emoji: string) =>
-      currentUser ? hasUserReacted(messageId, currentUser.id, emoji) : false,
+    sendReply,
+    uploadFiles,
+    toggleReaction,
+    refreshThread,
+
+    // Helpers
+    hasUserReacted: (messageId: string, emoji: string) => {
+      return currentUser
+        ? hasUserReacted(messageId, currentUser.id, emoji)
+        : false;
+    },
   };
 }
 
 /**
- * Specialized hook for pinned messages
- * @param channelId - Channel ID
- * @returns Pinned messages state and actions
+ * Hook for message reactions
+ * @param messageId Message ID
+ * @returns Reaction data and operations
  */
-export function usePinnedMessages(channelId: string | undefined) {
-  const pinnedMessagesQuery = usePinnedMessagesQuery(channelId);
-  const pinMessageMutation = usePinMessageMutation();
-  const unpinMessageMutation = useUnpinMessageMutation();
-
-  /**
-   * Pins a message
-   * @param messageId - Message ID
-   * @returns Promise resolving when action completes
-   */
-  const pinMessage = useCallback(
-    async (messageId: string) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to pin a message");
-      }
-
-      return pinMessageMutation.mutateAsync({ messageId, channelId });
-    },
-    [channelId, pinMessageMutation],
-  );
-
-  /**
-   * Unpins a message
-   * @param messageId - Message ID
-   * @returns Promise resolving when action completes
-   */
-  const unpinMessage = useCallback(
-    async (messageId: string) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to unpin a message");
-      }
-
-      return unpinMessageMutation.mutateAsync({ messageId, channelId });
-    },
-    [channelId, unpinMessageMutation],
-  );
-
-  return {
-    // State
-    pinnedMessages: pinnedMessagesQuery.data || [],
-    isLoading: pinnedMessagesQuery.isLoading,
-    isPinning: pinMessageMutation.isPending || unpinMessageMutation.isPending,
-
-    // Actions
-    pinMessage,
-    unpinMessage,
-    refreshPinnedMessages: pinnedMessagesQuery.refetch,
-  };
-}
-
-/**
- * Specialized hook for message composition
- * @param channelId - Channel ID
- * @param initialText - Initial text (optional)
- * @returns Message composer state and actions
- */
-export function useMessageComposer(
-  channelId: string,
-  initialText: string = "",
-) {
-  const [text, setText] = useState(initialText);
-  const [files, setFiles] = useState<File[]>([]);
-
-  const { sendMessage } = useMessages(channelId);
-  const { uploadFiles } = useMessages(channelId);
-
-  /**
-   * Updates the message text
-   * @param newText - New text
-   */
-  const updateText = useCallback((newText: string) => {
-    setText(newText);
-  }, []);
-
-  /**
-   * Adds files to attach
-   * @param newFiles - Files to add
-   */
-  const addFiles = useCallback((newFiles: File[]) => {
-    setFiles((prev) => [...prev, ...newFiles]);
-  }, []);
-
-  /**
-   * Removes a file
-   * @param fileIndex - Index of file to remove
-   */
-  const removeFile = useCallback((fileIndex: number) => {
-    setFiles((prev) => prev.filter((_, index) => index !== fileIndex));
-  }, []);
-
-  /**
-   * Submits the message with attachments
-   * @returns Promise resolving to the sent message
-   */
-  const submitMessage = useCallback(async () => {
-    if (!text.trim() && files.length === 0) return null;
-
-    try {
-      // Upload files first if any
-      let fileIds: string[] = [];
-      if (files.length > 0) {
-        fileIds = await uploadFiles(files);
-      }
-
-      // Send message with any attached files
-      const result = await sendMessage(text, fileIds);
-
-      // Reset form
-      setText("");
-      setFiles([]);
-
-      return result;
-    } catch (error) {
-      console.error("Error sending message:", error);
-      throw error;
-    }
-  }, [text, files, sendMessage, uploadFiles]);
-
-  // Typing notification optimized with debounce
-  const debouncedTypingNotification = useMemo(
-    () =>
-      debounce(() => {
-        // This function should notify the server that the user is typing
-        // Implemented in the WebSocket service
-      }, 1000),
-    [],
-  );
-
-  // Trigger typing notification when text changes
-  useEffect(() => {
-    if (text.length > 0) {
-      debouncedTypingNotification();
-    }
-  }, [text, debouncedTypingNotification]);
-
-  return {
-    // State
-    text,
-    files,
-
-    // Actions
-    updateText,
-    addFiles,
-    removeFile,
-    submitMessage,
-
-    // Utilities
-    reset: () => {
-      setText("");
-      setFiles([]);
-    },
-    isEmpty: text.trim() === "" && files.length === 0,
-  };
-}
-
-/**
- * Specialized hook for message reactions management
- */
-export function useMessageReactions() {
+export function useMessageReactions(messageId: string | undefined) {
   const { currentUser } = useAuthStore();
+
+  // Get message store and reactions
   const {
-    addReaction,
-    removeReaction,
-    hasUserReacted,
-    getReactionCounts,
+    getMessageById,
     getReactionsByEmoji,
+    getReactionCounts,
+    hasUserReacted,
   } = useMessageStore();
 
-  /**
-   * Adds a reaction to a message
-   * @param messageId - Message ID
-   * @param emoji - Emoji name
-   */
-  const addMessageReaction = useCallback(
-    (messageId: string, emoji: string) => {
-      if (!currentUser) {
-        console.warn("Cannot add reaction: user not logged in");
-        return;
-      }
+  // Get message mutations
+  const addReactionMutation = useAddReactionMutation();
+  const removeReactionMutation = useRemoveReactionMutation();
 
-      addReaction(messageId, currentUser.id, emoji);
+  // Message from store
+  const message = useMemo(() => {
+    if (!messageId) return null;
+    return getMessageById(messageId);
+  }, [messageId, getMessageById]);
+
+  // Channel ID from message
+  const channelId = useMemo(() => {
+    return message?.channel_id;
+  }, [message]);
+
+  // Reactions grouped by emoji
+  const reactionsByEmoji = useMemo(() => {
+    if (!messageId) return {};
+    return getReactionsByEmoji(messageId);
+  }, [messageId, getReactionsByEmoji]);
+
+  // Reaction counts
+  const reactionCounts = useMemo(() => {
+    if (!messageId) return [];
+    return getReactionCounts(messageId);
+  }, [messageId, getReactionCounts]);
+
+  /**
+   * Add a reaction to the message
+   * @param emoji Emoji name
+   */
+  const addReaction = useCallback(
+    async (emoji: string): Promise<boolean> => {
+      if (!messageId || !channelId || !currentUser) return false;
+
+      try {
+        await addReactionMutation.mutateAsync({ messageId, emoji, channelId });
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [currentUser, addReaction],
+    [messageId, channelId, currentUser, addReactionMutation],
   );
 
   /**
-   * Removes a reaction from a message
-   * @param messageId - Message ID
-   * @param emoji - Emoji name
+   * Remove a reaction from the message
+   * @param emoji Emoji name
    */
-  const removeMessageReaction = useCallback(
-    (messageId: string, emoji: string) => {
-      if (!currentUser) {
-        console.warn("Cannot remove reaction: user not logged in");
-        return;
-      }
+  const removeReaction = useCallback(
+    async (emoji: string): Promise<boolean> => {
+      if (!messageId || !channelId || !currentUser) return false;
 
-      removeReaction(messageId, currentUser.id, emoji);
+      try {
+        await removeReactionMutation.mutateAsync({
+          messageId,
+          emoji,
+          channelId,
+        });
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [currentUser, removeReaction],
+    [messageId, channelId, currentUser, removeReactionMutation],
   );
 
   /**
-   * Toggles a reaction based on current state
-   * @param messageId - Message ID
-   * @param emoji - Emoji name
+   * Toggle a reaction on the message
+   * @param emoji Emoji name
    */
   const toggleReaction = useCallback(
-    (messageId: string, emoji: string) => {
-      if (!currentUser) {
-        console.warn("Cannot toggle reaction: user not logged in");
-        return;
-      }
+    async (emoji: string): Promise<boolean> => {
+      if (!messageId || !channelId || !currentUser) return false;
 
-      const hasReacted = hasUserReacted(messageId, currentUser.id, emoji);
+      try {
+        const hasReacted = hasUserReacted(messageId, currentUser.id, emoji);
 
-      if (hasReacted) {
-        removeMessageReaction(messageId, emoji);
-      } else {
-        addMessageReaction(messageId, emoji);
+        if (hasReacted) {
+          await removeReactionMutation.mutateAsync({
+            messageId,
+            emoji,
+            channelId,
+          });
+        } else {
+          await addReactionMutation.mutateAsync({
+            messageId,
+            emoji,
+            channelId,
+          });
+        }
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
       }
     },
-    [currentUser, hasUserReacted, addMessageReaction, removeMessageReaction],
-  );
-
-  /**
-   * Checks if current user has reacted with an emoji
-   * @param messageId - Message ID
-   * @param emoji - Emoji name
-   * @returns True if user has reacted
-   */
-  const userHasReacted = useCallback(
-    (messageId: string, emoji: string): boolean => {
-      if (!currentUser) return false;
-      return hasUserReacted(messageId, currentUser.id, emoji);
-    },
-    [currentUser, hasUserReacted],
+    [
+      messageId,
+      channelId,
+      currentUser,
+      hasUserReacted,
+      addReactionMutation,
+      removeReactionMutation,
+    ],
   );
 
   return {
-    // State - no local state in this hook
+    // Data
+    reactionsByEmoji,
+    reactionCounts,
+
+    // State
+    isLoading:
+      addReactionMutation.isPending || removeReactionMutation.isPending,
 
     // Actions
-    addReaction: addMessageReaction,
-    removeReaction: removeMessageReaction,
+    addReaction,
+    removeReaction,
     toggleReaction,
 
-    // Selectors
-    getReactionCounts,
-    getReactionsByEmoji,
-    hasUserReacted: userHasReacted,
+    // Helpers
+    hasReacted: (emoji: string) => {
+      return currentUser
+        ? hasUserReacted(messageId || "", currentUser.id, emoji)
+        : false;
+    },
+  };
+}
+
+/**
+ * Hook for file information
+ * @param fileId File ID
+ * @returns File information
+ */
+export function useFileInfo(fileId: string | undefined) {
+  // Get file info query
+  const fileInfoQuery = useFileInfoQuery(fileId);
+
+  /**
+   * Gets the download URL for a file
+   */
+  const getDownloadUrl = useCallback((): string => {
+    if (!fileId) return "";
+    return messageService.getFileDownloadUrl(fileId);
+  }, [fileId]);
+
+  /**
+   * Gets the preview URL for a file
+   */
+  const getPreviewUrl = useCallback((): string => {
+    if (!fileId) return "";
+    return messageService.getFilePreviewUrl(fileId);
+  }, [fileId]);
+
+  /**
+   * Checks if file is an image
+   */
+  const isImage = useCallback((): boolean => {
+    if (!fileInfoQuery.data?.mime_type) return false;
+    return messageService.isImageFile(fileInfoQuery.data.mime_type);
+  }, [fileInfoQuery.data]);
+
+  /**
+   * Checks if file is a video
+   */
+  const isVideo = useCallback((): boolean => {
+    if (!fileInfoQuery.data?.mime_type) return false;
+    return messageService.isVideoFile(fileInfoQuery.data.mime_type);
+  }, [fileInfoQuery.data]);
+
+  /**
+   * Checks if file is an audio
+   */
+  const isAudio = useCallback((): boolean => {
+    if (!fileInfoQuery.data?.mime_type) return false;
+    return messageService.isAudioFile(fileInfoQuery.data.mime_type);
+  }, [fileInfoQuery.data]);
+
+  /**
+   * Checks if file is a PDF
+   */
+  const isPdf = useCallback((): boolean => {
+    if (!fileInfoQuery.data?.mime_type) return false;
+    return messageService.isPdfFile(fileInfoQuery.data.mime_type);
+  }, [fileInfoQuery.data]);
+
+  return {
+    // Data
+    fileInfo: fileInfoQuery.data,
+
+    // State
+    isLoading: fileInfoQuery.isLoading,
+    error: fileInfoQuery.error,
+
+    // Actions
+    refreshFileInfo: fileInfoQuery.refetch,
+
+    // Helpers
+    getDownloadUrl,
+    getPreviewUrl,
+    isImage,
+    isVideo,
+    isAudio,
+    isPdf,
   };
 }

@@ -1,438 +1,492 @@
 // src/hooks/useChannels.tsx
 /**
- * Hook for channel functionality
+ * Channel hooks
+ * Provides access to channel functionality
  */
-import { useCallback, useMemo } from "react";
-import { Channel, ChannelGroupType, ChannelMember } from "../types";
-import { useChannelStore } from "../core/store/channelStore";
-import { channelService } from "../core/services/channelService";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   useChannelsQuery,
   useChannelQuery,
-  useChannelMembersQuery,
   useCreateChannelMutation,
   useUpdateChannelMutation,
   useDeleteChannelMutation,
   useJoinChannelMutation,
   useLeaveChannelMutation,
+  useViewChannelMutation,
+  useChannelMembersQuery,
   useAddChannelToFavoritesMutation,
   useRemoveChannelFromFavoritesMutation,
   useToggleChannelMutedMutation,
 } from "../core/api/queries/channelQueries";
-import { useUnreadCounts } from "./useUnreadCounts";
+import { useChannelStore } from "../core/store/channelStore";
+import { useDirectChannelStore } from "../core/store/directChannelStore";
+import { useUserSettingsStore } from "../core/store/userSettingsStore";
+import { useUnreadStore } from "../core/store/unreadStore";
+import { channelService } from "../core/services/channelService";
+import {
+  Channel,
+  ChannelMember,
+  ChannelGroupType,
+  CreateChannelParams,
+  UpdateChannelParams,
+  DirectChannelInfo,
+} from "../types";
 import { useAuthStore } from "../core/store/authStore";
+import { handleError } from "../core/store/errorStore";
+import { ErrorSource } from "../types";
 
 /**
- * Hook that provides channels functionality for a team
+ * Hook for channel management functionality
  * @param teamId Team ID
- * @returns Channels state and actions
+ * @returns Channel operations and data
  */
 export function useChannels(teamId: string | undefined) {
-  // Get auth state
+  // Current user ID for filtering
   const { currentUser } = useAuthStore();
 
-  // Get state from store
-  const { activeChannel, setActiveChannel, getChannelById, getChannelsByType } =
-    useChannelStore();
-
-  // Get channels query
+  // Get channels using React Query
   const channelsQuery = useChannelsQuery(teamId);
 
-  // Get unread counts hook
+  // Get channel state from store
   const {
-    markChannelAsRead,
-    markTeamAsRead,
-    toggleChannelMuted,
-    hasUnreadsInChannel,
-    hasMentionsInChannel,
-    isChannelMuted,
-    unreadCounts,
-    teamUnreadCounts,
-  } = useUnreadCounts();
+    getChannelsByTeam,
+    getChannelsByType,
+    activeChannel,
+    setActiveChannel,
+    isLoading: storeLoading,
+    error: storeError,
+  } = useChannelStore();
+
+  // Favorites and muted channels
+  const { getFavorites, isFavorite, getMutedChannels, isChannelMuted } =
+    useUserSettingsStore();
+
+  // Unread store
+  const { unreadCounts } = useUnreadStore();
+
+  // Get channels by type using memo to avoid recalculation
+  const publicChannels = useMemo(() => {
+    if (!teamId) return [];
+    return getChannelsByType(teamId, "public");
+  }, [teamId, getChannelsByType]);
+
+  const privateChannels = useMemo(() => {
+    if (!teamId) return [];
+    return getChannelsByType(teamId, "private");
+  }, [teamId, getChannelsByType]);
+
+  const directChannels = useMemo(() => {
+    if (!teamId) return [];
+    return getChannelsByType(teamId, "direct");
+  }, [teamId, getChannelsByType]);
+
+  const groupChannels = useMemo(() => {
+    if (!teamId) return [];
+    return getChannelsByType(teamId, "group");
+  }, [teamId, getChannelsByType]);
+
+  const favoriteChannels = useMemo(() => {
+    if (!teamId) return [];
+    return getChannelsByType(teamId, "favorite");
+  }, [teamId, getChannelsByType]);
+
+  // View channel mutation
+  const viewMutation = useViewChannelMutation();
 
   /**
-   * Sets the active channel by ID
-   * @param channelId Channel ID
+   * Sets the active channel and marks as viewed
+   * @param channel Channel to make active
    */
-  const setActiveChannelById = useCallback(
-    (channelId: string | null) => {
-      if (!channelId) {
-        setActiveChannel(null);
-        return;
-      }
+  const selectChannel = useCallback(
+    async (channel: Channel) => {
+      // Set as active channel
+      setActiveChannel(channel);
 
-      const channel = getChannelById(channelId);
-      if (channel) {
-        setActiveChannel(channel);
-
-        // Also mark as read when setting active
-        markChannelAsRead(channelId);
+      // Mark as viewed
+      try {
+        await viewMutation.mutateAsync(channel.id);
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
       }
     },
-    [getChannelById, setActiveChannel, markChannelAsRead],
+    [setActiveChannel, viewMutation],
   );
 
   /**
-   * Refreshes the channels list
-   * @returns Promise resolving to the refreshed channels
+   * Refreshes channel data
    */
-  const refreshChannels = useCallback(async () => {
-    return channelsQuery.refetch().then((result) => result.data || []);
+  const refreshChannels = useCallback(() => {
+    return channelsQuery.refetch();
   }, [channelsQuery]);
 
   /**
-   * Gets channels by group type
-   * @param type Channel group type
-   * @returns Filtered channels
+   * Checks if a channel has unreads
+   * @param channelId Channel ID
    */
-  const getChannelsByGroupType = useCallback(
-    (type: ChannelGroupType): Channel[] => {
-      if (!teamId) return [];
-      return getChannelsByType(teamId, type);
+  const hasUnreads = useCallback(
+    (channelId: string): boolean => {
+      const unreadCount = unreadCounts[channelId];
+      if (!unreadCount) return false;
+      return unreadCount.msg_count > 0 || unreadCount.mention_count > 0;
     },
-    [teamId, getChannelsByType],
+    [unreadCounts],
   );
 
   /**
-   * Gets current unread data in a format suitable for UI components
+   * Checks if a channel has mentions
+   * @param channelId Channel ID
    */
-  const unreadData = useMemo(() => {
-    // Return format expected by UI components
-    if (!teamId) {
-      return {
-        unreadCounts: {},
-        favoriteChannels: new Set<string>(),
-        mutedChannels: new Set<string>(),
-      };
-    }
+  const hasMentions = useCallback(
+    (channelId: string): boolean => {
+      const unreadCount = unreadCounts[channelId];
+      if (!unreadCount) return false;
+      return unreadCount.mention_count > 0;
+    },
+    [unreadCounts],
+  );
 
-    const teamChannels = getChannelsByGroupType("public")
-      .concat(getChannelsByGroupType("private"))
-      .concat(getChannelsByGroupType("direct"))
-      .concat(getChannelsByGroupType("group"));
-
-    // Build sets for favorites and muted channels
-    const mutedChannels = new Set<string>();
-    const favoriteChannels = new Set<string>();
-
-    // Populate data from the store for UI components
-    teamChannels.forEach((channel) => {
-      // Track muted state
-      if (isChannelMuted(channel.id)) {
-        mutedChannels.add(channel.id);
-      }
-
-      // Track favorites
-      if (channel.is_favorite) {
-        favoriteChannels.add(channel.id);
-      }
-    });
-
-    return {
-      unreadCounts,
-      favoriteChannels,
-      mutedChannels,
-    };
-  }, [teamId, getChannelsByGroupType, isChannelMuted, unreadCounts]);
+  /**
+   * Gets display info for a direct channel
+   * @param channelId Channel ID
+   */
+  const getDirectChannelInfo = useCallback(
+    (channelId: string): DirectChannelInfo | null => {
+      return useDirectChannelStore.getState().getDirectChannelInfo(channelId);
+    },
+    [],
+  );
 
   return {
-    // State
-    channels: channelsQuery.data || [],
-    publicChannels: getChannelsByGroupType("public"),
-    privateChannels: getChannelsByGroupType("private"),
-    directChannels: getChannelsByGroupType("direct"),
-    groupChannels: getChannelsByGroupType("group"),
-    favoriteChannels: getChannelsByGroupType("favorite"),
+    // Data
+    channels: teamId ? getChannelsByTeam(teamId) : [],
+    publicChannels,
+    privateChannels,
+    directChannels,
+    groupChannels,
+    favoriteChannels,
     activeChannel,
-    isLoading: channelsQuery.isLoading || channelsQuery.isFetching,
-    error: channelsQuery.error,
 
-    // Unread counts
-    unreadCounts: unreadData.unreadCounts,
-    mutedChannels: unreadData.mutedChannels,
-    favoriteChannelSet: unreadData.favoriteChannels,
-    teamUnreads: teamId
-      ? teamUnreadCounts[teamId]
-      : { msg_count: 0, mention_count: 0 },
+    // State
+    isLoading: channelsQuery.isLoading || storeLoading,
+    isFetching: channelsQuery.isFetching,
+    error: channelsQuery.error || storeError,
 
     // Actions
-    setActiveChannel,
-    setActiveChannelById,
-    getChannelById,
+    selectChannel,
     refreshChannels,
 
-    // Unread count actions (exposed from useUnreadCounts)
-    markChannelAsRead,
-    markAllAsRead: teamId
-      ? () => markTeamAsRead(teamId)
-      : () => Promise.resolve(),
-    toggleChannelMuted,
-    hasUnreadsInChannel,
-    hasMentionsInChannel,
+    // Helper methods
+    hasUnreads,
+    hasMentions,
+    isFavorite,
     isChannelMuted,
+    getDirectChannelInfo,
   };
 }
 
 /**
- * Hook that provides functionality for a specific channel
+ * Hook for a specific channel
  * @param channelId Channel ID
- * @returns Channel state and actions
+ * @returns Channel data and operations
  */
 export function useChannel(channelId: string | undefined) {
-  // Get state from store
-  const { setActiveChannel, getChannelById } = useChannelStore();
+  // Current user ID for filtering
+  const { currentUser } = useAuthStore();
 
-  // Get channel queries
+  // Get specific channel using React Query
   const channelQuery = useChannelQuery(channelId);
-  const channelMembersQuery = useChannelMembersQuery(channelId);
 
-  // Get unread counts hook for this specific channel
-  const {
-    markChannelAsRead,
-    hasUnreadsInChannel,
-    hasMentionsInChannel,
-    isChannelMuted,
-    getChannelUnreadCount,
-  } = useUnreadCounts();
+  // Get channel members
+  const membersQuery = useChannelMembersQuery(channelId);
 
-  // Get channel mutations
-  const updateChannelMutation = useUpdateChannelMutation();
-  const deleteChannelMutation = useDeleteChannelMutation();
-  const leaveChannelMutation = useLeaveChannelMutation();
+  // Channel store access
+  const { getChannelById, updateChannel, removeChannel } = useChannelStore();
+
+  // Direct channel info
+  const { getDirectChannelInfo, refreshDirectChannelInfo } =
+    useDirectChannelStore();
+
+  // Favorites and muted channels
+  const { isFavorite, toggleFavorite, isChannelMuted, toggleMuted } =
+    useUserSettingsStore();
+
+  // Channel mutations
+  const updateMutation = useUpdateChannelMutation();
+  const deleteMutation = useDeleteChannelMutation();
+  const viewMutation = useViewChannelMutation();
+  const joinMutation = useJoinChannelMutation();
+  const leaveMutation = useLeaveChannelMutation();
   const addToFavoritesMutation = useAddChannelToFavoritesMutation();
   const removeFromFavoritesMutation = useRemoveChannelFromFavoritesMutation();
-  const toggleChannelMutedMutation = useToggleChannelMutedMutation();
+  const toggleMutedMutation = useToggleChannelMutedMutation();
+
+  // Current channel from store or query
+  const channel = useMemo(() => {
+    if (!channelId) return null;
+    return getChannelById(channelId) || channelQuery.data || null;
+  }, [channelId, getChannelById, channelQuery.data]);
+
+  // Direct channel info if this is a DM/GM
+  const directInfo = useMemo(() => {
+    if (!channelId || !channel) return null;
+
+    if (channelService.isDirectOrGroupChannel(channel)) {
+      return getDirectChannelInfo(channelId);
+    }
+
+    return null;
+  }, [channelId, channel, getDirectChannelInfo]);
+
+  // Refresh direct channel info when needed
+  useEffect(() => {
+    if (
+      channel &&
+      currentUser &&
+      channelService.isDirectOrGroupChannel(channel) &&
+      (!directInfo || directInfo.status === "loading")
+    ) {
+      refreshDirectChannelInfo(channelId!, currentUser.id);
+    }
+  }, [channel, currentUser, directInfo, channelId, refreshDirectChannelInfo]);
+
+  // Channel type helpers
+  const isPublic = useMemo(() => {
+    return channel ? channelService.isPublicChannel(channel) : false;
+  }, [channel]);
+
+  const isPrivate = useMemo(() => {
+    return channel ? channelService.isPrivateChannel(channel) : false;
+  }, [channel]);
+
+  const isDirect = useMemo(() => {
+    return channel ? channelService.isDirectChannel(channel) : false;
+  }, [channel]);
+
+  const isGroup = useMemo(() => {
+    return channel ? channelService.isGroupChannel(channel) : false;
+  }, [channel]);
 
   /**
-   * Updates a channel
-   * @param channelData Channel data to update
-   * @returns Promise resolving to the updated channel
+   * Updates the channel
+   * @param updateData Channel update data
    */
-  const updateChannel = useCallback(
-    async (channelData: Partial<Channel>) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required for update");
+  const update = useCallback(
+    async (updateData: UpdateChannelParams) => {
+      if (!channelId) return null;
+      try {
+        return await updateMutation.mutateAsync({
+          channelId,
+          channelData: updateData,
+        });
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        throw error;
       }
-
-      return updateChannelMutation.mutateAsync({
-        channelId,
-        channelData,
-      });
     },
-    [channelId, updateChannelMutation],
+    [channelId, updateMutation],
   );
 
   /**
-   * Deletes a channel
-   * @returns Promise resolving to the deleted channel ID
+   * Deletes the channel
    */
   const deleteChannel = useCallback(async () => {
-    if (!channelId) {
-      throw new Error("Channel ID is required for deletion");
+    if (!channelId) return;
+    try {
+      await deleteMutation.mutateAsync(channelId);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.API);
+      throw error;
     }
-
-    return deleteChannelMutation.mutateAsync(channelId);
-  }, [channelId, deleteChannelMutation]);
-
-  /**
-   * Leaves a channel
-   * @returns Promise resolving to the left channel ID
-   */
-  const leaveChannel = useCallback(async () => {
-    if (!channelId) {
-      throw new Error("Channel ID is required to leave");
-    }
-
-    return leaveChannelMutation.mutateAsync(channelId);
-  }, [channelId, leaveChannelMutation]);
+  }, [channelId, deleteMutation]);
 
   /**
    * Marks the channel as viewed
-   * @returns Promise resolving to the viewed channel ID
    */
-  const viewChannel = useCallback(async () => {
-    if (!channelId) {
-      throw new Error("Channel ID is required to view");
+  const markAsViewed = useCallback(async () => {
+    if (!channelId) return;
+    try {
+      await viewMutation.mutateAsync(channelId);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.API);
+      throw error;
     }
-
-    return markChannelAsRead(channelId);
-  }, [channelId, markChannelAsRead]);
+  }, [channelId, viewMutation]);
 
   /**
-   * Adds the channel to favorites
-   * @returns Promise resolving to the channel ID
+   * Joins the channel
    */
-  const addToFavorites = useCallback(async () => {
-    if (!channelId) {
-      throw new Error("Channel ID is required to add to favorites");
+  const joinChannel = useCallback(async () => {
+    if (!channelId || !channel?.team_id) return;
+    try {
+      await joinMutation.mutateAsync({ channelId, teamId: channel.team_id });
+    } catch (error) {
+      handleError(error as Error, ErrorSource.API);
+      throw error;
     }
-
-    return addToFavoritesMutation.mutateAsync(channelId);
-  }, [channelId, addToFavoritesMutation]);
+  }, [channelId, channel, joinMutation]);
 
   /**
-   * Removes the channel from favorites
-   * @returns Promise resolving to the channel ID
+   * Leaves the channel
    */
-  const removeFromFavorites = useCallback(async () => {
-    if (!channelId) {
-      throw new Error("Channel ID is required to remove from favorites");
+  const leaveChannel = useCallback(async () => {
+    if (!channelId) return;
+    try {
+      await leaveMutation.mutateAsync(channelId);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.API);
+      throw error;
     }
-
-    return removeFromFavoritesMutation.mutateAsync(channelId);
-  }, [channelId, removeFromFavoritesMutation]);
+  }, [channelId, leaveMutation]);
 
   /**
-   * Toggles whether the channel is muted
-   * @param muted Whether to mute the channel
-   * @returns Promise resolving when completed
+   * Toggles favorite status
    */
-  const toggleMuted = useCallback(
-    async (muted: boolean) => {
-      if (!channelId) {
-        throw new Error("Channel ID is required to toggle mute");
+  const toggleFavoriteStatus = useCallback(async () => {
+    if (!channelId) return;
+    try {
+      const isFav = isFavorite(channelId);
+      if (isFav) {
+        await removeFromFavoritesMutation.mutateAsync(channelId);
+      } else {
+        await addToFavoritesMutation.mutateAsync(channelId);
       }
-
-      return toggleChannelMutedMutation.mutateAsync({ channelId, muted });
-    },
-    [channelId, toggleChannelMutedMutation],
-  );
-
-  /**
-   * Sets this channel as active
-   */
-  const setAsActive = useCallback(() => {
-    if (channelId) {
-      const channel = getChannelById(channelId);
-      if (channel) {
-        setActiveChannel(channel);
-
-        // Mark as read when set as active
-        markChannelAsRead(channelId);
-      }
+    } catch (error) {
+      handleError(error as Error, ErrorSource.API);
+      throw error;
     }
-  }, [channelId, getChannelById, setActiveChannel, markChannelAsRead]);
+  }, [
+    channelId,
+    isFavorite,
+    addToFavoritesMutation,
+    removeFromFavoritesMutation,
+  ]);
 
   /**
-   * Refreshes the channel data
-   * @returns Promise resolving to the refreshed channel
+   * Toggles muted status
    */
-  const refreshChannel = useCallback(async () => {
-    return channelQuery.refetch().then((result) => result.data || null);
+  const toggleMutedStatus = useCallback(async () => {
+    if (!channelId) return;
+    try {
+      const muted = isChannelMuted(channelId);
+      await toggleMutedMutation.mutateAsync({ channelId, muted: !muted });
+    } catch (error) {
+      handleError(error as Error, ErrorSource.API);
+      throw error;
+    }
+  }, [channelId, isChannelMuted, toggleMutedMutation]);
+
+  /**
+   * Refreshes channel data
+   */
+  const refreshChannel = useCallback(() => {
+    return channelQuery.refetch();
   }, [channelQuery]);
 
   /**
-   * Gets the unread count data for this channel
+   * Refreshes channel members
    */
-  const unreadCount = useMemo(() => {
-    if (!channelId) return { msg_count: 0, mention_count: 0 };
-    return getChannelUnreadCount(channelId);
-  }, [channelId, getChannelUnreadCount]);
-
-  /**
-   * Checks if the channel has unread messages
-   */
-  const hasUnreads = useMemo(() => {
-    if (!channelId) return false;
-    return hasUnreadsInChannel(channelId);
-  }, [channelId, hasUnreadsInChannel]);
-
-  /**
-   * Checks if the channel has mentions
-   */
-  const hasMentions = useMemo(() => {
-    if (!channelId) return false;
-    return hasMentionsInChannel(channelId);
-  }, [channelId, hasMentionsInChannel]);
-
-  /**
-   * Checks if the channel is muted
-   */
-  const isMuted = useMemo(() => {
-    if (!channelId) return false;
-    return isChannelMuted(channelId);
-  }, [channelId, isChannelMuted]);
+  const refreshMembers = useCallback(() => {
+    return membersQuery.refetch();
+  }, [membersQuery]);
 
   return {
-    // State
-    channel: channelQuery.data,
-    unreadCount,
-    members: channelMembersQuery.data,
-    isLoading: channelQuery.isLoading || channelQuery.isFetching,
-    isUpdating: updateChannelMutation.isPending,
-    isDeleting: deleteChannelMutation.isPending,
-    isLeaving: leaveChannelMutation.isPending,
-    error: channelQuery.error,
+    // Data
+    channel,
+    members: membersQuery.data || [],
+    directInfo,
+    isFavorite: channelId ? isFavorite(channelId) : false,
+    isMuted: channelId ? isChannelMuted(channelId) : false,
 
-    // Unread state
-    hasUnreads,
-    hasMentions,
-    isMuted,
+    // Type helpers
+    isPublic,
+    isPrivate,
+    isDirect,
+    isGroup,
+
+    // State
+    isLoading: channelQuery.isLoading || membersQuery.isLoading,
+    isLoadingMembers: membersQuery.isLoading,
+    error: channelQuery.error || membersQuery.error,
 
     // Actions
-    updateChannel,
+    update,
     deleteChannel,
+    markAsViewed,
+    joinChannel,
     leaveChannel,
-    viewChannel,
-    markAsRead: markChannelAsRead,
-    addToFavorites,
-    removeFromFavorites,
-    toggleMuted,
-    setAsActive,
+    toggleFavoriteStatus,
+    toggleMutedStatus,
     refreshChannel,
+    refreshMembers,
+
+    // Mutations state
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+    isJoining: joinMutation.isPending,
+    isLeaving: leaveMutation.isPending,
+    updateError: updateMutation.error,
+    deleteError: deleteMutation.error,
   };
 }
 
 /**
- * Hook that provides channel creation functionality
- * @returns Channel creation actions and state
+ * Hook for channel creation
+ * @param teamId Team ID
+ * @returns Channel creation functionality
  */
-export function useChannelCreation() {
-  // Get channel creation mutation
-  const createChannelMutation = useCreateChannelMutation();
-  const joinChannelMutation = useJoinChannelMutation();
+export function useChannelCreation(teamId: string | undefined) {
+  // Create channel mutation
+  const createMutation = useCreateChannelMutation();
 
   /**
    * Creates a new channel
-   * @param channelData Channel data to create
-   * @returns Promise resolving to the created channel
+   * @param channelData Channel creation data
    */
   const createChannel = useCallback(
-    async (channelData: {
-      team_id: string;
-      name: string;
-      display_name: string;
-      type: "O" | "P";
-      purpose?: string;
-      header?: string;
-    }) => {
-      return createChannelMutation.mutateAsync(channelData);
+    async (
+      channelData: Omit<CreateChannelParams, "team_id">,
+    ): Promise<Channel> => {
+      if (!teamId) {
+        throw new Error("Team ID is required to create a channel");
+      }
+
+      try {
+        return await createMutation.mutateAsync({
+          ...channelData,
+          team_id: teamId,
+        });
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        throw error;
+      }
     },
-    [createChannelMutation],
+    [teamId, createMutation],
   );
 
   /**
-   * Joins a channel
-   * @param channelId Channel ID
-   * @param teamId Team ID
-   * @returns Promise resolving to the joined channel
+   * Validates channel name for creation
+   * @param name Channel name to validate
    */
-  const joinChannel = useCallback(
-    async (channelId: string, teamId: string) => {
-      return joinChannelMutation.mutateAsync({ channelId, teamId });
-    },
-    [joinChannelMutation],
-  );
+  const validateChannelName = useCallback((name: string): boolean => {
+    return channelService.validateChannelName(name);
+  }, []);
+
+  /**
+   * Creates URL-friendly channel name from display name
+   * @param displayName Display name
+   */
+  const sanitizeChannelName = useCallback((displayName: string): string => {
+    return channelService.sanitizeChannelName(displayName);
+  }, []);
 
   return {
-    // State
-    isCreating: createChannelMutation.isPending,
-    isJoining: joinChannelMutation.isPending,
-    createError: createChannelMutation.error,
-    joinError: joinChannelMutation.error,
-
     // Actions
     createChannel,
-    joinChannel,
+    validateChannelName,
+    sanitizeChannelName,
+
+    // State
+    isCreating: createMutation.isPending,
+    error: createMutation.error,
   };
 }

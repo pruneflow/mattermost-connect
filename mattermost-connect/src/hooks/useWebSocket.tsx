@@ -1,430 +1,376 @@
 // src/hooks/useWebSocket.tsx
 /**
- * Hooks for WebSocket functionality
- * Provides optimized React hooks for working with WebSockets
+ * WebSocket hooks
+ * Provides access to WebSocket functionality
  */
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useWsStore } from "../core/store/wsStore";
 import {
-  useWsStore,
-  registerWsHandler,
-  registerWsHandlers,
-  useAuthStore,
-  useUnreadStore,
-  useMessageStore,
-  useChannelStore,
-} from "../core/store";
-import { WebSocketEventType } from "../types";
-import { debounce } from "../utils/performance";
-import { unreadService } from "../core/services/unreadService";
+  WebSocketEventType,
+  WebSocketMessage,
+  WebSocketListenerOptions,
+  TypingData,
+} from "../types";
+import { handleError } from "../core/store/errorStore";
+import { ErrorSource } from "../types";
+import { useAuthStore } from "../core/store/authStore";
+import { useUserStore } from "../core/store";
 
 /**
- * Hook for general WebSocket functionality
- * Provides connection state and methods to interact with the WebSocket connection
- *
- * @returns Object with WebSocket state and methods
+ * Hook for WebSocket connection management
+ * @returns WebSocket connection functionality
  */
 export function useWebSocket() {
-  // Get state and methods from the WebSocket store
   const {
     isConnected,
     isConnecting,
     url,
     error,
-    reconnectAttempts,
-    lastConnectedAt,
-    lastDisconnectedAt,
-    hasBeenDisconnected,
     connect,
     disconnect,
     reconnect,
-    sendMessage,
+    hasBeenDisconnected,
   } = useWsStore();
 
-  // Track WebSocket connection status for reconnection logic
-  const connectionStatusRef = useRef({
-    lastConnectedAt: Date.now(),
-    hasDisconnected: false,
-  });
+  const { token, serverUrl } = useAuthStore();
 
-  // Monitor WebSocket connection status
-  useEffect(() => {
-    // If we've connected after a disconnection, we may need to refresh data
-    if (isConnected && connectionStatusRef.current.hasDisconnected) {
-      // Reset the disconnection flag
-      connectionStatusRef.current.hasDisconnected = false;
-    }
+  /**
+   * Connects to the WebSocket server
+   * @param wsUrl WebSocket URL (optional, uses stored URL if not provided)
+   * @param wsToken Authentication token (optional, uses stored token if not provided)
+   */
+  const connectWebSocket = useCallback(
+    async (wsUrl?: string, wsToken?: string) => {
+      if (!wsUrl && !url) {
+        throw new Error("WebSocket URL is required");
+      }
 
-    // If we've disconnected, mark the disconnect state
-    if (
-      !isConnected &&
-      !isConnecting &&
-      connectionStatusRef.current.lastConnectedAt > 0
-    ) {
-      connectionStatusRef.current.hasDisconnected = true;
-    }
+      if (!wsToken && !token) {
+        throw new Error("Authentication token is required");
+      }
 
-    // Update last connected time if connected
-    if (isConnected) {
-      connectionStatusRef.current.lastConnectedAt = Date.now();
+      try {
+        await connect(
+          wsUrl || url || `${serverUrl?.replace(/^http/, "ws")}/websocket`,
+          wsToken || token || "",
+          {
+            pingInterval: 30000, // 30 seconds
+            maxReconnectAttempts: 5,
+          },
+        );
+      } catch (error) {
+        handleError(error as Error, ErrorSource.WEBSOCKET);
+        throw error;
+      }
+    },
+    [connect, url, token, serverUrl],
+  );
+
+  /**
+   * Disconnects from the WebSocket server
+   * @param code Close code
+   * @param reason Close reason
+   */
+  const disconnectWebSocket = useCallback(
+    (code?: number, reason?: string) => {
+      disconnect(code, reason);
+    },
+    [disconnect],
+  );
+
+  /**
+   * Reconnects to the WebSocket server
+   */
+  const reconnectWebSocket = useCallback(async () => {
+    try {
+      await reconnect();
+    } catch (error) {
+      handleError(error as Error, ErrorSource.WEBSOCKET);
+      throw error;
     }
-  }, [isConnected, isConnecting]);
+  }, [reconnect]);
+
+  /**
+   * Sends a message over the WebSocket
+   * @param message Message to send
+   */
+  const sendMessage = useCallback(
+    (message: WebSocketMessage | string): boolean => {
+      try {
+        return useWsStore.getState().sendMessage(message);
+      } catch (error) {
+        handleError(error as Error, ErrorSource.WEBSOCKET);
+        return false;
+      }
+    },
+    [],
+  );
 
   return {
     // Connection state
     isConnected,
     isConnecting,
+    hasBeenDisconnected,
     url,
     error,
-    reconnectAttempts,
-    lastConnectedAt,
-    lastDisconnectedAt,
-    hasBeenDisconnected,
-    connectionStatus: {
-      lastConnectedAt: connectionStatusRef.current.lastConnectedAt,
-      hasDisconnected: connectionStatusRef.current.hasDisconnected,
-    },
 
-    // Connection methods
-    connect,
-    disconnect,
-    reconnect,
+    // Connection actions
+    connect: connectWebSocket,
+    disconnect: disconnectWebSocket,
+    reconnect: reconnectWebSocket,
     sendMessage,
   };
 }
 
 /**
- * Hook that registers WebSocket event handlers
- * @param eventType Event type to handle
- * @param handler Handler function
- * @param deps Dependencies for handler
+ * Hook for WebSocket event listening
+ * @param eventType Event type to listen for
+ * @param handler Event handler function
+ * @param options Listener options
  */
 export function useWebSocketEvent<T = any>(
   eventType: string,
   handler: (data: T) => void,
-  deps: any[] = [],
+  options: WebSocketListenerOptions = {},
 ) {
+  const { isConnected, addMessageHandler } = useWsStore();
+  const handlerRef = useRef(handler);
+
+  // Update handler ref when handler changes
   useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
+  // Set up event listener
+  useEffect(() => {
+    if (!eventType) return undefined;
+
+    // Create handler that uses the ref
+    const wrappedHandler = (data: T) => {
+      handlerRef.current(data);
+    };
+
     // Register handler
-    const unregister = registerWsHandler(eventType, handler);
+    const unsubscribe = addMessageHandler(eventType, wrappedHandler);
 
     // Clean up on unmount
     return () => {
-      unregister();
-    };
-  }, [eventType, ...deps]);
-}
-
-/**
- * Hook that registers multiple WebSocket event handlers
- * @param eventHandlers Record of event types to handler functions
- * @param deps Dependencies for handlers
- */
-export function useWebSocketEvents(
-  eventHandlers: Record<string, (data: any) => void>,
-  deps: any[] = [],
-) {
-  useEffect(() => {
-    // Register handlers
-    const unregister = registerWsHandlers(eventHandlers);
-
-    // Clean up on unmount
-    return () => {
-      unregister();
-    };
-  }, [...deps]);
-}
-
-/**
- * Hook for handling message-related WebSocket events (new messages, edits, deletes)
- * @param handler Callback function for message events
- * @param deps Dependencies for the hook
- */
-export function useWebSocketMessageEvents(
-  handler: (data: any) => void,
-  deps: any[] = [],
-) {
-  useEffect(() => {
-    // Register handlers for message events
-    return registerWsHandlers({
-      [WebSocketEventType.POSTED]: handler,
-      [WebSocketEventType.POST_EDITED]: handler,
-      [WebSocketEventType.POST_DELETED]: handler,
-    });
-  }, deps);
-}
-
-/**
- * Hook for handling typing indicator WebSocket events
- * @param channelId Channel ID to listen for typing events
- * @param handler Callback function for typing events
- * @param deps Dependencies for the hook
- */
-export function useWebSocketTypingEvents(
-  channelId: string,
-  handler: (data: any) => void,
-  deps: any[] = [],
-) {
-  useEffect(() => {
-    if (!channelId) return;
-
-    // Register handler for typing events
-    return registerWsHandler(WebSocketEventType.TYPING, (data) => {
-      if (data.channel_id === channelId) {
-        handler(data);
+      if (options.autoUnregister !== false) {
+        unsubscribe();
       }
-    });
-  }, [channelId, ...deps]);
-}
-
-/**
- * Hook that provides a function to send typing indicator events
- * @param channelId Channel ID where typing is occurring
- * @returns Function to call when user is typing
- */
-export function useTypingIndicator(channelId: string | undefined) {
-  // Access the WebSocket store to get connection state and message sending function
-  const { isConnected, sendMessage } = useWsStore();
-
-  // Get current user information
-  const { currentUser } = useAuthStore();
-
-  // Create a debounced function to avoid sending too many events
-  const debouncedSendTyping = useMemo(
-    () =>
-      debounce((rootId?: string) => {
-        // Only send if we have necessary data and an active connection
-        if (!channelId || !currentUser || !isConnected) {
-          return;
-        }
-
-        // Send the typing event through WebSocket
-        sendMessage({
-          action: "user_typing",
-          data: {
-            channel_id: channelId,
-            parent_id: rootId || "", // For thread replies
-            user_id: currentUser.id,
-          },
-        });
-      }, 1000), // Debounce for 1 second
-    [channelId, currentUser, isConnected, sendMessage],
-  );
-
-  // Return a function that components can call when user is typing
-  return useCallback(
-    (rootId?: string) => {
-      debouncedSendTyping(rootId);
-    },
-    [debouncedSendTyping],
-  );
-}
-
-/**
- * Hook for handling unread-related WebSocket events
- * @returns WebSocket handlers for unread events
- */
-export function useUnreadWebSocketEvents() {
-  const { currentUser } = useAuthStore();
-  const { incrementUnreadCount, markAsRead, updateUnreadCount } =
-    useUnreadStore();
-  const { addMessage, updateMessage } = useMessageStore();
-
-  // Register handlers for events that affect unread counts
-  const eventHandlers = useMemo(() => {
-    // Only create handlers if we have a current user
-    // This ensures we don't perform any actions when not authenticated
-    if (!currentUser) {
-      // Return empty object that satisfies the Record<string, MessageHandler<any>> type
-      return {} as Record<string, (data: any) => void>;
-    }
-
-    return {
-      // New message posted
-      [WebSocketEventType.POSTED]: (data: any) => {
-        const { post: postData, channel_id: channelId } = data;
-
-        if (!postData || !channelId) return;
-
-        try {
-          // Parse post data if it's a string
-          const post =
-            typeof postData === "string" ? JSON.parse(postData) : postData;
-
-          // Skip if message is from the current user
-          if (post.user_id === currentUser.id) return;
-
-          // Add the message to our store
-          addMessage(post);
-
-          // Check if this is the active channel - if so, we might want to mark as read after a delay
-          const activeChannel = useChannelStore.getState().activeChannel;
-          if (activeChannel?.id === channelId) {
-            // For active channel, mark as read after a short delay
-            setTimeout(() => markAsRead(channelId), 2000);
-            return;
-          }
-
-          // Check for mentions
-          const mentionsUser = unreadService.messageContainsMention(
-            post,
-            currentUser.id,
-          );
-
-          // Increment unread counts - one message, and mentionCount if mentioned
-          incrementUnreadCount(
-            channelId,
-            1, // One new message
-            mentionsUser ? 1 : 0, // Increment mentions if user is mentioned
-            post.id, // Message ID for tracking
-          );
-        } catch (err) {
-          console.error("Error processing new message event:", err);
-        }
-      },
-
-      // Message edited
-      [WebSocketEventType.POST_EDITED]: (data: any) => {
-        const { post: postData, channel_id: channelId } = data;
-
-        if (!postData || !channelId) return;
-
-        try {
-          // Parse post data if it's a string
-          const post =
-            typeof postData === "string" ? JSON.parse(postData) : postData;
-
-          // Update the message in our store
-          updateMessage(post);
-
-          // If this post now mentions the user but didn't before, we need to update unread counts
-          const mentionsUser = unreadService.messageContainsMention(
-            post,
-            currentUser.id,
-          );
-
-          if (mentionsUser) {
-            // Get current unread count
-            const unreadCount = useUnreadStore
-              .getState()
-              .getChannelUnreadCount(channelId);
-
-            // If we weren't already mentioned, increment mention count
-            if (unreadCount.mention_count === 0) {
-              updateUnreadCount(
-                channelId,
-                unreadCount.msg_count,
-                unreadCount.mention_count + 1,
-                post.id,
-                unreadCount.lastViewedAt,
-              );
-            }
-          }
-        } catch (err) {
-          console.error("Error processing message edit event:", err);
-        }
-      },
-
-      // Channel viewed
-      [WebSocketEventType.CHANNEL_VIEWED]: (data: any) => {
-        const { channel_id: channelId, user_id: userId } = data;
-
-        // Only process for current user's events
-        if (userId === currentUser.id && channelId) {
-          // Mark channel as read
-          markAsRead(channelId);
-        }
-      },
     };
-  }, [
-    currentUser,
-    addMessage,
-    updateMessage,
-    incrementUnreadCount,
-    markAsRead,
-    updateUnreadCount,
-  ]);
-
-  // Only setup event handlers if we have a current user
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Register handlers
-    const unregister = registerWsHandlers(eventHandlers);
-
-    // Clean up on unmount
-    return () => {
-      unregister();
-    };
-  }, [currentUser, eventHandlers]);
-
-  // Handle reconnection events
-  const handleReconnect = useCallback(() => {
-    // Only process when user is authenticated
-    if (!currentUser) return;
-
-    // On reconnection, we should refresh unread counts from the server
-    const channels = Object.values(
-      useChannelStore.getState().channelsByTeam,
-    ).flat();
-
-    // For each channel, we could fetch the current unread status from the server
-    channels.forEach((channel) => {
-      // Here we would typically make an API call to get the latest unread count
-      // This is just a placeholder for the actual implementation
-      const unreadStatus = {
-        msg_count: 0,
-        mention_count: 0,
-        lastViewedAt: Date.now(),
-      };
-
-      // Update our local state
-      updateUnreadCount(
-        channel.id,
-        unreadStatus.msg_count,
-        unreadStatus.mention_count,
-        undefined,
-        unreadStatus.lastViewedAt,
-      );
-    });
-
-    console.log("WebSocket reconnected - refreshed unread counts");
-  }, [currentUser, updateUnreadCount]);
+  }, [eventType, addMessageHandler, options.autoUnregister]);
 
   return {
-    onWebSocketReconnect: handleReconnect,
+    isConnected,
   };
 }
 
 /**
- * Hook for monitoring WebSocket connection state changes
- * @param onConnect Callback for connection events
- * @param onDisconnect Callback for disconnection events
- * @param deps Dependencies for the callbacks
+ * Hook for registering multiple WebSocket event listeners
+ * @param handlers Map of event types to handler functions
+ * @param options Listener options
  */
-export function useWebSocketConnectionMonitor(
-  onConnect?: () => void,
-  onDisconnect?: () => void,
-  deps: any[] = [],
+export function useWebSocketEvents<T = any>(
+  handlers: Record<string, (data: T) => void>,
+  options: WebSocketListenerOptions = {},
 ) {
-  const { isConnected } = useWsStore();
-  const wasConnectedRef = useRef(isConnected);
+  const { isConnected, addMessageHandlers } = useWsStore();
+  const handlersRef = useRef(handlers);
 
+  // Update handlers ref when handlers change
   useEffect(() => {
-    // Connection state changed
-    if (!wasConnectedRef.current && isConnected) {
-      // Connected
-      if (onConnect) onConnect();
-    } else if (wasConnectedRef.current && !isConnected) {
-      // Disconnected
-      if (onDisconnect) onDisconnect();
-    }
+    handlersRef.current = handlers;
+  }, [handlers]);
 
-    // Update ref
-    wasConnectedRef.current = isConnected;
-  }, [isConnected, onConnect, onDisconnect, ...deps]);
+  // Set up event listeners
+  useEffect(() => {
+    if (!handlers || Object.keys(handlers).length === 0) return undefined;
+
+    // Wrap handlers to use the current ref
+    const wrappedHandlers: Record<string, (data: T) => void> = {};
+
+    Object.entries(handlers).forEach(([eventType, handler]) => {
+      wrappedHandlers[eventType] = (data: T) => {
+        handlersRef.current[eventType]?.(data);
+      };
+    });
+
+    // Register handlers
+    const unsubscribe = addMessageHandlers(wrappedHandlers);
+
+    // Clean up on unmount
+    return () => {
+      if (options.autoUnregister !== false) {
+        unsubscribe();
+      }
+    };
+  }, [addMessageHandlers, options.autoUnregister]);
 
   return {
     isConnected,
-    wasConnected: wasConnectedRef.current,
+  };
+}
+
+/**
+ * Hook for WebSocket message events
+ * @param channelId Channel ID to filter by
+ * @param handler Event handler function
+ */
+export function useWebSocketMessageEvents(
+  channelId: string | undefined,
+  handler: (message: any, eventType: string) => void,
+) {
+  // Get event handlers
+  const messageHandlers: Record<string, (data: any) => void> = useMemo(() => {
+    if (!channelId) return {} as Record<string, (data: any) => void>;
+    return {
+      [WebSocketEventType.POSTED]: (data) => {
+        if (data.channel_id === channelId) {
+          handler(data, WebSocketEventType.POSTED);
+        }
+      },
+      [WebSocketEventType.POST_EDITED]: (data) => {
+        if (data.channel_id === channelId) {
+          handler(data, WebSocketEventType.POST_EDITED);
+        }
+      },
+      [WebSocketEventType.POST_DELETED]: (data) => {
+        if (data.channel_id === channelId) {
+          handler(data, WebSocketEventType.POST_DELETED);
+        }
+      },
+      [WebSocketEventType.REACTION_ADDED]: (data) => {
+        // For reactions, we need to check if the post is in our channel
+        if (data.channel_id === channelId) {
+          handler(data, WebSocketEventType.REACTION_ADDED);
+        }
+      },
+      [WebSocketEventType.REACTION_REMOVED]: (data) => {
+        if (data.channel_id === channelId) {
+          handler(data, WebSocketEventType.REACTION_REMOVED);
+        }
+      },
+    };
+  }, [channelId, handler]);
+
+  // Register event handlers
+  return useWebSocketEvents(messageHandlers);
+}
+
+/**
+ * Hook for WebSocket typing events
+ * @param channelId Channel ID to filter by
+ * @param parentId Optional parent ID for filtering thread typing events
+ * @param handler Event handler function
+ */
+export function useWebSocketTypingEvents(
+  channelId: string | undefined,
+  parentId: string | undefined,
+  handler: (data: TypingData) => void,
+) {
+  // Get typing event handler
+  const typingHandler = useCallback(
+    (data: TypingData) => {
+      if (!channelId || data.channel_id !== channelId) return;
+
+      // For thread typing, filter by parent_id if provided
+      if (parentId && data.parent_id && data.parent_id !== parentId) return;
+
+      handler(data);
+    },
+    [channelId, parentId, handler],
+  );
+
+  // Register typing event handler
+  return useWebSocketEvent(WebSocketEventType.TYPING, typingHandler);
+}
+
+/**
+ * Hook for typing indicator functionality
+ * @param channelId Channel ID
+ * @param parentId Optional parent ID for thread typing
+ * @returns Typing indicator functionality
+ */
+export function useTypingIndicator(
+  channelId: string | undefined,
+  parentId?: string,
+) {
+  const { currentUser } = useAuthStore();
+  const { isConnected, sendMessage } = useWsStore();
+
+  // Typing users state
+  const [typingUsers, setTypingUsers] = useState<Record<string, number>>({});
+
+  // Handle typing events
+  const handleTyping = useCallback(
+    (data: TypingData) => {
+      if (!data.user_id || data.user_id === currentUser?.id) return;
+
+      // Update typing users with timestamp
+      setTypingUsers((prev) => ({
+        ...prev,
+        [data.user_id]: Date.now(),
+      }));
+    },
+    [currentUser?.id],
+  );
+
+  // Register for typing events
+  useWebSocketTypingEvents(channelId, parentId, handleTyping);
+
+  // Clean up expired typing indicators
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTypingUsers((prev) => {
+        const now = Date.now();
+        const updated: Record<string, number> = {};
+        let hasChanges = false;
+
+        // Keep only non-expired typing indicators (5 seconds)
+        Object.entries(prev).forEach(([userId, timestamp]) => {
+          if (now - timestamp < 5000) {
+            updated[userId] = timestamp;
+          } else {
+            hasChanges = true;
+          }
+        });
+
+        return hasChanges ? updated : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  /**
+   * Sends a typing indicator
+   */
+  const sendTypingEvent = useCallback(() => {
+    if (!isConnected || !channelId || !currentUser?.id) return;
+
+    const typingMessage: WebSocketMessage = {
+      action: "user_typing",
+      data: {
+        channel_id: channelId,
+        parent_id: parentId || "",
+      },
+    };
+
+    sendMessage(typingMessage);
+  }, [isConnected, sendMessage, channelId, parentId, currentUser?.id]);
+
+  // Get currently typing user IDs
+  const typingUserIds = useMemo(() => {
+    const now = Date.now();
+    return Object.entries(typingUsers)
+      .filter(([_, timestamp]) => now - timestamp < 5000)
+      .map(([userId]) => userId);
+  }, [typingUsers]);
+
+  return {
+    typingUserIds,
+    sendTypingEvent,
+    isTyping: typingUserIds.length > 0,
   };
 }

@@ -1,122 +1,155 @@
 // src/hooks/useAuth.tsx
 /**
- * Hook for authentication functionality
- * Provides a simplified interface for working with authentication
+ * Authentication hooks
+ * Provides standardized access to authentication functionality
  */
-import { useCallback, useEffect, useState } from "react";
-import { useAuthStore } from "../core/store";
+import { useState, useEffect, useCallback } from "react";
 import {
-  useCurrentUserQuery,
   useLoginMutation,
   useLogoutMutation,
+  useCurrentUserQuery,
   useInitializeAuthQuery,
 } from "../core/api/queries/authQueries";
+import { useAuthStore } from "../core/store/authStore";
+import { useWsStore } from "../core/store/wsStore";
 import { User, LoginParams } from "../types";
+import { handleError } from "../core/store/errorStore";
+import { ErrorSource } from "../types";
 
 /**
- * Hook that provides authentication functionality
- * @returns Authentication state and actions
+ * Hook for authentication functionality
+ * Provides standardized interface for login, logout, and auth state
  */
 export function useAuth() {
-  // Get state from store
   const {
     isAuthenticated,
     isAuthenticating,
     currentUser,
-    error,
+    token,
     serverUrl,
-    refreshCurrentUser,
+    error,
   } = useAuthStore();
 
-  // Get queries and mutations
+  // Use React Query mutations for login and logout
   const loginMutation = useLoginMutation();
   const logoutMutation = useLogoutMutation();
-  const currentUserQuery = useCurrentUserQuery();
-  const initializeAuthQuery = useInitializeAuthQuery();
 
-  // Track initialization status
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Initialize authentication on mount
-  useEffect(() => {
-    if (!isInitialized && !isAuthenticated && !isAuthenticating) {
-      initializeAuthQuery.refetch().then(() => {
-        setIsInitialized(true);
-      });
-    }
-  }, [isInitialized, isAuthenticated, isAuthenticating, initializeAuthQuery]);
+  // Additional state for login error tracking
+  const [loginError, setLoginError] = useState<Error | null>(null);
 
   /**
-   * Login with username and password
-   * @param params Login parameters
-   * @returns Promise resolving to the logged in user
+   * Logs in a user with credentials
+   * @param credentials Login credentials
+   * @returns The authenticated user
    */
   const login = useCallback(
-    async (params: LoginParams): Promise<User> => {
-      return loginMutation.mutateAsync(params);
+    async (credentials: LoginParams): Promise<User> => {
+      try {
+        setLoginError(null);
+        return await loginMutation.mutateAsync(credentials);
+      } catch (error) {
+        setLoginError(error as Error);
+        throw error;
+      }
     },
     [loginMutation],
   );
 
   /**
-   * Logout the current user
+   * Logs out the current user
    */
   const logout = useCallback(() => {
-    logoutMutation.mutate();
+    try {
+      logoutMutation.mutate();
+
+      // Disconnect WebSocket if connected
+      const { isConnected, disconnect } = useWsStore.getState();
+      if (isConnected) {
+        disconnect(1000, "User logged out");
+      }
+    } catch (error) {
+      handleError(error as Error, ErrorSource.AUTH);
+    }
   }, [logoutMutation]);
 
   /**
-   * Refresh the current user
-   * @returns Promise resolving to the refreshed user
+   * Refreshes the current user data
    */
-  const refresh = useCallback(async () => {
-    if (!isAuthenticated) return null;
-    return refreshCurrentUser();
-  }, [isAuthenticated, refreshCurrentUser]);
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    try {
+      return await useAuthStore.getState().refreshCurrentUser();
+    } catch (error) {
+      handleError(error as Error, ErrorSource.AUTH);
+      return null;
+    }
+  }, []);
 
   return {
-    // State
+    // Auth state
     isAuthenticated,
-    isAuthenticating: isAuthenticating || loginMutation.isPending,
-    isInitialized,
+    isAuthenticating,
+    loginError,
+    error,
     currentUser,
-    error: error || loginMutation.error,
+    token,
     serverUrl,
 
-    // Status indicators
-    isLoggingIn: loginMutation.isPending,
-    isLoggingOut: logoutMutation.isPending,
-    isRefreshing: currentUserQuery.isRefetching,
-    isInitializing: initializeAuthQuery.isRefetching,
-
-    // Actions
+    // Auth actions
     login,
     logout,
-    refresh,
+    refreshUser,
   };
 }
 
 /**
  * Hook that requires authentication
- * If user is not authenticated, redirects to login page
+ * Redirects or throws error if user is not authenticated
  *
- * @param redirectUrl URL to redirect to if not authenticated
- * @returns Authentication state and actions
+ * @param onUnauthenticated Optional callback when user is not authenticated
+ * @returns The authenticated user
  */
-export function useRequireAuth(redirectUrl: string = "/login") {
-  const { isAuthenticated, isAuthenticating, isInitialized } = useAuth();
+export function useRequireAuth(onUnauthenticated?: () => void): User {
+  const { isAuthenticated, currentUser } = useAuth();
 
-  // Redirect to login if not authenticated and not in the process of authenticating
   useEffect(() => {
-    if (
-      isInitialized &&
-      !isAuthenticated &&
-      !isAuthenticating &&
-      typeof window !== "undefined"
-    ) {
-      window.location.href = redirectUrl;
+    if (!isAuthenticated && onUnauthenticated) {
+      onUnauthenticated();
     }
-  }, [isAuthenticated, isAuthenticating, isInitialized, redirectUrl]);
+  }, [isAuthenticated, onUnauthenticated]);
 
-  return useAuth();
+  if (!isAuthenticated || !currentUser) {
+    throw new Error("Authentication required");
+  }
+
+  return currentUser;
+}
+
+/**
+ * Hook to initialize authentication from stored token
+ * @returns Authentication initialization state
+ */
+export function useAuthInitialize() {
+  const initializeQuery = useInitializeAuthQuery();
+
+  return {
+    isInitialized: initializeQuery.isSuccess,
+    isInitializing: initializeQuery.isLoading,
+    error: initializeQuery.error,
+    initialized: initializeQuery.data,
+  };
+}
+
+/**
+ * Hook to get the current user
+ * @returns Current user query
+ */
+export function useCurrentUser() {
+  const currentUserQuery = useCurrentUserQuery();
+
+  return {
+    currentUser: currentUserQuery.data,
+    isLoading: currentUserQuery.isLoading,
+    error: currentUserQuery.error,
+    refetch: currentUserQuery.refetch,
+  };
 }

@@ -1,12 +1,9 @@
 // src/hooks/useUsers.tsx
 /**
- * Hook for user functionality
- * Provides optimized React hooks for working with users
+ * User hooks
+ * Provides access to user functionality
  */
-import { useCallback, useMemo, useEffect } from "react";
-import { User, UserStatus, UserProfileUpdate } from "../types";
-import { useUserStore } from "../core/store";
-import { userService } from "../core/services/userService";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   useUserQuery,
   useUsersQuery,
@@ -14,365 +11,482 @@ import {
   useUserStatusesQuery,
   useUpdateUserProfileMutation,
   useUpdateUserStatusMutation,
+  useSearchUsersQuery,
   useUpdatePasswordMutation,
   useUploadProfileImageMutation,
-  useSearchUsersQuery,
 } from "../core/api/queries/userQueries";
-import { useEntityQuery } from "./useEntityQuery";
+import { useUserStore } from "../core/store/userStore";
+import { userService } from "../core/services/userService";
+import {
+  User,
+  UserStatus,
+  UserProfileUpdate,
+  UserWithStatus,
+  GetUsersOptions,
+} from "../types";
+import { useAuthStore } from "../core/store/authStore";
+import { handleError } from "../core/store/errorStore";
+import { ErrorSource } from "../types";
 
 /**
- * Hook that provides information about a specific user
+ * Hook for user profile functionality
  * @param userId User ID
- * @returns User state and actions
+ * @returns User profile data and operations
  */
 export function useUser(userId: string | undefined) {
-  // Get state from store
-  const { getUserById, getUserStatus, getUserDisplayName, setUserStatus } =
-    useUserStore();
+  // Current user from auth store
+  const { currentUser } = useAuthStore();
 
-  // Get queries
+  // Determine if this is the current user
+  const isCurrentUser = useMemo(() => {
+    return currentUser?.id === userId;
+  }, [currentUser, userId]);
+
+  // Get user query
   const userQuery = useUserQuery(userId);
-  const userStatusQuery = useUserStatusQuery(userId);
 
-  /**
-   * Gets the user's current status
-   * @returns User status
-   */
-  const getStatus = useCallback((): UserStatus => {
-    if (!userId) return "offline";
-    return getUserStatus(userId);
-  }, [userId, getUserStatus]);
+  // Get user status query
+  const statusQuery = useUserStatusQuery(userId);
 
-  /**
-   * Gets the user's display name
-   * @returns Formatted user name
-   */
-  const getDisplayName = useCallback((): string => {
-    if (!userId) return "Unknown User";
-    return getUserDisplayName(userId);
-  }, [userId, getUserDisplayName]);
-
-  /**
-   * Refreshes the user data
-   * @returns Promise resolving to the refreshed user
-   */
-  const refreshUser = useCallback(async () => {
-    return userQuery.refetch().then((result) => result.data || null);
-  }, [userQuery]);
-
-  /**
-   * Refreshes the user's status
-   * @returns Promise resolving to the refreshed status
-   */
-  const refreshStatus = useCallback(async () => {
-    return userStatusQuery.refetch().then((result) => result.data || null);
-  }, [userStatusQuery]);
-
-  // Get avatar URL using service
-  const avatarUrl = useMemo(() => {
-    const user = getUserById(userId || "");
-    return user ? userService.getProfilePictureUrl(user) : "";
-  }, [userId, getUserById]);
-
-  // Memoize user object to avoid unnecessary re-renders
-  const user = useMemo(() => {
-    return userId ? getUserById(userId) : null;
-  }, [userId, getUserById, userQuery.data]);
-
-  // Get color for avatar background (used for users without images)
-  const userColor = useMemo(() => {
-    return userId ? userService.getUserColor(userId) : "#cccccc";
-  }, [userId]);
-
-  return {
-    // State
-    user,
-    status: getStatus(),
-    displayName: getDisplayName(),
-    avatarUrl,
-    userColor,
-    isLoading: userQuery.isLoading || userQuery.isFetching,
-    isStatusLoading: userStatusQuery.isLoading || userStatusQuery.isFetching,
-    error: userQuery.error,
-    statusError: userStatusQuery.error,
-
-    // Actions
-    refreshUser,
-    refreshStatus,
-    getDisplayName,
-  };
-}
-
-/**
- * Hook that provides information about multiple users
- * @param options Options for fetching users
- * @returns Users state and actions
- */
-export function useUsers(
-  options: {
-    userIds?: string[];
-    inChannel?: string;
-    inTeam?: string;
-  } = {},
-) {
-  // Get users query
-  const usersQuery = useUsersQuery(options);
-  const userStatusesQuery = useUserStatusesQuery(options.userIds);
-
-  // Get formatting helpers from service
-  const formatName = useCallback((user: User | null | undefined) => {
-    return userService.formatUserName(user);
-  }, []);
-
-  /**
-   * Gets avatars for a list of users
-   * @param users List of users
-   * @returns Map of user IDs to avatar URLs
-   */
-  const getAvatarUrls = useCallback((users: User[]) => {
-    const avatarMap: Record<string, string> = {};
-
-    users.forEach((user) => {
-      avatarMap[user.id] = userService.getProfilePictureUrl(user);
-    });
-
-    return avatarMap;
-  }, []);
-
-  /**
-   * Refreshes the users data
-   * @returns Promise resolving to the refreshed users
-   */
-  const refreshUsers = useCallback(async () => {
-    return usersQuery.refetch().then((result) => result.data || []);
-  }, [usersQuery]);
-
-  /**
-   * Refreshes the users' statuses
-   * @returns Promise resolving to the refreshed statuses
-   */
-  const refreshStatuses = useCallback(async () => {
-    return userStatusesQuery.refetch().then((result) => result.data || []);
-  }, [userStatusesQuery]);
-
-  // Sort users by display name
-  const sortedUsers = useMemo(() => {
-    if (!usersQuery.data) return [];
-    return userService.sortUsersByDisplayName(usersQuery.data);
-  }, [usersQuery.data]);
-
-  // Combine users with their statuses
-  const usersWithStatus = useMemo(() => {
-    if (!usersQuery.data) return [];
-
-    const { statusByUserId } = useUserStore.getState();
-
-    return usersQuery.data.map((user) => ({
-      user,
-      status: statusByUserId[user.id] || "offline",
-      displayName: userService.formatUserName(user),
-    }));
-  }, [usersQuery.data]);
-
-  return {
-    // State
-    users: usersQuery.data || [],
-    sortedUsers,
-    usersWithStatus,
-    statuses: userStatusesQuery.data || [],
-    isLoading: usersQuery.isLoading || usersQuery.isFetching,
-    isStatusesLoading:
-      userStatusesQuery.isLoading || userStatusesQuery.isFetching,
-    error: usersQuery.error,
-    statusesError: userStatusesQuery.error,
-
-    // Actions
-    refreshUsers,
-    refreshStatuses,
-    formatName,
-    getAvatarUrls,
-  };
-}
-
-/**
- * Hook that provides user search functionality
- * @param term Search term
- * @param options Search options
- * @returns Search results state and actions
- */
-export function useUserSearch(
-  term: string | undefined,
-  options: { inTeam?: string; inChannel?: string; notInChannel?: string } = {},
-) {
-  // Get search query
-  const searchQuery = useSearchUsersQuery(term, options);
-
-  /**
-   * Refreshes the search results
-   * @returns Promise resolving to the refreshed results
-   */
-  const refreshResults = useCallback(async () => {
-    return searchQuery.refetch().then((result) => result.data || []);
-  }, [searchQuery]);
-
-  // Filter results by search term using service function
-  const filteredResults = useMemo(() => {
-    if (!searchQuery.data || !term) return searchQuery.data || [];
-    return userService.filterUsersByTerm(searchQuery.data, term);
-  }, [searchQuery.data, term]);
-
-  return {
-    // State
-    results: filteredResults,
-    isLoading: searchQuery.isLoading || searchQuery.isFetching,
-    error: searchQuery.error,
-
-    // Actions
-    refreshResults,
-  };
-}
-
-/**
- * Hook that provides profile management functionality for the current user
- * @returns User profile state and actions
- */
-export function useUserProfile() {
-  // Get mutations
+  // User mutations
   const updateProfileMutation = useUpdateUserProfileMutation();
   const updateStatusMutation = useUpdateUserStatusMutation();
   const updatePasswordMutation = useUpdatePasswordMutation();
-  const uploadProfileImageMutation = useUploadProfileImageMutation();
+  const uploadImageMutation = useUploadProfileImageMutation();
+
+  // Get user from user store
+  const { getUserById, getUserStatus } = useUserStore();
+
+  // User from store or query
+  const user = useMemo(() => {
+    if (!userId) return null;
+
+    if (isCurrentUser && currentUser) {
+      return currentUser;
+    }
+
+    return getUserById(userId) || userQuery.data || null;
+  }, [userId, getUserById, userQuery.data, isCurrentUser, currentUser]);
+
+  // User status from store or query
+  const status = useMemo(() => {
+    if (!userId) return "offline" as UserStatus;
+
+    // Status from store
+    const storeStatus = getUserStatus(userId);
+
+    // If query has more recent data, use it
+    if (statusQuery.data && statusQuery.dataUpdatedAt > Date.now() - 60000) {
+      return statusQuery.data;
+    }
+
+    return storeStatus;
+  }, [userId, getUserStatus, statusQuery.data, statusQuery.dataUpdatedAt]);
+
+  // Formatted user name
+  const displayName = useMemo(() => {
+    if (!user) return "";
+    return userService.formatUserName(user);
+  }, [user]);
+
+  // User initials
+  const initials = useMemo(() => {
+    if (!user) return "";
+    return userService.getUserInitials(user);
+  }, [user]);
+
+  // Profile image URL
+  const profileImageUrl = useMemo(() => {
+    if (!user) return "";
+    return userService.getProfilePictureUrl(user);
+  }, [user]);
 
   /**
-   * Updates the user's profile
-   * @param profileData Profile data to update
-   * @returns Promise resolving to the updated user
+   * Updates user profile
+   * @param data Profile update data
    */
   const updateProfile = useCallback(
-    async (profileData: UserProfileUpdate) => {
-      // Use service to create a sanitized update object
-      const sanitizedData = userService.createProfileUpdate(profileData);
-      return updateProfileMutation.mutateAsync(sanitizedData);
+    async (data: UserProfileUpdate): Promise<User | null> => {
+      if (!isCurrentUser) return null;
+
+      try {
+        return await updateProfileMutation.mutateAsync(data);
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return null;
+      }
     },
-    [updateProfileMutation],
+    [isCurrentUser, updateProfileMutation],
   );
 
   /**
-   * Updates the user's status
-   * @param status New status
-   * @returns Promise resolving to the updated status
+   * Updates user status
+   * @param newStatus New status
    */
   const updateStatus = useCallback(
-    async (status: UserStatus) => {
-      return updateStatusMutation.mutateAsync(status);
+    async (newStatus: UserStatus): Promise<boolean> => {
+      if (!isCurrentUser) return false;
+
+      try {
+        await updateStatusMutation.mutateAsync(newStatus);
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [updateStatusMutation],
+    [isCurrentUser, updateStatusMutation],
   );
 
   /**
-   * Updates the user's password
+   * Updates user password
    * @param currentPassword Current password
    * @param newPassword New password
-   * @returns Promise resolving to success indicator
    */
   const updatePassword = useCallback(
-    async (currentPassword: string, newPassword: string) => {
-      return updatePasswordMutation.mutateAsync({
-        currentPassword,
-        newPassword,
-      });
+    async (currentPassword: string, newPassword: string): Promise<boolean> => {
+      if (!isCurrentUser) return false;
+
+      try {
+        await updatePasswordMutation.mutateAsync({
+          currentPassword,
+          newPassword,
+        });
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [updatePasswordMutation],
+    [isCurrentUser, updatePasswordMutation],
   );
 
   /**
-   * Uploads a profile image
-   * @param imageFile Image file to upload
-   * @returns Promise resolving to the user ID
+   * Uploads profile image
+   * @param file Image file
    */
   const uploadProfileImage = useCallback(
-    async (imageFile: File) => {
-      return uploadProfileImageMutation.mutateAsync(imageFile);
+    async (file: File): Promise<boolean> => {
+      if (!isCurrentUser) return false;
+
+      try {
+        await uploadImageMutation.mutateAsync(file);
+        return true;
+      } catch (error) {
+        handleError(error as Error, ErrorSource.API);
+        return false;
+      }
     },
-    [uploadProfileImageMutation],
+    [isCurrentUser, uploadImageMutation],
   );
 
   return {
+    // Data
+    user,
+    status,
+    displayName,
+    initials,
+    profileImageUrl,
+    isCurrentUser,
+
     // State
-    isUpdatingProfile: updateProfileMutation.isPending,
-    isUpdatingStatus: updateStatusMutation.isPending,
-    isUpdatingPassword: updatePasswordMutation.isPending,
-    isUploadingImage: uploadProfileImageMutation.isPending,
-    profileError: updateProfileMutation.error,
-    statusError: updateStatusMutation.error,
-    passwordError: updatePasswordMutation.error,
-    imageError: uploadProfileImageMutation.error,
+    isLoading: userQuery.isLoading || statusQuery.isLoading,
+    isFetching: userQuery.isFetching || statusQuery.isFetching,
+    error: userQuery.error || statusQuery.error,
 
     // Actions
     updateProfile,
     updateStatus,
     updatePassword,
     uploadProfileImage,
+    refreshUser: userQuery.refetch,
+    refreshStatus: statusQuery.refetch,
+
+    // Mutations state
+    isUpdatingProfile: updateProfileMutation.isPending,
+    isUpdatingStatus: updateStatusMutation.isPending,
+    isUpdatingPassword: updatePasswordMutation.isPending,
+    isUploadingImage: uploadImageMutation.isPending,
+    updateProfileError: updateProfileMutation.error,
+    updateStatusError: updateStatusMutation.error,
+    updatePasswordError: updatePasswordMutation.error,
+    uploadImageError: uploadImageMutation.error,
   };
 }
 
 /**
- * Hook that monitors typing users in a channel
- * @param channelId Channel ID
- * @returns Typing users information
+ * Hook for user search and listing
+ * @param options User query options
+ * @returns User listing functionality
  */
-export function useTypingUsers(channelId: string | undefined) {
-  // Get state from store
-  const { getTypingUsers, byId } = useUserStore();
+export function useUsers(options: GetUsersOptions = {}) {
+  // Get users query
+  const usersQuery = useUsersQuery(options);
 
-  // Get typing user IDs
-  const typingUserIds = useMemo(() => {
-    if (!channelId) return [];
-    return getTypingUsers(channelId);
-  }, [channelId, getTypingUsers]);
+  // Get user statuses query if needed
+  const userIds = useMemo(() => options.userIds || [], [options.userIds]);
+  const statusesQuery = options.withStatuses
+    ? useUserStatusesQuery(userIds)
+    : { data: undefined, isLoading: false, error: null };
 
-  // Get typing user objects
-  const typingUsers = useMemo(() => {
-    return typingUserIds
-      .map((userId) => byId[userId])
-      .filter((user): user is User => !!user);
-  }, [typingUserIds, byId]);
+  // Get user store
+  const {
+    getUserById,
+    getUserStatus,
+    getUserDisplayName,
+    getUsersByIds,
+    getUsersWithStatus,
+  } = useUserStore();
 
-  // Generate typing message
-  const typingMessage = useMemo(() => {
-    return userService.formatTypingMessage(typingUsers);
-  }, [typingUsers]);
+  // Users from store or query
+  const users = useMemo(() => {
+    if (userIds.length > 0) {
+      const storeUsers = getUsersByIds(userIds);
+
+      // If we have all users in store and no special options, use store
+      if (
+        storeUsers.length === userIds.length &&
+        !options.withProfiles &&
+        !options.withStatuses
+      ) {
+        return storeUsers;
+      }
+    }
+
+    return usersQuery.data || [];
+  }, [userIds, getUsersByIds, usersQuery.data, options]);
+
+  // Users with status information
+  const usersWithStatus = useMemo(() => {
+    return getUsersWithStatus(users.map((user) => user.id));
+  }, [users, getUsersWithStatus]);
+
+  /**
+   * Gets user by ID
+   * @param userId User ID
+   */
+  const getUserInfo = useCallback(
+    (userId: string): User | null => {
+      return getUserById(userId);
+    },
+    [getUserById],
+  );
+
+  /**
+   * Gets user status
+   * @param userId User ID
+   */
+  const getStatus = useCallback(
+    (userId: string): UserStatus => {
+      return getUserStatus(userId);
+    },
+    [getUserStatus],
+  );
+
+  /**
+   * Gets user display name
+   * @param userId User ID
+   */
+  const getDisplayName = useCallback(
+    (userId: string): string => {
+      return getUserDisplayName(userId);
+    },
+    [getUserDisplayName],
+  );
+
+  /**
+   * Refreshes user data
+   */
+  const refreshUsers = useCallback(() => {
+    return usersQuery.refetch();
+  }, [usersQuery]);
+
+  /**
+   * Refreshes user statuses
+   */
+  const refreshStatuses = useCallback(() => {
+    if (
+      "refetch" in statusesQuery &&
+      typeof statusesQuery.refetch === "function"
+    ) {
+      return statusesQuery.refetch();
+    }
+    return Promise.resolve();
+  }, [statusesQuery]);
 
   return {
-    // State
-    typingUserIds,
-    typingUsers,
-    typingMessage,
-    isTyping: typingUsers.length > 0,
+    // Data
+    users,
+    usersWithStatus,
 
-    // Helper for components
-    getFormattedMessage: () => typingMessage,
+    // State
+    isLoading: usersQuery.isLoading || statusesQuery.isLoading,
+    isFetching: usersQuery.isFetching,
+    error: usersQuery.error || statusesQuery.error,
+
+    // Actions
+    refreshUsers,
+    refreshStatuses,
+
+    // Helpers
+    getUserInfo,
+    getStatus,
+    getDisplayName,
   };
 }
 
 /**
- * Generic hook for user entity operations using the EntityQuery hook
+ * Hook for user search
+ * @param searchTerm Search term
+ * @param options Search options
+ * @returns User search functionality
  */
-export function useUserEntities(
-  options: {
-    userIds?: string[];
-    inChannel?: string;
-    inTeam?: string;
-    enabled?: boolean;
-  } = {},
+export function useUserSearch(
+  searchTerm: string | undefined,
+  options: { inTeam?: string; inChannel?: string } = {},
 ) {
-  // Use the generic entity query hook with user-specific config
-  return useEntityQuery<User>({
-    entityType: "user",
-    endpoint: "users",
-    idField: "id",
-    initialParams: options,
-    enabled: options.enabled !== false,
-    select: (data) => userService.sortUsersByDisplayName(data),
-  });
+  // Get search query
+  const searchQuery = useSearchUsersQuery(searchTerm, options);
+
+  // Get user store
+  const { setUsers } = useUserStore();
+
+  // Update store with search results
+  useEffect(() => {
+    if (searchQuery.data && searchQuery.data.length > 0) {
+      setUsers(searchQuery.data);
+    }
+  }, [searchQuery.data, setUsers]);
+
+  // Search results sorted by display name
+  const sortedResults = useMemo(() => {
+    if (!searchQuery.data) return [];
+
+    return userService.sortUsersByDisplayName(searchQuery.data);
+  }, [searchQuery.data]);
+
+  /**
+   * Filters users by search term locally
+   * @param users Users to filter
+   * @param term Search term
+   */
+  const filterUsers = useCallback((users: User[], term: string): User[] => {
+    return userService.filterUsersByTerm(users, term);
+  }, []);
+
+  return {
+    // Data
+    results: sortedResults,
+
+    // State
+    isLoading: searchQuery.isLoading,
+    isFetching: searchQuery.isFetching,
+    error: searchQuery.error,
+
+    // Actions
+    search: searchQuery.refetch,
+
+    // Helpers
+    filterUsers,
+  };
+}
+
+/**
+ * Hook for user profile display
+ * @returns User formatting utilities
+ */
+export function useUserProfile() {
+  /**
+   * Formats a user's name
+   * @param user User object
+   * @param preferUsername Whether to prefer username over full name
+   */
+  const formatUserName = useCallback(
+    (
+      user: User | null | undefined,
+      preferUsername: boolean = false,
+    ): string => {
+      return userService.formatUserName(user, preferUsername);
+    },
+    [],
+  );
+
+  /**
+   * Gets a user's initials
+   * @param user User object
+   */
+  const getUserInitials = useCallback(
+    (user: User | null | undefined): string => {
+      return userService.getUserInitials(user);
+    },
+    [],
+  );
+
+  /**
+   * Gets a user's profile picture URL
+   * @param user User object
+   * @param size Image size
+   */
+  const getProfilePictureUrl = useCallback(
+    (user: User, size: number = 128): string => {
+      return userService.getProfilePictureUrl(user, size);
+    },
+    [],
+  );
+
+  /**
+   * Gets a color based on user ID
+   * @param userId User ID
+   */
+  const getUserColor = useCallback((userId: string): string => {
+    return userService.getUserColor(userId);
+  }, []);
+
+  /**
+   * Formats multiple users into a list
+   * @param users List of users
+   * @param maxUsers Maximum number of users to display
+   */
+  const formatUserList = useCallback(
+    (users: User[], maxUsers: number = 3): string => {
+      return userService.formatUserList(users, maxUsers);
+    },
+    [],
+  );
+
+  /**
+   * Formats user status for display
+   * @param status User status
+   */
+  const formatUserStatus = useCallback((status: UserStatus): string => {
+    return userService.formatUserStatus(status);
+  }, []);
+
+  /**
+   * Gets CSS class for user status
+   * @param status User status
+   */
+  const getUserStatusClass = useCallback((status: UserStatus): string => {
+    return userService.getUserStatusClass(status);
+  }, []);
+
+  /**
+   * Gets icon for user status
+   * @param status User status
+   */
+  const getUserStatusIcon = useCallback((status: UserStatus): string => {
+    return userService.getUserStatusIcon(status);
+  }, []);
+
+  return {
+    // Formatting helpers
+    formatUserName,
+    getUserInitials,
+    getProfilePictureUrl,
+    getUserColor,
+    formatUserList,
+    formatUserStatus,
+    getUserStatusClass,
+    getUserStatusIcon,
+  };
 }

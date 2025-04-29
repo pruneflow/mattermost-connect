@@ -1,11 +1,16 @@
 // src/hooks/index.ts
 /**
  * Central export point for all hooks
- * Provides easy access to all hooks in the application
+ * Provides easy access to all application hooks
  */
 
-// Auth hooks
-export { useAuth, useRequireAuth } from "./useAuth";
+// Authentication hooks
+export {
+  useAuth,
+  useRequireAuth,
+  useAuthInitialize,
+  useCurrentUser,
+} from "./useAuth";
 
 // Team hooks
 export { useTeams, useTeam, useTeamCreation } from "./useTeams";
@@ -14,22 +19,29 @@ export { useTeams, useTeam, useTeamCreation } from "./useTeams";
 export { useChannels, useChannel, useChannelCreation } from "./useChannels";
 
 // Direct channel hooks
-export {
-  useDirectChannels,
-  useDirectChannelUsers,
-  useDirectChannel,
-} from "./useDirectChannels";
+export { useDirectChannels, useDirectChannel } from "./useDirectChannels";
+export { useDirectChannelUsers } from "./useDirectChannelUsers";
 
 // Message hooks
 export {
   useMessages,
   useThread,
-  usePinnedMessages,
-  useMessageComposer,
   useMessageReactions,
+  useFileInfo,
 } from "./useMessages";
 
-// WebSocket hooks - Newly refactored
+// Unread count hooks
+export {
+  useChannelUnreadCount,
+  useTeamUnreadCount,
+  useTotalUnreadCount,
+  useUnreadChannels,
+} from "./useUnreadCounts";
+
+// User hooks
+export { useUser, useUsers, useUserSearch, useUserProfile } from "./useUsers";
+
+// WebSocket hooks
 export {
   useWebSocket,
   useWebSocketEvent,
@@ -37,26 +49,4 @@ export {
   useWebSocketMessageEvents,
   useWebSocketTypingEvents,
   useTypingIndicator,
-  useUnreadWebSocketEvents,
-  useWebSocketConnectionMonitor,
 } from "./useWebSocket";
-
-// User hooks
-export {
-  useUser,
-  useUsers,
-  useUserSearch,
-  useUserProfile,
-  useTypingUsers,
-} from "./useUsers";
-
-// Unread count hooks
-export {
-  useUnreadCounts,
-  useChannelUnreadCount,
-  useTeamUnreadCount,
-  useUnreadCountsListener,
-} from "./useUnreadCounts";
-
-// Entity query hook
-export { useEntityQuery } from "./useEntityQuery";
