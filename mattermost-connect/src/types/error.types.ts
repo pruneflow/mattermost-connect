@@ -86,7 +86,7 @@ export type SourceErrorHandler = (
 ) => AppError;
 
 /**
- * Error state for the store
+ * Complete error state for the store
  */
 export interface ErrorState {
   /** List of all errors */
@@ -99,6 +99,10 @@ export interface ErrorState {
   errorsBySource: Record<ErrorSource, AppError[]>;
   /** Errors organized by severity */
   errorsBySeverity: Record<ErrorSeverity, AppError[]>;
+  /** Main error object */
+  error: Error | null;
+  /** Map of errors by ID */
+  errorMap?: Record<string, Error | null>;
 }
 
 /**

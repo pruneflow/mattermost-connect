@@ -26,7 +26,7 @@ export interface WithTimestamps {
  */
 export interface Entity extends WithId, WithTimestamps {}
 
-// --- Loading and error states ---
+// --- Loading state ---
 
 /**
  * Standard loading state
@@ -34,14 +34,6 @@ export interface Entity extends WithId, WithTimestamps {}
 export interface LoadingState {
   isLoading: boolean;
   loadingIds: string[];
-}
-
-/**
- * Standard error state
- */
-export interface ErrorState {
-  error: Error | null;
-  errors: Record<string, Error | null>;
 }
 
 // --- Store state interfaces ---

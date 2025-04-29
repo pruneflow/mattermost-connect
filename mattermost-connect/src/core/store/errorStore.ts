@@ -12,23 +12,16 @@ import {
   ErrorFilter,
   ErrorSeverity,
   ErrorSource,
+  EventType,
+  ErrorState,
 } from "../../types";
 import { emitEvent } from "../api/eventUtils";
-import { EventType } from "../../types/common";
 import { createLoadingSlice } from "./storeUtils";
 
 /**
  * Error store state and actions interface
  */
-interface ErrorStoreState {
-  // State
-  errors: AppError[];
-  lastError: AppError | null;
-  hasUnhandledError: boolean;
-  errorsBySource: Record<ErrorSource, AppError[]>;
-  errorsBySeverity: Record<ErrorSeverity, AppError[]>;
-
-  // Actions
+interface ErrorStoreState extends ErrorState {
   addError: (
     error: Error | ApiError,
     source: ErrorSource,
