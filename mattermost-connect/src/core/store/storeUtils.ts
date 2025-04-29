@@ -8,7 +8,13 @@ import { immer } from "zustand/middleware/immer";
 import { persist, PersistOptions } from "zustand/middleware";
 import { devtools } from "zustand/middleware";
 import { subscribeWithSelector } from "zustand/middleware";
-import { LoadingState, ErrorState, StoreState } from "../../types";
+import {
+  LoadingState,
+  ErrorState,
+  StoreState,
+  ErrorSource,
+  ErrorSeverity,
+} from "../../types";
 
 /**
  * Basic state interface
@@ -24,7 +30,23 @@ export const initialBaseState: BaseState = {
   isLoading: false,
   loadingIds: [],
   error: null,
-  errors: {},
+  errors: [],
+  lastError: null,
+  hasUnhandledError: false,
+  errorsBySource: {
+    [ErrorSource.API]: [],
+    [ErrorSource.AUTH]: [],
+    [ErrorSource.WEBSOCKET]: [],
+    [ErrorSource.UI]: [],
+    [ErrorSource.STORAGE]: [],
+    [ErrorSource.UNKNOWN]: [],
+  },
+  errorsBySeverity: {
+    [ErrorSeverity.INFO]: [],
+    [ErrorSeverity.WARNING]: [],
+    [ErrorSeverity.ERROR]: [],
+    [ErrorSeverity.CRITICAL]: [],
+  },
   lastFetchTimes: {},
   lastUpdated: Date.now(),
 };
@@ -140,10 +162,7 @@ export function createAsyncActionCreator<
  * @param initialState Optional initial state
  * @returns State and actions for loading/error management
  */
-export function createLoadingSlice<
-  S extends LoadingState &
-    ErrorState & { errors: Record<string, Error | null>; loadingIds: string[] },
->(
+export function createLoadingSlice<S extends LoadingState & ErrorState>(
   set: (fn: (state: S) => void) => void,
   initialState?: Partial<LoadingState & ErrorState>,
 ) {
@@ -151,7 +170,23 @@ export function createLoadingSlice<
     isLoading: initialState?.isLoading || false,
     loadingIds: initialState?.loadingIds || [],
     error: initialState?.error || null,
-    errors: initialState?.errors || {},
+    errors: initialState?.errors || [],
+    lastError: initialState?.lastError || null,
+    hasUnhandledError: initialState?.hasUnhandledError || false,
+    errorsBySource: initialState?.errorsBySource || {
+      [ErrorSource.API]: [],
+      [ErrorSource.AUTH]: [],
+      [ErrorSource.WEBSOCKET]: [],
+      [ErrorSource.UI]: [],
+      [ErrorSource.STORAGE]: [],
+      [ErrorSource.UNKNOWN]: [],
+    },
+    errorsBySeverity: initialState?.errorsBySeverity || {
+      [ErrorSeverity.INFO]: [],
+      [ErrorSeverity.WARNING]: [],
+      [ErrorSeverity.ERROR]: [],
+      [ErrorSeverity.CRITICAL]: [],
+    },
 
     setLoading: (isLoading: boolean) =>
       set((state) => {
@@ -182,17 +217,53 @@ export function createLoadingSlice<
 
     setErrorForId: (id: string, error: Error | null) =>
       set((state) => {
-        if (error) {
-          state.errors[id] = error;
-        } else if (state.errors[id]) {
-          delete state.errors[id];
+        // Create errorMap if it doesn't exist yet
+        if (!state.errorMap) {
+          state.errorMap = {};
+        }
+
+        // Handle error addition or removal
+        if (error === null) {
+          // Remove error for this ID
+          if (state.errorMap[id]) {
+            delete state.errorMap[id];
+          }
+        } else {
+          // Store error in the map
+          state.errorMap[id] = error;
+
+          // Set global error if it's the first error
+          if (state.error === null) {
+            state.error = error;
+          }
+        }
+
+        // Update loading state if needed
+        // Remove ID from loading state if error is cleared
+        const loadingIndex = state.loadingIds.indexOf(id);
+        if (error === null && loadingIndex !== -1) {
+          // If we're clearing the error, also remove from loading state
+          state.loadingIds.splice(loadingIndex, 1);
+          // Update global loading state
+          state.isLoading = state.loadingIds.length > 0;
         }
       }),
 
     clearErrors: () =>
       set((state) => {
         state.error = null;
-        state.errors = {};
+        state.errors = [];
+        state.lastError = null;
+        state.hasUnhandledError = false;
+
+        // Réinitialiser les collections d'erreurs
+        Object.keys(state.errorsBySource).forEach((source) => {
+          state.errorsBySource[source as ErrorSource] = [];
+        });
+
+        Object.keys(state.errorsBySeverity).forEach((severity) => {
+          state.errorsBySeverity[severity as ErrorSeverity] = [];
+        });
       }),
   };
 }

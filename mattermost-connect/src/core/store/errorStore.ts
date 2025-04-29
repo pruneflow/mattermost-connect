@@ -12,16 +12,18 @@ import {
   ErrorFilter,
   ErrorSeverity,
   ErrorSource,
-  EventType,
   ErrorState,
+  EventType,
+  LoadingState,
 } from "../../types";
 import { emitEvent } from "../api/eventUtils";
 import { createLoadingSlice } from "./storeUtils";
 
 /**
- * Error store state and actions interface
+ * Enhanced error store state with actions
  */
-interface ErrorStoreState extends ErrorState {
+interface ErrorStoreState extends ErrorState, LoadingState {
+  // Actions - Error Management
   addError: (
     error: Error | ApiError,
     source: ErrorSource,
@@ -34,19 +36,54 @@ interface ErrorStoreState extends ErrorState {
   clearAllErrors: () => void;
   clearErrorsBySource: (source: ErrorSource) => void;
 
-  // Selectors
+  // Selectors - Error Retrieval
   getErrors: (filter?: ErrorFilter) => AppError[];
   getErrorsBySource: (source: ErrorSource) => AppError[];
   getErrorsBySeverity: (severity: ErrorSeverity) => AppError[];
   getLastError: () => AppError | null;
   hasErrors: (filter?: ErrorFilter) => boolean;
+  getUnhandledErrors: () => AppError[];
+
+  setLoading: (isLoading: boolean) => void;
+  setLoadingId: (id: string, isLoading: boolean) => void;
+  setError: (error: Error | null) => void;
+  setErrorForId: (id: string, error: Error | null) => void;
 
   // Reset
   reset: () => void;
 }
 
 /**
+ * Initial state for the error store
+ */
+const initialState: ErrorState = {
+  errors: [],
+  lastError: null,
+  hasUnhandledError: false,
+  errorsBySource: {
+    [ErrorSource.API]: [],
+    [ErrorSource.AUTH]: [],
+    [ErrorSource.WEBSOCKET]: [],
+    [ErrorSource.UI]: [],
+    [ErrorSource.STORAGE]: [],
+    [ErrorSource.UNKNOWN]: [],
+  },
+  errorsBySeverity: {
+    [ErrorSeverity.INFO]: [],
+    [ErrorSeverity.WARNING]: [],
+    [ErrorSeverity.ERROR]: [],
+    [ErrorSeverity.CRITICAL]: [],
+  },
+  error: null,
+};
+
+/**
  * Creates an AppError from an Error or ApiError
+ * @param error Original error
+ * @param source Error source
+ * @param severity Error severity
+ * @param metadata Additional context
+ * @returns Structured AppError
  */
 function createAppError(
   error: Error | ApiError,
@@ -70,31 +107,19 @@ function createAppError(
 }
 
 /**
- * Global error store implementation with Zustand and immer middleware
+ * Error store implementation with Zustand and immer middleware
  */
 export const useErrorStore = create<ErrorStoreState>()(
   immer((set, get) => {
     // Create standard loading slice
-    const loadingSlice = createLoadingSlice<any>(set);
+    const loadingSlice = createLoadingSlice<ErrorStoreState>(set);
+
+    // Note: loadingSlice contient déjà les champs errors, errorsBySource, etc.
+    // car nous avons corrigé le createLoadingSlice dans storeUtils.ts
 
     return {
       // Initial state
-      lastError: null,
-      hasUnhandledError: false,
-      errorsBySource: {
-        [ErrorSource.API]: [],
-        [ErrorSource.AUTH]: [],
-        [ErrorSource.WEBSOCKET]: [],
-        [ErrorSource.UI]: [],
-        [ErrorSource.STORAGE]: [],
-        [ErrorSource.UNKNOWN]: [],
-      },
-      errorsBySeverity: {
-        [ErrorSeverity.INFO]: [],
-        [ErrorSeverity.WARNING]: [],
-        [ErrorSeverity.ERROR]: [],
-        [ErrorSeverity.CRITICAL]: [],
-      },
+      ...initialState,
 
       // Include loading slice properties
       ...loadingSlice,
@@ -107,7 +132,12 @@ export const useErrorStore = create<ErrorStoreState>()(
        * @param metadata Additional contextual information
        * @returns The created AppError
        */
-      addError: (error, source, severity = ErrorSeverity.ERROR, metadata) => {
+      addError: (
+        error: Error | ApiError,
+        source: ErrorSource = ErrorSource.UNKNOWN,
+        severity: ErrorSeverity = ErrorSeverity.ERROR,
+        metadata?: Record<string, any>,
+      ): AppError => {
         const appError = createAppError(error, source, severity, metadata);
 
         set((state) => {
@@ -121,10 +151,16 @@ export const useErrorStore = create<ErrorStoreState>()(
           // Update last error and unhandled state
           state.lastError = appError;
           state.hasUnhandledError = true;
+
+          // Set the main error property
+          state.error = error;
         });
 
         // Emit error event for subscribers
-        emitEvent(EventType.ERROR_OCCURRED, { error: appError });
+        emitEvent(EventType.ERROR_OCCURRED, {
+          error: appError,
+          isNew: true,
+        });
 
         // Log errors to console in development
         if (process.env.NODE_ENV !== "production") {
@@ -138,12 +174,13 @@ export const useErrorStore = create<ErrorStoreState>()(
        * Marks a specific error as handled
        * @param errorId ID of the error to mark as handled
        */
-      handleError: (errorId) => {
+      handleError: (errorId: string): void => {
         set((state) => {
           // Find the error
           const errorIndex = state.errors.findIndex(
             (error: AppError) => error.id === errorId,
           );
+
           if (errorIndex === -1) return;
 
           // Mark as handled
@@ -154,6 +191,7 @@ export const useErrorStore = create<ErrorStoreState>()(
           const sourceIndex = state.errorsBySource[error.source].findIndex(
             (e: AppError) => e.id === errorId,
           );
+
           const severityIndex = state.errorsBySeverity[
             error.severity
           ].findIndex((e: AppError) => e.id === errorId);
@@ -177,7 +215,7 @@ export const useErrorStore = create<ErrorStoreState>()(
       /**
        * Marks all errors as handled
        */
-      handleAllErrors: () => {
+      handleAllErrors: (): void => {
         set((state) => {
           // Mark all errors as handled
           state.errors.forEach((error: AppError) => {
@@ -202,6 +240,7 @@ export const useErrorStore = create<ErrorStoreState>()(
           state.hasUnhandledError = false;
         });
 
+        // Emit event for subscribers
         emitEvent(EventType.ERRORS_CLEARED, { partial: false });
       },
 
@@ -209,10 +248,16 @@ export const useErrorStore = create<ErrorStoreState>()(
        * Clears errors based on filter criteria
        * @param filter Criteria to filter errors for removal
        */
-      clearErrors: (filter) => {
-        if (!filter) return;
+      clearErrors: (filter?: ErrorFilter): void => {
+        if (!filter) {
+          get().clearAllErrors();
+          return;
+        }
 
         set((state) => {
+          // Keep track of removed errors for index cleanup
+          const removedErrorIds = new Set<string>();
+
           // Filter errors based on criteria
           state.errors = state.errors.filter((error: AppError) => {
             // If any filter criteria don't match, keep the error
@@ -225,75 +270,83 @@ export const useErrorStore = create<ErrorStoreState>()(
             )
               return true;
             if (filter.since && error.timestamp < filter.since) return true;
+            if (
+              filter.messageContains &&
+              !error.message.includes(filter.messageContains)
+            )
+              return true;
 
-            // All criteria matched, filter out this error
+            // All criteria matched, mark for removal
+            removedErrorIds.add(error.id);
             return false;
           });
 
-          // Rebuild the indexes
-          state.errorsBySource = {
-            [ErrorSource.API]: [],
-            [ErrorSource.AUTH]: [],
-            [ErrorSource.WEBSOCKET]: [],
-            [ErrorSource.UI]: [],
-            [ErrorSource.STORAGE]: [],
-            [ErrorSource.UNKNOWN]: [],
-          };
+          // Rebuild the indexes if there were removals
+          if (removedErrorIds.size > 0) {
+            // Remove from source indexes
+            Object.keys(state.errorsBySource).forEach((sourceKey) => {
+              const source = sourceKey as ErrorSource;
+              state.errorsBySource[source] = state.errorsBySource[
+                source
+              ].filter((error: AppError) => !removedErrorIds.has(error.id));
+            });
 
-          state.errorsBySeverity = {
-            [ErrorSeverity.INFO]: [],
-            [ErrorSeverity.WARNING]: [],
-            [ErrorSeverity.ERROR]: [],
-            [ErrorSeverity.CRITICAL]: [],
-          };
+            // Remove from severity indexes
+            Object.keys(state.errorsBySeverity).forEach((severityKey) => {
+              const severity = severityKey as ErrorSeverity;
+              state.errorsBySeverity[severity] = state.errorsBySeverity[
+                severity
+              ].filter((error: AppError) => !removedErrorIds.has(error.id));
+            });
 
-          // Rebuild indexes with remaining errors
-          state.errors.forEach((error: AppError) => {
-            state.errorsBySource[error.source].push(error);
-            state.errorsBySeverity[error.severity].push(error);
-          });
+            // Update last error and unhandled state
+            state.lastError =
+              state.errors.length > 0
+                ? state.errors[state.errors.length - 1]
+                : null;
 
-          // Update last error and unhandled state
-          state.lastError =
-            state.errors.length > 0
-              ? state.errors[state.errors.length - 1]
-              : null;
+            state.hasUnhandledError = state.errors.some(
+              (error: AppError) => !error.handled,
+            );
 
-          state.hasUnhandledError = state.errors.some(
-            (error: AppError) => !error.handled,
-          );
+            // Reset main error if all errors are cleared
+            if (state.errors.length === 0) {
+              state.error = null;
+            }
+          }
         });
 
-        emitEvent(EventType.ERRORS_CLEARED, { partial: true, filter });
+        // Emit event for subscribers
+        emitEvent(EventType.ERRORS_CLEARED, {
+          partial: true,
+          filter,
+        });
       },
 
       /**
        * Clears all errors from the store
        */
-      clearAllErrors: () => {
+      clearAllErrors: (): void => {
         set((state) => {
+          // Reset to initial state
           state.errors = [];
           state.lastError = null;
           state.hasUnhandledError = false;
+          state.error = null;
 
           // Reset indexes
-          state.errorsBySource = {
-            [ErrorSource.API]: [],
-            [ErrorSource.AUTH]: [],
-            [ErrorSource.WEBSOCKET]: [],
-            [ErrorSource.UI]: [],
-            [ErrorSource.STORAGE]: [],
-            [ErrorSource.UNKNOWN]: [],
-          };
+          Object.keys(state.errorsBySource).forEach((sourceKey) => {
+            const source = sourceKey as ErrorSource;
+            state.errorsBySource[source] = [];
+          });
 
-          state.errorsBySeverity = {
-            [ErrorSeverity.INFO]: [],
-            [ErrorSeverity.WARNING]: [],
-            [ErrorSeverity.ERROR]: [],
-            [ErrorSeverity.CRITICAL]: [],
-          };
+          Object.keys(state.errorsBySeverity).forEach((severityKey) => {
+            const severity = severityKey as ErrorSeverity;
+            state.errorsBySeverity[severity] = [];
+          });
         });
 
+        // Emit event for subscribers
         emitEvent(EventType.ERRORS_CLEARED, { partial: false });
       },
 
@@ -301,12 +354,15 @@ export const useErrorStore = create<ErrorStoreState>()(
        * Clears all errors from a specific source
        * @param source Error source to clear
        */
-      clearErrorsBySource: (source: ErrorSource) => {
+      clearErrorsBySource: (source: ErrorSource): void => {
         set((state) => {
           // Get error IDs to remove
           const errorIdsToRemove = new Set(
             state.errorsBySource[source].map((e: AppError) => e.id),
           );
+
+          // Skip if no errors to remove
+          if (errorIdsToRemove.size === 0) return;
 
           // Filter main errors array
           state.errors = state.errors.filter(
@@ -333,8 +389,14 @@ export const useErrorStore = create<ErrorStoreState>()(
           state.hasUnhandledError = state.errors.some(
             (error: AppError) => !error.handled,
           );
+
+          // Reset main error if all errors are cleared
+          if (state.errors.length === 0) {
+            state.error = null;
+          }
         });
 
+        // Emit event for subscribers
         emitEvent(EventType.ERRORS_CLEARED, {
           partial: true,
           filter: { source },
@@ -346,7 +408,7 @@ export const useErrorStore = create<ErrorStoreState>()(
        * @param filter Criteria to filter errors
        * @returns Filtered errors
        */
-      getErrors: (filter) => {
+      getErrors: (filter?: ErrorFilter): AppError[] => {
         const { errors } = get();
 
         if (!filter) return errors;
@@ -358,7 +420,14 @@ export const useErrorStore = create<ErrorStoreState>()(
             return false;
           if (filter.handled !== undefined && error.handled !== filter.handled)
             return false;
-          return !(filter.since && error.timestamp < filter.since);
+          if (filter.since && error.timestamp < filter.since) return false;
+          if (
+            filter.messageContains &&
+            !error.message.includes(filter.messageContains)
+          )
+            return false;
+
+          return true;
         });
       },
 
@@ -367,7 +436,7 @@ export const useErrorStore = create<ErrorStoreState>()(
        * @param source Error source
        * @returns Errors from that source
        */
-      getErrorsBySource: (source: ErrorSource) => {
+      getErrorsBySource: (source: ErrorSource): AppError[] => {
         return get().errorsBySource[source];
       },
 
@@ -376,7 +445,7 @@ export const useErrorStore = create<ErrorStoreState>()(
        * @param severity Error severity
        * @returns Errors of that severity
        */
-      getErrorsBySeverity: (severity: ErrorSeverity) => {
+      getErrorsBySeverity: (severity: ErrorSeverity): AppError[] => {
         return get().errorsBySeverity[severity];
       },
 
@@ -384,8 +453,16 @@ export const useErrorStore = create<ErrorStoreState>()(
        * Gets the last error that occurred
        * @returns The last error or null
        */
-      getLastError: () => {
+      getLastError: (): AppError | null => {
         return get().lastError;
+      },
+
+      /**
+       * Gets all unhandled errors
+       * @returns List of unhandled errors
+       */
+      getUnhandledErrors: (): AppError[] => {
+        return get().errors.filter((error: AppError) => !error.handled);
       },
 
       /**
@@ -393,32 +470,21 @@ export const useErrorStore = create<ErrorStoreState>()(
        * @param filter Criteria to filter errors
        * @returns Whether matching errors exist
        */
-      hasErrors: (filter?) => {
+      hasErrors: (filter?: ErrorFilter): boolean => {
         return get().getErrors(filter).length > 0;
       },
 
       /**
        * Resets the store to its initial state
        */
-      reset: () => {
+      reset: (): void => {
         set((state) => {
-          state.errors = [];
-          state.lastError = null;
-          state.hasUnhandledError = false;
-          state.errorsBySource = {
-            [ErrorSource.API]: [],
-            [ErrorSource.AUTH]: [],
-            [ErrorSource.WEBSOCKET]: [],
-            [ErrorSource.UI]: [],
-            [ErrorSource.STORAGE]: [],
-            [ErrorSource.UNKNOWN]: [],
-          };
-          state.errorsBySeverity = {
-            [ErrorSeverity.INFO]: [],
-            [ErrorSeverity.WARNING]: [],
-            [ErrorSeverity.ERROR]: [],
-            [ErrorSeverity.CRITICAL]: [],
-          };
+          // Reset to initial state
+          Object.assign(state, initialState);
+
+          // Reset loading state
+          state.isLoading = false;
+          state.loadingIds = [];
         });
       },
     };
@@ -454,7 +520,7 @@ export function createErrorHandler(source: ErrorSource) {
     error: Error | ApiError,
     severity: ErrorSeverity = ErrorSeverity.ERROR,
     metadata?: Record<string, any>,
-  ) => {
+  ): AppError => {
     return handleError(error, source, severity, metadata);
   };
 }
