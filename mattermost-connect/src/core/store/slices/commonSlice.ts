@@ -3,7 +3,14 @@
  * Common slice for Zustand stores
  * Provides reusable state and actions using Zustand's native patterns
  */
-import { LoadingState, ErrorState, StoreState } from "../../../types";
+import {
+  LoadingState,
+  ErrorState,
+  StoreState,
+  ErrorSource,
+  AppError,
+  ErrorSeverity,
+} from "../../../types";
 
 /**
  * Interface for common slice state
@@ -36,9 +43,13 @@ export const initialCommonState: CommonSlice = {
   isLoading: false,
   loadingIds: [],
   error: null,
-  errors: {},
+  errors: [],
   lastUpdated: Date.now(),
   lastFetchTimes: {},
+  lastError: null,
+  hasUnhandledError: false,
+  errorsBySource: {} as Record<ErrorSource, AppError[]>,
+  errorsBySeverity: {} as Record<ErrorSeverity, AppError[]>,
 };
 
 /**
