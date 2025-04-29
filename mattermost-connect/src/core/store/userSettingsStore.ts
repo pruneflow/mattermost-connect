@@ -20,9 +20,11 @@ import {
   MessageDisplay,
   EventType,
   ErrorSource,
+  ErrorSeverity,
 } from "../../types";
 import { handleError } from "./errorStore";
 import { emitEvent } from "../api/eventUtils";
+import { createCommonSlice } from "./slices/commonSlice";
 
 /**
  * Default notification settings
@@ -71,602 +73,855 @@ const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
 };
 
 /**
- * Enhanced user settings store state with actions
- */
-interface UserSettingsStoreState extends UserSettingsState {
-  // Favorites Actions
-  toggleFavorite: (channelId: string) => void;
-  addFavorite: (channelId: string) => void;
-  removeFavorite: (channelId: string) => void;
-  getFavorites: () => string[];
-  isFavorite: (channelId: string) => boolean;
-
-  // Muted Channels Actions
-  toggleMuted: (channelId: string) => void;
-  muteChannel: (channelId: string, expirationTime?: number) => void;
-  unmuteChannel: (channelId: string) => void;
-  getMutedChannels: () => string[];
-  isChannelMuted: (channelId: string) => boolean;
-
-  // Appearance Actions
-  setTheme: (theme: ThemeOption) => void;
-  setAppearanceSetting: <K extends keyof AppearanceSettings>(
-    key: K,
-    value: AppearanceSettings[K],
-  ) => void;
-  getAppearanceSettings: () => AppearanceSettings;
-
-  // Notification Actions
-  setNotificationSetting: <K extends keyof NotificationSettings>(
-    key: K,
-    value: NotificationSettings[K],
-  ) => void;
-  setChannelNotificationOverride: (
-    channelId: string,
-    setting: "desktop" | "mobile" | "email",
-    level: NotificationLevel,
-  ) => void;
-  getNotificationSettings: () => NotificationSettings;
-  getChannelNotificationOverride: (
-    channelId: string,
-    setting: "desktop" | "mobile" | "email",
-  ) => NotificationLevel | undefined;
-
-  // Privacy Actions
-  setPrivacySetting: <K extends keyof PrivacySettings>(
-    key: K,
-    value: PrivacySettings[K],
-  ) => void;
-  getPrivacySettings: () => PrivacySettings;
-
-  // Advanced Actions
-  setAdvancedSetting: <K extends keyof AdvancedSettings>(
-    key: K,
-    value: AdvancedSettings[K],
-  ) => void;
-  getAdvancedSettings: () => AdvancedSettings;
-
-  // Language Setting
-  setLanguage: (langCode: string) => void;
-  getLanguage: () => string;
-
-  // Reset Actions
-  resetAppearanceSettings: () => void;
-  resetNotificationSettings: () => void;
-  resetPrivacySettings: () => void;
-  resetAdvancedSettings: () => void;
-  resetAllSettings: (preservePreferences?: boolean) => void;
-  reset: () => void;
-}
-
-/**
- * Type for persisted state to ensure proper storage and retrieval
- */
-interface PersistedState {
-  favorites: string[];
-  mutedChannels: string[];
-  notifications: NotificationSettings;
-  appearance: AppearanceSettings;
-  privacy: PrivacySettings;
-  advanced: AdvancedSettings;
-  lastUpdated: number;
-}
-
-/**
  * Creates and exports the userSettingsStore using Zustand
  * Optimized with immer for immutability and persist for localStorage persistence
  */
-export const useUserSettingsStore = create<UserSettingsStoreState>()(
+export const useUserSettingsStore = create<
+  UserSettingsState & {
+    // Favorites Actions
+    toggleFavorite: (channelId: string) => void;
+    addFavorite: (channelId: string) => void;
+    removeFavorite: (channelId: string) => void;
+    getFavorites: () => string[];
+    isFavorite: (channelId: string) => boolean;
+
+    // Muted Channels Actions
+    toggleMuted: (channelId: string) => void;
+    muteChannel: (channelId: string, expirationTime?: number) => void;
+    unmuteChannel: (channelId: string) => void;
+    getMutedChannels: () => string[];
+    isChannelMuted: (channelId: string) => boolean;
+
+    // Appearance Actions
+    setTheme: (theme: ThemeOption) => void;
+    setAppearanceSetting: <K extends keyof AppearanceSettings>(
+      key: K,
+      value: AppearanceSettings[K],
+    ) => void;
+    getAppearanceSettings: () => AppearanceSettings;
+
+    // Notification Actions
+    setNotificationSetting: <K extends keyof NotificationSettings>(
+      key: K,
+      value: NotificationSettings[K],
+    ) => void;
+    setChannelNotificationOverride: (
+      channelId: string,
+      setting: "desktop" | "mobile" | "email",
+      level: NotificationLevel,
+    ) => void;
+    getNotificationSettings: () => NotificationSettings;
+    getChannelNotificationOverride: (
+      channelId: string,
+      setting: "desktop" | "mobile" | "email",
+    ) => NotificationLevel | undefined;
+
+    // Privacy Actions
+    setPrivacySetting: <K extends keyof PrivacySettings>(
+      key: K,
+      value: PrivacySettings[K],
+    ) => void;
+    getPrivacySettings: () => PrivacySettings;
+
+    // Advanced Actions
+    setAdvancedSetting: <K extends keyof AdvancedSettings>(
+      key: K,
+      value: AdvancedSettings[K],
+    ) => void;
+    getAdvancedSettings: () => AdvancedSettings;
+
+    // Language Setting
+    setLanguage: (langCode: string) => void;
+    getLanguage: () => string;
+
+    // Reset Actions
+    resetAppearanceSettings: () => void;
+    resetNotificationSettings: () => void;
+    resetPrivacySettings: () => void;
+    resetAdvancedSettings: () => void;
+    resetAllSettings: (preservePreferences?: boolean) => void;
+    reset: () => void;
+  }
+>()(
   persist(
-    immer((set, get) => ({
-      // Initial state
-      favorites: new Set<string>(),
-      mutedChannels: new Set<string>(),
-      notifications: DEFAULT_NOTIFICATION_SETTINGS,
-      appearance: DEFAULT_APPEARANCE_SETTINGS,
-      privacy: DEFAULT_PRIVACY_SETTINGS,
-      advanced: DEFAULT_ADVANCED_SETTINGS,
-      lastUpdated: Date.now(),
+    immer((set, get) => {
+      // Create common slice for standardized state management
+      const commonSlice = createCommonSlice<UserSettingsState>(set);
 
-      // ===== Favorites Actions =====
+      return {
+        // Include common slice for standardized loading/error state
+        ...commonSlice,
 
-      /**
-       * Toggles favorite status of a channel
-       */
-      toggleFavorite: (channelId: string) => {
-        set((state) => {
-          const isFavorite = state.favorites.has(channelId);
+        // Initial state
+        favorites: new Set<string>(),
+        mutedChannels: new Set<string>(),
+        notifications: DEFAULT_NOTIFICATION_SETTINGS,
+        appearance: DEFAULT_APPEARANCE_SETTINGS,
+        privacy: DEFAULT_PRIVACY_SETTINGS,
+        advanced: DEFAULT_ADVANCED_SETTINGS,
 
-          if (isFavorite) {
-            state.favorites.delete(channelId);
-          } else {
-            state.favorites.add(channelId);
-          }
+        // ===== Favorites Actions =====
 
-          state.lastUpdated = Date.now();
-        });
+        /**
+         * Toggles favorite status of a channel
+         */
+        toggleFavorite: (channelId: string) => {
+          try {
+            set((state) => {
+              const isFavorite = state.favorites.has(channelId);
 
-        // Emit settings changed event
-        const isFavorite = get().favorites.has(channelId);
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.FAVORITES,
-          channelId,
-          value: isFavorite,
-        });
-      },
-
-      /**
-       * Adds a channel to favorites
-       */
-      addFavorite: (channelId: string) => {
-        // Skip if already a favorite
-        if (get().favorites.has(channelId)) return;
-
-        set((state) => {
-          state.favorites.add(channelId);
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.FAVORITES,
-          channelId,
-          value: true,
-        });
-      },
-
-      /**
-       * Removes a channel from favorites
-       */
-      removeFavorite: (channelId: string) => {
-        // Skip if not a favorite
-        if (!get().favorites.has(channelId)) return;
-
-        set((state) => {
-          state.favorites.delete(channelId);
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.FAVORITES,
-          channelId,
-          value: false,
-        });
-      },
-
-      /**
-       * Gets all favorite channel IDs
-       */
-      getFavorites: () => {
-        return Array.from(get().favorites);
-      },
-
-      /**
-       * Checks if a channel is a favorite
-       */
-      isFavorite: (channelId: string) => {
-        return get().favorites.has(channelId);
-      },
-
-      // ===== Muted Channels Actions =====
-
-      /**
-       * Toggles muted status of a channel
-       */
-      toggleMuted: (channelId: string) => {
-        set((state) => {
-          const isMuted = state.mutedChannels.has(channelId);
-
-          if (isMuted) {
-            state.mutedChannels.delete(channelId);
-          } else {
-            state.mutedChannels.add(channelId);
-          }
-
-          state.lastUpdated = Date.now();
-        });
-
-        // Emit settings changed event
-        const isMuted = get().mutedChannels.has(channelId);
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.MUTED_CHANNELS,
-          channelId,
-          value: isMuted,
-        });
-      },
-
-      /**
-       * Mutes a channel
-       */
-      muteChannel: (channelId: string, expirationTime?: number) => {
-        // Skip if already muted
-        if (get().mutedChannels.has(channelId)) return;
-
-        set((state) => {
-          state.mutedChannels.add(channelId);
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.MUTED_CHANNELS,
-          channelId,
-          value: true,
-          expirationTime,
-        });
-
-        // If expiration time is set, schedule unmute
-        if (expirationTime) {
-          const timeoutMs = expirationTime - Date.now();
-          if (timeoutMs > 0) {
-            setTimeout(() => {
-              const store = get();
-              if (store.mutedChannels.has(channelId)) {
-                store.unmuteChannel(channelId);
+              if (isFavorite) {
+                state.favorites.delete(channelId);
+              } else {
+                state.favorites.add(channelId);
               }
-            }, timeoutMs);
+
+              state.lastUpdated = Date.now();
+            });
+
+            // Emit settings changed event
+            const isFavorite = get().favorites.has(channelId);
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.FAVORITES,
+              channelId,
+              value: isFavorite,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "toggleFavorite",
+              channelId,
+            });
           }
-        }
-      },
+        },
 
-      /**
-       * Unmutes a channel
-       */
-      unmuteChannel: (channelId: string) => {
-        // Skip if not muted
-        if (!get().mutedChannels.has(channelId)) return;
+        /**
+         * Adds a channel to favorites
+         */
+        addFavorite: (channelId: string) => {
+          try {
+            // Skip if already a favorite
+            if (get().favorites.has(channelId)) return;
 
-        set((state) => {
-          state.mutedChannels.delete(channelId);
-          state.lastUpdated = Date.now();
-        });
+            set((state) => {
+              state.favorites.add(channelId);
+              state.lastUpdated = Date.now();
+            });
 
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.MUTED_CHANNELS,
-          channelId,
-          value: false,
-        });
-      },
-
-      /**
-       * Gets all muted channel IDs
-       */
-      getMutedChannels: () => {
-        return Array.from(get().mutedChannels);
-      },
-
-      /**
-       * Checks if a channel is muted
-       */
-      isChannelMuted: (channelId: string) => {
-        return get().mutedChannels.has(channelId);
-      },
-
-      // ===== Appearance Actions =====
-
-      /**
-       * Sets the application theme
-       */
-      setTheme: (theme: ThemeOption) => {
-        set((state) => {
-          state.appearance.theme = theme;
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.THEME,
-          value: theme,
-        });
-      },
-
-      /**
-       * Sets a specific appearance setting
-       */
-      setAppearanceSetting: <K extends keyof AppearanceSettings>(
-        key: K,
-        value: AppearanceSettings[K],
-      ) => {
-        set((state) => {
-          state.appearance[key] = value;
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.APPEARANCE,
-          key,
-          value,
-        });
-      },
-
-      /**
-       * Gets all appearance settings
-       */
-      getAppearanceSettings: () => {
-        return { ...get().appearance };
-      },
-
-      // ===== Notification Actions =====
-
-      /**
-       * Sets a notification setting
-       */
-      setNotificationSetting: <K extends keyof NotificationSettings>(
-        key: K,
-        value: NotificationSettings[K],
-      ) => {
-        set((state) => {
-          if (key === "channelOverrides") {
-            // Deep clone for nested objects
-            state.notifications.channelOverrides =
-              value as NotificationSettings["channelOverrides"];
-          } else {
-            state.notifications[key] = value;
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.FAVORITES,
+              channelId,
+              value: true,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "addFavorite",
+              channelId,
+            });
           }
-          state.lastUpdated = Date.now();
-        });
+        },
 
-        // Don't emit events for complex objects
-        if (key !== "channelOverrides") {
-          emitEvent(EventType.SETTINGS_CHANGED, {
-            setting: PreferenceKey.NOTIFICATIONS,
-            key,
-            value,
-          });
-        }
-      },
+        /**
+         * Removes a channel from favorites
+         */
+        removeFavorite: (channelId: string) => {
+          try {
+            // Skip if not a favorite
+            if (!get().favorites.has(channelId)) return;
 
-      /**
-       * Sets notification override for a specific channel
-       */
-      setChannelNotificationOverride: (
-        channelId: string,
-        setting: "desktop" | "mobile" | "email",
-        level: NotificationLevel,
-      ) => {
-        set((state) => {
-          const currentOverrides = state.notifications.channelOverrides || {};
-          const channelOverride = currentOverrides[channelId] || {};
+            set((state) => {
+              state.favorites.delete(channelId);
+              state.lastUpdated = Date.now();
+            });
 
-          // Update with new override
-          state.notifications.channelOverrides = {
-            ...currentOverrides,
-            [channelId]: {
-              ...channelOverride,
-              [setting]: level,
-            },
-          };
-
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.NOTIFICATIONS,
-          channelId,
-          key: setting,
-          value: level,
-        });
-      },
-
-      /**
-       * Gets all notification settings
-       */
-      getNotificationSettings: () => {
-        return { ...get().notifications };
-      },
-
-      /**
-       * Gets notification override for a channel
-       */
-      getChannelNotificationOverride: (
-        channelId: string,
-        setting: "desktop" | "mobile" | "email",
-      ) => {
-        const { notifications } = get();
-        const channelOverrides = notifications.channelOverrides || {};
-        const channelOverride = channelOverrides[channelId];
-
-        return channelOverride ? channelOverride[setting] : undefined;
-      },
-
-      // ===== Privacy Actions =====
-
-      /**
-       * Sets a privacy setting
-       */
-      setPrivacySetting: <K extends keyof PrivacySettings>(
-        key: K,
-        value: PrivacySettings[K],
-      ) => {
-        set((state) => {
-          state.privacy[key] = value;
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.PRIVACY,
-          key,
-          value,
-        });
-      },
-
-      /**
-       * Gets all privacy settings
-       */
-      getPrivacySettings: () => {
-        return { ...get().privacy };
-      },
-
-      // ===== Advanced Settings Actions =====
-
-      /**
-       * Sets an advanced setting
-       */
-      setAdvancedSetting: <K extends keyof AdvancedSettings>(
-        key: K,
-        value: AdvancedSettings[K],
-      ) => {
-        set((state) => {
-          state.advanced[key] = value;
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.ADVANCED,
-          key,
-          value,
-        });
-      },
-
-      /**
-       * Gets all advanced settings
-       */
-      getAdvancedSettings: () => {
-        return { ...get().advanced };
-      },
-
-      // ===== Language Setting =====
-
-      /**
-       * Sets the application language
-       */
-      setLanguage: (langCode: string) => {
-        set((state) => {
-          state.appearance.language = langCode;
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.LANGUAGE,
-          value: langCode,
-        });
-      },
-
-      /**
-       * Gets the current language setting
-       */
-      getLanguage: () => {
-        return get().appearance.language || "en";
-      },
-
-      // ===== Reset Actions =====
-
-      /**
-       * Resets appearance settings to defaults
-       */
-      resetAppearanceSettings: () => {
-        set((state) => {
-          // Preserve language when resetting appearance
-          const currentLang = state.appearance.language;
-          state.appearance = {
-            ...DEFAULT_APPEARANCE_SETTINGS,
-            language: currentLang,
-          };
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.APPEARANCE,
-          reset: true,
-        });
-      },
-
-      /**
-       * Resets notification settings to defaults
-       */
-      resetNotificationSettings: () => {
-        set((state) => {
-          state.notifications = { ...DEFAULT_NOTIFICATION_SETTINGS };
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.NOTIFICATIONS,
-          reset: true,
-        });
-      },
-
-      /**
-       * Resets privacy settings to defaults
-       */
-      resetPrivacySettings: () => {
-        set((state) => {
-          state.privacy = { ...DEFAULT_PRIVACY_SETTINGS };
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.PRIVACY,
-          reset: true,
-        });
-      },
-
-      /**
-       * Resets advanced settings to defaults
-       */
-      resetAdvancedSettings: () => {
-        set((state) => {
-          state.advanced = { ...DEFAULT_ADVANCED_SETTINGS };
-          state.lastUpdated = Date.now();
-        });
-
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.ADVANCED,
-          reset: true,
-        });
-      },
-
-      /**
-       * Resets all settings to defaults
-       * @param preservePreferences If true, keeps favorites and muted channels
-       */
-      resetAllSettings: (preservePreferences = false) => {
-        set((state) => {
-          const favorites = preservePreferences
-            ? state.favorites
-            : new Set<string>();
-          const mutedChannels = preservePreferences
-            ? state.mutedChannels
-            : new Set<string>();
-
-          state.notifications = { ...DEFAULT_NOTIFICATION_SETTINGS };
-          state.appearance = { ...DEFAULT_APPEARANCE_SETTINGS };
-          state.privacy = { ...DEFAULT_PRIVACY_SETTINGS };
-          state.advanced = { ...DEFAULT_ADVANCED_SETTINGS };
-
-          // Only reset these if preservePreferences is false
-          if (!preservePreferences) {
-            state.favorites = new Set<string>();
-            state.mutedChannels = new Set<string>();
-          } else {
-            state.favorites = favorites;
-            state.mutedChannels = mutedChannels;
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.FAVORITES,
+              channelId,
+              value: false,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "removeFavorite",
+              channelId,
+            });
           }
+        },
 
-          state.lastUpdated = Date.now();
-        });
+        /**
+         * Gets all favorite channel IDs
+         */
+        getFavorites: () => {
+          try {
+            return Array.from(get().favorites);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getFavorites",
+            });
+            return [];
+          }
+        },
 
-        emitEvent(EventType.SETTINGS_CHANGED, {
-          reset: true,
-          preservePreferences,
-        });
-      },
+        /**
+         * Checks if a channel is a favorite
+         */
+        isFavorite: (channelId: string) => {
+          try {
+            return get().favorites.has(channelId);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "isFavorite",
+              channelId,
+            });
+            return false;
+          }
+        },
 
-      /**
-       * Resets the store to initial state
-       * Used primarily for logout
-       */
-      reset: () => {
-        set({
-          favorites: new Set<string>(),
-          mutedChannels: new Set<string>(),
-          notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
-          appearance: { ...DEFAULT_APPEARANCE_SETTINGS },
-          privacy: { ...DEFAULT_PRIVACY_SETTINGS },
-          advanced: { ...DEFAULT_ADVANCED_SETTINGS },
-          lastUpdated: Date.now(),
-        });
+        // ===== Muted Channels Actions =====
 
-        emitEvent(EventType.SETTINGS_CHANGED, { reset: true });
-      },
-    })),
+        /**
+         * Toggles muted status of a channel
+         */
+        toggleMuted: (channelId: string) => {
+          try {
+            set((state) => {
+              const isMuted = state.mutedChannels.has(channelId);
+
+              if (isMuted) {
+                state.mutedChannels.delete(channelId);
+              } else {
+                state.mutedChannels.add(channelId);
+              }
+
+              state.lastUpdated = Date.now();
+            });
+
+            // Emit settings changed event
+            const isMuted = get().mutedChannels.has(channelId);
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.MUTED_CHANNELS,
+              channelId,
+              value: isMuted,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "toggleMuted",
+              channelId,
+            });
+          }
+        },
+
+        /**
+         * Mutes a channel
+         */
+        muteChannel: (channelId: string, expirationTime?: number) => {
+          try {
+            // Skip if already muted
+            if (get().mutedChannels.has(channelId)) return;
+
+            set((state) => {
+              state.mutedChannels.add(channelId);
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.MUTED_CHANNELS,
+              channelId,
+              value: true,
+              expirationTime,
+            });
+
+            // If expiration time is set, schedule unmute
+            if (expirationTime) {
+              const timeoutMs = expirationTime - Date.now();
+              if (timeoutMs > 0) {
+                setTimeout(() => {
+                  const store = get();
+                  if (store.mutedChannels.has(channelId)) {
+                    store.unmuteChannel(channelId);
+                  }
+                }, timeoutMs);
+              }
+            }
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "muteChannel",
+              channelId,
+              expirationTime,
+            });
+          }
+        },
+
+        /**
+         * Unmutes a channel
+         */
+        unmuteChannel: (channelId: string) => {
+          try {
+            // Skip if not muted
+            if (!get().mutedChannels.has(channelId)) return;
+
+            set((state) => {
+              state.mutedChannels.delete(channelId);
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.MUTED_CHANNELS,
+              channelId,
+              value: false,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "unmuteChannel",
+              channelId,
+            });
+          }
+        },
+
+        /**
+         * Gets all muted channel IDs
+         */
+        getMutedChannels: () => {
+          try {
+            return Array.from(get().mutedChannels);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getMutedChannels",
+            });
+            return [];
+          }
+        },
+
+        /**
+         * Checks if a channel is muted
+         */
+        isChannelMuted: (channelId: string) => {
+          try {
+            return get().mutedChannels.has(channelId);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "isChannelMuted",
+              channelId,
+            });
+            return false;
+          }
+        },
+
+        // ===== Appearance Actions =====
+
+        /**
+         * Sets the application theme
+         */
+        setTheme: (theme: ThemeOption) => {
+          try {
+            set((state) => {
+              state.appearance.theme = theme;
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.THEME,
+              value: theme,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setTheme",
+              theme,
+            });
+          }
+        },
+
+        /**
+         * Sets a specific appearance setting
+         */
+        setAppearanceSetting: <K extends keyof AppearanceSettings>(
+          key: K,
+          value: AppearanceSettings[K],
+        ) => {
+          try {
+            set((state) => {
+              state.appearance[key] = value;
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.APPEARANCE,
+              key,
+              value,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setAppearanceSetting",
+              key: String(key),
+              value,
+            });
+          }
+        },
+
+        /**
+         * Gets all appearance settings
+         */
+        getAppearanceSettings: () => {
+          try {
+            return { ...get().appearance };
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getAppearanceSettings",
+            });
+            return { ...DEFAULT_APPEARANCE_SETTINGS };
+          }
+        },
+
+        // ===== Notification Actions =====
+
+        /**
+         * Sets a notification setting
+         */
+        setNotificationSetting: <K extends keyof NotificationSettings>(
+          key: K,
+          value: NotificationSettings[K],
+        ) => {
+          try {
+            set((state) => {
+              if (key === "channelOverrides") {
+                // Deep clone for nested objects
+                state.notifications.channelOverrides =
+                  value as NotificationSettings["channelOverrides"];
+              } else {
+                state.notifications[key] = value;
+              }
+              state.lastUpdated = Date.now();
+            });
+
+            // Don't emit events for complex objects
+            if (key !== "channelOverrides") {
+              emitEvent(EventType.SETTINGS_CHANGED, {
+                setting: PreferenceKey.NOTIFICATIONS,
+                key,
+                value,
+              });
+            }
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setNotificationSetting",
+              key: String(key),
+            });
+          }
+        },
+
+        /**
+         * Sets notification override for a specific channel
+         */
+        setChannelNotificationOverride: (
+          channelId: string,
+          setting: "desktop" | "mobile" | "email",
+          level: NotificationLevel,
+        ) => {
+          try {
+            set((state) => {
+              const currentOverrides =
+                state.notifications.channelOverrides || {};
+              const channelOverride = currentOverrides[channelId] || {};
+
+              // Update with new override
+              state.notifications.channelOverrides = {
+                ...currentOverrides,
+                [channelId]: {
+                  ...channelOverride,
+                  [setting]: level,
+                },
+              };
+
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.NOTIFICATIONS,
+              channelId,
+              key: setting,
+              value: level,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setChannelNotificationOverride",
+              channelId,
+              setting,
+              level,
+            });
+          }
+        },
+
+        /**
+         * Gets all notification settings
+         */
+        getNotificationSettings: () => {
+          try {
+            return { ...get().notifications };
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getNotificationSettings",
+            });
+            return { ...DEFAULT_NOTIFICATION_SETTINGS };
+          }
+        },
+
+        /**
+         * Gets notification override for a channel
+         */
+        getChannelNotificationOverride: (
+          channelId: string,
+          setting: "desktop" | "mobile" | "email",
+        ) => {
+          try {
+            const { notifications } = get();
+            const channelOverrides = notifications.channelOverrides || {};
+            const channelOverride = channelOverrides[channelId];
+
+            return channelOverride ? channelOverride[setting] : undefined;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getChannelNotificationOverride",
+              channelId,
+              setting,
+            });
+            return undefined;
+          }
+        },
+
+        // ===== Privacy Actions =====
+
+        /**
+         * Sets a privacy setting
+         */
+        setPrivacySetting: <K extends keyof PrivacySettings>(
+          key: K,
+          value: PrivacySettings[K],
+        ) => {
+          try {
+            set((state) => {
+              state.privacy[key] = value;
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.PRIVACY,
+              key,
+              value,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setPrivacySetting",
+              key: String(key),
+              value,
+            });
+          }
+        },
+
+        /**
+         * Gets all privacy settings
+         */
+        getPrivacySettings: () => {
+          try {
+            return { ...get().privacy };
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getPrivacySettings",
+            });
+            return { ...DEFAULT_PRIVACY_SETTINGS };
+          }
+        },
+
+        // ===== Advanced Settings Actions =====
+
+        /**
+         * Sets an advanced setting
+         */
+        setAdvancedSetting: <K extends keyof AdvancedSettings>(
+          key: K,
+          value: AdvancedSettings[K],
+        ) => {
+          try {
+            set((state) => {
+              state.advanced[key] = value;
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.ADVANCED,
+              key,
+              value,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setAdvancedSetting",
+              key: String(key),
+              value,
+            });
+          }
+        },
+
+        /**
+         * Gets all advanced settings
+         */
+        getAdvancedSettings: () => {
+          try {
+            return { ...get().advanced };
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getAdvancedSettings",
+            });
+            return { ...DEFAULT_ADVANCED_SETTINGS };
+          }
+        },
+
+        // ===== Language Setting =====
+
+        /**
+         * Sets the application language
+         */
+        setLanguage: (langCode: string) => {
+          try {
+            set((state) => {
+              state.appearance.language = langCode;
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.LANGUAGE,
+              value: langCode,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "setLanguage",
+              langCode,
+            });
+          }
+        },
+
+        /**
+         * Gets the current language setting
+         */
+        getLanguage: () => {
+          try {
+            return get().appearance.language || "en";
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "getLanguage",
+            });
+            return "en";
+          }
+        },
+
+        // ===== Reset Actions =====
+
+        /**
+         * Resets appearance settings to defaults
+         */
+        resetAppearanceSettings: () => {
+          try {
+            set((state) => {
+              // Preserve language when resetting appearance
+              const currentLang = state.appearance.language;
+              state.appearance = {
+                ...DEFAULT_APPEARANCE_SETTINGS,
+                language: currentLang,
+              };
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.APPEARANCE,
+              reset: true,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "resetAppearanceSettings",
+            });
+          }
+        },
+
+        /**
+         * Resets notification settings to defaults
+         */
+        resetNotificationSettings: () => {
+          try {
+            set((state) => {
+              state.notifications = { ...DEFAULT_NOTIFICATION_SETTINGS };
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.NOTIFICATIONS,
+              reset: true,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "resetNotificationSettings",
+            });
+          }
+        },
+
+        /**
+         * Resets privacy settings to defaults
+         */
+        resetPrivacySettings: () => {
+          try {
+            set((state) => {
+              state.privacy = { ...DEFAULT_PRIVACY_SETTINGS };
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.PRIVACY,
+              reset: true,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "resetPrivacySettings",
+            });
+          }
+        },
+
+        /**
+         * Resets advanced settings to defaults
+         */
+        resetAdvancedSettings: () => {
+          try {
+            set((state) => {
+              state.advanced = { ...DEFAULT_ADVANCED_SETTINGS };
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              setting: PreferenceKey.ADVANCED,
+              reset: true,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "resetAdvancedSettings",
+            });
+          }
+        },
+
+        /**
+         * Resets all settings to defaults
+         * @param preservePreferences If true, keeps favorites and muted channels
+         */
+        resetAllSettings: (preservePreferences = false) => {
+          try {
+            set((state) => {
+              const favorites = preservePreferences
+                ? state.favorites
+                : new Set<string>();
+              const mutedChannels = preservePreferences
+                ? state.mutedChannels
+                : new Set<string>();
+
+              state.notifications = { ...DEFAULT_NOTIFICATION_SETTINGS };
+              state.appearance = { ...DEFAULT_APPEARANCE_SETTINGS };
+              state.privacy = { ...DEFAULT_PRIVACY_SETTINGS };
+              state.advanced = { ...DEFAULT_ADVANCED_SETTINGS };
+
+              // Only reset these if preservePreferences is false
+              if (!preservePreferences) {
+                state.favorites = new Set<string>();
+                state.mutedChannels = new Set<string>();
+              } else {
+                state.favorites = favorites;
+                state.mutedChannels = mutedChannels;
+              }
+
+              state.lastUpdated = Date.now();
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, {
+              reset: true,
+              preservePreferences,
+            });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "resetAllSettings",
+              preservePreferences,
+            });
+          }
+        },
+
+        /**
+         * Resets the store to initial state
+         * Used primarily for logout
+         */
+        reset: () => {
+          try {
+            set((state) => {
+              // Reset domain-specific state
+              state.favorites = new Set<string>();
+              state.mutedChannels = new Set<string>();
+              state.notifications = { ...DEFAULT_NOTIFICATION_SETTINGS };
+              state.appearance = { ...DEFAULT_APPEARANCE_SETTINGS };
+              state.privacy = { ...DEFAULT_PRIVACY_SETTINGS };
+              state.advanced = { ...DEFAULT_ADVANCED_SETTINGS };
+
+              // Reset common state
+              state.isLoading = false;
+              state.loadingIds = [];
+              state.error = null;
+              state.errors = [];
+              state.errorsBySource = {
+                [ErrorSource.API]: [],
+                [ErrorSource.AUTH]: [],
+                [ErrorSource.WEBSOCKET]: [],
+                [ErrorSource.UI]: [],
+                [ErrorSource.STORAGE]: [],
+                [ErrorSource.UNKNOWN]: [],
+              };
+              state.errorsBySeverity = {
+                [ErrorSeverity.INFO]: [],
+                [ErrorSeverity.WARNING]: [],
+                [ErrorSeverity.ERROR]: [],
+                [ErrorSeverity.CRITICAL]: [],
+              };
+              state.lastUpdated = Date.now();
+              state.lastFetchTimes = {};
+              state.lastError = null;
+              state.hasUnhandledError = false;
+            });
+
+            emitEvent(EventType.SETTINGS_CHANGED, { reset: true });
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "reset",
+            });
+          }
+        },
+      };
+    }),
     {
       name: "mattermost-user-settings",
       partialize: (state): PersistedState => ({
@@ -713,6 +968,17 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
     },
   ),
 );
+
+// Type for persisted state to aid with type checking during rehydration
+interface PersistedState {
+  favorites: string[];
+  mutedChannels: string[];
+  notifications: NotificationSettings;
+  appearance: AppearanceSettings;
+  privacy: PrivacySettings;
+  advanced: AdvancedSettings;
+  lastUpdated: number;
+}
 
 // ===== Helper functions for commonly used settings =====
 

@@ -3,6 +3,8 @@
  * Comprehensive types for user preferences and app configuration
  */
 
+import { CommonState } from "./common";
+
 /**
  * Notification level options
  */
@@ -162,7 +164,7 @@ export interface UserPreference {
 /**
  * User settings state
  */
-export interface UserSettingsState {
+export interface UserSettingsState extends CommonState {
   /** Favorite channel IDs */
   favorites: Set<string>;
   /** Muted channel IDs */
@@ -175,8 +177,6 @@ export interface UserSettingsState {
   privacy: PrivacySettings;
   /** Advanced settings */
   advanced: AdvancedSettings;
-  /** Last updated timestamp */
-  lastUpdated: number;
 }
 
 /**
