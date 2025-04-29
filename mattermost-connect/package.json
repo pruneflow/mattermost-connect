@@ -85,6 +85,7 @@
     "ts-jest": "^29.1.1",
     "typescript": "^5.2.2",
     "use-deep-compare-effect": "1.8.1",
+    "uuid": "11.1.0",
     "zustand": "5.0.3"
   },
   "keywords": [
