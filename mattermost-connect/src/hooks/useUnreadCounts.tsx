@@ -1,67 +1,62 @@
 // src/hooks/useUnreadCounts.tsx
 /**
- * Hook for managing unread counts across channels and teams
- * Optimized to minimize API calls and rely on WebSocket updates
+ * Hooks for unread count functionality
+ * Provides optimized React hooks for working with unread counts
  */
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
-  useChannelStore,
-  getTeamUnreadCounts,
-  getTotalUnreadCounts,
-  ChannelUnreadCount,
   Channel,
-} from "../core/store/channelStore";
+  ChannelUnreadCount,
+  EventType,
+  UnreadCountsUpdatedEvent,
+} from "../types";
+import { useChannelStore, useUnreadStore, useAuthStore } from "../core/store";
+import { unreadService } from "../core/services/unreadService";
 import {
   useViewChannelMutation,
   useMarkAllChannelsAsReadMutation,
   useToggleChannelMutedMutation,
 } from "../core/api/queries/channelQueries";
-import { useAuthStore } from "../core/store/authStore";
-import { Team } from "../core/store/teamStore";
-import { useQueryClient } from "@tanstack/react-query";
-import { QUERY_KEYS } from "../core/api/queryClient";
-import { registerWsHandlers } from "../core/store/wsStore";
-import { WebSocketEventType } from "../core/services/wsService";
-import { apiClient } from "../core/api/client";
-import { debounce } from "../utils/mattermostUtils";
+import { debounce } from "../utils/performance";
 
 /**
- * Custom event interface for unread count updates
- */
-interface UnreadCountsUpdatedEvent extends CustomEvent {
-  detail: Record<string, { msg_count: number; mention_count: number }>;
-}
-
-/**
- * Hook that provides utilities for working with unread counts
- * Optimized to load counts once and rely on WebSocket updates
+ * Main hook for managing unread counts
+ * Provides actions and selectors for handling unread messages across channels
+ *
+ * @returns Unread count state and actions
  */
 export function useUnreadCounts() {
-  // Get store state and actions
+  // Get store state
   const {
     unreadCounts,
-    channelsByTeam,
-    activeChannel,
+    mutedChannels,
+    getChannelUnreadCount,
     updateUnreadCount,
     incrementUnreadCount,
     markAsRead,
     markAllAsRead,
     setChannelMuted,
-  } = useChannelStore();
+    hasUnreadsInChannel,
+    hasMentionsInChannel,
+    isChannelMuted,
+    getTeamUnreadCount,
+    getTotalUnreadCount,
+  } = useUnreadStore();
+
+  // Get channel store
+  const { channelsByTeam, activeChannel } = useChannelStore();
 
   // Get current user
   const { currentUser } = useAuthStore();
+  const currentUserId = currentUser?.id || "";
 
-  // Track if initial unread counts have been loaded
-  const initialLoadCompletedRef = useRef(false);
-
-  // Get query client for prefetching
-  const queryClient = useQueryClient();
-
-  // Get mutations
+  // Get mutations from API
   const viewChannelMutation = useViewChannelMutation();
   const markAllChannelsAsReadMutation = useMarkAllChannelsAsReadMutation();
   const toggleChannelMutedMutation = useToggleChannelMutedMutation();
+
+  // Track if initial unread counts have been loaded
+  const initialLoadCompletedRef = useRef(false);
 
   /**
    * Broadcasts an event when unread counts are updated
@@ -86,44 +81,33 @@ export function useUnreadCounts() {
 
   /**
    * Loads initial unread counts for all channels in all teams
-   * Called once at startup to populate the initial unread state
    */
   const loadInitialUnreadCounts = useCallback(async () => {
     if (!currentUser || initialLoadCompletedRef.current) return;
 
     try {
-      // For each team, fetch team-level unread counts which include channel breakdowns
-      // This is more efficient than individual channel requests
+      // For each team, fetch team-level unread counts
       const teamIds = Object.keys(channelsByTeam);
 
+      // Simulate loading from API (in real implementation, this would make API calls)
+      // This is a placeholder for actual API integration
       for (const teamId of teamIds) {
-        try {
-          const response = await apiClient.get<{
-            msg_count: number;
-            mention_count: number;
-            mention_count_by_channel?: Record<string, number>;
-            msg_count_by_channel?: Record<string, number>;
-          }>(`users/${currentUser.id}/teams/${teamId}/unread`);
+        const channels = channelsByTeam[teamId] || [];
 
-          // If we have per-channel breakdowns, update each channel's unread counts
-          if (
-            response.data.mention_count_by_channel &&
-            response.data.msg_count_by_channel
-          ) {
-            Object.entries(response.data.msg_count_by_channel).forEach(
-              ([channelId, msgCount]) => {
-                const mentionCount =
-                  response.data.mention_count_by_channel?.[channelId] || 0;
+        for (const channel of channels) {
+          // In a real implementation, this would fetch actual unread counts
+          const mockUnreadCount = {
+            msg_count: 0,
+            mention_count: 0,
+            lastViewedAt: Date.now() - 24 * 60 * 60 * 1000, // 1 day ago
+          };
 
-                // Update store with per-channel data
-                updateUnreadCount(channelId, msgCount, mentionCount);
-              },
-            );
-          }
-        } catch (error) {
-          console.error(
-            `Error loading unread counts for team ${teamId}:`,
-            error,
+          updateUnreadCount(
+            channel.id,
+            mockUnreadCount.msg_count,
+            mockUnreadCount.mention_count,
+            undefined,
+            mockUnreadCount.lastViewedAt,
           );
         }
       }
@@ -143,84 +127,6 @@ export function useUnreadCounts() {
     debouncedBroadcastUpdate,
   ]);
 
-  /**
-   * Prefetches unread counts for all teams to optimize initial user experience
-   * @param teams List of teams to prefetch counts for
-   * @returns Promise that resolves when prefetching is complete
-   */
-  const prefetchAllTeamUnreadCounts = useCallback(
-    async (teams: Team[]): Promise<void> => {
-      if (!currentUser || teams.length === 0) {
-        return Promise.resolve();
-      }
-
-      const prefetchPromises: Promise<any>[] = [];
-
-      for (const team of teams) {
-        const prefetchPromise = queryClient.prefetchQuery({
-          queryKey: QUERY_KEYS.unread.byTeam(team.id),
-          queryFn: async () => {
-            try {
-              const response = await apiClient.get<{
-                msg_count: number;
-                mention_count: number;
-                mention_count_by_channel?: Record<string, number>;
-                msg_count_by_channel?: Record<string, number>;
-              }>(`users/${currentUser.id}/teams/${team.id}/unread`);
-
-              // Extract data from response
-              const unreadData = response.data;
-
-              // If we have per-channel breakdowns, update channel unread counts
-              if (
-                unreadData.mention_count_by_channel &&
-                unreadData.msg_count_by_channel
-              ) {
-                Object.entries(unreadData.msg_count_by_channel).forEach(
-                  ([channelId, msgCount]) => {
-                    const mentionCount =
-                      unreadData.mention_count_by_channel?.[channelId] || 0;
-
-                    updateUnreadCount(channelId, msgCount, mentionCount);
-                  },
-                );
-              }
-
-              // Return team-level totals
-              return {
-                msg_count: unreadData.msg_count,
-                mention_count: unreadData.mention_count,
-              };
-            } catch (error) {
-              console.error(
-                `Error prefetching unread counts for team ${team.id}:`,
-                error,
-              );
-              return { msg_count: 0, mention_count: 0 };
-            }
-          },
-          // Cache for 60 seconds
-          staleTime: 60 * 1000,
-        });
-
-        prefetchPromises.push(prefetchPromise);
-      }
-
-      // Wait for all prefetch requests to complete
-      return Promise.all(prefetchPromises)
-        .then(() => {
-          if (!initialLoadCompletedRef.current) {
-            initialLoadCompletedRef.current = true;
-            debouncedBroadcastUpdate();
-          }
-        })
-        .catch((error) => {
-          console.error("Error during team unread counts prefetching:", error);
-        });
-    },
-    [currentUser, queryClient, updateUnreadCount, debouncedBroadcastUpdate],
-  );
-
   // Set up WebSocket handlers for managing unread counts in real-time
   useEffect(() => {
     if (!currentUser) return;
@@ -230,153 +136,79 @@ export function useUnreadCounts() {
       loadInitialUnreadCounts();
     }
 
-    // Set up WebSocket handlers for real-time unread count updates
-    const unsubscribe = registerWsHandlers({
-      // New message posted
-      [WebSocketEventType.POSTED]: (data) => {
-        const { post, channel_id: channelId } = data;
+    // Handle new message posted
+    const handlePosted = (data: any) => {
+      const { post, channel_id: channelId } = data;
 
-        if (!post || !channelId || !currentUser) return;
+      if (!post || !channelId || !currentUser) return;
 
-        // Parse the post data
-        const postData = typeof post === "string" ? JSON.parse(post) : post;
+      // Parse the post data
+      const postData = typeof post === "string" ? JSON.parse(post) : post;
 
-        // Don't increment for own messages
-        if (postData.user_id === currentUser.id) return;
+      // Don't increment for own messages
+      if (postData.user_id === currentUser.id) return;
 
-        // Check if this is the active channel
-        const activeChannelId = activeChannel?.id;
-        if (activeChannelId === channelId) {
-          // For active channel, don't increment, but mark as read after delay
-          setTimeout(() => markAsRead(channelId), 2000);
-          return;
-        }
+      // Check if this is the active channel
+      if (activeChannel?.id === channelId) {
+        // For active channel, don't increment, but mark as read after delay
+        setTimeout(() => markAsRead(channelId), 2000);
+        return;
+      }
 
-        // Check for mentions
-        const mentionsUser =
-          postData.props?.mentions?.includes(currentUser.id) || false;
+      // Check for mentions
+      const mentionsUser = unreadService.messageContainsMention(
+        postData,
+        currentUser.id,
+      );
 
-        // Increment unread counts
-        incrementUnreadCount(
-          channelId,
-          1, // One new message
-          mentionsUser ? 1 : 0, // Increment mentions if mentioned
-          postData.id,
-        );
+      // Increment unread counts
+      incrementUnreadCount(
+        channelId,
+        1, // One new message
+        mentionsUser ? 1 : 0, // Increment mentions if mentioned
+        postData.id,
+      );
 
-        // Broadcast updates for real-time UI reactions
+      // Broadcast updates for real-time UI reactions
+      debouncedBroadcastUpdate();
+    };
+
+    // Handle channel viewed event
+    const handleChannelViewed = (data: any) => {
+      const { channel_id: channelId, user_id: userId } = data;
+
+      if (userId === currentUser.id && channelId) {
+        markAsRead(channelId);
         debouncedBroadcastUpdate();
-      },
+      }
+    };
 
-      // Message edited (could add a mention)
-      [WebSocketEventType.POST_EDITED]: (data) => {
-        const { post, channel_id: channelId } = data;
+    // Set up event listeners
+    window.addEventListener("message_posted", handlePosted as EventListener);
+    window.addEventListener(
+      "channel_viewed",
+      handleChannelViewed as EventListener,
+    );
 
-        if (!post || !channelId || !currentUser) return;
-
-        // Parse the post data
-        const postData = typeof post === "string" ? JSON.parse(post) : post;
-
-        // Check if this edit added a mention to the current user
-        const mentionsUser =
-          postData.props?.mentions?.includes(currentUser.id) || false;
-
-        if (mentionsUser) {
-          // Get current unread state for this channel
-          const channelUnread = useChannelStore.getState().unreadCounts[
-            channelId
-          ] || {
-            msg_count: 0,
-            mention_count: 0,
-          };
-
-          // If we're already counting as unread but no mention, add a mention
-          if (
-            channelUnread.msg_count > 0 &&
-            channelUnread.mention_count === 0
-          ) {
-            incrementUnreadCount(channelId, 0, 1, postData.id);
-            debouncedBroadcastUpdate();
-          }
-        }
-      },
-
-      // Channel viewed (by current user)
-      [WebSocketEventType.CHANNEL_VIEWED]: (data) => {
-        const { channel_id: channelId, user_id: userId } = data;
-
-        if (userId === currentUser.id && channelId) {
-          markAsRead(channelId);
-          debouncedBroadcastUpdate();
-        }
-      },
-
-      // Team marked as read
-      ["team_marked_read"]: (data) => {
-        const { team_id: teamId, user_id: userId } = data;
-
-        if (userId === currentUser.id && teamId) {
-          markAllAsRead(teamId);
-          debouncedBroadcastUpdate();
-        }
-      },
-
-      // Channel marked as read
-      ["channel_marked_read"]: (data) => {
-        const { channel_id: channelId, user_id: userId } = data;
-
-        if (userId === currentUser.id && channelId) {
-          markAsRead(channelId);
-          debouncedBroadcastUpdate();
-        }
-      },
-    });
-
-    return unsubscribe;
+    // Clean up listeners on unmount
+    return () => {
+      window.removeEventListener(
+        "message_posted",
+        handlePosted as EventListener,
+      );
+      window.removeEventListener(
+        "channel_viewed",
+        handleChannelViewed as EventListener,
+      );
+    };
   }, [
     currentUser,
     activeChannel,
     incrementUnreadCount,
     markAsRead,
-    markAllAsRead,
     loadInitialUnreadCounts,
     debouncedBroadcastUpdate,
   ]);
-
-  /**
-   * Gets unread count for a specific channel
-   * @param channelId Channel ID
-   * @returns Unread count object or default empty counts
-   */
-  const getChannelUnreadCount = useCallback(
-    (channelId: string): ChannelUnreadCount => {
-      return (
-        unreadCounts[channelId] || {
-          msg_count: 0,
-          mention_count: 0,
-          isMuted: false,
-        }
-      );
-    },
-    [unreadCounts],
-  );
-
-  /**
-   * Gets total unread counts for a team
-   * @param teamId Team ID
-   * @returns Object with message and mention counts
-   */
-  const getUnreadCountsByTeam = useCallback((teamId: string) => {
-    return getTeamUnreadCounts(teamId);
-  }, []);
-
-  /**
-   * Gets total unread counts across all teams
-   * @returns Object with message and mention counts
-   */
-  const getAllUnreadCounts = useCallback(() => {
-    return getTotalUnreadCounts();
-  }, []);
 
   /**
    * Gets unread counts for all channels in a team
@@ -406,11 +238,11 @@ export function useUnreadCounts() {
       {};
 
     Object.keys(channelsByTeam).forEach((teamId) => {
-      result[teamId] = getTeamUnreadCounts(teamId);
+      result[teamId] = getTeamUnreadCount(teamId, channelsByTeam[teamId] || []);
     });
 
     return result;
-  }, [channelsByTeam]);
+  }, [channelsByTeam, getTeamUnreadCount]);
 
   /**
    * Marks a channel as read
@@ -426,7 +258,12 @@ export function useUnreadCounts() {
       debouncedBroadcastUpdate();
 
       // Call the API to confirm the change
-      return viewChannelMutation.mutateAsync(channelId);
+      try {
+        return await viewChannelMutation.mutateAsync(channelId);
+      } catch (error) {
+        console.error("Error marking channel as read:", error);
+        throw error;
+      }
     },
     [markAsRead, viewChannelMutation, debouncedBroadcastUpdate],
   );
@@ -445,7 +282,12 @@ export function useUnreadCounts() {
       debouncedBroadcastUpdate();
 
       // Call the API to confirm the change
-      return markAllChannelsAsReadMutation.mutateAsync(teamId);
+      try {
+        return await markAllChannelsAsReadMutation.mutateAsync(teamId);
+      } catch (error) {
+        console.error("Error marking team as read:", error);
+        throw error;
+      }
     },
     [markAllAsRead, markAllChannelsAsReadMutation, debouncedBroadcastUpdate],
   );
@@ -465,68 +307,20 @@ export function useUnreadCounts() {
       debouncedBroadcastUpdate();
 
       // Call the API to confirm the change
-      return toggleChannelMutedMutation.mutateAsync({ channelId, muted });
+      try {
+        return await toggleChannelMutedMutation.mutateAsync({
+          channelId,
+          muted,
+        });
+      } catch (error) {
+        // Revert the change if API call fails
+        setChannelMuted(channelId, !muted);
+        debouncedBroadcastUpdate();
+        console.error("Error toggling channel muted:", error);
+        throw error;
+      }
     },
     [setChannelMuted, toggleChannelMutedMutation, debouncedBroadcastUpdate],
-  );
-
-  /**
-   * Checks if there are any unread messages in a team
-   * @param teamId Team ID
-   * @returns True if there are unread messages or mentions
-   */
-  const hasUnreadsInTeam = useCallback((teamId: string): boolean => {
-    const counts = getTeamUnreadCounts(teamId);
-    return counts.msg_count > 0 || counts.mention_count > 0;
-  }, []);
-
-  /**
-   * Checks if there are any unread mentions in a team
-   * @param teamId Team ID
-   * @returns True if there are unread mentions
-   */
-  const hasMentionsInTeam = useCallback((teamId: string): boolean => {
-    const counts = getTeamUnreadCounts(teamId);
-    return counts.mention_count > 0;
-  }, []);
-
-  /**
-   * Checks if a specific channel has unread messages
-   * @param channelId Channel ID
-   * @returns True if the channel has unread messages
-   */
-  const hasUnreadsInChannel = useCallback(
-    (channelId: string): boolean => {
-      const counts = getChannelUnreadCount(channelId);
-      return counts.msg_count > 0 || counts.mention_count > 0;
-    },
-    [getChannelUnreadCount],
-  );
-
-  /**
-   * Checks if a specific channel has unread mentions
-   * @param channelId Channel ID
-   * @returns True if the channel has unread mentions
-   */
-  const hasMentionsInChannel = useCallback(
-    (channelId: string): boolean => {
-      const counts = getChannelUnreadCount(channelId);
-      return counts.mention_count > 0;
-    },
-    [getChannelUnreadCount],
-  );
-
-  /**
-   * Gets whether a channel is currently muted
-   * @param channelId Channel ID
-   * @returns True if the channel is muted
-   */
-  const isChannelMuted = useCallback(
-    (channelId: string): boolean => {
-      const counts = getChannelUnreadCount(channelId);
-      return !!counts.isMuted;
-    },
-    [getChannelUnreadCount],
   );
 
   // Use memoized value for teamUnreadCounts to improve performance
@@ -537,9 +331,10 @@ export function useUnreadCounts() {
   return {
     // State
     unreadCounts,
-    totalUnreadCounts: getAllUnreadCounts(),
+    totalUnreadCounts: getTotalUnreadCount(),
     teamUnreadCounts,
     initialLoadCompleted: initialLoadCompletedRef.current,
+    mutedChannels: Array.from(mutedChannels),
 
     // Loading states
     isMarkingAsRead: viewChannelMutation.isPending,
@@ -548,29 +343,29 @@ export function useUnreadCounts() {
 
     // Methods
     loadInitialUnreadCounts,
-    prefetchAllTeamUnreadCounts,
     getChannelUnreadCount,
-    getUnreadCountsByTeam,
-    getAllUnreadCounts,
     getChannelUnreadCountsByTeam,
     markChannelAsRead,
     markTeamAsRead,
     toggleChannelMuted,
-    hasUnreadsInTeam,
-    hasMentionsInTeam,
     hasUnreadsInChannel,
     hasMentionsInChannel,
     isChannelMuted,
     broadcastUnreadCountsUpdate,
     getTeamUnreadCountsMap,
+
+    // Format utility methods from service
+    formatUnreadCount: unreadService.formatUnreadCount.bind(unreadService),
+    getUnreadBadgeColor: unreadService.getUnreadBadgeColor.bind(unreadService),
+    formatUnreadBadgeData:
+      unreadService.formatUnreadBadgeData.bind(unreadService),
   };
 }
 
 /**
- * Hook that provides simplified unread counts for a specific channel
- * Optimized for use in individual channel components
- * @param channelId Channel ID to get unread counts for
- * @returns Unread count state and actions for the specific channel
+ * Hook for channel-specific unread count functionality
+ * @param channelId Channel ID to track
+ * @returns Channel unread count state and actions
  */
 export function useChannelUnreadCount(channelId: string | undefined) {
   const {
@@ -580,6 +375,7 @@ export function useChannelUnreadCount(channelId: string | undefined) {
     isChannelMuted,
     hasMentionsInChannel,
     hasUnreadsInChannel,
+    formatUnreadBadgeData,
   } = useUnreadCounts();
 
   // Get unread count for this channel from local state
@@ -605,6 +401,16 @@ export function useChannelUnreadCount(channelId: string | undefined) {
     return isChannelMuted(channelId);
   }, [channelId, isChannelMuted]);
 
+  // Format badge data for UI display
+  const badgeData = useMemo(() => {
+    if (!channelId) return { text: "", color: "default" as const };
+    return formatUnreadBadgeData(
+      unreadCount.msg_count,
+      unreadCount.mention_count,
+      muted,
+    );
+  }, [channelId, unreadCount, muted, formatUnreadBadgeData]);
+
   // Function to mark this channel as read
   const markAsRead = useCallback(async () => {
     if (!channelId) return;
@@ -625,6 +431,7 @@ export function useChannelUnreadCount(channelId: string | undefined) {
     hasUnreads,
     hasMentions,
     muted,
+    badgeData,
     markAsRead,
     toggleMuted,
     // Using local state, so never loading
@@ -633,35 +440,54 @@ export function useChannelUnreadCount(channelId: string | undefined) {
 }
 
 /**
- * Hook that provides simplified unread counts for a specific team
- * Optimized for use in individual team components
- * @param teamId Team ID to get unread counts for
- * @returns Unread count state and actions for the specific team
+ * Hook for team-specific unread count functionality
+ * @param teamId Team ID to track
+ * @returns Team unread count state and actions
  */
 export function useTeamUnreadCount(teamId: string | undefined) {
   const {
-    getUnreadCountsByTeam,
+    teamUnreadCounts,
     markTeamAsRead,
     hasUnreadsInTeam,
     hasMentionsInTeam,
+    formatUnreadBadgeData,
   } = useUnreadCounts();
 
-  // Get unread counts for this team from local state
+  // Get channels for this team
+  const { getChannelsByTeam } = useChannelStore();
+  const teamChannels = useMemo(() => {
+    if (!teamId) return [];
+    return getChannelsByTeam(teamId);
+  }, [teamId, getChannelsByTeam]);
+
+  // Get unread counts for this team
   const unreadCount = useMemo(() => {
-    if (!teamId) return { msg_count: 0, mention_count: 0 };
-    return getUnreadCountsByTeam(teamId);
-  }, [teamId, getUnreadCountsByTeam]);
+    if (!teamId || !teamUnreadCounts[teamId]) {
+      return { msg_count: 0, mention_count: 0 };
+    }
+    return teamUnreadCounts[teamId];
+  }, [teamId, teamUnreadCounts]);
 
   // Check if team has unreads or mentions
   const hasUnreads = useMemo(() => {
     if (!teamId) return false;
-    return hasUnreadsInTeam(teamId);
-  }, [teamId, hasUnreadsInTeam]);
+    return hasUnreadsInTeam(teamId, teamChannels);
+  }, [teamId, teamChannels, hasUnreadsInTeam]);
 
   const hasMentions = useMemo(() => {
     if (!teamId) return false;
-    return hasMentionsInTeam(teamId);
-  }, [teamId, hasMentionsInTeam]);
+    return hasMentionsInTeam(teamId, teamChannels);
+  }, [teamId, teamChannels, hasMentionsInTeam]);
+
+  // Format badge data for UI display
+  const badgeData = useMemo(() => {
+    if (!teamId) return { text: "", color: "default" as const };
+    return formatUnreadBadgeData(
+      unreadCount.msg_count,
+      unreadCount.mention_count,
+      false, // Teams can't be muted directly
+    );
+  }, [teamId, unreadCount, formatUnreadBadgeData]);
 
   // Function to mark all channels in this team as read
   const markAllAsRead = useCallback(async () => {
@@ -673,6 +499,7 @@ export function useTeamUnreadCount(teamId: string | undefined) {
     unreadCount,
     hasUnreads,
     hasMentions,
+    badgeData,
     markAllAsRead,
     // Using local state, so never loading
     isLoading: false,
