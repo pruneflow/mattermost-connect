@@ -3,6 +3,8 @@
  * API client for Mattermost communication
  * Supports both direct and proxy modes with centralized configuration
  */
+import { ErrorSource } from "../../types";
+import { handleError } from "../store";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 export type ApiMode = "direct" | "proxy";
@@ -165,7 +167,11 @@ class ApiClient {
     }
   }
 
-  public getUserId() {
+  /**
+   * Gets the current user ID (for proxy mode)
+   * @returns User ID or undefined
+   */
+  public getUserId(): string | undefined {
     return this.userId;
   }
 
@@ -229,6 +235,8 @@ class ApiClient {
   /**
    * Handles error responses
    * @param response Fetch response
+   * @param url Request URL
+   * @param method Request method
    * @returns Processed API error
    */
   private async handleErrorResponse(
@@ -252,6 +260,14 @@ class ApiClient {
     error.data = errorData;
     error.request = { url, method };
 
+    // Use standardized error handling from Group 2
+    handleError(error, ErrorSource.API, undefined, {
+      url,
+      method,
+      status: response.status,
+    });
+
+    // Also call custom error handler if provided
     if (this.onError) {
       this.onError(error);
     }
@@ -358,15 +374,33 @@ class ApiClient {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         const timeoutError = new Error(`Request timeout after ${timeout}ms`);
+
+        // Use standardized error handling from Group 2
+        handleError(timeoutError, ErrorSource.API, undefined, {
+          url: fullUrl,
+          method,
+          timeout,
+        });
+
         if (this.onError) {
           this.onError(timeoutError);
         }
         throw timeoutError;
       }
 
-      if (this.onError) {
-        this.onError(error);
+      // If it's already an ApiError, it's been handled by handleErrorResponse
+      if (!(error as ApiError).request) {
+        // Generic error handling for non-HTTP errors
+        handleError(error as Error, ErrorSource.API, undefined, {
+          url: fullUrl,
+          method,
+        });
+
+        if (this.onError) {
+          this.onError(error);
+        }
       }
+
       throw error;
     } finally {
       clearTimeout(timeoutId);
@@ -481,6 +515,15 @@ class ApiClient {
         headers: this.extractHeaders(response),
       };
     } catch (error) {
+      // Use standardized error handling unless it's already handled by handleErrorResponse
+      if (!(error as ApiError).request) {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          url: fullUrl,
+          method: "POST",
+          isFileUpload: true,
+        });
+      }
+
       if (this.onError) {
         this.onError(error);
       }

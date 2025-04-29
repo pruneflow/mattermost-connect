@@ -75,6 +75,8 @@ export function extractPaginationInfo(
   const totalCount = totalCountStr ? parseInt(totalCountStr, 10) : undefined;
 
   // Determine if there are more pages
+  // If we received a full page of results (dataLength equals pageSize),
+  // or if the API explicitly tells us there are more results
   const hasMore = dataLength > 0 && dataLength === defaultPageSize;
 
   return {
@@ -82,4 +84,102 @@ export function extractPaginationInfo(
     nextCursor,
     totalCount: isNaN(totalCount as number) ? undefined : totalCount,
   };
+}
+
+/**
+ * Normalizes entity array to a map keyed by ID
+ * @param entities Array of entities with an ID field
+ * @param idField Field to use as key (default: 'id')
+ * @returns Map of entities keyed by ID
+ */
+export function normalizeEntities<T extends Record<string, any>>(
+  entities: T[],
+  idField: string = "id",
+): Record<string, T> {
+  const normalized: Record<string, T> = {};
+
+  entities.forEach((entity) => {
+    const id = entity[idField];
+    if (id) {
+      normalized[id] = entity;
+    }
+  });
+
+  return normalized;
+}
+
+/**
+ * Formats JSON body for API request, handling special cases
+ * @param body Request body
+ * @returns Formatted body ready for API request
+ */
+export function formatRequestBody(body: any): any {
+  if (!body) {
+    return undefined;
+  }
+
+  // For FormData, return as-is
+  if (body instanceof FormData) {
+    return body;
+  }
+
+  // Convert Date objects to ISO strings
+  if (typeof body === "object") {
+    return JSON.parse(JSON.stringify(body));
+  }
+
+  return body;
+}
+
+/**
+ * Creates a URL for fetching a user's profile picture
+ * @param userId User ID
+ * @param lastPictureUpdate Last picture update timestamp
+ * @param size Desired size in pixels
+ * @returns Profile picture URL
+ */
+export function getUserProfilePictureUrl(
+  userId: string,
+  lastPictureUpdate?: number,
+  size: number = 128,
+): string {
+  const timestamp = lastPictureUpdate || Date.now();
+  return `/api/v4/users/${userId}/image?_=${timestamp}&size=${size}`;
+}
+
+/**
+ * Creates a URL for downloading a file
+ * @param fileId File ID
+ * @returns File download URL
+ */
+export function getFileDownloadUrl(fileId: string): string {
+  return `/api/v4/files/${fileId}`;
+}
+
+/**
+ * Creates a URL for previewing a file
+ * @param fileId File ID
+ * @returns File preview URL
+ */
+export function getFilePreviewUrl(fileId: string): string {
+  return `/api/v4/files/${fileId}/preview`;
+}
+
+/**
+ * Creates a URL for a team
+ * @param teamName Team name
+ * @returns Team URL
+ */
+export function getTeamUrl(teamName: string): string {
+  return `/teams/${teamName}`;
+}
+
+/**
+ * Creates a URL for a channel within a team
+ * @param teamName Team name
+ * @param channelName Channel name
+ * @returns Channel URL
+ */
+export function getChannelUrl(teamName: string, channelName: string): string {
+  return `/teams/${teamName}/channels/${channelName}`;
 }

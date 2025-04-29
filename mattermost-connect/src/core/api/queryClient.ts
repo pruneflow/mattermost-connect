@@ -253,3 +253,72 @@ export const invalidateQueries = {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.users.statuses });
   },
 };
+
+/**
+ * Type-safe function to register custom invalidation functions
+ * @param entityType Entity type
+ * @param invalidationFn Invalidation function
+ */
+export function registerInvalidation(
+  entityType: string,
+  invalidationFn: (id?: string) => void,
+): void {
+  (invalidateQueries as any)[entityType] = invalidationFn;
+}
+
+/**
+ * Reset query cache completely
+ * Useful for logout or testing
+ */
+export function resetQueryCache(): void {
+  queryClient.clear();
+}
+
+/**
+ * Sets default query data from another query
+ * @param sourceKey Source query key
+ * @param targetKey Target query key
+ */
+export function setQueryDataFromQuery<T>(
+  sourceKey: unknown[],
+  targetKey: unknown[],
+): void {
+  const data = queryClient.getQueryData<T>(sourceKey);
+  if (data) {
+    queryClient.setQueryData<T>(targetKey, data);
+  }
+}
+
+/**
+ * Gets query data with type safety
+ * @param queryKey Query key
+ * @returns Query data or undefined
+ */
+export function getQueryData<T>(queryKey: unknown[]): T | undefined {
+  return queryClient.getQueryData<T>(queryKey);
+}
+
+/**
+ * Sets query data with type safety
+ * @param queryKey Query key
+ * @param data Query data
+ */
+export function setQueryData<T>(queryKey: unknown[], data: T): void {
+  queryClient.setQueryData<T>(queryKey, data);
+}
+
+/**
+ * Prefetches a query
+ * @param queryKey Query key
+ * @param queryFn Query function
+ */
+export function prefetchQuery<T>(
+  queryKey: unknown[],
+  queryFn: () => Promise<T>,
+): void {
+  queryClient.prefetchQuery({
+    queryKey,
+    queryFn,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
