@@ -1,31 +1,20 @@
 // src/core/services/authService.ts
 /**
  * Authentication service
- * Handles user login, logout, token management, and session persistence
+ * Provides centralized management of user authentication, token handling, and session persistence
  */
 import { apiClient } from "../api/client";
-import { handleError } from "../store/errorStore";
 import {
-  ErrorSource,
   User,
   LoginParams,
   LoginResponse,
   AuthMode,
+  AuthServiceConfig,
+  ErrorSource,
+  EventType,
 } from "../../types";
-
-/**
- * Authentication service configuration options
- */
-export interface AuthServiceConfig {
-  /** Whether to use localStorage to persist tokens */
-  useLocalStorage?: boolean;
-  /** Key to use in localStorage for tokens */
-  storageKey?: string;
-  /** Key to use in localStorage for server URL */
-  serverStorageKey?: string;
-  /** Auth mode to use */
-  mode?: AuthMode;
-}
+import { handleError } from "../store/errorStore";
+import { emitEvent } from "../api/eventUtils";
 
 /**
  * Default configuration for authentication service
@@ -39,7 +28,7 @@ const DEFAULT_CONFIG: AuthServiceConfig = {
 
 /**
  * Authentication service for Mattermost
- * Centralized service for handling user authentication
+ * Centralizes user authentication, session management, and token storage
  */
 class AuthService {
   private useLocalStorage: boolean;
@@ -132,9 +121,15 @@ class AuthService {
         }
       }
 
+      // Emit login success event
+      emitEvent(EventType.LOGIN_SUCCESS, {
+        user,
+        timestamp: Date.now(),
+      });
+
       return { token, user };
     } catch (error) {
-      // Handle and report error
+      // Handle and report error using standardized error handling
       handleError(error as Error, ErrorSource.AUTH);
       throw error;
     }
@@ -144,12 +139,32 @@ class AuthService {
    * Logs out the current user
    */
   public logout(): void {
+    // Get current user before logout for event emission
+    let currentUser = null;
+
+    try {
+      // Attempt to get current user info from API client for event
+      // This is a best-effort attempt and won't block logout if it fails
+      const userId = apiClient.getUserId();
+      if (userId) {
+        currentUser = { id: userId };
+      }
+    } catch (error) {
+      // Silent catch - we still want to complete the logout
+    }
+
     // Clear stored credentials
     this.clearStoredCredentials();
 
     // Reset API client state
     apiClient.setToken(null);
     apiClient.setUserId(null);
+
+    // Emit logout event
+    emitEvent(EventType.LOGOUT, {
+      user: currentUser,
+      timestamp: Date.now(),
+    });
   }
 
   /**
@@ -169,7 +184,14 @@ class AuthService {
       // If authentication error, clean up
       if ((error as any).status === 401) {
         this.logout();
+
+        // Emit session expired event
+        emitEvent(EventType.SESSION_EXPIRED, {
+          reason: "Authentication failed",
+          timestamp: Date.now(),
+        });
       }
+
       handleError(error as Error, ErrorSource.AUTH);
       return null;
     }
@@ -213,11 +235,18 @@ class AuthService {
         return false;
       }
 
+      // Emit login success event if initialization was successful
+      emitEvent(EventType.LOGIN_SUCCESS, {
+        user,
+        timestamp: Date.now(),
+      });
+
       return true;
     } catch (error) {
       // Clear invalid credentials
       this.clearStoredCredentials();
       apiClient.setToken(null);
+
       handleError(error as Error, ErrorSource.AUTH);
       return false;
     }
@@ -270,6 +299,27 @@ class AuthService {
       return null;
     }
     return localStorage.getItem(this.serverStorageKey);
+  }
+
+  /**
+   * Validates an authentication token format
+   * @param token Token to validate
+   * @returns Whether token format is valid
+   */
+  public validateTokenFormat(token: string): boolean {
+    // Basic validation - can be extended based on token format
+    return !!(token && token.length > 8);
+  }
+
+  /**
+   * Estimates remaining token validity
+   * @param token Authentication token
+   * @returns Estimated validity in seconds or null if unknown
+   */
+  public getTokenRemainingValidity(token?: string): number | null {
+    // This is a placeholder implementation - token validity would typically
+    // be determined by decoding JWT or tracking issuance time
+    return null;
   }
 
   /**

@@ -9,8 +9,11 @@ import {
   WebSocketMessage,
   WebSocketOptions,
   ErrorSource,
+  ErrorSeverity,
+  EventType,
 } from "../../types";
 import { handleError } from "../store";
+import { emitEvent } from "../api/eventUtils";
 
 /**
  * WebSocket connection states
@@ -51,11 +54,12 @@ class WebSocketService {
     lastConnectedAt: null,
     lastDisconnectedAt: null,
   };
-  private pingInterval: number | null = null;
-  private reconnectTimeout: number | null = null;
+  private pingInterval: NodeJS.Timeout | null = null;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
   private sequence: number = 1;
   private maxReconnectAttempts: number = 5;
   private defaultPingInterval: number = 30000; // 30 seconds
+  private reconnectDelayFactor: number = 1.5; // Exponential backoff factor
 
   /**
    * Creates an instance of WebSocketService
@@ -122,7 +126,12 @@ class WebSocketService {
       this.connectionInfo.reconnectAttempts++;
       this.scheduleReconnect(url, token, options);
 
-      handleError(error as Error, ErrorSource.WEBSOCKET);
+      // Use standardized error handling from Group 2
+      handleError(error as Error, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR, {
+        url,
+        reconnectAttempt: this.connectionInfo.reconnectAttempts,
+      });
+
       throw error;
     }
   }
@@ -156,11 +165,11 @@ class WebSocketService {
     this.connectionInfo.isConnecting = false;
     this.connectionInfo.lastDisconnectedAt = Date.now();
 
-    // Emit disconnection event
-    this.emit("connection", {
-      isConnected: false,
+    // Emit disconnection event using standard event system
+    emitEvent(EventType.WEBSOCKET_DISCONNECTED, {
       code,
       reason,
+      timestamp: Date.now(),
       userInitiated: true,
     });
   }
@@ -183,6 +192,13 @@ class WebSocketService {
 
     // Reset reconnect attempts
     this.connectionInfo.reconnectAttempts = 0;
+
+    // Emit event for reconnection attempt
+    emitEvent(EventType.WEBSOCKET_DISCONNECTED, {
+      reason: "Reconnection requested",
+      timestamp: Date.now(),
+      reconnectAttempted: true,
+    });
 
     // Connect again
     return this.connect(url, token, options);
@@ -211,7 +227,18 @@ class WebSocketService {
       this.socket.send(data);
       return true;
     } catch (error) {
-      console.error("Error sending WebSocket message:", error);
+      // Use standardized error handling
+      handleError(
+        error as Error,
+        ErrorSource.WEBSOCKET,
+        ErrorSeverity.WARNING,
+        {
+          message:
+            typeof message === "string"
+              ? message.substring(0, 100)
+              : "WebSocket message object",
+        },
+      );
       return false;
     }
   }
@@ -268,6 +295,15 @@ class WebSocketService {
   }
 
   /**
+   * Gets the number of listeners for an event
+   * @param eventType Event type to check
+   * @returns Number of registered listeners
+   */
+  public getListenerCount(eventType: string): number {
+    return this.eventEmitter.listenerCount(eventType);
+  }
+
+  /**
    * Emits an event to registered listeners
    * @param eventType Event type
    * @param data Event data
@@ -307,10 +343,10 @@ class WebSocketService {
       options.onOpen();
     }
 
-    // Emit connection event
-    this.emit("connection", {
-      isConnected: true,
+    // Emit connection event using standard event system
+    emitEvent(EventType.WEBSOCKET_CONNECTED, {
       timestamp: now,
+      reconnected: this.connectionInfo.reconnectAttempts > 0,
     });
   }
 
@@ -348,12 +384,12 @@ class WebSocketService {
       options.onClose(event);
     }
 
-    // Emit disconnection event
-    this.emit("connection", {
-      isConnected: false,
+    // Emit disconnection event using standard event system
+    emitEvent(EventType.WEBSOCKET_DISCONNECTED, {
       code: event.code,
       reason: event.reason,
       timestamp: now,
+      reconnectAttempt: this.connectionInfo.reconnectAttempts,
     });
   }
 
@@ -363,27 +399,33 @@ class WebSocketService {
    * @param options Connection options
    */
   private handleError(event: Event, options: WebSocketOptions): void {
+    const now = Date.now();
+
     // Update connection state
     this.connectionInfo.isConnected = false;
     this.connectionInfo.isConnecting = false;
-    this.connectionInfo.lastDisconnectedAt = Date.now();
+    this.connectionInfo.lastDisconnectedAt = now;
 
     // Create error object
     const error = new Error("WebSocket connection error");
 
-    // Pass to error handler
-    handleError(error, ErrorSource.WEBSOCKET);
+    // Pass to standardized error handler
+    handleError(error, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR, {
+      url: this.connectionInfo.url,
+      reconnectAttempt: this.connectionInfo.reconnectAttempts,
+      originalEvent: event,
+    });
 
     // Call user callback if provided
     if (options.onError) {
       options.onError(event);
     }
 
-    // Emit error event
-    this.emit("error", {
+    // Emit error event using standard event system
+    emitEvent(EventType.WEBSOCKET_ERROR, {
       error,
-      originalEvent: event,
-      timestamp: Date.now(),
+      timestamp: now,
+      url: this.connectionInfo.url,
     });
   }
 
@@ -404,7 +446,15 @@ class WebSocketService {
       // Emit event for all messages
       this.emit(WebSocketEventType.ALL, message);
     } catch (error) {
-      console.error("Error processing WebSocket message:", error);
+      // Use standardized error handling for message parsing errors
+      handleError(
+        error as Error,
+        ErrorSource.WEBSOCKET,
+        ErrorSeverity.WARNING,
+        {
+          messageData: event.data?.toString().substring(0, 100), // Limit log size
+        },
+      );
     }
   }
 
@@ -438,7 +488,7 @@ class WebSocketService {
   private startPingInterval(interval: number): void {
     this.stopPingInterval();
 
-    this.pingInterval = window.setInterval(() => {
+    this.pingInterval = setInterval(() => {
       if (this.socket && this.socket.readyState === WebSocketState.OPEN) {
         const pingMessage = {
           seq: this.sequence++,
@@ -474,13 +524,26 @@ class WebSocketService {
       clearTimeout(this.reconnectTimeout);
     }
 
-    // Use exponential backoff with a maximum delay
-    const delay = Math.min(
-      1000 * Math.pow(2, this.connectionInfo.reconnectAttempts),
-      30000,
+    // Use exponential backoff with jitter for more resilient reconnection
+    const baseDelay = options.reconnectDelay || 1000;
+    const maxDelay = 30000; // 30 seconds max delay
+
+    // Calculate exponential backoff
+    let delay = Math.min(
+      baseDelay *
+        Math.pow(
+          this.reconnectDelayFactor,
+          this.connectionInfo.reconnectAttempts,
+        ),
+      maxDelay,
     );
 
-    this.reconnectTimeout = window.setTimeout(() => {
+    // Add jitter (±20% randomness)
+    const jitter = delay * 0.2;
+    delay = delay - jitter + Math.random() * jitter * 2;
+
+    // Schedule reconnect
+    this.reconnectTimeout = setTimeout(() => {
       this.connect(url, token, options);
     }, delay);
   }

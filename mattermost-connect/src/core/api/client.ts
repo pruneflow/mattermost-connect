@@ -165,6 +165,10 @@ class ApiClient {
     }
   }
 
+  public getUserId() {
+    return this.userId;
+  }
+
   /**
    * Gets the current base URL
    * @returns The base URL
