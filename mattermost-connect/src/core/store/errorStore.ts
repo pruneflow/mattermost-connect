@@ -14,68 +14,9 @@ import {
   ErrorSource,
   ErrorState,
   EventType,
-  LoadingState,
 } from "../../types";
 import { emitEvent } from "../api/eventUtils";
-import { createLoadingSlice } from "./storeUtils";
-
-/**
- * Enhanced error store state with actions
- */
-interface ErrorStoreState extends ErrorState, LoadingState {
-  // Actions - Error Management
-  addError: (
-    error: Error | ApiError,
-    source: ErrorSource,
-    severity?: ErrorSeverity,
-    metadata?: Record<string, any>,
-  ) => AppError;
-  handleError: (errorId: string) => void;
-  handleAllErrors: () => void;
-  clearErrors: (filter?: ErrorFilter) => void;
-  clearAllErrors: () => void;
-  clearErrorsBySource: (source: ErrorSource) => void;
-
-  // Selectors - Error Retrieval
-  getErrors: (filter?: ErrorFilter) => AppError[];
-  getErrorsBySource: (source: ErrorSource) => AppError[];
-  getErrorsBySeverity: (severity: ErrorSeverity) => AppError[];
-  getLastError: () => AppError | null;
-  hasErrors: (filter?: ErrorFilter) => boolean;
-  getUnhandledErrors: () => AppError[];
-
-  setLoading: (isLoading: boolean) => void;
-  setLoadingId: (id: string, isLoading: boolean) => void;
-  setError: (error: Error | null) => void;
-  setErrorForId: (id: string, error: Error | null) => void;
-
-  // Reset
-  reset: () => void;
-}
-
-/**
- * Initial state for the error store
- */
-const initialState: ErrorState = {
-  errors: [],
-  lastError: null,
-  hasUnhandledError: false,
-  errorsBySource: {
-    [ErrorSource.API]: [],
-    [ErrorSource.AUTH]: [],
-    [ErrorSource.WEBSOCKET]: [],
-    [ErrorSource.UI]: [],
-    [ErrorSource.STORAGE]: [],
-    [ErrorSource.UNKNOWN]: [],
-  },
-  errorsBySeverity: {
-    [ErrorSeverity.INFO]: [],
-    [ErrorSeverity.WARNING]: [],
-    [ErrorSeverity.ERROR]: [],
-    [ErrorSeverity.CRITICAL]: [],
-  },
-  error: null,
-};
+import { createCommonSlice } from "./slices/commonSlice";
 
 /**
  * Creates an AppError from an Error or ApiError
@@ -108,18 +49,61 @@ function createAppError(
 
 /**
  * Error store implementation with Zustand and immer middleware
+ * Now uses CommonSlice for standardized state management
  */
-export const useErrorStore = create<ErrorStoreState>()(
+export const useErrorStore = create<
+  ErrorState & {
+    // Actions - Error Management
+    addError: (
+      error: Error | ApiError,
+      source: ErrorSource,
+      severity?: ErrorSeverity,
+      metadata?: Record<string, any>,
+    ) => AppError;
+    handleError: (errorId: string) => void;
+    handleAllErrors: () => void;
+    clearErrors: (filter?: ErrorFilter) => void;
+    clearAllErrors: () => void;
+    clearErrorsBySource: (source: ErrorSource) => void;
+
+    // Selectors - Error Retrieval
+    getErrors: (filter?: ErrorFilter) => AppError[];
+    getErrorsBySource: (source: ErrorSource) => AppError[];
+    getErrorsBySeverity: (severity: ErrorSeverity) => AppError[];
+    getLastError: () => AppError | null;
+    hasErrors: (filter?: ErrorFilter) => boolean;
+    getUnhandledErrors: () => AppError[];
+
+    // Reset
+    reset: () => void;
+  }
+>()(
   immer((set, get) => {
-    // Create standard loading slice
-    const loadingSlice = createLoadingSlice<ErrorStoreState>(set);
+    // Create common slice for standardized loading/error state
+    const commonSlice = createCommonSlice<ErrorState>(set);
 
     return {
-      // Initial state
-      ...initialState,
+      // Include common slice for standardized state
+      ...commonSlice,
 
-      // Include loading slice properties
-      ...loadingSlice,
+      // Initial state - error collections
+      errors: [],
+      lastError: null,
+      hasUnhandledError: false,
+      errorsBySource: {
+        [ErrorSource.API]: [],
+        [ErrorSource.AUTH]: [],
+        [ErrorSource.WEBSOCKET]: [],
+        [ErrorSource.UI]: [],
+        [ErrorSource.STORAGE]: [],
+        [ErrorSource.UNKNOWN]: [],
+      },
+      errorsBySeverity: {
+        [ErrorSeverity.INFO]: [],
+        [ErrorSeverity.WARNING]: [],
+        [ErrorSeverity.ERROR]: [],
+        [ErrorSeverity.CRITICAL]: [],
+      },
 
       /**
        * Adds an error to the store
@@ -151,6 +135,9 @@ export const useErrorStore = create<ErrorStoreState>()(
 
           // Set the main error property
           state.error = error;
+
+          // Update timestamp
+          state.lastUpdated = Date.now();
         });
 
         // Emit error event for subscribers
@@ -206,6 +193,8 @@ export const useErrorStore = create<ErrorStoreState>()(
           state.hasUnhandledError = state.errors.some(
             (error: AppError) => !error.handled,
           );
+
+          state.lastUpdated = Date.now();
         });
       },
 
@@ -235,6 +224,7 @@ export const useErrorStore = create<ErrorStoreState>()(
           });
 
           state.hasUnhandledError = false;
+          state.lastUpdated = Date.now();
         });
 
         // Emit event for subscribers
@@ -310,6 +300,8 @@ export const useErrorStore = create<ErrorStoreState>()(
             if (state.errors.length === 0) {
               state.error = null;
             }
+
+            state.lastUpdated = Date.now();
           }
         });
 
@@ -341,6 +333,8 @@ export const useErrorStore = create<ErrorStoreState>()(
             const severity = severityKey as ErrorSeverity;
             state.errorsBySeverity[severity] = [];
           });
+
+          state.lastUpdated = Date.now();
         });
 
         // Emit event for subscribers
@@ -391,6 +385,8 @@ export const useErrorStore = create<ErrorStoreState>()(
           if (state.errors.length === 0) {
             state.error = null;
           }
+
+          state.lastUpdated = Date.now();
         });
 
         // Emit event for subscribers
@@ -476,12 +472,28 @@ export const useErrorStore = create<ErrorStoreState>()(
        */
       reset: (): void => {
         set((state) => {
-          // Reset to initial state
-          Object.assign(state, initialState);
+          // Reset error state
+          state.errors = [];
+          state.lastError = null;
+          state.hasUnhandledError = false;
+          state.error = null;
+
+          // Reset indexes
+          Object.keys(state.errorsBySource).forEach((sourceKey) => {
+            const source = sourceKey as ErrorSource;
+            state.errorsBySource[source] = [];
+          });
+
+          Object.keys(state.errorsBySeverity).forEach((severityKey) => {
+            const severity = severityKey as ErrorSeverity;
+            state.errorsBySeverity[severity] = [];
+          });
 
           // Reset loading state
           state.isLoading = false;
           state.loadingIds = [];
+          state.lastUpdated = Date.now();
+          state.lastFetchTimes = {};
         });
       },
     };

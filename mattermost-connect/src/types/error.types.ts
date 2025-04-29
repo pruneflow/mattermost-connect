@@ -87,6 +87,7 @@ export type SourceErrorHandler = (
 
 /**
  * Complete error state for the store
+ * Uses import type to avoid circular dependencies
  */
 export interface ErrorState {
   /** List of all errors */
@@ -103,6 +104,14 @@ export interface ErrorState {
   error: Error | null;
   /** Map of errors by ID */
   errorMap?: Record<string, Error | null>;
+  /** Loading state for error operations */
+  isLoading: boolean;
+  /** IDs currently loading */
+  loadingIds: string[];
+  /** Last update timestamp */
+  lastUpdated: number;
+  /** Last fetch times by ID */
+  lastFetchTimes: Record<string, number>;
 }
 
 /**

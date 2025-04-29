@@ -1,7 +1,7 @@
 /**
  * User related type definitions
  */
-import { Entity, PaginationParams } from "./common";
+import { Entity, CommonState, PaginationParams } from "./common";
 import { User } from "./auth.types";
 
 /**
@@ -102,12 +102,11 @@ export interface UserProfileDisplay {
 
 /**
  * User state - core structure for userStore
+ * Now extends CommonState for standardized state management
  */
-export interface UserState {
+export interface UserState extends CommonState {
   byId: Record<string, User>;
   statusByUserId: Record<string, UserStatus>;
   typingUsers: Record<string, Record<string, number>>;
-  loadingUserIds: string[];
-  lastFetchTimes: Record<string, number>;
   isInitialized: boolean;
 }

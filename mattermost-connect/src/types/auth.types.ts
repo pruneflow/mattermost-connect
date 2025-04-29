@@ -1,7 +1,7 @@
 /**
  * Authentication related type definitions
  */
-import { Entity } from "./common";
+import { Entity, CommonState } from "./common";
 
 /**
  * Authentication modes
@@ -33,14 +33,14 @@ export interface AuthToken {
 
 /**
  * Authentication state
+ * Now extends CommonState for standardized state management
  */
-export interface AuthState {
+export interface AuthState extends CommonState {
   isAuthenticated: boolean;
   isAuthenticating: boolean;
   currentUser: User | null;
   token: string | null;
   serverUrl: string | null;
-  error: Error | null;
 }
 
 /**

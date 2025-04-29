@@ -26,10 +26,37 @@ export interface WithTimestamps {
  */
 export interface Entity extends WithId, WithTimestamps {}
 
+// Import error types for CommonState
+import { AppError, ErrorSource, ErrorSeverity } from "./error.types";
+
+/**
+ * Common state interface for all stores
+ * Provides standardized state management for all stores
+ */
+export interface CommonState {
+  // Loading state
+  isLoading: boolean;
+  loadingIds: string[];
+
+  // Error handling
+  error: Error | null;
+  errors: AppError[];
+  errorMap?: Record<string, Error | null>;
+  lastError: AppError | null;
+  hasUnhandledError: boolean;
+  errorsBySource: Record<ErrorSource, AppError[]>;
+  errorsBySeverity: Record<ErrorSeverity, AppError[]>;
+
+  // Timestamps and caching
+  lastUpdated: number;
+  lastFetchTimes: Record<string, number>;
+}
+
 // --- Loading state ---
 
 /**
  * Standard loading state
+ * @deprecated Use CommonState instead
  */
 export interface LoadingState {
   isLoading: boolean;

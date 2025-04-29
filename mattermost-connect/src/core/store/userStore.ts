@@ -6,96 +6,74 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";
-import { User, UserStatus, UserStatusInfo, EventType } from "../../types";
+import {
+  User,
+  UserState,
+  UserStatus,
+  UserStatusInfo,
+  EventType,
+} from "../../types";
 import { userService } from "../services/userService";
-import { createLoadingSlice } from "./storeUtils";
-import { emitEvent } from "./eventStore";
+import { createCommonSlice } from "./slices/commonSlice";
+import { emitEvent } from "../api/eventUtils";
 
 // Typing indicator timeout (5 seconds)
 const TYPING_TIMEOUT = 5000;
 
 /**
- * User state interface
- */
-interface UserState {
-  byId: Record<string, User>;
-  statusByUserId: Record<string, UserStatus>;
-  typingUsers: Record<string, Record<string, number>>;
-  isInitialized: boolean;
-  lastFetchTimes: Record<string, number>;
-  isLoading: boolean;
-  loadingIds: string[];
-  error: Error | null;
-  errors: Record<string, Error | null>;
-}
-
-/**
- * Extended user store state with actions
- */
-interface UserStoreState extends UserState {
-  // Actions - User Data
-  setUser: (user: User) => void;
-  setUsers: (users: User[]) => void;
-  updateUser: (user: Partial<User> & { id: string }) => void;
-  removeUser: (userId: string) => void;
-
-  // Actions - Loading/Error State
-  setLoading: (isLoading: boolean) => void;
-  setLoadingId: (id: string, isLoading: boolean) => void;
-  setError: (error: Error | null) => void;
-  setErrorForId: (id: string, error: Error | null) => void;
-
-  // Actions - User Status
-  setUserStatus: (userId: string, status: UserStatus) => void;
-  setUserStatuses: (
-    statuses: UserStatusInfo[] | Record<string, UserStatus>,
-  ) => void;
-
-  // Actions - Typing Indicators
-  setTyping: (channelId: string, userId: string) => void;
-  clearTyping: (channelId: string, userId: string) => void;
-  cleanupExpiredTyping: () => void;
-
-  // Selectors
-  getUserById: (userId: string) => User | null;
-  getUserStatus: (userId: string) => UserStatus;
-  getUserDisplayName: (userId: string) => string;
-  getUsersByIds: (userIds: string[]) => User[];
-  getTypingUsers: (channelId: string) => string[];
-  getUsersWithStatus: (userIds: string[]) => Array<{
-    user: User;
-    status: UserStatus;
-    displayName: string;
-  }>;
-  isPendingUser: (userId: string) => boolean;
-
-  // Reset
-  reset: () => void;
-}
-
-/**
  * Create the user store with immer middleware for simplified updates
  * and subscribeWithSelector for observing state changes
  */
-export const useUserStore = create<UserStoreState>()(
+export const useUserStore = create<
+  UserState & {
+    // Actions - User Data
+    setUser: (user: User) => void;
+    setUsers: (users: User[]) => void;
+    updateUser: (user: Partial<User> & { id: string }) => void;
+    removeUser: (userId: string) => void;
+
+    // Actions - User Status
+    setUserStatus: (userId: string, status: UserStatus) => void;
+    setUserStatuses: (
+      statuses: UserStatusInfo[] | Record<string, UserStatus>,
+    ) => void;
+
+    // Actions - Typing Indicators
+    setTyping: (channelId: string, userId: string) => void;
+    clearTyping: (channelId: string, userId: string) => void;
+    cleanupExpiredTyping: () => void;
+
+    // Selectors
+    getUserById: (userId: string) => User | null;
+    getUserStatus: (userId: string) => UserStatus;
+    getUserDisplayName: (userId: string) => string;
+    getUsersByIds: (userIds: string[]) => User[];
+    getTypingUsers: (channelId: string) => string[];
+    getUsersWithStatus: (userIds: string[]) => Array<{
+      user: User;
+      status: UserStatus;
+      displayName: string;
+    }>;
+    isPendingUser: (userId: string) => boolean;
+
+    // Reset
+    reset: () => void;
+  }
+>()(
   subscribeWithSelector(
     immer((set, get) => {
-      // Create loading slice for standard loading/error state management
-      const loadingSlice = createLoadingSlice<UserStoreState>(set);
+      // Create common slice for standardized loading/error state
+      const commonSlice = createCommonSlice<UserState>(set);
 
       return {
+        // Include common slice properties
+        ...commonSlice,
+
         // Initial state
         byId: {},
         statusByUserId: {},
         typingUsers: {},
         isInitialized: false,
-        lastFetchTimes: {},
-
-        // Include loading/error state from loading slice
-        isLoading: loadingSlice.isLoading,
-        loadingIds: loadingSlice.loadingIds,
-        error: loadingSlice.error,
-        errors: loadingSlice.errors,
 
         /**
          * Sets a single user in the store
@@ -121,6 +99,7 @@ export const useUserStore = create<UserStoreState>()(
 
             // Ensure initialization flag is set
             state.isInitialized = true;
+            state.lastUpdated = Date.now();
           });
 
           // Emit user updated event
@@ -157,6 +136,7 @@ export const useUserStore = create<UserStoreState>()(
 
             // Ensure initialization flag is set
             state.isInitialized = true;
+            state.lastUpdated = now;
           });
         },
 
@@ -178,6 +158,7 @@ export const useUserStore = create<UserStoreState>()(
 
             // Update fetch time
             state.lastFetchTimes[id] = Date.now();
+            state.lastUpdated = Date.now();
           });
 
           // Emit user updated event
@@ -205,14 +186,10 @@ export const useUserStore = create<UserStoreState>()(
             state.loadingIds = state.loadingIds.filter(
               (id: string) => id !== userId,
             );
+
+            state.lastUpdated = Date.now();
           });
         },
-
-        // Include loading state management from the slice
-        setLoading: loadingSlice.setLoading,
-        setLoadingId: loadingSlice.setLoadingId,
-        setError: loadingSlice.setError,
-        setErrorForId: loadingSlice.setErrorForId,
 
         /**
          * Sets a user's online status
@@ -225,6 +202,7 @@ export const useUserStore = create<UserStoreState>()(
 
             // Set the new status
             state.statusByUserId[userId] = status;
+            state.lastUpdated = Date.now();
 
             // Emit status updated event if changed
             if (previousStatus !== status) {
@@ -279,6 +257,8 @@ export const useUserStore = create<UserStoreState>()(
                 }
               });
             }
+
+            state.lastUpdated = Date.now();
           });
         },
 
@@ -298,6 +278,7 @@ export const useUserStore = create<UserStoreState>()(
 
             // Set typing timestamp
             state.typingUsers[channelId][userId] = now;
+            state.lastUpdated = now;
           });
 
           // Emit typing event
@@ -333,6 +314,8 @@ export const useUserStore = create<UserStoreState>()(
               // If no users are typing, remove the channel entry
               delete state.typingUsers[channelId];
             }
+
+            state.lastUpdated = Date.now();
           });
         },
 
@@ -370,10 +353,9 @@ export const useUserStore = create<UserStoreState>()(
               }
             });
 
-            // Only apply update if there were changes
-            if (!hasChanges) {
-              // Return state unchanged
-              return state;
+            // Only update timestamp if there were changes
+            if (hasChanges) {
+              state.lastUpdated = now;
             }
           });
         },
@@ -467,17 +449,20 @@ export const useUserStore = create<UserStoreState>()(
          * Resets the store to initial state
          */
         reset: () => {
-          set(() => ({
-            byId: {},
-            statusByUserId: {},
-            typingUsers: {},
-            lastFetchTimes: {},
-            isInitialized: false,
-            isLoading: false,
-            loadingIds: [],
-            error: null,
-            errors: {},
-          }));
+          set((state) => {
+            Object.assign(state, {
+              byId: {},
+              statusByUserId: {},
+              typingUsers: {},
+              isInitialized: false,
+              isLoading: false,
+              loadingIds: [],
+              error: null,
+              errors: [],
+              lastUpdated: Date.now(),
+              lastFetchTimes: {},
+            });
+          });
         },
       };
     }),

@@ -3,21 +3,7 @@
  * Common slice for Zustand stores
  * Provides reusable state and actions using Zustand's native patterns
  */
-import {
-  LoadingState,
-  ErrorState,
-  StoreState,
-  ErrorSource,
-  AppError,
-  ErrorSeverity,
-} from "../../../types";
-
-/**
- * Interface for common slice state
- */
-export interface CommonSlice extends LoadingState, ErrorState, StoreState {
-  lastFetchTimes: Record<string, number>;
-}
+import { CommonState, ErrorSource, ErrorSeverity } from "../../../types";
 
 /**
  * Interface for common slice actions
@@ -32,24 +18,31 @@ export interface CommonSliceActions {
 }
 
 /**
- * Combined type for state and actions
- */
-export type CommonState = CommonSlice & CommonSliceActions;
-
-/**
  * Initial state for common slice
  */
-export const initialCommonState: CommonSlice = {
+export const initialCommonState: CommonState = {
   isLoading: false,
   loadingIds: [],
   error: null,
   errors: [],
-  lastUpdated: Date.now(),
-  lastFetchTimes: {},
   lastError: null,
   hasUnhandledError: false,
-  errorsBySource: {} as Record<ErrorSource, AppError[]>,
-  errorsBySeverity: {} as Record<ErrorSeverity, AppError[]>,
+  errorsBySource: {
+    [ErrorSource.API]: [],
+    [ErrorSource.AUTH]: [],
+    [ErrorSource.WEBSOCKET]: [],
+    [ErrorSource.UI]: [],
+    [ErrorSource.STORAGE]: [],
+    [ErrorSource.UNKNOWN]: [],
+  },
+  errorsBySeverity: {
+    [ErrorSeverity.INFO]: [],
+    [ErrorSeverity.WARNING]: [],
+    [ErrorSeverity.ERROR]: [],
+    [ErrorSeverity.CRITICAL]: [],
+  },
+  lastUpdated: Date.now(),
+  lastFetchTimes: {},
 };
 
 /**
@@ -59,21 +52,16 @@ export const initialCommonState: CommonSlice = {
  * @param set Function to update the store state
  * @returns CommonState with both state and actions
  */
-export const createCommonSlice = <
-  T extends CommonState & {
-    errors: Record<string, Error | null>;
-    loadingIds: string[];
-  },
->(
+export const createCommonSlice = <T extends CommonState>(
   set: (fn: (state: T) => void) => void,
-): CommonState => ({
+): CommonState & CommonSliceActions => ({
   ...initialCommonState,
 
   /**
    * Sets the global loading state
    * @param isLoading Whether loading is in progress
    */
-  setLoading: (isLoading) => {
+  setLoading: (isLoading: boolean) => {
     set((state) => {
       state.isLoading = isLoading;
       state.lastUpdated = Date.now();
@@ -89,7 +77,7 @@ export const createCommonSlice = <
    * @param id Element ID
    * @param isLoading Whether loading is in progress
    */
-  setLoadingId: (id, isLoading) => {
+  setLoadingId: (id: string, isLoading: boolean) => {
     set((state) => {
       if (isLoading) {
         if (!state.loadingIds.includes(id)) {
@@ -110,7 +98,7 @@ export const createCommonSlice = <
    * Sets the global error state
    * @param error Error object or null
    */
-  setError: (error) => {
+  setError: (error: Error | null) => {
     set((state) => {
       state.error = error;
       state.lastUpdated = Date.now();
@@ -122,13 +110,19 @@ export const createCommonSlice = <
    * @param id Element ID
    * @param error Error object or null
    */
-  setErrorForId: (id, error) => {
+  setErrorForId: (id: string, error: Error | null) => {
     set((state) => {
-      if (error) {
-        state.errors[id] = error;
-      } else if (state.errors[id]) {
-        delete state.errors[id];
+      // Create errorMap if it doesn't exist yet
+      if (!state.errorMap) {
+        state.errorMap = {};
       }
+
+      if (error) {
+        state.errorMap[id] = error;
+      } else if (state.errorMap[id]) {
+        delete state.errorMap[id];
+      }
+
       state.lastUpdated = Date.now();
     });
   },
@@ -137,7 +131,7 @@ export const createCommonSlice = <
    * Updates the last fetch time for an entity
    * @param id Entity ID
    */
-  updateLastFetchTime: (id) => {
+  updateLastFetchTime: (id: string) => {
     set((state) => {
       state.lastFetchTimes[id] = Date.now();
       state.lastUpdated = Date.now();

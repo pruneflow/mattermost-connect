@@ -6,37 +6,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import { User, EventType, LoginParams } from "../../types";
+import {
+  User,
+  AuthState,
+  LoginParams,
+  EventType,
+  ErrorSource,
+} from "../../types";
 import { authService } from "../services/authService";
 import { emitEvent } from "../api/eventUtils";
-import { createLoadingSlice } from "./storeUtils";
-
-/**
- * Authentication store state and actions
- */
-interface AuthStoreState {
-  // State
-  isAuthenticated: boolean;
-  isAuthenticating: boolean;
-  currentUser: User | null;
-  token: string | null;
-  serverUrl: string | null;
-  error: Error | null;
-
-  // Actions
-  initialize: () => Promise<boolean>;
-  login: (params: LoginParams) => Promise<User>;
-  logout: () => void;
-  refreshCurrentUser: () => Promise<User | null>;
-  setCurrentUser: (user: User) => void;
-
-  // Loading state actions (provided by loading slice)
-  setLoading: (isLoading: boolean) => void;
-  setError: (error: Error | null) => void;
-
-  // Reset
-  reset: () => void;
-}
+import { createCommonSlice } from "./slices/commonSlice";
+import { handleError } from "./errorStore";
 
 /**
  * Configuration for persist middleware
@@ -45,7 +25,7 @@ const authPersistConfig = {
   name: "mattermost-auth",
 
   // Only persist token and serverUrl to avoid security issues
-  partialize: (state: AuthStoreState) => ({
+  partialize: (state: AuthState) => ({
     token: state.token,
     serverUrl: state.serverUrl,
   }),
@@ -56,24 +36,32 @@ const authPersistConfig = {
  * Uses persist middleware for token persistence
  * Uses immer for immutable state updates
  */
-export const useAuthStore = create<AuthStoreState>()(
+export const useAuthStore = create<
+  AuthState & {
+    // Actions
+    initialize: () => Promise<boolean>;
+    login: (params: LoginParams) => Promise<User>;
+    logout: () => void;
+    refreshCurrentUser: () => Promise<User | null>;
+    setCurrentUser: (user: User) => void;
+    reset: () => void;
+  }
+>()(
   persist(
     immer((set, get) => {
-      // Create loading slice for standardized loading/error state
-      const loadingSlice = createLoadingSlice<any>(set);
+      // Create common slice for standardized loading/error state
+      const commonSlice = createCommonSlice<AuthState>(set);
 
       return {
+        // Include common slice properties
+        ...commonSlice,
+
         // Initial state
         isAuthenticated: false,
         isAuthenticating: false,
         currentUser: null,
         token: null,
         serverUrl: null,
-        error: null,
-
-        // Include loading state actions
-        setLoading: loadingSlice.setLoading,
-        setError: loadingSlice.setError,
 
         /**
          * Initializes authentication from stored token
@@ -102,6 +90,7 @@ export const useAuthStore = create<AuthStoreState>()(
                   state.serverUrl = serverUrl;
                   state.isAuthenticating = false;
                   state.error = null;
+                  state.lastUpdated = Date.now();
                 });
 
                 // Emit authenticated event
@@ -114,14 +103,19 @@ export const useAuthStore = create<AuthStoreState>()(
             set((state) => {
               state.isAuthenticating = false;
               state.isAuthenticated = false;
+              state.lastUpdated = Date.now();
             });
 
             return false;
           } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
             set((state) => {
               state.isAuthenticating = false;
               state.isAuthenticated = false;
               state.error = error as Error;
+              state.lastUpdated = Date.now();
             });
 
             return false;
@@ -155,6 +149,7 @@ export const useAuthStore = create<AuthStoreState>()(
               state.isAuthenticating = false;
               state.serverUrl = serverUrl || authService.getStoredServerUrl();
               state.error = null;
+              state.lastUpdated = Date.now();
             });
 
             // Emit login success event
@@ -162,9 +157,13 @@ export const useAuthStore = create<AuthStoreState>()(
 
             return user;
           } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
             set((state) => {
               state.isAuthenticating = false;
               state.error = error as Error;
+              state.lastUpdated = Date.now();
             });
 
             throw error;
@@ -187,6 +186,7 @@ export const useAuthStore = create<AuthStoreState>()(
             state.currentUser = null;
             state.isAuthenticated = false;
             state.error = null;
+            state.lastUpdated = Date.now();
           });
 
           // Emit logout event
@@ -208,6 +208,7 @@ export const useAuthStore = create<AuthStoreState>()(
             if (user) {
               set((state) => {
                 state.currentUser = user;
+                state.lastUpdated = Date.now();
               });
               return user;
             }
@@ -219,6 +220,7 @@ export const useAuthStore = create<AuthStoreState>()(
               state.token = null;
               state.currentUser = null;
               state.isAuthenticated = false;
+              state.lastUpdated = Date.now();
             });
 
             // Emit session expired event
@@ -226,6 +228,9 @@ export const useAuthStore = create<AuthStoreState>()(
 
             return null;
           } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
             // On error, logout and report
             authService.logout();
 
@@ -234,6 +239,7 @@ export const useAuthStore = create<AuthStoreState>()(
               state.currentUser = null;
               state.isAuthenticated = false;
               state.error = error as Error;
+              state.lastUpdated = Date.now();
             });
 
             // Emit session expired event
@@ -252,6 +258,7 @@ export const useAuthStore = create<AuthStoreState>()(
         setCurrentUser: (user: User) => {
           set((state) => {
             state.currentUser = user;
+            state.lastUpdated = Date.now();
           });
 
           // Emit user updated event
@@ -269,6 +276,7 @@ export const useAuthStore = create<AuthStoreState>()(
             state.isAuthenticating = false;
             state.serverUrl = null;
             state.error = null;
+            state.lastUpdated = Date.now();
           });
         },
       };
