@@ -328,6 +328,22 @@ export function useUnreadCounts() {
     return getTeamUnreadCountsMap();
   }, [getTeamUnreadCountsMap, unreadCounts]);
 
+  const hasUnreadsInTeam = useCallback(
+    (teamId: string, channels: Channel[]): boolean => {
+      const counts = getTeamUnreadCount(teamId, channels);
+      return counts.msg_count > 0 || counts.mention_count > 0;
+    },
+    [getTeamUnreadCount],
+  );
+
+  const hasMentionsInTeam = useCallback(
+    (teamId: string, channels: Channel[]): boolean => {
+      const counts = getTeamUnreadCount(teamId, channels);
+      return counts.mention_count > 0;
+    },
+    [getTeamUnreadCount],
+  );
+
   return {
     // State
     unreadCounts,
@@ -353,6 +369,8 @@ export function useUnreadCounts() {
     isChannelMuted,
     broadcastUnreadCountsUpdate,
     getTeamUnreadCountsMap,
+    hasUnreadsInTeam,
+    hasMentionsInTeam,
 
     // Format utility methods from service
     formatUnreadCount: unreadService.formatUnreadCount.bind(unreadService),
@@ -517,7 +535,7 @@ export function useUnreadCountsListener(
 ) {
   useEffect(() => {
     const handleUpdate = (event: Event) => {
-      const customEvent = event as UnreadCountsUpdatedEvent;
+      const customEvent = event as CustomEvent;
       onUpdate(customEvent.detail);
     };
 

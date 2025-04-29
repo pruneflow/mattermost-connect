@@ -6,8 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS } from "../queryClient";
 import { Channel, ChannelMember } from "../../../types";
-import { useChannelStore } from "../../store/channelStore";
-import { useAuthStore } from "../../store/authStore";
+import { useAuthStore, useChannelStore } from "../../store";
 
 /**
  * Fetches channels for a team
@@ -95,7 +94,6 @@ export const useChannelQuery = (channelId: string | undefined) => {
  * @returns Query hook for channel unread count
  */
 export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
-  const queryClient = useQueryClient();
   const { getState } = useAuthStore;
 
   return useQuery({
@@ -122,14 +120,12 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
       }>(`users/${currentUser.id}/channels/${channelId}/unread`);
 
       // Map response to our internal ChannelUnreadCount format
-      const unreadData = {
+      // Get the channel to find its team
+      return {
         msg_count: response.data.msg_count,
         mention_count: response.data.mention_count,
         lastViewedAt: response.data.last_viewed_at,
       };
-
-      // Get the channel to find its team
-      return unreadData;
     },
     // Don't run query if channelId is not provided or user not authenticated
     enabled: !!channelId && !!getState().currentUser,

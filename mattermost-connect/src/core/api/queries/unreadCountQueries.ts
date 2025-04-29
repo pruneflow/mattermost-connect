@@ -3,27 +3,20 @@
  * React Query hooks for unread count operations
  * Optimized hooks for fetching and managing unread counts
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { useChannelStore } from "../../store/channelStore";
-import { useUnreadStore } from "../../store/unreadStore";
-import { useAuthStore } from "../../store/authStore";
-import { ChannelUnreadCount, Message } from "../../../types";
+import { useAuthStore, useUnreadStore, useChannelStore } from "../../store";
+import { ChannelUnreadCount, Message, ApiError } from "../../../types";
 import { createQueryOptions, createMutationOptions } from "../queryUtils";
 
 /**
- * Interface for paginated message history request
+ * Response type for unread messages query
  */
-export interface MessageHistoryParams {
-  /** Channel ID */
-  channelId: string;
-  /** Last viewed timestamp to fetch from (in milliseconds) */
-  sinceTimestamp: number;
-  /** Page number for pagination */
-  page?: number;
-  /** Number of messages per page */
-  perPage?: number;
+interface UnreadMessagesResponse {
+  messages: Message[];
+  msg_count: number;
+  mention_count: number;
 }
 
 /**
@@ -32,11 +25,10 @@ export interface MessageHistoryParams {
  * @returns Query hook for the channel's unread count
  */
 export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
-  const queryClient = useQueryClient();
   const { updateUnreadCount } = useUnreadStore();
   const { currentUser } = useAuthStore();
 
-  return useQuery({
+  return useQuery<ChannelUnreadCount, ApiError>({
     queryKey: channelId
       ? QUERY_KEYS.channels.unreadCount(channelId)
       : ["channelUnreadCount", "undefined"],
@@ -99,11 +91,10 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
  * @returns Query hook for the team's unread counts
  */
 export const useTeamUnreadCountQuery = (teamId: string | undefined) => {
-  const queryClient = useQueryClient();
   const { updateUnreadCount } = useUnreadStore();
   const { currentUser } = useAuthStore();
 
-  return useQuery({
+  return useQuery<{ msg_count: number; mention_count: number }, ApiError>({
     queryKey: teamId
       ? QUERY_KEYS.unread.byTeam(teamId)
       : ["teamUnreadCount", "undefined"],
@@ -160,11 +151,10 @@ export const useUnreadMessagesQuery = (
   channelId: string | undefined,
   sinceTimestamp?: number,
 ) => {
-  const queryClient = useQueryClient();
   const { incrementUnreadCount } = useUnreadStore();
   const { currentUser } = useAuthStore();
 
-  return useQuery({
+  return useQuery<UnreadMessagesResponse, ApiError>({
     queryKey:
       channelId && sinceTimestamp
         ? QUERY_KEYS.messages.since(channelId, sinceTimestamp)
@@ -238,11 +228,10 @@ export const useUnreadMessagesQuery = (
  * @returns Mutation hook for marking a channel as viewed
  */
 export const useViewChannelMutation = () => {
-  const queryClient = useQueryClient();
   const { markAsRead } = useUnreadStore();
   const { getChannelById } = useChannelStore();
 
-  return useMutation({
+  return useMutation<string, ApiError, string>({
     mutationFn: async (channelId: string) => {
       await apiClient.post("channels/members/me/view", {
         channel_id: channelId,
@@ -271,10 +260,9 @@ export const useViewChannelMutation = () => {
  * @returns Mutation hook for marking all channels as read
  */
 export const useMarkAllChannelsAsReadMutation = () => {
-  const queryClient = useQueryClient();
   const { markAllAsRead } = useUnreadStore();
 
-  return useMutation({
+  return useMutation<string, ApiError, string>({
     mutationFn: async (teamId: string) => {
       await apiClient.post(`teams/${teamId}/channels/members/me/mark_read`);
       return teamId;
@@ -295,17 +283,14 @@ export const useMarkAllChannelsAsReadMutation = () => {
  * @returns Mutation hook for toggling muted state
  */
 export const useToggleChannelMutedMutation = () => {
-  const queryClient = useQueryClient();
   const { setChannelMuted } = useUnreadStore();
 
-  return useMutation({
-    mutationFn: async ({
-      channelId,
-      muted,
-    }: {
-      channelId: string;
-      muted: boolean;
-    }) => {
+  return useMutation<
+    { channelId: string; muted: boolean },
+    ApiError,
+    { channelId: string; muted: boolean }
+  >({
+    mutationFn: async ({ channelId, muted }) => {
       // Create preference object
       const preference = {
         user_id: "me",
@@ -334,16 +319,12 @@ export const useToggleChannelMutedMutation = () => {
  * @returns Mutation hook for acknowledging a message
  */
 export const useAcknowledgeNewMessageMutation = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      channelId,
-      postId,
-    }: {
-      channelId: string;
-      postId: string;
-    }) => {
+  return useMutation<
+    { channelId: string; postId: string },
+    ApiError,
+    { channelId: string; postId: string }
+  >({
+    mutationFn: async ({ channelId, postId }) => {
       // Tell Mattermost server we acknowledged this message
       await apiClient.post(`channels/${channelId}/posts/${postId}/ack`);
       return { channelId, postId };

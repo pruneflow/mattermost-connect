@@ -9,12 +9,11 @@ import { subscribeWithSelector } from "zustand/middleware";
 import {
   Channel,
   ChannelUnreadCount,
-  Message,
-  UnreadState,
   EventType,
+  UnreadState,
 } from "../../types";
 import { unreadService } from "../services/unreadService";
-import { createLoadingSlice } from "../store/storeUtils";
+import { createLoadingSlice } from "./storeUtils";
 import { emitEvent } from "./eventStore";
 
 /**
@@ -241,16 +240,14 @@ export const useUnreadStore = create<UnreadStoreState>()(
               return;
             }
 
-            const unreadCount: ChannelUnreadCount = {
+            // Update unread counts
+            state.unreadCounts[channelId] = {
               ...existingUnread,
               msg_count: 0,
               mention_count: 0,
               lastViewedAt: Date.now(),
               isMuted: state.mutedChannels.has(channelId),
             };
-
-            // Update unread counts
-            state.unreadCounts[channelId] = unreadCount;
 
             // Update last fetch time
             state.lastFetchTimes[channelId] = Date.now();
@@ -456,7 +453,6 @@ export const useUnreadStore = create<UnreadStoreState>()(
           msg_count: number;
           mention_count: number;
         } => {
-          const channelsByTeam: Record<string, Channel[]> = {};
           let totalMessages = 0;
           let totalMentions = 0;
 
