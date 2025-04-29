@@ -1,7 +1,7 @@
 // src/core/store/storeUtils.ts
 /**
  * Store utilities for Zustand
- * Provides lightweight wrappers around standard Zustand middlewares
+ * Provides reusable patterns and helpers for state management
  */
 import { StateCreator, StoreApi, create } from "zustand";
 import { immer } from "zustand/middleware/immer";
@@ -14,10 +14,11 @@ import {
   StoreState,
   ErrorSource,
   ErrorSeverity,
+  AppError,
 } from "../../types";
 
 /**
- * Basic state interface
+ * Basic state interface with loading and error handling
  */
 export interface BaseState extends LoadingState, ErrorState, StoreState {
   lastFetchTimes: Record<string, number>;
@@ -57,9 +58,9 @@ export const initialBaseState: BaseState = {
 type ExtractState<S> = S extends { getState: () => infer T } ? T : never;
 
 /**
- * Creates a store with standard middleware configuration
+ * Creates a standard Zustand store with immer, devtools, and subscribeWithSelector
  * @param name Store name for DevTools
- * @param stateCreator State creator function
+ * @param stateCreator Function to create the store state
  * @returns Zustand store
  */
 export function createStore<T>(
@@ -72,10 +73,10 @@ export function createStore<T>(
 }
 
 /**
- * Creates a persistent store with standard middleware
+ * Creates a persistent Zustand store with standard middleware
  * @param name Store name for DevTools
- * @param stateCreator State creator function
- * @param persistOptions Persistence options
+ * @param stateCreator Function to create the store state
+ * @param persistOptions Options for persistence
  * @returns Zustand store with persistence
  */
 export function createPersistStore<T>(
@@ -99,10 +100,9 @@ export function createPersistStore<T>(
 }
 
 /**
- * Creates a selector that memoizes its result
- * Wrapper around zustand's standard selector pattern
+ * Creates a memoized selector function
  * @param selector Selector function
- * @returns Selector function
+ * @returns Memoized selector
  */
 export function createSelector<State, Result>(
   selector: (state: State) => Result,
@@ -111,9 +111,9 @@ export function createSelector<State, Result>(
 }
 
 /**
- * Helper for creating asynchronous actions with loading state management
+ * Creates an async action creator with loading state management
  * @param set Setter function from Zustand
- * @returns A function that wraps an async action with loading state management
+ * @returns Function that wraps an async action with loading state
  */
 export function createAsyncActionCreator<
   State extends LoadingState & ErrorState,
@@ -157,10 +157,10 @@ export function createAsyncActionCreator<
 }
 
 /**
- * Creates a slice of state with loading/error management
+ * Creates a standardized loading/error management slice
  * @param set Setter function from Zustand
  * @param initialState Optional initial state
- * @returns State and actions for loading/error management
+ * @returns Standard loading/error state and actions
  */
 export function createLoadingSlice<S extends LoadingState & ErrorState>(
   set: (fn: (state: S) => void) => void,
@@ -188,6 +188,10 @@ export function createLoadingSlice<S extends LoadingState & ErrorState>(
       [ErrorSeverity.CRITICAL]: [],
     },
 
+    /**
+     * Sets the global loading state
+     * @param isLoading Whether loading is in progress
+     */
     setLoading: (isLoading: boolean) =>
       set((state) => {
         state.isLoading = isLoading;
@@ -196,6 +200,11 @@ export function createLoadingSlice<S extends LoadingState & ErrorState>(
         }
       }),
 
+    /**
+     * Sets loading state for a specific ID
+     * @param id Element ID
+     * @param isLoading Whether loading is in progress
+     */
     setLoadingId: (id: string, isLoading: boolean) =>
       set((state) => {
         if (isLoading) {
@@ -210,11 +219,20 @@ export function createLoadingSlice<S extends LoadingState & ErrorState>(
         state.isLoading = state.loadingIds.length > 0;
       }),
 
+    /**
+     * Sets the global error state
+     * @param error Error object or null
+     */
     setError: (error: Error | null) =>
       set((state) => {
         state.error = error;
       }),
 
+    /**
+     * Sets an error for a specific ID
+     * @param id Element ID
+     * @param error Error object or null
+     */
     setErrorForId: (id: string, error: Error | null) =>
       set((state) => {
         // Create errorMap if it doesn't exist yet
@@ -249,6 +267,9 @@ export function createLoadingSlice<S extends LoadingState & ErrorState>(
         }
       }),
 
+    /**
+     * Clears all errors
+     */
     clearErrors: () =>
       set((state) => {
         state.error = null;
@@ -256,7 +277,7 @@ export function createLoadingSlice<S extends LoadingState & ErrorState>(
         state.lastError = null;
         state.hasUnhandledError = false;
 
-        // Réinitialiser les collections d'erreurs
+        // Reset error collections
         Object.keys(state.errorsBySource).forEach((source) => {
           state.errorsBySource[source as ErrorSource] = [];
         });

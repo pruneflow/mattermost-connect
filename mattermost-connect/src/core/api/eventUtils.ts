@@ -1,8 +1,7 @@
 // src/core/api/eventUtils.ts
 /**
  * Event utilities
- * Provides functions for event emission and handling
- * Simplifies event management across the application
+ * Provides a standardized pub/sub system for application-wide events
  */
 import { EventType, EventPayload } from "../../types";
 

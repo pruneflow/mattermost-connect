@@ -55,6 +55,9 @@ export const initialCommonState: CommonSlice = {
 /**
  * Creates a common slice with standard loading/error state management
  * Compatible with immer middleware in Zustand
+ *
+ * @param set Function to update the store state
+ * @returns CommonState with both state and actions
  */
 export const createCommonSlice = <
   T extends CommonState & {
@@ -66,6 +69,10 @@ export const createCommonSlice = <
 ): CommonState => ({
   ...initialCommonState,
 
+  /**
+   * Sets the global loading state
+   * @param isLoading Whether loading is in progress
+   */
   setLoading: (isLoading) => {
     set((state) => {
       state.isLoading = isLoading;
@@ -77,6 +84,11 @@ export const createCommonSlice = <
     });
   },
 
+  /**
+   * Sets loading state for a specific ID
+   * @param id Element ID
+   * @param isLoading Whether loading is in progress
+   */
   setLoadingId: (id, isLoading) => {
     set((state) => {
       if (isLoading) {
@@ -94,6 +106,10 @@ export const createCommonSlice = <
     });
   },
 
+  /**
+   * Sets the global error state
+   * @param error Error object or null
+   */
   setError: (error) => {
     set((state) => {
       state.error = error;
@@ -101,6 +117,11 @@ export const createCommonSlice = <
     });
   },
 
+  /**
+   * Sets an error for a specific ID
+   * @param id Element ID
+   * @param error Error object or null
+   */
   setErrorForId: (id, error) => {
     set((state) => {
       if (error) {
@@ -112,6 +133,10 @@ export const createCommonSlice = <
     });
   },
 
+  /**
+   * Updates the last fetch time for an entity
+   * @param id Entity ID
+   */
   updateLastFetchTime: (id) => {
     set((state) => {
       state.lastFetchTimes[id] = Date.now();
@@ -119,6 +144,9 @@ export const createCommonSlice = <
     });
   },
 
+  /**
+   * Resets the slice to initial state
+   */
   reset: () => {
     set((state) => {
       // Reset to initial state

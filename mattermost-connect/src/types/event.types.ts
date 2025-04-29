@@ -1,5 +1,6 @@
 /**
  * Types for event handling system
+ * Provides comprehensive types for the application-wide event system
  */
 
 /**
@@ -20,6 +21,7 @@ export enum EventCategory {
 
 /**
  * Common event types
+ * Using a namespace pattern for better organization and type safety
  */
 export enum EventType {
   // Auth events
@@ -79,9 +81,13 @@ export enum EventType {
  * Generic event payload interface
  */
 export interface EventPayload<T = any> {
+  /** Event type that was emitted */
   type: EventType;
+  /** Event data specific to the event type */
   data: T;
+  /** Timestamp when the event was emitted */
   timestamp: number;
+  /** Optional metadata for additional context */
   meta?: Record<string, any>;
 }
 
@@ -94,6 +100,59 @@ export type EventHandler<T = any> = (payload: EventPayload<T>) => void;
  * Event state for the store
  */
 export interface EventState {
+  /** Map of event handlers by event type */
   handlers: Record<string, Set<EventHandler>>;
+  /** Most recent events by type */
   lastEvents: Record<string, EventPayload>;
+}
+
+/**
+ * Event data interfaces for specific event types
+ */
+
+export interface AuthEventData {
+  user?: any;
+  timestamp: number;
+  reason?: string;
+}
+
+export interface ChannelEventData {
+  channel: any;
+  teamId?: string;
+  userId?: string;
+}
+
+export interface MessageEventData {
+  message: any;
+  channelId: string;
+  userId?: string;
+}
+
+export interface UserEventData {
+  user?: any;
+  userId?: string;
+  status?: string;
+  previousStatus?: string;
+}
+
+export interface WebSocketEventData {
+  isConnected?: boolean;
+  code?: number;
+  reason?: string;
+  timestamp: number;
+  reconnected?: boolean;
+  error?: Error;
+}
+
+export interface UnreadEventData {
+  channelId?: string;
+  teamId?: string;
+  unreadCount?: any;
+}
+
+export interface SettingsEventData {
+  setting: string;
+  value?: any;
+  key?: string;
+  reset?: boolean;
 }
