@@ -114,9 +114,6 @@ export const useErrorStore = create<ErrorStoreState>()(
     // Create standard loading slice
     const loadingSlice = createLoadingSlice<ErrorStoreState>(set);
 
-    // Note: loadingSlice contient déjà les champs errors, errorsBySource, etc.
-    // car nous avons corrigé le createLoadingSlice dans storeUtils.ts
-
     return {
       // Initial state
       ...initialState,
