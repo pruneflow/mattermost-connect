@@ -7,20 +7,20 @@ import React, {
   ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
-  useState,
 } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { apiClient } from "../core/api/client";
 import { queryClient } from "../core/api/queryClient";
-import { useAuthStore } from "../core/store/authStore";
-import { useWsStore } from "../core/store/wsStore";
+import { useWsStore, useAuthStore } from "../core/store";
 import { wsService } from "../core/services/wsService";
-import { useUnreadCounts } from "../hooks/useUnreadCounts";
-import { JSX } from "react/jsx-runtime";
+import { useUnreadCounts } from "../hooks";
+import { emitEvent } from "../core/api/eventUtils";
+import { EventType } from "../types";
 
 /**
- * MattermostProvider props
+ * Props for the MattermostProvider component
  */
 export interface MattermostProviderProps {
   /** Children elements */
@@ -46,86 +46,61 @@ export interface MattermostProviderProps {
 }
 
 /**
- * Determines if we're using direct or proxy mode
- * @param props Provider props
- * @returns API mode
+ * Determines if we're using direct or proxy mode based on provided URLs
  */
-function determineMode(props: MattermostProviderProps): "direct" | "proxy" {
-  if (props.serverUrl) {
+function determineMode(
+  serverUrl?: string,
+  proxyUrl?: string,
+  clientId?: string,
+): "direct" | "proxy" {
+  if (serverUrl) {
     return "direct";
-  } else if (props.proxyUrl && props.clientId) {
+  } else if (proxyUrl && clientId) {
     return "proxy";
   }
+
   // Default to direct mode if not specified
   return "direct";
 }
 
-function MattermostProviderContent({
-  children,
+/**
+ * Initialization component that handles API client and authentication setup
+ * Separated to avoid unnecessary re-renders of the children
+ */
+const MattermostInitializer: React.FC<MattermostProviderProps> = ({
   serverUrl,
   proxyUrl,
   clientId,
   token,
   enableWebSocket = true,
-  persistAuth = true,
   onInitialized,
   onAuthError,
   onWebSocketError,
-}: MattermostProviderProps) {
-  // États
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [initError, setInitError] = useState<Error | null>(null);
+}) => {
+  // Get state and actions from stores
+  const { initialize, setError: setAuthError } = useAuthStore();
+  const { connect: connectWs, setError: setWsError } = useWsStore();
 
-  // CHANGEMENT IMPORTANT: Utiliser useRef pour l'état de la connexion WebSocket
-  // plutôt que useState, pour éviter des rendus supplémentaires
+  // Use ref for tracking initialization to prevent unnecessary effect triggers
+  const isInitializedRef = useRef(false);
+
+  // Hook that uses React Query - safe to use here as no rendering depends on it
+  const { loadInitialUnreadCounts } = useUnreadCounts();
+
+  // WebSocket connection tracking ref to avoid state-based re-renders
   const wsConnectionStatusRef = useRef({
     hadSuccessfulConnection: false,
     hasDisconnected: false,
     lastConnectedAt: 0,
   });
 
-  // Hooks du store
-  const { initialize, setError: setAuthError } = useAuthStore();
-  const {
-    connect: connectWs,
-    setError: setWsError,
-    isConnected,
-  } = useWsStore();
+  // Determine the API mode (direct/proxy)
+  const mode = useMemo(
+    () => determineMode(serverUrl, proxyUrl, clientId),
+    [serverUrl, proxyUrl, clientId],
+  );
 
-  // Hook qui utilise React Query - maintenant utilisable en toute sécurité
-  const { loadInitialUnreadCounts } = useUnreadCounts();
-
-  // Déterminer le mode (direct/proxy)
-  const mode = serverUrl ? "direct" : proxyUrl && clientId ? "proxy" : "direct";
-
-  // Gestionnaire de reconnexion WebSocket
-  const handleWsReconnect = useCallback(() => {
-    // Utiliser une fonction qui ne modifie pas l'état local
-    if (
-      wsConnectionStatusRef.current.hadSuccessfulConnection &&
-      wsConnectionStatusRef.current.hasDisconnected
-    ) {
-      void loadInitialUnreadCounts();
-      wsConnectionStatusRef.current.hasDisconnected = false;
-    }
-  }, [loadInitialUnreadCounts]); // Moins de dépendances
-
-  useEffect(() => {
-    if (isConnected) {
-      if (wsConnectionStatusRef.current.hasDisconnected) {
-        handleWsReconnect();
-      }
-
-      wsConnectionStatusRef.current = {
-        hadSuccessfulConnection: true,
-        hasDisconnected: false,
-        lastConnectedAt: Date.now(),
-      };
-    } else if (wsConnectionStatusRef.current.hadSuccessfulConnection) {
-      wsConnectionStatusRef.current.hasDisconnected = true;
-    }
-  }, [isConnected, handleWsReconnect]);
-
+  // Configure API client
   useEffect(() => {
     try {
       apiClient.configure({
@@ -143,14 +118,56 @@ function MattermostProviderContent({
       });
     } catch (error) {
       console.error("Failed to configure API client:", error);
-      setInitError(error as Error);
+      if (onAuthError) {
+        onAuthError(error as Error);
+      }
     }
   }, [serverUrl, proxyUrl, clientId, token, mode, onAuthError]);
 
-  // Initialisation de l'authentification et WebSocket - légèrement modifiée
+  // Handle WebSocket reconnection - optimized to reduce dependencies
+  const handleWsReconnect = useCallback(() => {
+    if (
+      wsConnectionStatusRef.current.hadSuccessfulConnection &&
+      wsConnectionStatusRef.current.hasDisconnected
+    ) {
+      void loadInitialUnreadCounts();
+      wsConnectionStatusRef.current.hasDisconnected = false;
+
+      // Emit reconnection event
+      emitEvent(EventType.WEBSOCKET_CONNECTED, {
+        timestamp: Date.now(),
+        reconnected: true,
+      });
+    }
+  }, [loadInitialUnreadCounts]);
+
+  // Update WebSocket connection status
   useEffect(() => {
-    // Éviter les appels excessifs
-    if (isInitialized) return;
+    const handleWsConnection = (state: any) => {
+      const isConnected = state.isConnected;
+      if (isConnected) {
+        if (wsConnectionStatusRef.current.hasDisconnected) {
+          handleWsReconnect();
+        }
+
+        wsConnectionStatusRef.current = {
+          hadSuccessfulConnection: true,
+          hasDisconnected: false,
+          lastConnectedAt: Date.now(),
+        };
+      } else if (wsConnectionStatusRef.current.hadSuccessfulConnection) {
+        wsConnectionStatusRef.current.hasDisconnected = true;
+      }
+    };
+
+    // Subscribe to WebSocket connection events
+    return useWsStore.subscribe(handleWsConnection);
+  }, [handleWsReconnect]);
+
+  // Initialize authentication and WebSocket connection
+  useEffect(() => {
+    // Skip if already initialized
+    if (isInitializedRef.current) return;
 
     const initAuth = async () => {
       try {
@@ -165,7 +182,7 @@ function MattermostProviderContent({
         // Connect WebSocket if enabled and authenticated
         if (enableWebSocket && isAuthenticated) {
           try {
-            // Build WebSocket URL from the server URL, replacing http(s) with ws(s)
+            // Only connect in direct mode for now
             if (mode === "direct" && serverUrl) {
               const wsUrl =
                 serverUrl.replace(
@@ -177,8 +194,8 @@ function MattermostProviderContent({
               if (authToken) {
                 await connectWs(wsUrl, authToken);
 
-                // Sécuritaire d'appeler ici car le Provider est déjà monté
-                loadInitialUnreadCounts();
+                // Load initial unread counts
+                await loadInitialUnreadCounts();
               }
             }
           } catch (wsError) {
@@ -190,16 +207,15 @@ function MattermostProviderContent({
             }
           }
         } else if (isAuthenticated) {
-          // Même sans WebSocket, charger les compteurs
-          loadInitialUnreadCounts();
+          // Even without WebSocket, load unread counts
+          await loadInitialUnreadCounts();
         }
 
-        // CHANGEMENT IMPORTANT: Mettre à jour isInitialized à la fin, pas au milieu
-        setIsInitialized(true);
+        // Mark as initialized
+        isInitializedRef.current = true;
       } catch (authError) {
         console.error("Failed to initialize authentication:", authError);
         setAuthError(authError as Error);
-        setInitError(authError as Error);
 
         if (onAuthError) {
           onAuthError(authError as Error);
@@ -207,15 +223,15 @@ function MattermostProviderContent({
       }
     };
 
-    // Seulement initialiser avec la configuration requise
+    // Only initialize with the required configuration
     if (
       (mode === "direct" && serverUrl) ||
       (mode === "proxy" && proxyUrl && clientId)
     ) {
-      initAuth();
+      void initAuth();
     }
 
-    // Nettoyage
+    // Cleanup WebSocket connection on unmount
     return () => {
       if (wsService.isSocketConnected()) {
         wsService.disconnect();
@@ -227,9 +243,7 @@ function MattermostProviderContent({
     clientId,
     token,
     enableWebSocket,
-    persistAuth,
     mode,
-    isInitialized,
     initialize,
     connectWs,
     setAuthError,
@@ -240,30 +254,38 @@ function MattermostProviderContent({
     loadInitialUnreadCounts,
   ]);
 
-  // Le rendu est simplement les enfants - toute la logique est au-dessus
-  return <>{children}</>;
-}
+  // This component doesn't render anything
+  return null;
+};
+
+/**
+ * Memoized Initializer component to prevent unnecessary re-renders
+ */
+const MemoizedInitializer = React.memo(MattermostInitializer);
 
 /**
  * Main provider component for MattermostConnect
  * Initializes all required services and provides context to child components
- * @param props Provider props
- * @returns Provider component
  */
-export function MattermostProvider(props: MattermostProviderProps) {
+export const MattermostProvider: React.FC<MattermostProviderProps> = (
+  props,
+) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <MattermostProviderContent {...props} />
+      <MemoizedInitializer {...props} />
+      {props.children}
     </QueryClientProvider>
   );
-}
+};
 
 /**
  * Direct mode provider for Mattermost
- * @param props Provider props
- * @returns Provider component
  */
-export function MattermostDirectProvider({
+export const MattermostDirectProvider: React.FC<
+  Omit<MattermostProviderProps, "proxyUrl" | "clientId"> & {
+    serverUrl: string;
+  }
+> = ({
   children,
   serverUrl,
   token,
@@ -272,9 +294,7 @@ export function MattermostDirectProvider({
   onInitialized,
   onAuthError,
   onWebSocketError,
-}: Omit<MattermostProviderProps, "proxyUrl" | "clientId"> & {
-  serverUrl: string;
-}) {
+}) => {
   return (
     <MattermostProvider
       serverUrl={serverUrl}
@@ -288,14 +308,17 @@ export function MattermostDirectProvider({
       {children}
     </MattermostProvider>
   );
-}
+};
 
 /**
  * Proxy mode provider for Mattermost
- * @param props Provider props
- * @returns Provider component
  */
-export function MattermostProxyProvider({
+export const MattermostProxyProvider: React.FC<
+  Omit<MattermostProviderProps, "serverUrl"> & {
+    proxyUrl: string;
+    clientId: string;
+  }
+> = ({
   children,
   proxyUrl,
   clientId,
@@ -305,10 +328,7 @@ export function MattermostProxyProvider({
   onInitialized,
   onAuthError,
   onWebSocketError,
-}: Omit<MattermostProviderProps, "serverUrl"> & {
-  proxyUrl: string;
-  clientId: string;
-}) {
+}) => {
   return (
     <MattermostProvider
       proxyUrl={proxyUrl}
@@ -323,4 +343,4 @@ export function MattermostProxyProvider({
       {children}
     </MattermostProvider>
   );
-}
+};
