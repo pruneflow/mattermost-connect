@@ -1,7 +1,7 @@
 // src/core/services/messageService.ts
 /**
  * Message service
- * Provides business logic for message operations
+ * Provides business logic for message operations and formatting
  */
 import {
   Message,
@@ -9,9 +9,13 @@ import {
   ReactionCount,
   User,
   MessageAttachment,
+  ErrorSource,
+  EventType,
 } from "../../types";
 import { formatDate } from "../../utils/formatters";
 import { escapeHtml } from "../../utils/mattermostUtils";
+import { handleError } from "../store";
+import { emitEvent } from "../api/eventUtils";
 
 /**
  * Service for message-related operations
@@ -24,7 +28,15 @@ class MessageService {
    * @returns Sorted messages
    */
   public sortMessages(messages: Message[]): Message[] {
-    return [...messages].sort((a, b) => a.create_at - b.create_at);
+    try {
+      return [...messages].sort((a, b) => a.create_at - b.create_at);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "sortMessages",
+        messageCount: messages?.length,
+      });
+      return [...messages]; // Return unsorted copy as fallback
+    }
   }
 
   /**
@@ -33,7 +45,15 @@ class MessageService {
    * @returns Sorted messages
    */
   public sortMessagesReverse(messages: Message[]): Message[] {
-    return [...messages].sort((a, b) => b.create_at - a.create_at);
+    try {
+      return [...messages].sort((a, b) => b.create_at - a.create_at);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "sortMessagesReverse",
+        messageCount: messages?.length,
+      });
+      return [...messages]; // Return unsorted copy as fallback
+    }
   }
 
   /**
@@ -42,20 +62,31 @@ class MessageService {
    * @returns Map of date strings to messages
    */
   public groupMessagesByDate(messages: Message[]): Map<string, Message[]> {
-    const groupedMessages = new Map<string, Message[]>();
+    try {
+      const groupedMessages = new Map<string, Message[]>();
 
-    messages.forEach((message) => {
-      const date = new Date(message.create_at);
-      const dateString = formatDate(date, { showTime: false, format: "short" });
+      messages.forEach((message) => {
+        const date = new Date(message.create_at);
+        const dateString = formatDate(date, {
+          showTime: false,
+          format: "short",
+        });
 
-      if (!groupedMessages.has(dateString)) {
-        groupedMessages.set(dateString, []);
-      }
+        if (!groupedMessages.has(dateString)) {
+          groupedMessages.set(dateString, []);
+        }
 
-      groupedMessages.get(dateString)?.push(message);
-    });
+        groupedMessages.get(dateString)?.push(message);
+      });
 
-    return groupedMessages;
+      return groupedMessages;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "groupMessagesByDate",
+        messageCount: messages?.length,
+      });
+      return new Map<string, Message[]>();
+    }
   }
 
   /**
@@ -70,22 +101,24 @@ class MessageService {
   ): string {
     if (!message) return "";
 
-    // This is a placeholder for more complex formatting
-    // In a real implementation, you would want to process:
-    // - Markdown formatting
-    // - User mentions
-    // - Channel mentions
-    // - Emojis
-    // - Links
+    try {
+      // Process message in stages
+      let formattedText = this.escapeMentions(message);
+      formattedText = this.processEmojis(formattedText);
 
-    let formattedText = this.escapeMentions(message);
-    formattedText = this.processEmojis(formattedText);
+      if (users) {
+        formattedText = this.processMentions(formattedText, users);
+      }
 
-    if (users) {
-      formattedText = this.processMentions(formattedText, users);
+      return formattedText;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "formatMessageText",
+        messageLength: message?.length,
+      });
+      // Return safely escaped text as fallback
+      return escapeHtml(message);
     }
-
-    return formattedText;
   }
 
   /**
@@ -145,15 +178,23 @@ class MessageService {
    * @returns Array of emoji names
    */
   public extractEmojis(text: string): string[] {
-    const emojiRegex = /:([a-zA-Z0-9_+\-]+):/g;
-    const emojis: string[] = [];
-    let match;
+    try {
+      const emojiRegex = /:([a-zA-Z0-9_+\-]+):/g;
+      const emojis: string[] = [];
+      let match;
 
-    while ((match = emojiRegex.exec(text)) !== null) {
-      emojis.push(match[1]);
+      while ((match = emojiRegex.exec(text)) !== null) {
+        emojis.push(match[1]);
+      }
+
+      return emojis;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "extractEmojis",
+        textLength: text?.length,
+      });
+      return [];
     }
-
-    return emojis;
   }
 
   /**
@@ -162,15 +203,23 @@ class MessageService {
    * @returns Array of usernames mentioned
    */
   public extractUserMentions(text: string): string[] {
-    const mentionRegex = /@([a-zA-Z0-9_.-]+)/g;
-    const mentions: string[] = [];
-    let match;
+    try {
+      const mentionRegex = /@([a-zA-Z0-9_.-]+)/g;
+      const mentions: string[] = [];
+      let match;
 
-    while ((match = mentionRegex.exec(text)) !== null) {
-      mentions.push(match[1]);
+      while ((match = mentionRegex.exec(text)) !== null) {
+        mentions.push(match[1]);
+      }
+
+      return mentions;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "extractUserMentions",
+        textLength: text?.length,
+      });
+      return [];
     }
-
-    return mentions;
   }
 
   /**
@@ -273,21 +322,29 @@ class MessageService {
   public getReactionsByEmoji(
     message: Message,
   ): Record<string, MessageReaction[]> {
-    if (!message.metadata?.reactions) {
-      return {};
-    }
-
-    const groupedReactions: Record<string, MessageReaction[]> = {};
-
-    message.metadata.reactions.forEach((reaction) => {
-      if (!groupedReactions[reaction.emoji_name]) {
-        groupedReactions[reaction.emoji_name] = [];
+    try {
+      if (!message.metadata?.reactions) {
+        return {};
       }
 
-      groupedReactions[reaction.emoji_name].push(reaction);
-    });
+      const groupedReactions: Record<string, MessageReaction[]> = {};
 
-    return groupedReactions;
+      message.metadata.reactions.forEach((reaction) => {
+        if (!groupedReactions[reaction.emoji_name]) {
+          groupedReactions[reaction.emoji_name] = [];
+        }
+
+        groupedReactions[reaction.emoji_name].push(reaction);
+      });
+
+      return groupedReactions;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getReactionsByEmoji",
+        messageId: message.id,
+      });
+      return {};
+    }
   }
 
   /**
@@ -296,13 +353,21 @@ class MessageService {
    * @returns Reaction counts
    */
   public getReactionCounts(message: Message): ReactionCount[] {
-    const groupedReactions = this.getReactionsByEmoji(message);
+    try {
+      const groupedReactions = this.getReactionsByEmoji(message);
 
-    return Object.entries(groupedReactions).map(([emoji, reactions]) => ({
-      emoji_name: emoji,
-      count: reactions.length,
-      userIds: reactions.map((r) => r.user_id),
-    }));
+      return Object.entries(groupedReactions).map(([emoji, reactions]) => ({
+        emoji_name: emoji,
+        count: reactions.length,
+        userIds: reactions.map((r) => r.user_id),
+      }));
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getReactionCounts",
+        messageId: message.id,
+      });
+      return [];
+    }
   }
 
   /**
@@ -348,17 +413,25 @@ class MessageService {
    * @returns Array of image attachments
    */
   public getImageAttachments(message: Message): MessageAttachment[] {
-    if (!message.metadata?.files) {
+    try {
+      if (!message.metadata?.files) {
+        return [];
+      }
+
+      return message.metadata.files.filter(
+        (file) =>
+          file.mime_type?.startsWith("image/") ||
+          ["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(
+            file.name.split(".").pop()?.toLowerCase() || "",
+          ),
+      );
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getImageAttachments",
+        messageId: message.id,
+      });
       return [];
     }
-
-    return message.metadata.files.filter(
-      (file) =>
-        file.mime_type?.startsWith("image/") ||
-        ["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(
-          file.name.split(".").pop()?.toLowerCase() || "",
-        ),
-    );
   }
 
   /**
@@ -367,30 +440,38 @@ class MessageService {
    * @returns Map of root message IDs to thread messages
    */
   public organizeThreads(messages: Message[]): Map<string, Message[]> {
-    const rootMessages: Message[] = [];
-    const threadReplies = new Map<string, Message[]>();
+    try {
+      const rootMessages: Message[] = [];
+      const threadReplies = new Map<string, Message[]>();
 
-    // First pass: separate root messages and replies
-    messages.forEach((message) => {
-      if (message.root_id) {
-        // This is a thread reply
-        if (!threadReplies.has(message.root_id)) {
-          threadReplies.set(message.root_id, []);
+      // First pass: separate root messages and replies
+      messages.forEach((message) => {
+        if (message.root_id) {
+          // This is a thread reply
+          if (!threadReplies.has(message.root_id)) {
+            threadReplies.set(message.root_id, []);
+          }
+
+          threadReplies.get(message.root_id)?.push(message);
+        } else {
+          // This is a root message
+          rootMessages.push(message);
         }
+      });
 
-        threadReplies.get(message.root_id)?.push(message);
-      } else {
-        // This is a root message
-        rootMessages.push(message);
-      }
-    });
+      // Sort thread replies by date
+      threadReplies.forEach((replies, rootId) => {
+        threadReplies.set(rootId, this.sortMessages(replies));
+      });
 
-    // Sort thread replies by date
-    threadReplies.forEach((replies, rootId) => {
-      threadReplies.set(rootId, this.sortMessages(replies));
-    });
-
-    return threadReplies;
+      return threadReplies;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "organizeThreads",
+        messageCount: messages.length,
+      });
+      return new Map<string, Message[]>();
+    }
   }
 
   /**
@@ -454,7 +535,9 @@ class MessageService {
    * @returns File extension
    */
   public getFileExtension(fileName: string): string {
-    return fileName.split(".").pop()?.toLowerCase() || "";
+    return fileName
+      .slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2)
+      .toLowerCase();
   }
 
   /**
@@ -525,6 +608,49 @@ class MessageService {
       create_at: Date.now(),
       update_at: Date.now(),
     };
+  }
+
+  /**
+   * Validates that a message meets requirements
+   * @param message Message to validate
+   * @returns Whether the message is valid
+   */
+  public validateMessage(message: string): boolean {
+    if (!message || typeof message !== "string") {
+      return false;
+    }
+
+    // Check if message exceeds maximum length
+    const MAX_LENGTH = 16383; // Mattermost maximum message length
+    if (message.length > MAX_LENGTH) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Notifies about message events
+   * @param message Message that was acted upon
+   * @param action Action performed on the message
+   */
+  public notifyMessageEvent(
+    message: Message,
+    action: "sent" | "received" | "updated" | "deleted",
+  ): void {
+    const eventMap = {
+      sent: EventType.MESSAGE_SENT,
+      received: EventType.MESSAGE_RECEIVED,
+      updated: EventType.MESSAGE_UPDATED,
+      deleted: EventType.MESSAGE_DELETED,
+    };
+
+    emitEvent(eventMap[action], {
+      message,
+      channelId: message.channel_id,
+      userId: message.user_id,
+      timestamp: Date.now(),
+    });
   }
 }
 

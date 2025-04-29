@@ -6,11 +6,14 @@
 import {
   User,
   UserStatus,
-  UserStatusInfo,
   UserWithStatus,
   UserProfileUpdate,
+  ErrorSource,
+  EventType,
 } from "../../types";
 import { formatDate } from "../../utils/formatters";
+import { handleError } from "../store";
+import { emitEvent } from "../api/eventUtils";
 
 /**
  * Typing indicator timeout (5 seconds)
@@ -34,15 +37,23 @@ class UserService {
   ): string {
     if (!user) return "Unknown User";
 
-    if (!preferUsername && user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`;
-    } else if (!preferUsername && user.nickname) {
-      return user.nickname;
-    } else if (user.username) {
-      return user.username;
-    }
+    try {
+      if (!preferUsername && user.first_name && user.last_name) {
+        return `${user.first_name} ${user.last_name}`;
+      } else if (!preferUsername && user.nickname) {
+        return user.nickname;
+      } else if (user.username) {
+        return user.username;
+      }
 
-    return "Unknown User";
+      return "Unknown User";
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "formatUserName",
+        userId: user?.id,
+      });
+      return user?.username || "Unknown User";
+    }
   }
 
   /**
@@ -53,19 +64,27 @@ class UserService {
   public getUserInitials(user: User | null | undefined): string {
     if (!user) return "?";
 
-    if (user.first_name && user.last_name) {
-      return (
-        user.first_name.charAt(0) + user.last_name.charAt(0)
-      ).toUpperCase();
-    } else if (user.first_name) {
-      return user.first_name.charAt(0).toUpperCase();
-    } else if (user.nickname) {
-      return user.nickname.charAt(0).toUpperCase();
-    } else if (user.username) {
-      return user.username.charAt(0).toUpperCase();
-    }
+    try {
+      if (user.first_name && user.last_name) {
+        return (
+          user.first_name.charAt(0) + user.last_name.charAt(0)
+        ).toUpperCase();
+      } else if (user.first_name) {
+        return user.first_name.charAt(0).toUpperCase();
+      } else if (user.nickname) {
+        return user.nickname.charAt(0).toUpperCase();
+      } else if (user.username) {
+        return user.username.charAt(0).toUpperCase();
+      }
 
-    return "?";
+      return "?";
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getUserInitials",
+        userId: user?.id,
+      });
+      return "?";
+    }
   }
 
   /**
@@ -77,8 +96,16 @@ class UserService {
   public getProfilePictureUrl(user: User, size: number = 128): string {
     if (!user || !user.id) return "";
 
-    const timestamp = user.last_picture_update || "";
-    return `/api/v4/users/${user.id}/image?_=${timestamp}&size=${size}`;
+    try {
+      const timestamp = user.last_picture_update || "";
+      return `/api/v4/users/${user.id}/image?_=${timestamp}&size=${size}`;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getProfilePictureUrl",
+        userId: user.id,
+      });
+      return "";
+    }
   }
 
   /**
@@ -89,18 +116,26 @@ class UserService {
   public getUserColor(userId: string): string {
     if (!userId) return "#000000";
 
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-    }
+    try {
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+        hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+      }
 
-    let color = "#";
-    for (let i = 0; i < 3; i++) {
-      const value = (hash >> (i * 8)) & 0xff;
-      color += ("00" + value.toString(16)).substr(-2);
-    }
+      let color = "#";
+      for (let i = 0; i < 3; i++) {
+        const value = (hash >> (i * 8)) & 0xff;
+        color += ("00" + value.toString(16)).substr(-2);
+      }
 
-    return color;
+      return color;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getUserColor",
+        userId,
+      });
+      return "#cccccc"; // Safe fallback color
+    }
   }
 
   /**
@@ -112,14 +147,22 @@ class UserService {
   public formatUserList(users: User[], maxUsers: number = 3): string {
     if (!users.length) return "";
 
-    if (users.length <= maxUsers) {
-      return users.map((user) => this.formatUserName(user)).join(", ");
+    try {
+      if (users.length <= maxUsers) {
+        return users.map((user) => this.formatUserName(user)).join(", ");
+      }
+
+      const visibleUsers = users.slice(0, maxUsers);
+      const remaining = users.length - maxUsers;
+
+      return `${visibleUsers.map((user) => this.formatUserName(user)).join(", ")} and ${remaining} more`;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "formatUserList",
+        userCount: users.length,
+      });
+      return `${users.length} users`;
     }
-
-    const visibleUsers = users.slice(0, maxUsers);
-    const remaining = users.length - maxUsers;
-
-    return `${visibleUsers.map((user) => this.formatUserName(user)).join(", ")} and ${remaining} more`;
   }
 
   /**
@@ -197,11 +240,19 @@ class UserService {
    * @returns Array of user IDs who are currently typing
    */
   public getTypingUsers(typingUsers: Record<string, number>): string[] {
-    const now = Date.now();
+    try {
+      const now = Date.now();
 
-    return Object.entries(typingUsers)
-      .filter(([_, timestamp]) => now - timestamp < TYPING_TIMEOUT)
-      .map(([userId]) => userId);
+      return Object.entries(typingUsers)
+        .filter(([_, timestamp]) => now - timestamp < TYPING_TIMEOUT)
+        .map(([userId]) => userId);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getTypingUsers",
+        timestamp: Date.now(),
+      });
+      return [];
+    }
   }
 
   /**
@@ -213,18 +264,28 @@ class UserService {
   public formatTypingMessage(users: User[], maxUsers: number = 2): string {
     if (!users.length) return "";
 
-    if (users.length === 1) {
-      return `${this.formatUserName(users[0])} is typing...`;
-    }
+    try {
+      if (users.length === 1) {
+        return `${this.formatUserName(users[0])} is typing...`;
+      }
 
-    if (users.length <= maxUsers) {
-      const names = users
-        .map((user) => this.formatUserName(user))
-        .join(" and ");
-      return `${names} are typing...`;
-    }
+      if (users.length <= maxUsers) {
+        const names = users
+          .map((user) => this.formatUserName(user))
+          .join(" and ");
+        return `${names} are typing...`;
+      }
 
-    return `Several people are typing...`;
+      return `Several people are typing...`;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "formatTypingMessage",
+        userCount: users.length,
+      });
+      return users.length === 1
+        ? "Someone is typing..."
+        : "People are typing...";
+    }
   }
 
   /**
@@ -236,16 +297,25 @@ class UserService {
   public filterUsersByTerm(users: User[], searchTerm: string): User[] {
     if (!searchTerm) return users;
 
-    const term = searchTerm.toLowerCase();
+    try {
+      const term = searchTerm.toLowerCase();
 
-    return users.filter(
-      (user) =>
-        (user.username && user.username.toLowerCase().includes(term)) ||
-        (user.first_name && user.first_name.toLowerCase().includes(term)) ||
-        (user.last_name && user.last_name.toLowerCase().includes(term)) ||
-        (user.nickname && user.nickname.toLowerCase().includes(term)) ||
-        (user.email && user.email.toLowerCase().includes(term)),
-    );
+      return users.filter(
+        (user) =>
+          (user.username && user.username.toLowerCase().includes(term)) ||
+          (user.first_name && user.first_name.toLowerCase().includes(term)) ||
+          (user.last_name && user.last_name.toLowerCase().includes(term)) ||
+          (user.nickname && user.nickname.toLowerCase().includes(term)) ||
+          (user.email && user.email.toLowerCase().includes(term)),
+      );
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "filterUsersByTerm",
+        searchTerm,
+        userCount: users.length,
+      });
+      return users;
+    }
   }
 
   /**
@@ -254,11 +324,19 @@ class UserService {
    * @returns Sorted users
    */
   public sortUsersByDisplayName(users: User[]): User[] {
-    return [...users].sort((a, b) => {
-      const nameA = this.formatUserName(a);
-      const nameB = this.formatUserName(b);
-      return nameA.localeCompare(nameB);
-    });
+    try {
+      return [...users].sort((a, b) => {
+        const nameA = this.formatUserName(a);
+        const nameB = this.formatUserName(b);
+        return nameA.localeCompare(nameB);
+      });
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "sortUsersByDisplayName",
+        userCount: users.length,
+      });
+      return [...users];
+    }
   }
 
   /**
@@ -271,11 +349,20 @@ class UserService {
     status: UserStatus,
     timestamp: number,
   ): string {
-    const formattedTime = formatDate(timestamp, {
-      showTime: true,
-      relative: true,
-    });
-    return `${this.formatUserStatus(status)} ${formattedTime}`;
+    try {
+      const formattedTime = formatDate(timestamp, {
+        showTime: true,
+        relative: true,
+      });
+      return `${this.formatUserStatus(status)} ${formattedTime}`;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "formatUserStatusWithTime",
+        status,
+        timestamp,
+      });
+      return this.formatUserStatus(status);
+    }
   }
 
   /**
@@ -310,8 +397,17 @@ class UserService {
    * @returns Whether email format is valid
    */
   public isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    if (!email) return false;
+
+    try {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(email);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "isValidEmail",
+      });
+      return false;
+    }
   }
 
   /**
@@ -320,9 +416,18 @@ class UserService {
    * @returns Whether username format is valid
    */
   public isValidUsername(username: string): boolean {
-    // Username must be 3-22 characters, alphanumeric or dots, dashes, underscores
-    const usernameRegex = /^[a-zA-Z0-9\.\-\_]{3,22}$/;
-    return usernameRegex.test(username);
+    if (!username) return false;
+
+    try {
+      // Username must be 3-22 characters, alphanumeric or dots, dashes, underscores
+      const usernameRegex = /^[a-zA-Z0-9\.\-\_]{3,22}$/;
+      return usernameRegex.test(username);
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "isValidUsername",
+      });
+      return false;
+    }
   }
 
   /**
@@ -333,12 +438,20 @@ class UserService {
   public getUserRolesText(user: User): string {
     if (!user.roles) return "Member";
 
-    const roles = user.roles.split(" ");
+    try {
+      const roles = user.roles.split(" ");
 
-    if (roles.includes("system_admin")) return "System Admin";
-    if (roles.includes("system_user")) return "System User";
+      if (roles.includes("system_admin")) return "System Admin";
+      if (roles.includes("system_user")) return "System User";
 
-    return "Member";
+      return "Member";
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getUserRolesText",
+        userId: user.id,
+      });
+      return "Member";
+    }
   }
 
   /**
@@ -347,29 +460,85 @@ class UserService {
    * @returns Sanitized update object
    */
   public createProfileUpdate(userData: Partial<User>): UserProfileUpdate {
-    const update: UserProfileUpdate = {};
+    try {
+      const update: UserProfileUpdate = {};
 
-    if (userData.email && this.isValidEmail(userData.email)) {
-      update.email = userData.email;
+      if (userData.email && this.isValidEmail(userData.email)) {
+        update.email = userData.email;
+      }
+
+      if (userData.username && this.isValidUsername(userData.username)) {
+        update.username = userData.username;
+      }
+
+      if (userData.first_name) {
+        update.first_name = userData.first_name;
+      }
+
+      if (userData.last_name) {
+        update.last_name = userData.last_name;
+      }
+
+      if (userData.nickname) {
+        update.nickname = userData.nickname;
+      }
+
+      return update;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "createProfileUpdate",
+      });
+      return {};
     }
+  }
 
-    if (userData.username && this.isValidUsername(userData.username)) {
-      update.username = userData.username;
-    }
+  /**
+   * Notifies about user status changes
+   * @param userId User ID
+   * @param status New status
+   * @param previousStatus Previous status
+   */
+  public notifyStatusChange(
+    userId: string,
+    status: UserStatus,
+    previousStatus?: UserStatus,
+  ): void {
+    emitEvent(EventType.USER_STATUS_UPDATED, {
+      userId,
+      status,
+      previousStatus,
+      timestamp: Date.now(),
+    });
+  }
 
-    if (userData.first_name) {
-      update.first_name = userData.first_name;
-    }
+  /**
+   * Notifies about user profile updates
+   * @param user Updated user
+   */
+  public notifyUserUpdate(user: User): void {
+    emitEvent(EventType.USER_UPDATED, {
+      user,
+      timestamp: Date.now(),
+    });
+  }
 
-    if (userData.last_name) {
-      update.last_name = userData.last_name;
-    }
-
-    if (userData.nickname) {
-      update.nickname = userData.nickname;
-    }
-
-    return update;
+  /**
+   * Notifies about typing activity
+   * @param userId User who is typing
+   * @param channelId Channel where typing occurs
+   * @param parentId Optional thread parent ID
+   */
+  public notifyTyping(
+    userId: string,
+    channelId: string,
+    parentId?: string,
+  ): void {
+    emitEvent(EventType.USER_TYPING, {
+      userId,
+      channelId,
+      parentId,
+      timestamp: Date.now(),
+    });
   }
 }
 

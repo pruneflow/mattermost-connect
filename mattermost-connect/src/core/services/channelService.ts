@@ -1,7 +1,7 @@
 // src/core/services/channelService.ts
 /**
  * Channel service
- * Provides business logic for channel operations
+ * Provides business logic for channel operations and formatting
  */
 import {
   Channel,
@@ -10,13 +10,17 @@ import {
   DirectChannelInfo,
   ChannelType,
   ChannelGroupType,
+  ErrorSource,
+  EventType,
 } from "../../types";
+import { emitEvent } from "../api/eventUtils";
+import { handleError } from "../store";
 
 /**
  * Channel service class
  * Centralizes channel business logic and formatting
  */
-export class ChannelService {
+class ChannelService {
   /**
    * Checks if a channel is a direct message channel
    * @param channel Channel to check
@@ -82,9 +86,18 @@ export class ChannelService {
     channelName: string,
     currentUserId: string,
   ): string | null {
-    const userIds = this.getUserIdsFromDirectChannel(channelName);
-    const otherUserId = userIds.find((id) => id !== currentUserId);
-    return otherUserId || null;
+    try {
+      const userIds = this.getUserIdsFromDirectChannel(channelName);
+      const otherUserId = userIds.find((id) => id !== currentUserId);
+      return otherUserId || null;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getOtherUserIdFromDirectChannel",
+        channelName,
+        currentUserId,
+      });
+      return null;
+    }
   }
 
   /**
@@ -97,20 +110,28 @@ export class ChannelService {
     channel: Channel,
     members?: { user_id: string }[],
   ): string[] {
-    if (members && members.length > 0) {
-      return members.map((member) => member.user_id);
-    }
+    try {
+      if (members && members.length > 0) {
+        return members.map((member) => member.user_id);
+      }
 
-    // If members aren't provided and we have a channel name that looks like a
-    // group of user IDs (G__user1__user2__user3), try to parse those
-    if (channel.name && channel.name.startsWith("G__")) {
-      const parts = channel.name.split("__");
-      // Remove the 'G' prefix and return the rest of the parts
-      return parts.slice(1).filter((part) => part.length > 0);
-    }
+      // If members aren't provided and we have a channel name that looks like a
+      // group of user IDs (G__user1__user2__user3), try to parse those
+      if (channel.name && channel.name.startsWith("G__")) {
+        const parts = channel.name.split("__");
+        // Remove the 'G' prefix and return the rest of the parts
+        return parts.slice(1).filter((part) => part.length > 0);
+      }
 
-    // If we can't determine the members, return an empty array
-    return [];
+      // If we can't determine the members, return an empty array
+      return [];
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getUserIdsFromGroupChannel",
+        channelId: channel.id,
+      });
+      return [];
+    }
   }
 
   /**
@@ -159,31 +180,39 @@ export class ChannelService {
     currentUserId: string,
     maxNames: number = 3,
   ): string {
-    // Filter out current user and get valid users
-    const otherUsers = users.filter((user) => user.id !== currentUserId);
+    try {
+      // Filter out current user and get valid users
+      const otherUsers = users.filter((user) => user.id !== currentUserId);
 
-    if (otherUsers.length === 0) {
-      return "Group Channel";
-    }
-
-    // Format names
-    const formattedNames = otherUsers.map((user) => {
-      if (user.first_name) {
-        return user.first_name;
-      } else if (user.nickname) {
-        return user.nickname;
-      } else {
-        return user.username || "User";
+      if (otherUsers.length === 0) {
+        return "Group Channel";
       }
-    });
 
-    // Limit the number of displayed names
-    if (formattedNames.length <= maxNames) {
-      return formattedNames.join(", ");
-    } else {
-      const displayedNames = formattedNames.slice(0, maxNames);
-      const remainingCount = formattedNames.length - maxNames;
-      return `${displayedNames.join(", ")} and ${remainingCount} more`;
+      // Format names
+      const formattedNames = otherUsers.map((user) => {
+        if (user.first_name) {
+          return user.first_name;
+        } else if (user.nickname) {
+          return user.nickname;
+        } else {
+          return user.username || "User";
+        }
+      });
+
+      // Limit the number of displayed names
+      if (formattedNames.length <= maxNames) {
+        return formattedNames.join(", ");
+      } else {
+        const displayedNames = formattedNames.slice(0, maxNames);
+        const remainingCount = formattedNames.length - maxNames;
+        return `${displayedNames.join(", ")} and ${remainingCount} more`;
+      }
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getGroupChannelDisplayName",
+        userCount: users.length,
+      });
+      return "Group Channel";
     }
   }
 
@@ -300,108 +329,124 @@ export class ChannelService {
     users: Record<string, User>,
     statusMap: Record<string, UserStatus> = {},
   ): DirectChannelInfo {
-    // Default info with channel is not direct/group
-    const defaultInfo: DirectChannelInfo = {
-      isDirect: false,
-      isGroup: false,
-      displayName: channel.display_name || "Channel",
-      userIds: [],
-      status: "complete",
-    };
+    try {
+      // Default info with channel is not direct/group
+      const defaultInfo: DirectChannelInfo = {
+        isDirect: false,
+        isGroup: false,
+        displayName: channel.display_name || "Channel",
+        userIds: [],
+        status: "complete",
+      };
 
-    // Handle direct channel
-    if (this.isDirectChannel(channel)) {
-      const userIds = this.getUserIdsFromDirectChannel(channel.name);
-      const otherUserId = this.getOtherUserIdFromDirectChannel(
-        channel.name,
-        currentUserId,
-      );
-
-      if (!otherUserId) {
-        return {
-          ...defaultInfo,
-          isDirect: true,
-          userIds,
-          displayName: "Direct Message",
-          status: "error",
-        };
-      }
-
-      const otherUser = users[otherUserId];
-
-      if (otherUser) {
-        // User is loaded
-        return {
-          isDirect: true,
-          isGroup: false,
-          displayName: this.getDirectChannelDisplayName(otherUser),
-          userIds,
-          otherUserId,
-          userStatus: statusMap[otherUserId] || "offline",
-          userImageUrl: otherUser.last_picture_update
-            ? `/api/v4/users/${otherUser.id}/image?_=${otherUser.last_picture_update}`
-            : undefined,
-          status: "complete",
-        };
-      } else {
-        // User is not loaded yet
-        return {
-          isDirect: true,
-          isGroup: false,
-          displayName: this.getPlaceholderDisplayName(otherUserId),
-          userIds,
-          otherUserId,
-          status: "loading",
-        };
-      }
-    }
-
-    // Handle group channel
-    if (this.isGroupChannel(channel)) {
-      const userIds = this.getUserIdsFromGroupChannel(channel);
-
-      // Get available users
-      const availableUsers = userIds
-        .map((id) => users[id])
-        .filter((user): user is User => !!user);
-
-      // If we have users, build a proper display name
-      if (availableUsers.length > 0) {
-        const displayName = this.getGroupChannelDisplayName(
-          availableUsers,
+      // Handle direct channel
+      if (this.isDirectChannel(channel)) {
+        const userIds = this.getUserIdsFromDirectChannel(channel.name);
+        const otherUserId = this.getOtherUserIdFromDirectChannel(
+          channel.name,
           currentUserId,
         );
 
-        // Build avatar URLs for users in the group
-        const groupAvatarUrls = availableUsers
-          .filter((user) => user.last_picture_update)
-          .map(
-            (user) =>
-              `/api/v4/users/${user.id}/image?_=${user.last_picture_update}`,
+        if (!otherUserId) {
+          return {
+            ...defaultInfo,
+            isDirect: true,
+            userIds,
+            displayName: "Direct Message",
+            status: "error",
+          };
+        }
+
+        const otherUser = users[otherUserId];
+
+        if (otherUser) {
+          // User is loaded
+          return {
+            isDirect: true,
+            isGroup: false,
+            displayName: this.getDirectChannelDisplayName(otherUser),
+            userIds,
+            otherUserId,
+            userStatus: statusMap[otherUserId] || "offline",
+            userImageUrl: otherUser.last_picture_update
+              ? `/api/v4/users/${otherUser.id}/image?_=${otherUser.last_picture_update}`
+              : undefined,
+            status: "complete",
+          };
+        } else {
+          // User is not loaded yet
+          return {
+            isDirect: true,
+            isGroup: false,
+            displayName: this.getPlaceholderDisplayName(otherUserId),
+            userIds,
+            otherUserId,
+            status: "loading",
+          };
+        }
+      }
+
+      // Handle group channel
+      if (this.isGroupChannel(channel)) {
+        const userIds = this.getUserIdsFromGroupChannel(channel);
+
+        // Get available users
+        const availableUsers = userIds
+          .map((id) => users[id])
+          .filter((user): user is User => !!user);
+
+        // If we have users, build a proper display name
+        if (availableUsers.length > 0) {
+          const displayName = this.getGroupChannelDisplayName(
+            availableUsers,
+            currentUserId,
           );
 
-        return {
-          isDirect: false,
-          isGroup: true,
-          displayName,
-          userIds,
-          groupAvatarUrls,
-          status: "complete",
-        };
-      } else {
-        // Users not loaded yet
-        return {
-          isDirect: false,
-          isGroup: true,
-          displayName: channel.display_name || "Group Message",
-          userIds,
-          status: "loading",
-        };
-      }
-    }
+          // Build avatar URLs for users in the group
+          const groupAvatarUrls = availableUsers
+            .filter((user) => user.last_picture_update)
+            .map(
+              (user) =>
+                `/api/v4/users/${user.id}/image?_=${user.last_picture_update}`,
+            );
 
-    // Return default info for non-direct/group channels
-    return defaultInfo;
+          return {
+            isDirect: false,
+            isGroup: true,
+            displayName,
+            userIds,
+            groupAvatarUrls,
+            status: "complete",
+          };
+        } else {
+          // Users not loaded yet
+          return {
+            isDirect: false,
+            isGroup: true,
+            displayName: channel.display_name || "Group Message",
+            userIds,
+            status: "loading",
+          };
+        }
+      }
+
+      // Return default info for non-direct/group channels
+      return defaultInfo;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "createDirectChannelInfo",
+        channelId: channel.id,
+      });
+
+      // Return a safe default
+      return {
+        isDirect: false,
+        isGroup: false,
+        displayName: channel.display_name || "Channel",
+        userIds: [],
+        status: "error",
+      };
+    }
   }
 
   /**
@@ -448,36 +493,93 @@ export class ChannelService {
     users: Record<string, User>,
     currentUserId: string,
   ): string[] {
-    const neededUserIds: string[] = [];
+    try {
+      const neededUserIds: string[] = [];
 
-    channels.forEach((channel) => {
-      if (this.isDirectChannel(channel)) {
-        const otherUserId = this.getOtherUserIdFromDirectChannel(
-          channel.name,
-          currentUserId,
-        );
-        if (
-          otherUserId &&
-          !users[otherUserId] &&
-          !neededUserIds.includes(otherUserId)
-        ) {
-          neededUserIds.push(otherUserId);
-        }
-      } else if (this.isGroupChannel(channel)) {
-        const userIds = this.getUserIdsFromGroupChannel(channel);
-        userIds.forEach((userId) => {
+      channels.forEach((channel) => {
+        if (this.isDirectChannel(channel)) {
+          const otherUserId = this.getOtherUserIdFromDirectChannel(
+            channel.name,
+            currentUserId,
+          );
           if (
-            userId !== currentUserId &&
-            !users[userId] &&
-            !neededUserIds.includes(userId)
+            otherUserId &&
+            !users[otherUserId] &&
+            !neededUserIds.includes(otherUserId)
           ) {
-            neededUserIds.push(userId);
+            neededUserIds.push(otherUserId);
           }
-        });
-      }
-    });
+        } else if (this.isGroupChannel(channel)) {
+          const userIds = this.getUserIdsFromGroupChannel(channel);
+          userIds.forEach((userId) => {
+            if (
+              userId !== currentUserId &&
+              !users[userId] &&
+              !neededUserIds.includes(userId)
+            ) {
+              neededUserIds.push(userId);
+            }
+          });
+        }
+      });
 
-    return neededUserIds;
+      return neededUserIds;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "getNeededUserIdsForDirectChannels",
+        channelCount: channels.length,
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Validates a channel name format
+   * @param name Channel name to validate
+   * @returns Whether the name is valid
+   */
+  public validateChannelName(name: string): boolean {
+    // Channel names must be lowercase alphanumeric or hyphens
+    // Cannot start with a hyphen
+    const channelNameRegex = /^[a-z0-9][a-z0-9\-_]*$/;
+    return channelNameRegex.test(name) && name.length >= 2 && name.length <= 64;
+  }
+
+  /**
+   * Creates a URL-friendly channel name from a display name
+   * @param displayName Display name
+   * @returns URL-friendly channel name
+   */
+  public sanitizeChannelName(displayName: string): string {
+    return displayName
+      .toLowerCase()
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/[^a-z0-9\-_]/g, "") // Remove invalid characters
+      .replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
+  }
+
+  /**
+   * Notifies about channel updates
+   * @param channel Updated channel
+   * @param action Action performed on the channel
+   */
+  public notifyChannelUpdate(
+    channel: Channel,
+    action: "created" | "updated" | "deleted" | "joined" | "left",
+  ): void {
+    const eventMap = {
+      created: EventType.CHANNEL_CREATED,
+      updated: EventType.CHANNEL_UPDATED,
+      deleted: EventType.CHANNEL_DELETED,
+      joined: EventType.CHANNEL_JOINED,
+      left: EventType.CHANNEL_LEFT,
+    };
+
+    emitEvent(eventMap[action], {
+      channel,
+      teamId: channel.team_id,
+      timestamp: Date.now(),
+    });
   }
 }
 
