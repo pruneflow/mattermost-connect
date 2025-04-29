@@ -1,103 +1,35 @@
 // src/core/store/userSettingsStore.ts
 /**
- * User Settings store
- * Centralized storage and management of user preferences and settings
+ * User Settings Store
+ * Central management of user preferences and settings
+ * Optimized with immer and persist middleware for seamless updates and persistence
  */
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { persist, PersistOptions } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import {
   UserSettingsState,
   AppearanceSettings,
   NotificationSettings,
   PrivacySettings,
   AdvancedSettings,
+  PreferenceKey,
   ThemeOption,
   NotificationLevel,
-  PreferenceKey,
-  PreferenceCategory,
   ClockDisplay,
   MessageDisplay,
+  EventType,
+  ErrorSource,
 } from "../../types";
+import { handleError } from "./errorStore";
 import { emitEvent } from "../api/eventUtils";
-import { EventType } from "../../types/common";
-import { handleStorageError } from "./errorStore";
-
-/**
- * Enhanced user settings store state and actions
- */
-interface UserSettingsStoreState extends UserSettingsState {
-  // Actions - Favorites
-  toggleFavorite: (channelId: string) => void;
-  addFavorite: (channelId: string) => void;
-  removeFavorite: (channelId: string) => void;
-  getFavorites: () => string[];
-  isFavorite: (channelId: string) => boolean;
-
-  // Actions - Muted Channels
-  toggleMuted: (channelId: string) => void;
-  muteChannel: (channelId: string, expirationTime?: number) => void;
-  unmuteChannel: (channelId: string) => void;
-  getMutedChannels: () => string[];
-  isChannelMuted: (channelId: string) => boolean;
-
-  // Actions - Appearance
-  setTheme: (theme: ThemeOption) => void;
-  setAppearanceSetting: <K extends keyof AppearanceSettings>(
-    key: K,
-    value: AppearanceSettings[K],
-  ) => void;
-  getAppearanceSettings: () => AppearanceSettings;
-
-  // Actions - Notifications
-  setNotificationSetting: <K extends keyof NotificationSettings>(
-    key: K,
-    value: NotificationSettings[K],
-  ) => void;
-  setChannelNotificationOverride: (
-    channelId: string,
-    setting: "desktop" | "mobile" | "email",
-    level: NotificationLevel,
-  ) => void;
-  getNotificationSettings: () => NotificationSettings;
-  getChannelNotificationOverride: (
-    channelId: string,
-    setting: "desktop" | "mobile" | "email",
-  ) => NotificationLevel | undefined;
-
-  // Actions - Privacy
-  setPrivacySetting: <K extends keyof PrivacySettings>(
-    key: K,
-    value: PrivacySettings[K],
-  ) => void;
-  getPrivacySettings: () => PrivacySettings;
-
-  // Actions - Advanced
-  setAdvancedSetting: <K extends keyof AdvancedSettings>(
-    key: K,
-    value: AdvancedSettings[K],
-  ) => void;
-  getAdvancedSettings: () => AdvancedSettings;
-
-  // Actions - Language
-  setLanguage: (langCode: string) => void;
-  getLanguage: () => string;
-
-  // Reset actions
-  resetAppearanceSettings: () => void;
-  resetNotificationSettings: () => void;
-  resetPrivacySettings: () => void;
-  resetAdvancedSettings: () => void;
-  resetAllSettings: () => void;
-  reset: () => void;
-}
 
 /**
  * Default notification settings
  */
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  desktop: "all",
-  mobile: "all",
+  desktop: "mentions",
+  mobile: "mentions",
   email: "mentions",
   sound: true,
   channelOverrides: {},
@@ -139,7 +71,76 @@ const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
 };
 
 /**
- * Type for persisted state
+ * Enhanced user settings store state with actions
+ */
+interface UserSettingsStoreState extends UserSettingsState {
+  // Favorites Actions
+  toggleFavorite: (channelId: string) => void;
+  addFavorite: (channelId: string) => void;
+  removeFavorite: (channelId: string) => void;
+  getFavorites: () => string[];
+  isFavorite: (channelId: string) => boolean;
+
+  // Muted Channels Actions
+  toggleMuted: (channelId: string) => void;
+  muteChannel: (channelId: string, expirationTime?: number) => void;
+  unmuteChannel: (channelId: string) => void;
+  getMutedChannels: () => string[];
+  isChannelMuted: (channelId: string) => boolean;
+
+  // Appearance Actions
+  setTheme: (theme: ThemeOption) => void;
+  setAppearanceSetting: <K extends keyof AppearanceSettings>(
+    key: K,
+    value: AppearanceSettings[K],
+  ) => void;
+  getAppearanceSettings: () => AppearanceSettings;
+
+  // Notification Actions
+  setNotificationSetting: <K extends keyof NotificationSettings>(
+    key: K,
+    value: NotificationSettings[K],
+  ) => void;
+  setChannelNotificationOverride: (
+    channelId: string,
+    setting: "desktop" | "mobile" | "email",
+    level: NotificationLevel,
+  ) => void;
+  getNotificationSettings: () => NotificationSettings;
+  getChannelNotificationOverride: (
+    channelId: string,
+    setting: "desktop" | "mobile" | "email",
+  ) => NotificationLevel | undefined;
+
+  // Privacy Actions
+  setPrivacySetting: <K extends keyof PrivacySettings>(
+    key: K,
+    value: PrivacySettings[K],
+  ) => void;
+  getPrivacySettings: () => PrivacySettings;
+
+  // Advanced Actions
+  setAdvancedSetting: <K extends keyof AdvancedSettings>(
+    key: K,
+    value: AdvancedSettings[K],
+  ) => void;
+  getAdvancedSettings: () => AdvancedSettings;
+
+  // Language Setting
+  setLanguage: (langCode: string) => void;
+  getLanguage: () => string;
+
+  // Reset Actions
+  resetAppearanceSettings: () => void;
+  resetNotificationSettings: () => void;
+  resetPrivacySettings: () => void;
+  resetAdvancedSettings: () => void;
+  resetAllSettings: (preservePreferences?: boolean) => void;
+  reset: () => void;
+}
+
+/**
+ * Type for persisted state to ensure proper storage and retrieval
  */
 interface PersistedState {
   favorites: string[];
@@ -148,65 +149,12 @@ interface PersistedState {
   appearance: AppearanceSettings;
   privacy: PrivacySettings;
   advanced: AdvancedSettings;
-  language: string;
   lastUpdated: number;
 }
 
 /**
- * Configuration for persistence
- */
-const persistConfig: PersistOptions<UserSettingsStoreState, PersistedState> = {
-  name: "mattermost-user-settings",
-  partialize: (state) => {
-    // Only persist these specific pieces of state
-    return {
-      favorites: Array.from(state.favorites),
-      mutedChannels: Array.from(state.mutedChannels),
-      notifications: state.notifications,
-      appearance: state.appearance,
-      privacy: state.privacy,
-      advanced: state.advanced,
-      language: state.appearance.language || "en",
-      lastUpdated: state.lastUpdated,
-    } as PersistedState;
-  },
-  merge: (persistedState, currentState) => {
-    try {
-      // Ensure persisted state is properly typed
-      const typedState = persistedState as PersistedState;
-
-      return {
-        ...currentState,
-        favorites: new Set(typedState.favorites || []),
-        mutedChannels: new Set(typedState.mutedChannels || []),
-        notifications:
-          typedState.notifications || DEFAULT_NOTIFICATION_SETTINGS,
-        appearance: typedState.appearance || DEFAULT_APPEARANCE_SETTINGS,
-        privacy: typedState.privacy || DEFAULT_PRIVACY_SETTINGS,
-        advanced: typedState.advanced || DEFAULT_ADVANCED_SETTINGS,
-        lastUpdated: typedState.lastUpdated || Date.now(),
-      };
-    } catch (error) {
-      // Handle persistence errors gracefully
-      handleStorageError(error as Error, "Error merging persisted settings", {
-        persistedState,
-      });
-
-      // Return current state as fallback
-      return currentState;
-    }
-  },
-  onRehydrateStorage: () => (state) => {
-    if (!state) {
-      console.warn("Failed to rehydrate user settings");
-    }
-  },
-};
-
-/**
- * User settings store for managing preferences
- * Uses persist middleware for localStorage persistence
- * Uses immer middleware for simplified state updates
+ * Creates and exports the userSettingsStore using Zustand
+ * Optimized with immer for immutability and persist for localStorage persistence
  */
 export const useUserSettingsStore = create<UserSettingsStoreState>()(
   persist(
@@ -224,7 +172,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Toggles favorite status of a channel
-       * @param channelId Channel ID
        */
       toggleFavorite: (channelId: string) => {
         set((state) => {
@@ -240,7 +187,7 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
         });
 
         // Emit settings changed event
-        const isFavorite = !get().favorites.has(channelId);
+        const isFavorite = get().favorites.has(channelId);
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.FAVORITES,
           channelId,
@@ -250,19 +197,16 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Adds a channel to favorites
-       * @param channelId Channel ID
        */
       addFavorite: (channelId: string) => {
-        if (get().favorites.has(channelId)) {
-          return; // Already a favorite
-        }
+        // Skip if already a favorite
+        if (get().favorites.has(channelId)) return;
 
         set((state) => {
           state.favorites.add(channelId);
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.FAVORITES,
           channelId,
@@ -272,19 +216,16 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Removes a channel from favorites
-       * @param channelId Channel ID
        */
       removeFavorite: (channelId: string) => {
-        if (!get().favorites.has(channelId)) {
-          return; // Not a favorite
-        }
+        // Skip if not a favorite
+        if (!get().favorites.has(channelId)) return;
 
         set((state) => {
           state.favorites.delete(channelId);
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.FAVORITES,
           channelId,
@@ -294,7 +235,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets all favorite channel IDs
-       * @returns Array of favorite channel IDs
        */
       getFavorites: () => {
         return Array.from(get().favorites);
@@ -302,8 +242,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Checks if a channel is a favorite
-       * @param channelId Channel ID
-       * @returns Whether channel is a favorite
        */
       isFavorite: (channelId: string) => {
         return get().favorites.has(channelId);
@@ -313,7 +251,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Toggles muted status of a channel
-       * @param channelId Channel ID
        */
       toggleMuted: (channelId: string) => {
         set((state) => {
@@ -329,7 +266,7 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
         });
 
         // Emit settings changed event
-        const isMuted = !get().mutedChannels.has(channelId);
+        const isMuted = get().mutedChannels.has(channelId);
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.MUTED_CHANNELS,
           channelId,
@@ -339,45 +276,49 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Mutes a channel
-       * @param channelId Channel ID
-       * @param expirationTime Optional timestamp when mute should expire
        */
       muteChannel: (channelId: string, expirationTime?: number) => {
-        if (get().mutedChannels.has(channelId)) {
-          return; // Already muted
-        }
+        // Skip if already muted
+        if (get().mutedChannels.has(channelId)) return;
 
         set((state) => {
           state.mutedChannels.add(channelId);
           state.lastUpdated = Date.now();
-
-          // TODO: Implement expiration handling when needed
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.MUTED_CHANNELS,
           channelId,
           value: true,
           expirationTime,
         });
+
+        // If expiration time is set, schedule unmute
+        if (expirationTime) {
+          const timeoutMs = expirationTime - Date.now();
+          if (timeoutMs > 0) {
+            setTimeout(() => {
+              const store = get();
+              if (store.mutedChannels.has(channelId)) {
+                store.unmuteChannel(channelId);
+              }
+            }, timeoutMs);
+          }
+        }
       },
 
       /**
        * Unmutes a channel
-       * @param channelId Channel ID
        */
       unmuteChannel: (channelId: string) => {
-        if (!get().mutedChannels.has(channelId)) {
-          return; // Not muted
-        }
+        // Skip if not muted
+        if (!get().mutedChannels.has(channelId)) return;
 
         set((state) => {
           state.mutedChannels.delete(channelId);
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.MUTED_CHANNELS,
           channelId,
@@ -387,7 +328,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets all muted channel IDs
-       * @returns Array of muted channel IDs
        */
       getMutedChannels: () => {
         return Array.from(get().mutedChannels);
@@ -395,8 +335,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Checks if a channel is muted
-       * @param channelId Channel ID
-       * @returns Whether channel is muted
        */
       isChannelMuted: (channelId: string) => {
         return get().mutedChannels.has(channelId);
@@ -405,8 +343,7 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
       // ===== Appearance Actions =====
 
       /**
-       * Sets the theme
-       * @param theme Theme option
+       * Sets the application theme
        */
       setTheme: (theme: ThemeOption) => {
         set((state) => {
@@ -414,7 +351,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.THEME,
           value: theme,
@@ -423,8 +359,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Sets a specific appearance setting
-       * @param key Setting key
-       * @param value Setting value
        */
       setAppearanceSetting: <K extends keyof AppearanceSettings>(
         key: K,
@@ -435,7 +369,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.APPEARANCE,
           key,
@@ -445,7 +378,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets all appearance settings
-       * @returns Current appearance settings
        */
       getAppearanceSettings: () => {
         return { ...get().appearance };
@@ -455,26 +387,23 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Sets a notification setting
-       * @param key Setting key
-       * @param value Setting value
        */
       setNotificationSetting: <K extends keyof NotificationSettings>(
         key: K,
         value: NotificationSettings[K],
       ) => {
         set((state) => {
-          // Special handling for channelOverrides
           if (key === "channelOverrides") {
+            // Deep clone for nested objects
             state.notifications.channelOverrides =
               value as NotificationSettings["channelOverrides"];
           } else {
             state.notifications[key] = value;
           }
-
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event (except for complex channelOverrides)
+        // Don't emit events for complex objects
         if (key !== "channelOverrides") {
           emitEvent(EventType.SETTINGS_CHANGED, {
             setting: PreferenceKey.NOTIFICATIONS,
@@ -486,9 +415,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Sets notification override for a specific channel
-       * @param channelId Channel ID
-       * @param setting Setting type (desktop, mobile, email)
-       * @param level Notification level
        */
       setChannelNotificationOverride: (
         channelId: string,
@@ -499,7 +425,7 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           const currentOverrides = state.notifications.channelOverrides || {};
           const channelOverride = currentOverrides[channelId] || {};
 
-          // Update the override
+          // Update with new override
           state.notifications.channelOverrides = {
             ...currentOverrides,
             [channelId]: {
@@ -511,7 +437,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.NOTIFICATIONS,
           channelId,
@@ -522,7 +447,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets all notification settings
-       * @returns Current notification settings
        */
       getNotificationSettings: () => {
         return { ...get().notifications };
@@ -530,15 +454,13 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets notification override for a channel
-       * @param channelId Channel ID
-       * @param setting Setting type (desktop, mobile, email)
-       * @returns Override level or undefined
        */
       getChannelNotificationOverride: (
         channelId: string,
         setting: "desktop" | "mobile" | "email",
       ) => {
-        const channelOverrides = get().notifications.channelOverrides || {};
+        const { notifications } = get();
+        const channelOverrides = notifications.channelOverrides || {};
         const channelOverride = channelOverrides[channelId];
 
         return channelOverride ? channelOverride[setting] : undefined;
@@ -548,8 +470,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Sets a privacy setting
-       * @param key Setting key
-       * @param value Setting value
        */
       setPrivacySetting: <K extends keyof PrivacySettings>(
         key: K,
@@ -560,7 +480,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.PRIVACY,
           key,
@@ -570,7 +489,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets all privacy settings
-       * @returns Current privacy settings
        */
       getPrivacySettings: () => {
         return { ...get().privacy };
@@ -580,8 +498,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Sets an advanced setting
-       * @param key Setting key
-       * @param value Setting value
        */
       setAdvancedSetting: <K extends keyof AdvancedSettings>(
         key: K,
@@ -592,7 +508,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.ADVANCED,
           key,
@@ -602,17 +517,15 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
 
       /**
        * Gets all advanced settings
-       * @returns Current advanced settings
        */
       getAdvancedSettings: () => {
         return { ...get().advanced };
       },
 
-      // ===== Language Setting ======
+      // ===== Language Setting =====
 
       /**
        * Sets the application language
-       * @param langCode Language code (e.g., 'en', 'fr')
        */
       setLanguage: (langCode: string) => {
         set((state) => {
@@ -620,17 +533,14 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
-          setting: PreferenceKey.APPEARANCE,
-          key: "language",
+          setting: PreferenceKey.LANGUAGE,
           value: langCode,
         });
       },
 
       /**
        * Gets the current language setting
-       * @returns Language code
        */
       getLanguage: () => {
         return get().appearance.language || "en";
@@ -643,11 +553,15 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
        */
       resetAppearanceSettings: () => {
         set((state) => {
-          state.appearance = { ...DEFAULT_APPEARANCE_SETTINGS };
+          // Preserve language when resetting appearance
+          const currentLang = state.appearance.language;
+          state.appearance = {
+            ...DEFAULT_APPEARANCE_SETTINGS,
+            language: currentLang,
+          };
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.APPEARANCE,
           reset: true,
@@ -663,7 +577,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.NOTIFICATIONS,
           reset: true,
@@ -679,7 +592,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.PRIVACY,
           reset: true,
@@ -695,7 +607,6 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           state.lastUpdated = Date.now();
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           setting: PreferenceKey.ADVANCED,
           reset: true,
@@ -703,30 +614,47 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
       },
 
       /**
-       * Resets all settings to defaults but keeps favorites/muted
+       * Resets all settings to defaults
+       * @param preservePreferences If true, keeps favorites and muted channels
        */
-      resetAllSettings: () => {
+      resetAllSettings: (preservePreferences = false) => {
         set((state) => {
+          const favorites = preservePreferences
+            ? state.favorites
+            : new Set<string>();
+          const mutedChannels = preservePreferences
+            ? state.mutedChannels
+            : new Set<string>();
+
           state.notifications = { ...DEFAULT_NOTIFICATION_SETTINGS };
           state.appearance = { ...DEFAULT_APPEARANCE_SETTINGS };
           state.privacy = { ...DEFAULT_PRIVACY_SETTINGS };
           state.advanced = { ...DEFAULT_ADVANCED_SETTINGS };
+
+          // Only reset these if preservePreferences is false
+          if (!preservePreferences) {
+            state.favorites = new Set<string>();
+            state.mutedChannels = new Set<string>();
+          } else {
+            state.favorites = favorites;
+            state.mutedChannels = mutedChannels;
+          }
+
           state.lastUpdated = Date.now();
-          // Note: Doesn't reset favorites or muted channels
         });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, {
           reset: true,
-          preservePreferences: true,
+          preservePreferences,
         });
       },
 
       /**
        * Resets the store to initial state
+       * Used primarily for logout
        */
       reset: () => {
-        set(() => ({
+        set({
           favorites: new Set<string>(),
           mutedChannels: new Set<string>(),
           notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
@@ -734,17 +662,59 @@ export const useUserSettingsStore = create<UserSettingsStoreState>()(
           privacy: { ...DEFAULT_PRIVACY_SETTINGS },
           advanced: { ...DEFAULT_ADVANCED_SETTINGS },
           lastUpdated: Date.now(),
-        }));
+        });
 
-        // Emit settings changed event
         emitEvent(EventType.SETTINGS_CHANGED, { reset: true });
       },
     })),
-    persistConfig,
+    {
+      name: "mattermost-user-settings",
+      partialize: (state): PersistedState => ({
+        favorites: Array.from(state.favorites),
+        mutedChannels: Array.from(state.mutedChannels),
+        notifications: state.notifications,
+        appearance: state.appearance,
+        privacy: state.privacy,
+        advanced: state.advanced,
+        lastUpdated: state.lastUpdated,
+      }),
+      merge: (persisted, current) => {
+        try {
+          // Type assertion to ensure proper typing
+          const persistedState = persisted as unknown as PersistedState;
+
+          return {
+            ...current,
+            favorites: new Set(persistedState.favorites || []),
+            mutedChannels: new Set(persistedState.mutedChannels || []),
+            notifications:
+              persistedState.notifications || DEFAULT_NOTIFICATION_SETTINGS,
+            appearance:
+              persistedState.appearance || DEFAULT_APPEARANCE_SETTINGS,
+            privacy: persistedState.privacy || DEFAULT_PRIVACY_SETTINGS,
+            advanced: persistedState.advanced || DEFAULT_ADVANCED_SETTINGS,
+            lastUpdated: persistedState.lastUpdated || Date.now(),
+          };
+        } catch (error) {
+          // Handle persistence errors gracefully
+          handleError(error as Error, ErrorSource.STORAGE, undefined, {
+            persistedState: persisted,
+          });
+
+          // Return current state as fallback
+          return current;
+        }
+      },
+      onRehydrateStorage: () => (state) => {
+        if (!state) {
+          console.warn("Failed to rehydrate user settings");
+        }
+      },
+    },
   ),
 );
 
-// Helper functions for commonly used settings
+// ===== Helper functions for commonly used settings =====
 
 /**
  * Gets the current theme setting
@@ -789,10 +759,11 @@ export function getMessageDisplay(): MessageDisplay {
 }
 
 /**
- * Converts user preferences to server format
- * @returns Array of preference objects ready for API
+ * Converts user preferences to server format for API requests
+ * @param userId User ID (defaults to "me")
+ * @returns Array of preference objects ready for API submission
  */
-export function getPreferencesForApi(): Array<{
+export function getPreferencesForApi(userId: string = "me"): Array<{
   user_id: string;
   category: string;
   name: string;
@@ -810,8 +781,8 @@ export function getPreferencesForApi(): Array<{
   const favorites = state.getFavorites();
   favorites.forEach((channelId) => {
     preferences.push({
-      user_id: "me", // Will be replaced with actual user ID by API
-      category: PreferenceCategory.FAVORITE_CHANNEL,
+      user_id: userId,
+      category: "favorite_channel",
       name: channelId,
       value: "true",
     });
@@ -819,19 +790,18 @@ export function getPreferencesForApi(): Array<{
 
   // Add theme preference
   preferences.push({
-    user_id: "me",
-    category: PreferenceCategory.THEME,
+    user_id: userId,
+    category: "theme",
     name: "name",
     value: state.appearance.theme,
   });
 
   // Add display settings
   Object.entries(state.appearance).forEach(([key, value]) => {
-    // Skip language as it's handled separately
     if (key !== "language") {
       preferences.push({
-        user_id: "me",
-        category: PreferenceCategory.DISPLAY_SETTINGS,
+        user_id: userId,
+        category: "display_settings",
         name: key,
         value:
           typeof value === "boolean"
@@ -843,13 +813,20 @@ export function getPreferencesForApi(): Array<{
     }
   });
 
+  // Add language setting
+  preferences.push({
+    user_id: userId,
+    category: "display_settings",
+    name: "language",
+    value: state.appearance.language || "en",
+  });
+
   // Add notification settings
   Object.entries(state.notifications).forEach(([key, value]) => {
-    // Handle channel overrides separately
     if (key !== "channelOverrides") {
       preferences.push({
-        user_id: "me",
-        category: PreferenceCategory.NOTIFICATIONS,
+        user_id: userId,
+        category: "notifications",
         name: key,
         value:
           typeof value === "boolean"
@@ -866,10 +843,10 @@ export function getPreferencesForApi(): Array<{
   Object.entries(overrides).forEach(([channelId, settings]) => {
     Object.entries(settings).forEach(([setting, level]) => {
       preferences.push({
-        user_id: "me",
+        user_id: userId,
         category: "channel_notifications",
         name: `${channelId}_${setting}`,
-        value: level,
+        value: level as string,
       });
     });
   });
