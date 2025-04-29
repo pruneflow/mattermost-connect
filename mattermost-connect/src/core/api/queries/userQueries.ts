@@ -1,36 +1,26 @@
 // src/core/api/queries/userQueries.ts
 /**
  * React Query hooks for user operations
- * Optimized and standardized queries using shared patterns
+ * Standardized queries for user-related operations
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS } from "../queryClient";
+import { createQueryOptions, createMutationOptions } from "../queryUtils";
+import { emitEvent } from "../eventUtils";
+import { EventType, ErrorSource } from "../../../types";
+import { useAuthStore, useUserStore } from "../../store";
+import { handleError } from "../../store";
+import { userService } from "../../services/userService";
+
 import {
   User,
   UserStatus,
   UserStatusInfo,
   UserProfileUpdate,
+  GetUsersOptions,
   ApiError,
 } from "../../../types";
-import { useAuthStore, useUserStore } from "../../store";
-import { createQueryOptions, createMutationOptions } from "../queryUtils";
-
-/**
- * Options for fetching users
- */
-export interface GetUsersOptions {
-  /** List of user IDs to fetch */
-  userIds?: string[];
-  /** Channel ID to get members from */
-  inChannel?: string;
-  /** Team ID to get members from */
-  inTeam?: string;
-  /** Whether to include detailed profiles */
-  withProfiles?: boolean;
-  /** Whether to include statuses */
-  withStatuses?: boolean;
-}
 
 /**
  * Fetches a user by ID
@@ -38,7 +28,14 @@ export interface GetUsersOptions {
  * @returns Query hook for a user
  */
 export const useUserQuery = (userId: string | undefined) => {
-  const { setUser, setLoading, setError, getUserById } = useUserStore();
+  const {
+    setUser,
+    setLoading,
+    setError,
+    getUserById,
+    setLoadingId,
+    setErrorForId,
+  } = useUserStore();
 
   return useQuery<User, ApiError>({
     queryKey: userId
@@ -68,6 +65,11 @@ export const useUserQuery = (userId: string | undefined) => {
         return user;
       } catch (error) {
         setError(error as Error);
+        setErrorForId(userId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          userId,
+          method: "fetchUser",
+        });
         throw error;
       } finally {
         setLoading(false);
@@ -120,8 +122,6 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
 
         // Handle fetching users by IDs - use POST to /users/ids
         if (options.userIds?.length) {
-          console.debug("Fetching users by IDs:", options.userIds);
-
           // Use POST request to fetch users by IDs
           const response = await apiClient.post<User[]>(
             "users/ids",
@@ -131,7 +131,7 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
         }
         // Handle fetching users by channel
         else if (options.inChannel) {
-          // Build URL with pagination and additional parameters
+          // Build URL with additional parameters
           let url = `users?in_channel=${encodeURIComponent(options.inChannel)}`;
 
           if (options.withProfiles) {
@@ -143,7 +143,7 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
         }
         // Handle fetching users by team
         else if (options.inTeam) {
-          // Build URL with pagination and additional parameters
+          // Build URL with additional parameters
           let url = `users?in_team=${encodeURIComponent(options.inTeam)}`;
 
           if (options.withProfiles) {
@@ -162,6 +162,10 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
         return users;
       } catch (error) {
         setError(error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          options,
+          method: "fetchUsers",
+        });
         throw error;
       } finally {
         setLoading(false);
@@ -186,7 +190,7 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
  * @returns Query hook for user status
  */
 export const useUserStatusQuery = (userId: string | undefined) => {
-  const { setUserStatus } = useUserStore();
+  const { setUserStatus, setLoadingId, setErrorForId } = useUserStore();
 
   return useQuery<UserStatus, ApiError>({
     queryKey: userId
@@ -197,15 +201,27 @@ export const useUserStatusQuery = (userId: string | undefined) => {
         throw new Error("User ID is required");
       }
 
-      const response = await apiClient.get<{ status: UserStatus }>(
-        `users/${userId}/status`,
-      );
-      const status = response.data.status;
+      setLoadingId(`status_${userId}`, true);
+      try {
+        const response = await apiClient.get<{ status: UserStatus }>(
+          `users/${userId}/status`,
+        );
+        const status = response.data.status;
 
-      // Update store
-      setUserStatus(userId, status);
+        // Update store
+        setUserStatus(userId, status);
 
-      return status;
+        return status;
+      } catch (error) {
+        setErrorForId(`status_${userId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          userId,
+          method: "fetchUserStatus",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`status_${userId}`, false);
+      }
     },
     // Don't run query if userId is not provided
     enabled: !!userId,
@@ -222,7 +238,7 @@ export const useUserStatusQuery = (userId: string | undefined) => {
  * @returns Query hook for user statuses
  */
 export const useUserStatusesQuery = (userIds: string[] = []) => {
-  const { setUserStatuses } = useUserStore();
+  const { setUserStatuses, setLoading, setError } = useUserStore();
 
   return useQuery<UserStatusInfo[], ApiError>({
     queryKey: [...QUERY_KEYS.users.statuses, userIds],
@@ -231,16 +247,28 @@ export const useUserStatusesQuery = (userIds: string[] = []) => {
         return [];
       }
 
-      const response = await apiClient.post<UserStatusInfo[]>(
-        "users/status/ids",
-        userIds,
-      );
-      const statuses = response.data;
+      setLoading(true);
+      try {
+        const response = await apiClient.post<UserStatusInfo[]>(
+          "users/status/ids",
+          userIds,
+        );
+        const statuses = response.data;
 
-      // Update store with statuses
-      setUserStatuses(statuses);
+        // Update store with statuses
+        setUserStatuses(statuses);
 
-      return statuses;
+        return statuses;
+      } catch (error) {
+        setError(error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          userIds,
+          method: "fetchUserStatuses",
+        });
+        throw error;
+      } finally {
+        setLoading(false);
+      }
     },
     // Don't run query if no userIds are provided
     enabled: userIds.length > 0,
@@ -280,8 +308,18 @@ export const useUpdateUserProfileMutation = () => {
       // Also update auth store if this is the current user
       const { setCurrentUser } = useAuthStore.getState();
       setCurrentUser(updatedUser);
+
+      // Notify user updated
+      userService.notifyUserUpdate(updatedUser);
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          data: variables,
+          method: "updateUserProfile",
+        });
+      },
+    }),
   });
 };
 
@@ -309,6 +347,9 @@ export const useUpdateUserStatusMutation = () => {
       return { userId: currentUser.id, status };
     },
     onSuccess: ({ userId, status }) => {
+      // Get previous status for event
+      const previousStatus = useUserStore.getState().getUserStatus(userId);
+
       // Invalidate status query
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.users.status(userId),
@@ -317,8 +358,18 @@ export const useUpdateUserStatusMutation = () => {
       // Update user store
       const { setUserStatus } = useUserStore.getState();
       setUserStatus(userId, status);
+
+      // Notify status change
+      userService.notifyStatusChange(userId, status, previousStatus);
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, status) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          status,
+          method: "updateUserStatus",
+        });
+      },
+    }),
   });
 };
 
@@ -338,7 +389,13 @@ export const useUpdatePasswordMutation = () => {
       });
       return true;
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error) => {
+        handleError(error as Error, ErrorSource.AUTH, undefined, {
+          method: "updatePassword",
+        });
+      },
+    }),
   });
 };
 
@@ -348,6 +405,7 @@ export const useUpdatePasswordMutation = () => {
 export const useUploadProfileImageMutation = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useAuthStore();
+  const { setLoading, setError } = useUserStore();
 
   return useMutation<string, ApiError, File>({
     mutationFn: async (imageFile) => {
@@ -356,14 +414,22 @@ export const useUploadProfileImageMutation = () => {
         throw new Error("User must be authenticated");
       }
 
-      // Create form data for file upload
-      const formData = new FormData();
-      formData.append("image", imageFile);
+      setLoading(true);
+      try {
+        // Create form data for file upload
+        const formData = new FormData();
+        formData.append("image", imageFile);
 
-      // Upload image
-      await apiClient.post(`users/${currentUser.id}/image`, formData);
+        // Upload image
+        await apiClient.post(`users/${currentUser.id}/image`, formData);
 
-      return currentUser.id;
+        return currentUser.id;
+      } catch (error) {
+        setError(error as Error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
     },
     onSuccess: (userId) => {
       // Invalidate user query to get updated profile with new image
@@ -375,8 +441,20 @@ export const useUploadProfileImageMutation = () => {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.auth.current,
       });
+
+      // Emit user updated event
+      emitEvent(EventType.USER_UPDATED, {
+        userId,
+        timestamp: Date.now(),
+      });
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          method: "uploadProfileImage",
+        });
+      },
+    }),
   });
 };
 
@@ -430,6 +508,11 @@ export const useSearchUsersQuery = (
         return users;
       } catch (error) {
         setError(error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          term,
+          options,
+          method: "searchUsers",
+        });
         throw error;
       } finally {
         setLoading(false);
@@ -442,9 +525,4 @@ export const useSearchUsersQuery = (
       staleTime: 60 * 1000, // 1 minute
     }),
   });
-};
-
-// Helper function to access setLoadingId from userStore
-const setLoadingId = (userId: string, isLoading: boolean) => {
-  useUserStore.getState().setLoadingId(userId, isLoading);
 };

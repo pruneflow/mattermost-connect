@@ -5,15 +5,14 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
-import { invalidateQueries } from "../queryClient";
+import { QUERY_KEYS, invalidateQueries } from "../queryClient";
+import { emitEvent } from "../../api/eventUtils";
+import { EventType, ErrorSource } from "../../../types";
+import { createQueryOptions, createMutationOptions } from "../queryUtils";
+import { useTeamStore } from "../../store";
+import { handleError } from "../../store/errorStore";
+import { teamService } from "../../services/teamService";
 
-// Team-specific query keys
-const TEAM_QUERY_KEYS = {
-  all: ["teams"],
-  byId: (id: string) => ["teams", id],
-  stats: (id: string) => ["teams", "stats", id],
-  members: (id: string) => ["teams", "members", id],
-};
 import {
   Team,
   TeamMember,
@@ -22,8 +21,16 @@ import {
   UpdateTeamParams,
   ApiError,
 } from "../../../types";
-import { useTeamStore } from "../../store";
-import { createQueryOptions, createMutationOptions } from "../queryUtils";
+
+// Team-specific query keys
+const TEAM_QUERY_KEYS = {
+  all: ["teams"],
+  byId: (id: string) => ["teams", id],
+  stats: (id: string) => ["teams", "stats", id],
+  members: (id: string) => ["teams", "members", id],
+  search: (term: string) => ["teams", "search", term],
+  invite: (inviteId: string) => ["teams", "invite", inviteId],
+};
 
 /**
  * Fetches all teams for the current user
@@ -38,13 +45,15 @@ export const useTeamsQuery = () => {
       setLoading(true);
       try {
         const response = await apiClient.get<Team[]>("users/me/teams");
+        const teams = response.data;
 
         // Update store with fetched teams
-        setTeams(response.data);
+        setTeams(teams);
 
-        return response.data;
+        return teams;
       } catch (error) {
         setError(error as Error);
+        handleError(error as Error, ErrorSource.API);
         throw error;
       } finally {
         setLoading(false);
@@ -78,13 +87,18 @@ export const useTeamQuery = (teamId: string | undefined) => {
       setLoadingId(teamId, true);
       try {
         const response = await apiClient.get<Team>(`teams/${teamId}`);
+        const team = response.data;
 
         // Update store with fetched team
-        setTeam(response.data);
+        setTeam(team);
 
-        return response.data;
+        return team;
       } catch (error) {
         setErrorForId(teamId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          teamId,
+          method: "fetchTeam",
+        });
         throw error;
       } finally {
         setLoadingId(teamId, false);
@@ -113,6 +127,9 @@ export const useCreateTeamMutation = () => {
 
       // Invalidate teams queries
       queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
+
+      // Emit team created event
+      teamService.notifyTeamUpdate(newTeam, "created");
     },
     ...createMutationOptions(),
   });
@@ -142,6 +159,9 @@ export const useUpdateTeamMutation = () => {
       queryClient.invalidateQueries({
         queryKey: TEAM_QUERY_KEYS.byId(updatedTeam.id),
       });
+
+      // Emit team updated event
+      teamService.notifyTeamUpdate(updatedTeam, "updated");
     },
     ...createMutationOptions(),
   });
@@ -155,10 +175,18 @@ export const useDeleteTeamMutation = () => {
 
   return useMutation<string, ApiError, string>({
     mutationFn: async (teamId) => {
+      const team = useTeamStore.getState().getTeamById(teamId);
+      if (!team) {
+        throw new Error("Team not found");
+      }
+
       await apiClient.delete(`teams/${teamId}`);
       return teamId;
     },
     onSuccess: (teamId) => {
+      // Get team before removing from store
+      const team = useTeamStore.getState().getTeamById(teamId);
+
       // Remove team from store
       const { removeTeam } = useTeamStore.getState();
       removeTeam(teamId);
@@ -166,6 +194,11 @@ export const useDeleteTeamMutation = () => {
       // Invalidate teams queries
       queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
       queryClient.removeQueries({ queryKey: TEAM_QUERY_KEYS.byId(teamId) });
+
+      // Emit team deleted event
+      if (team) {
+        teamService.notifyTeamUpdate(team, "deleted");
+      }
     },
     ...createMutationOptions(),
   });
@@ -189,6 +222,9 @@ export const useJoinTeamMutation = () => {
 
       // Invalidate teams queries
       queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
+
+      // Emit team joined event
+      teamService.notifyTeamUpdate(newTeam, "joined");
     },
     ...createMutationOptions(),
   });
@@ -202,10 +238,18 @@ export const useLeaveTeamMutation = () => {
 
   return useMutation<string, ApiError, string>({
     mutationFn: async (teamId) => {
+      const team = useTeamStore.getState().getTeamById(teamId);
+      if (!team) {
+        throw new Error("Team not found");
+      }
+
       await apiClient.delete(`teams/${teamId}/members/me`);
       return teamId;
     },
     onSuccess: (teamId) => {
+      // Get team before removing from store
+      const team = useTeamStore.getState().getTeamById(teamId);
+
       // Remove team from store
       const { removeTeam } = useTeamStore.getState();
       removeTeam(teamId);
@@ -213,6 +257,11 @@ export const useLeaveTeamMutation = () => {
       // Invalidate teams queries
       queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEYS.all });
       queryClient.removeQueries({ queryKey: TEAM_QUERY_KEYS.byId(teamId) });
+
+      // Emit team left event
+      if (team) {
+        teamService.notifyTeamUpdate(team, "left");
+      }
     },
     ...createMutationOptions(),
   });
@@ -224,7 +273,7 @@ export const useLeaveTeamMutation = () => {
  * @returns Query hook for team statistics
  */
 export const useTeamStatsQuery = (teamId: string | undefined) => {
-  const { setTeamStats } = useTeamStore();
+  const { setTeamStats, setLoadingId, setErrorForId } = useTeamStore();
 
   return useQuery<TeamStats, ApiError>({
     queryKey: teamId
@@ -235,12 +284,27 @@ export const useTeamStatsQuery = (teamId: string | undefined) => {
         throw new Error("Team ID is required");
       }
 
-      const response = await apiClient.get<TeamStats>(`teams/${teamId}/stats`);
+      setLoadingId(`stats_${teamId}`, true);
+      try {
+        const response = await apiClient.get<TeamStats>(
+          `teams/${teamId}/stats`,
+        );
+        const stats = response.data;
 
-      // Update store with team stats
-      setTeamStats(teamId, response.data);
+        // Update store with team stats
+        setTeamStats(teamId, stats);
 
-      return response.data;
+        return stats;
+      } catch (error) {
+        setErrorForId(`stats_${teamId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          teamId,
+          method: "fetchTeamStats",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`stats_${teamId}`, false);
+      }
     },
     enabled: !!teamId,
     ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes
@@ -253,7 +317,7 @@ export const useTeamStatsQuery = (teamId: string | undefined) => {
  * @returns Query hook for team members
  */
 export const useTeamMembersQuery = (teamId: string | undefined) => {
-  const { setTeamMembers } = useTeamStore();
+  const { setTeamMembers, setLoadingId, setErrorForId } = useTeamStore();
 
   return useQuery<TeamMember[], ApiError>({
     queryKey: teamId
@@ -264,14 +328,27 @@ export const useTeamMembersQuery = (teamId: string | undefined) => {
         throw new Error("Team ID is required");
       }
 
-      const response = await apiClient.get<TeamMember[]>(
-        `teams/${teamId}/members`,
-      );
+      setLoadingId(`members_${teamId}`, true);
+      try {
+        const response = await apiClient.get<TeamMember[]>(
+          `teams/${teamId}/members`,
+        );
+        const members = response.data;
 
-      // Update store with team members
-      setTeamMembers(teamId, response.data);
+        // Update store with team members
+        setTeamMembers(teamId, members);
 
-      return response.data;
+        return members;
+      } catch (error) {
+        setErrorForId(`members_${teamId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          teamId,
+          method: "fetchTeamMembers",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`members_${teamId}`, false);
+      }
     },
     enabled: !!teamId,
     ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes
@@ -284,6 +361,8 @@ export const useTeamMembersQuery = (teamId: string | undefined) => {
  * @returns Query hook for team search results
  */
 export const useSearchTeamsQuery = (searchTerm: string | undefined) => {
+  const { setLoading, setError } = useTeamStore();
+
   return useQuery<Team[], ApiError>({
     queryKey: ["teams", "search", searchTerm],
     queryFn: async () => {
@@ -291,11 +370,22 @@ export const useSearchTeamsQuery = (searchTerm: string | undefined) => {
         return [];
       }
 
-      const response = await apiClient.post<Team[]>(`teams/search`, {
-        term: searchTerm,
-      });
-
-      return response.data;
+      setLoading(true);
+      try {
+        const response = await apiClient.post<Team[]>(`teams/search`, {
+          term: searchTerm,
+        });
+        return response.data;
+      } catch (error) {
+        setError(error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          searchTerm,
+          method: "searchTeams",
+        });
+        throw error;
+      } finally {
+        setLoading(false);
+      }
     },
     enabled: !!searchTerm && searchTerm.trim().length > 0,
     ...createQueryOptions("team", { staleTime: 2 * 60 * 1000 }), // 2 minutes
@@ -308,6 +398,8 @@ export const useSearchTeamsQuery = (searchTerm: string | undefined) => {
  * @returns Query hook for team invite information
  */
 export const useTeamInviteInfoQuery = (inviteId: string | undefined) => {
+  const { setLoading, setError } = useTeamStore();
+
   return useQuery<{ name: string; display_name: string; id: string }, ApiError>(
     {
       queryKey: ["teams", "invite", inviteId],
@@ -316,13 +408,25 @@ export const useTeamInviteInfoQuery = (inviteId: string | undefined) => {
           throw new Error("Invite ID is required");
         }
 
-        const response = await apiClient.get<{
-          name: string;
-          display_name: string;
-          id: string;
-        }>(`teams/invite/${inviteId}`);
+        setLoading(true);
+        try {
+          const response = await apiClient.get<{
+            name: string;
+            display_name: string;
+            id: string;
+          }>(`teams/invite/${inviteId}`);
 
-        return response.data;
+          return response.data;
+        } catch (error) {
+          setError(error as Error);
+          handleError(error as Error, ErrorSource.API, undefined, {
+            inviteId,
+            method: "getTeamInviteInfo",
+          });
+          throw error;
+        } finally {
+          setLoading(false);
+        }
       },
       enabled: !!inviteId,
       ...createQueryOptions("team", { staleTime: 5 * 60 * 1000 }), // 5 minutes

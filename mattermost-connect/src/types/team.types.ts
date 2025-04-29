@@ -1,7 +1,12 @@
 /**
  * Team related type definitions
  */
-import { CommonState, Entity, PaginationParams } from "./common";
+import {
+  CommonSliceActions,
+  CommonState,
+  Entity,
+  PaginationParams,
+} from "./common";
 
 /**
  * Team types
@@ -124,7 +129,7 @@ export interface TeamState extends CommonState {
   teamMembers: Record<string, TeamMember[]>;
 }
 
-export interface TeamStore {
+export interface TeamStore extends CommonSliceActions {
   // Actions - Teams
   setTeams: (teams: Team[]) => void;
   setTeam: (team: Team) => void;

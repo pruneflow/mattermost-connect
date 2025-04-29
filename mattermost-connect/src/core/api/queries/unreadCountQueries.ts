@@ -1,14 +1,23 @@
 // src/core/api/queries/unreadCountQueries.ts
 /**
  * React Query hooks for unread count operations
- * Optimized hooks for fetching and managing unread counts
+ * Standardized queries for unread count-related operations
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { useAuthStore, useUnreadStore, useChannelStore } from "../../store";
-import { ChannelUnreadCount, Message, ApiError } from "../../../types";
 import { createQueryOptions, createMutationOptions } from "../queryUtils";
+import { emitEvent } from "../eventUtils";
+import { EventType, ErrorSource } from "../../../types";
+import {
+  useAuthStore,
+  useUnreadStore,
+  useChannelStore,
+  handleError,
+} from "../../store";
+import { unreadService } from "../../services/unreadService";
+
+import { ChannelUnreadCount, Message, ApiError } from "../../../types";
 
 /**
  * Response type for unread messages query
@@ -27,6 +36,7 @@ interface UnreadMessagesResponse {
 export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
   const { updateUnreadCount } = useUnreadStore();
   const { currentUser } = useAuthStore();
+  const { setLoadingId, setErrorForId } = useUnreadStore();
 
   return useQuery<ChannelUnreadCount, ApiError>({
     queryKey: channelId
@@ -37,44 +47,56 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
         throw new Error("Channel ID and current user are required");
       }
 
-      // Use the correct Mattermost API endpoint
-      const response = await apiClient.get<{
-        msg_count: number;
-        mention_count: number;
-        last_viewed_at: number;
-        last_update_at: number;
-      }>(`users/${currentUser.id}/channels/${channelId}/unread`);
-
-      // Map response to our internal ChannelUnreadCount format
-      const unreadData: ChannelUnreadCount = {
-        msg_count: response.data.msg_count,
-        mention_count: response.data.mention_count,
-        lastViewedAt: response.data.last_viewed_at,
-      };
-
-      // Get the channel for totalMessageCount
-      let totalMsgCount: number | undefined;
+      setLoadingId(channelId, true);
       try {
-        const channel = useChannelStore.getState().getChannelById(channelId);
-        totalMsgCount = channel?.total_msg_count;
+        // Use the correct Mattermost API endpoint
+        const response = await apiClient.get<{
+          msg_count: number;
+          mention_count: number;
+          last_viewed_at: number;
+          last_update_at: number;
+        }>(`users/${currentUser.id}/channels/${channelId}/unread`);
 
-        // Update the unreadCount in the store
-        updateUnreadCount(
-          channelId,
-          unreadData.msg_count,
-          unreadData.mention_count,
-          undefined, // last message ID (not available from this API)
-          unreadData.lastViewedAt,
-          totalMsgCount,
-        );
+        // Map response to our internal ChannelUnreadCount format
+        const unreadData: ChannelUnreadCount = {
+          msg_count: response.data.msg_count,
+          mention_count: response.data.mention_count,
+          lastViewedAt: response.data.last_viewed_at,
+        };
+
+        // Get the channel for totalMessageCount
+        let totalMsgCount: number | undefined;
+        try {
+          const channel = useChannelStore.getState().getChannelById(channelId);
+          totalMsgCount = channel?.total_msg_count;
+
+          // Update the unreadCount in the store
+          updateUnreadCount(
+            channelId,
+            unreadData.msg_count,
+            unreadData.mention_count,
+            undefined, // last message ID (not available from this API)
+            unreadData.lastViewedAt,
+            totalMsgCount,
+          );
+        } catch (error) {
+          console.error(
+            `Error updating unread count for channel ${channelId}:`,
+            error,
+          );
+        }
+
+        return unreadData;
       } catch (error) {
-        console.error(
-          `Error updating unread count for channel ${channelId}:`,
-          error,
-        );
+        setErrorForId(channelId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          method: "fetchChannelUnreadCount",
+        });
+        throw error;
+      } finally {
+        setLoadingId(channelId, false);
       }
-
-      return unreadData;
     },
     // Only run query if we have required parameters
     enabled: !!channelId && !!currentUser,
@@ -93,6 +115,7 @@ export const useChannelUnreadCountQuery = (channelId: string | undefined) => {
 export const useTeamUnreadCountQuery = (teamId: string | undefined) => {
   const { updateUnreadCount } = useUnreadStore();
   const { currentUser } = useAuthStore();
+  const { setLoadingId, setErrorForId } = useUnreadStore();
 
   return useQuery<{ msg_count: number; mention_count: number }, ApiError>({
     queryKey: teamId
@@ -103,34 +126,46 @@ export const useTeamUnreadCountQuery = (teamId: string | undefined) => {
         throw new Error("Team ID and current user are required");
       }
 
-      // Use the correct Mattermost API endpoint
-      const response = await apiClient.get<{
-        msg_count: number;
-        mention_count: number;
-        mention_count_by_channel?: Record<string, number>;
-        msg_count_by_channel?: Record<string, number>;
-      }>(`users/${currentUser.id}/teams/${teamId}/unread`);
+      setLoadingId(`team_${teamId}`, true);
+      try {
+        // Use the correct Mattermost API endpoint
+        const response = await apiClient.get<{
+          msg_count: number;
+          mention_count: number;
+          mention_count_by_channel?: Record<string, number>;
+          msg_count_by_channel?: Record<string, number>;
+        }>(`users/${currentUser.id}/teams/${teamId}/unread`);
 
-      // If we have per-channel breakdowns, update each channel's unread counts
-      if (
-        response.data.mention_count_by_channel &&
-        response.data.msg_count_by_channel
-      ) {
-        Object.entries(response.data.msg_count_by_channel).forEach(
-          ([channelId, msgCount]) => {
-            const mention_count =
-              response.data.mention_count_by_channel?.[channelId] || 0;
+        // If we have per-channel breakdowns, update each channel's unread counts
+        if (
+          response.data.mention_count_by_channel &&
+          response.data.msg_count_by_channel
+        ) {
+          Object.entries(response.data.msg_count_by_channel).forEach(
+            ([channelId, msgCount]) => {
+              const mention_count =
+                response.data.mention_count_by_channel?.[channelId] || 0;
 
-            // Update the store with per-channel data
-            updateUnreadCount(channelId, msgCount, mention_count);
-          },
-        );
+              // Update the store with per-channel data
+              updateUnreadCount(channelId, msgCount, mention_count);
+            },
+          );
+        }
+
+        return {
+          msg_count: response.data.msg_count,
+          mention_count: response.data.mention_count,
+        };
+      } catch (error) {
+        setErrorForId(`team_${teamId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          teamId,
+          method: "fetchTeamUnreadCount",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`team_${teamId}`, false);
       }
-
-      return {
-        msg_count: response.data.msg_count,
-        mention_count: response.data.mention_count,
-      };
     },
     // Only run query if we have required parameters
     enabled: !!teamId && !!currentUser,
@@ -153,6 +188,7 @@ export const useUnreadMessagesQuery = (
 ) => {
   const { incrementUnreadCount } = useUnreadStore();
   const { currentUser } = useAuthStore();
+  const { setLoadingId, setErrorForId } = useUnreadStore();
 
   return useQuery<UnreadMessagesResponse, ApiError>({
     queryKey:
@@ -164,56 +200,69 @@ export const useUnreadMessagesQuery = (
         throw new Error("Channel ID, timestamp, and current user are required");
       }
 
-      // Convert milliseconds to seconds for Mattermost API
-      const sinceSeconds = Math.floor(sinceTimestamp / 1000);
+      setLoadingId(`unread_messages_${channelId}`, true);
+      try {
+        // Convert milliseconds to seconds for Mattermost API
+        const sinceSeconds = Math.floor(sinceTimestamp / 1000);
 
-      // Fetch unread messages
-      const response = await apiClient.get<{
-        order: string[];
-        posts: Record<string, Message>;
-      }>(`channels/${channelId}/posts?since=${sinceSeconds}`);
+        // Fetch unread messages
+        const response = await apiClient.get<{
+          order: string[];
+          posts: Record<string, Message>;
+        }>(`channels/${channelId}/posts?since=${sinceSeconds}`);
 
-      // Process messages
-      const messages: Message[] = [];
-      let mention_count = 0;
+        // Process messages
+        const messages: Message[] = [];
+        let mention_count = 0;
 
-      response.data.order.forEach((postId) => {
-        const message = response.data.posts[postId];
+        response.data.order.forEach((postId) => {
+          const message = response.data.posts[postId];
 
-        // Skip messages from the current user
-        if (message.user_id === currentUser.id) {
-          return;
+          // Skip messages from the current user
+          if (message.user_id === currentUser.id) {
+            return;
+          }
+
+          messages.push(message);
+
+          // Check for mentions
+          if (
+            message.props &&
+            message.props.mentions &&
+            Array.isArray(message.props.mentions) &&
+            message.props.mentions.includes(currentUser.id)
+          ) {
+            mention_count++;
+          }
+        });
+
+        // Update store
+        if (messages.length > 0) {
+          incrementUnreadCount(
+            channelId,
+            messages.length,
+            mention_count,
+            // Use the most recent message ID if available
+            messages.length > 0 ? messages[0].id : undefined,
+          );
         }
 
-        messages.push(message);
-
-        // Check for mentions
-        if (
-          message.props &&
-          message.props.mentions &&
-          Array.isArray(message.props.mentions) &&
-          message.props.mentions.includes(currentUser.id)
-        ) {
-          mention_count++;
-        }
-      });
-
-      // Update store
-      if (messages.length > 0) {
-        incrementUnreadCount(
-          channelId,
-          messages.length,
+        return {
+          messages,
+          msg_count: messages.length,
           mention_count,
-          // Use the most recent message ID if available
-          messages.length > 0 ? messages[0].id : undefined,
-        );
+        };
+      } catch (error) {
+        setErrorForId(`unread_messages_${channelId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          sinceTimestamp,
+          method: "fetchUnreadMessages",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`unread_messages_${channelId}`, false);
       }
-
-      return {
-        messages,
-        msg_count: messages.length,
-        mention_count,
-      };
     },
     enabled: !!channelId && !!sinceTimestamp && !!currentUser,
     ...createQueryOptions("unread", {
@@ -250,8 +299,18 @@ export const useViewChannelMutation = () => {
       if (channel?.team_id) {
         invalidateQueries.allUnreadCounts();
       }
+
+      // Notify marking as read
+      unreadService.notifyMarkedRead(channelId, channel?.team_id);
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, channelId) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          method: "viewChannel",
+        });
+      },
+    }),
   });
 };
 
@@ -273,8 +332,21 @@ export const useMarkAllChannelsAsReadMutation = () => {
 
       // Invalidate queries to ensure fresh data
       invalidateQueries.allUnreadCounts();
+
+      // Emit team marked read event
+      emitEvent(EventType.UNREAD_MARKED_READ, {
+        teamId,
+        timestamp: Date.now(),
+      });
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, teamId) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          teamId,
+          method: "markAllChannelsAsRead",
+        });
+      },
+    }),
   });
 };
 
@@ -309,8 +381,24 @@ export const useToggleChannelMutedMutation = () => {
 
       // Invalidate queries to ensure fresh data
       invalidateQueries.channelUnreadCount(channelId);
+
+      // Emit settings changed event
+      emitEvent(EventType.SETTINGS_CHANGED, {
+        setting: "muted_channels",
+        channelId,
+        value: muted,
+        timestamp: Date.now(),
+      });
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId: variables.channelId,
+          muted: variables.muted,
+          method: "toggleChannelMuted",
+        });
+      },
+    }),
   });
 };
 
@@ -333,6 +421,14 @@ export const useAcknowledgeNewMessageMutation = () => {
       // Invalidate relevant queries
       invalidateQueries.channelUnreadCount(channelId);
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId: variables.channelId,
+          postId: variables.postId,
+          method: "acknowledgeNewMessage",
+        });
+      },
+    }),
   });
 };

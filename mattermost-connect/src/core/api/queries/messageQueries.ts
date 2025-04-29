@@ -1,19 +1,24 @@
 // src/core/api/queries/messageQueries.ts
 /**
  * React Query hooks for message operations
- * Optimized for message-related queries and mutations
+ * Standardized queries for message-related operations
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
 import { QUERY_KEYS, invalidateQueries } from "../queryClient";
-import { Message, MessagePaginationOptions } from "../../../types";
-import { useMessageStore } from "../../store/messageStore";
 import { createQueryOptions, createMutationOptions } from "../queryUtils";
 import { buildUrlWithParams } from "../apiUtils";
+import { emitEvent } from "../eventUtils";
+import { EventType, ErrorSource } from "../../../types";
+import { handleError, useMessageStore } from "../../store";
+import { messageService } from "../../services/messageService";
 
-// ==========================================
-// COMMON TYPE DEFINITIONS
-// ==========================================
+import {
+  Message,
+  MessagePaginationOptions,
+  SendMessageParams,
+} from "../../../types";
+import { useAuthStore } from "../../store";
 
 /**
  * Parameters for message API requests with pagination
@@ -66,10 +71,6 @@ const MESSAGE_KEYS = {
   fileInfo: (fileId: string) => ["fileInfo", fileId] as const,
 };
 
-// ==========================================
-// MESSAGE QUERY HOOKS
-// ==========================================
-
 /**
  * Hook for fetching messages in a channel
  */
@@ -113,6 +114,11 @@ export function useMessagesQuery(
         return messages;
       } catch (error) {
         setError(channelId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          method: "fetchMessages",
+          options,
+        });
         throw error;
       } finally {
         setLoading(channelId, false);
@@ -122,7 +128,7 @@ export function useMessagesQuery(
     enabled: !!channelId,
     ...createQueryOptions("message", {
       refetchOnWindowFocus: true,
-      staleTime: 30 * 1000,
+      staleTime: 30 * 1000, // 30 seconds
     }),
   });
 }
@@ -131,7 +137,7 @@ export function useMessagesQuery(
  * Hook for fetching thread messages
  */
 export function useThreadMessagesQuery(rootMessageId: string | undefined) {
-  const { setThreadMessages, setThreadLoading } = useMessageStore();
+  const { setThreadMessages, setThreadLoading, setError } = useMessageStore();
 
   return useQuery<Message[], Error>({
     queryKey: rootMessageId
@@ -156,10 +162,11 @@ export function useThreadMessagesQuery(rootMessageId: string | undefined) {
         setThreadMessages(rootMessageId, messages);
         return messages;
       } catch (error) {
-        console.error(
-          `Error fetching thread messages for ${rootMessageId}:`,
-          error,
-        );
+        setError(rootMessageId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          rootMessageId,
+          method: "fetchThreadMessages",
+        });
         throw error;
       } finally {
         setThreadLoading(rootMessageId, false);
@@ -168,7 +175,7 @@ export function useThreadMessagesQuery(rootMessageId: string | undefined) {
 
     enabled: !!rootMessageId,
     ...createQueryOptions("message", {
-      staleTime: 30 * 1000,
+      staleTime: 30 * 1000, // 30 seconds
     }),
   });
 }
@@ -177,7 +184,7 @@ export function useThreadMessagesQuery(rootMessageId: string | undefined) {
  * Hook for fetching pinned messages in a channel
  */
 export function usePinnedMessagesQuery(channelId: string | undefined) {
-  const { setPinnedMessages } = useMessageStore();
+  const { setPinnedMessages, setLoadingId, setErrorForId } = useMessageStore();
 
   return useQuery<Message[], Error>({
     queryKey: channelId
@@ -187,22 +194,34 @@ export function usePinnedMessagesQuery(channelId: string | undefined) {
     queryFn: async () => {
       if (!channelId) return [];
 
-      const response = await apiClient.get<PostsResponse>(
-        `channels/${channelId}/pinned`,
-      );
+      setLoadingId(`pinned_${channelId}`, true);
+      try {
+        const response = await apiClient.get<PostsResponse>(
+          `channels/${channelId}/pinned`,
+        );
 
-      const { posts, order } = response.data;
-      const pinnedMessages = order
-        .map((postId) => posts[postId])
-        .filter((msg): msg is Message => !!msg);
+        const { posts, order } = response.data;
+        const pinnedMessages = order
+          .map((postId) => posts[postId])
+          .filter((msg): msg is Message => !!msg);
 
-      setPinnedMessages(channelId, pinnedMessages);
-      return pinnedMessages;
+        setPinnedMessages(channelId, pinnedMessages);
+        return pinnedMessages;
+      } catch (error) {
+        setErrorForId(`pinned_${channelId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          method: "fetchPinnedMessages",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`pinned_${channelId}`, false);
+      }
     },
 
     enabled: !!channelId,
     ...createQueryOptions("message", {
-      staleTime: 60 * 1000,
+      staleTime: 60 * 1000, // 1 minute
     }),
   });
 }
@@ -211,6 +230,8 @@ export function usePinnedMessagesQuery(channelId: string | undefined) {
  * Hook for fetching file information
  */
 export function useFileInfoQuery(fileId: string | undefined) {
+  const { setLoadingId, setErrorForId } = useMessageStore();
+
   return useQuery<any, Error>({
     queryKey: fileId
       ? MESSAGE_KEYS.fileInfo(fileId)
@@ -219,13 +240,25 @@ export function useFileInfoQuery(fileId: string | undefined) {
     queryFn: async () => {
       if (!fileId) throw new Error("File ID is required");
 
-      const response = await apiClient.get(`files/${fileId}/info`);
-      return response.data;
+      setLoadingId(`file_${fileId}`, true);
+      try {
+        const response = await apiClient.get(`files/${fileId}/info`);
+        return response.data;
+      } catch (error) {
+        setErrorForId(`file_${fileId}`, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          fileId,
+          method: "fetchFileInfo",
+        });
+        throw error;
+      } finally {
+        setLoadingId(`file_${fileId}`, false);
+      }
     },
 
     enabled: !!fileId,
     ...createQueryOptions("message", {
-      staleTime: 5 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5 minutes
     }),
   });
 }
@@ -237,6 +270,8 @@ export function useSearchMessagesQuery(
   channelId: string | undefined,
   searchTerm: string | undefined,
 ) {
+  const { setLoading, setError } = useMessageStore();
+
   return useQuery<Message[], Error>({
     queryKey:
       channelId && searchTerm
@@ -246,71 +281,44 @@ export function useSearchMessagesQuery(
     queryFn: async () => {
       if (!channelId || !searchTerm || searchTerm.trim() === "") return [];
 
-      const params = {
-        terms: searchTerm,
-        is_or_search: true,
-        include_deleted_channels: false,
-        page: 0,
-        per_page: 20,
-      };
+      setLoading(channelId, true);
+      try {
+        const params = {
+          terms: searchTerm,
+          is_or_search: true,
+          include_deleted_channels: false,
+          page: 0,
+          per_page: 20,
+        };
 
-      const response = await apiClient.post<PostsResponse>(
-        `teams/posts/search`,
-        params,
-      );
-
-      const { posts, order } = response.data;
-      return order
-        .map((postId) => posts[postId])
-        .filter(
-          (post): post is Message => !!post && post.channel_id === channelId,
+        const response = await apiClient.post<PostsResponse>(
+          `teams/posts/search`,
+          params,
         );
+
+        const { posts, order } = response.data;
+        return order
+          .map((postId) => posts[postId])
+          .filter(
+            (post): post is Message => !!post && post.channel_id === channelId,
+          );
+      } catch (error) {
+        setError(channelId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          searchTerm,
+          method: "searchMessages",
+        });
+        throw error;
+      } finally {
+        setLoading(channelId, false);
+      }
     },
 
     enabled: !!(channelId && searchTerm && searchTerm.trim() !== ""),
     ...createQueryOptions("message", {
-      staleTime: 30 * 1000,
+      staleTime: 30 * 1000, // 30 seconds
       retry: false,
-    }),
-  });
-}
-
-/**
- * Hook for fetching unread messages in a channel
- */
-export function useUnreadMessagesQuery(
-  channelId: string | undefined,
-  lastViewedAt: number | undefined,
-) {
-  return useQuery<Message[], Error>({
-    queryKey:
-      channelId && lastViewedAt
-        ? QUERY_KEYS.messages.since(channelId, lastViewedAt)
-        : ["unread-messages-placeholder"],
-
-    queryFn: async () => {
-      if (!channelId || !lastViewedAt) return [];
-
-      const params: MessagesQueryParams = {
-        page: 0,
-        per_page: 60,
-        since: lastViewedAt,
-      };
-
-      const url = buildUrlWithParams(`channels/${channelId}/posts`, params);
-      const response = await apiClient.get<PostsResponse>(url);
-
-      const { posts, order } = response.data;
-      return order
-        .map((postId) => posts[postId])
-        .filter((msg): msg is Message => !!msg);
-    },
-
-    enabled: !!(channelId && lastViewedAt),
-    ...createQueryOptions("message", {
-      staleTime: 0,
-      refetchOnWindowFocus: true,
-      refetchOnMount: true,
     }),
   });
 }
@@ -323,6 +331,8 @@ export function useMessageContextQuery(
   messageId: string | undefined,
   count: number = 10,
 ) {
+  const { setLoading, setError } = useMessageStore();
+
   return useQuery<MessageContext, Error>({
     queryKey:
       channelId && messageId
@@ -334,74 +344,75 @@ export function useMessageContextQuery(
         return { before: [], target: null, after: [] };
       }
 
-      // Fetch messages before target
-      const beforeParams: MessagesQueryParams = {
-        page: 0,
-        per_page: count,
-        before: messageId,
-      };
+      setLoading(channelId, true);
+      try {
+        // Fetch messages before target
+        const beforeParams: MessagesQueryParams = {
+          page: 0,
+          per_page: count,
+          before: messageId,
+        };
 
-      const beforeUrl = buildUrlWithParams(
-        `channels/${channelId}/posts`,
-        beforeParams,
-      );
-      const beforeResponse = await apiClient.get<PostsResponse>(beforeUrl);
+        const beforeUrl = buildUrlWithParams(
+          `channels/${channelId}/posts`,
+          beforeParams,
+        );
+        const beforeResponse = await apiClient.get<PostsResponse>(beforeUrl);
 
-      // Fetch target message
-      const targetResponse = await apiClient.get<Message>(`posts/${messageId}`);
+        // Fetch target message
+        const targetResponse = await apiClient.get<Message>(
+          `posts/${messageId}`,
+        );
 
-      // Fetch messages after target
-      const afterParams: MessagesQueryParams = {
-        page: 0,
-        per_page: count,
-        after: messageId,
-      };
+        // Fetch messages after target
+        const afterParams: MessagesQueryParams = {
+          page: 0,
+          per_page: count,
+          after: messageId,
+        };
 
-      const afterUrl = buildUrlWithParams(
-        `channels/${channelId}/posts`,
-        afterParams,
-      );
-      const afterResponse = await apiClient.get<PostsResponse>(afterUrl);
+        const afterUrl = buildUrlWithParams(
+          `channels/${channelId}/posts`,
+          afterParams,
+        );
+        const afterResponse = await apiClient.get<PostsResponse>(afterUrl);
 
-      // Transform responses
-      const before = beforeResponse.data.order
-        .map((postId) => beforeResponse.data.posts[postId])
-        .filter((msg): msg is Message => !!msg);
+        // Transform responses
+        const before = beforeResponse.data.order
+          .map((postId) => beforeResponse.data.posts[postId])
+          .filter((msg): msg is Message => !!msg);
 
-      const target = targetResponse.data;
+        const target = targetResponse.data;
 
-      const after = afterResponse.data.order
-        .map((postId) => afterResponse.data.posts[postId])
-        .filter((msg): msg is Message => !!msg);
+        const after = afterResponse.data.order
+          .map((postId) => afterResponse.data.posts[postId])
+          .filter((msg): msg is Message => !!msg);
 
-      return { before, target, after };
+        return { before, target, after };
+      } catch (error) {
+        setError(channelId, error as Error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId,
+          messageId,
+          method: "fetchMessageContext",
+        });
+        throw error;
+      } finally {
+        setLoading(channelId, false);
+      }
     },
 
     enabled: !!(channelId && messageId),
     ...createQueryOptions("message", {
-      staleTime: 30 * 1000,
+      staleTime: 30 * 1000, // 30 seconds
     }),
   });
-}
-
-// ==========================================
-// MESSAGE MUTATION HOOKS
-// ==========================================
-
-/**
- * Interface for sending a message
- */
-interface SendMessageParams {
-  channelId: string;
-  message: string;
-  fileIds?: string[];
 }
 
 /**
  * Hook for sending a new message
  */
 export function useSendMessageMutation() {
-  const queryClient = useQueryClient();
   const { addMessage } = useMessageStore();
 
   return useMutation<Message, Error, SendMessageParams>({
@@ -420,11 +431,24 @@ export function useSendMessageMutation() {
     },
 
     onSuccess: (newMessage) => {
+      // Invalidate channel messages
       invalidateQueries.channelMessages(newMessage.channel_id);
+
+      // Update store
       addMessage(newMessage);
+
+      // Notify about message sent
+      messageService.notifyMessageEvent(newMessage, "sent");
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId: variables.channelId,
+          method: "sendMessage",
+        });
+      },
+    }),
   });
 }
 
@@ -442,7 +466,6 @@ interface ReplyMessageParams {
  * Hook for replying to a message in a thread
  */
 export function useReplyToMessageMutation() {
-  const queryClient = useQueryClient();
   const { addMessage, setReplyToMessage } = useMessageStore();
 
   return useMutation<Message, Error, ReplyMessageParams>({
@@ -464,17 +487,31 @@ export function useReplyToMessageMutation() {
     },
 
     onSuccess: (newMessage) => {
+      // Invalidate thread messages
       if (newMessage.root_id) {
         invalidateQueries.thread(newMessage.root_id);
       }
 
+      // Invalidate channel messages
       invalidateQueries.channelMessages(newMessage.channel_id);
 
+      // Update store
       addMessage(newMessage);
       setReplyToMessage(null);
+
+      // Notify about message sent
+      messageService.notifyMessageEvent(newMessage, "sent");
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId: variables.channelId,
+          rootMessageId: variables.rootMessageId,
+          method: "replyToMessage",
+        });
+      },
+    }),
   });
 }
 
@@ -490,8 +527,7 @@ interface EditMessageParams {
  * Hook for editing an existing message
  */
 export function useEditMessageMutation() {
-  const queryClient = useQueryClient();
-  const { updateMessage } = useMessageStore();
+  const { updateMessage, setEditingMessage } = useMessageStore();
 
   return useMutation<Message, Error, EditMessageParams>({
     mutationFn: async ({ messageId, message }) => {
@@ -518,16 +554,30 @@ export function useEditMessageMutation() {
     },
 
     onSuccess: (updatedMessage) => {
+      // Invalidate thread if this is a reply
       if (updatedMessage.root_id) {
         invalidateQueries.thread(updatedMessage.root_id);
       }
 
+      // Invalidate channel messages
       invalidateQueries.channelMessages(updatedMessage.channel_id);
 
+      // Update store
       updateMessage(updatedMessage);
+      setEditingMessage(null);
+
+      // Notify about message updated
+      messageService.notifyMessageEvent(updatedMessage, "updated");
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId: variables.messageId,
+          method: "editMessage",
+        });
+      },
+    }),
   });
 }
 
@@ -551,7 +601,6 @@ interface DeleteMessageResult {
  * Hook for deleting a message
  */
 export function useDeleteMessageMutation() {
-  const queryClient = useQueryClient();
   const { getMessageById, deleteMessage } = useMessageStore();
 
   return useMutation<DeleteMessageResult, Error, DeleteMessageParams>({
@@ -567,16 +616,32 @@ export function useDeleteMessageMutation() {
     onSuccess: ({ messageId, channelId }) => {
       const message = getMessageById(messageId);
 
+      // Invalidate thread if message is part of one
       if (message?.root_id) {
         invalidateQueries.thread(message.root_id);
       }
 
+      // Invalidate channel messages
       invalidateQueries.channelMessages(channelId);
 
+      // Remove from store
       deleteMessage(messageId, channelId);
+
+      // Notify about message deleted if we still have the message info
+      if (message) {
+        messageService.notifyMessageEvent(message, "deleted");
+      }
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId: variables.messageId,
+          channelId: variables.channelId,
+          method: "deleteMessage",
+        });
+      },
+    }),
   });
 }
 
@@ -614,23 +679,44 @@ export function usePinMessageMutation() {
     },
 
     onSuccess: async ({ messageId, channelId }) => {
+      // Invalidate pinned messages query
       queryClient.invalidateQueries({
         queryKey: MESSAGE_KEYS.pinned(channelId),
       });
 
+      // Invalidate channel messages query
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.messages.byChannel(channelId),
       });
 
       try {
+        // Fetch updated message to get current state
         const response = await apiClient.get<Message>(`posts/${messageId}`);
+
+        // Update message in store
         updateMessage(response.data);
+
+        // Notify about message updated
+        messageService.notifyMessageEvent(response.data, "updated");
       } catch (error) {
         console.error("Error refetching pinned message:", error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId,
+          channelId,
+          method: "refreshPinnedMessage",
+        });
       }
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId: variables.messageId,
+          channelId: variables.channelId,
+          method: "pinMessage",
+        });
+      },
+    }),
   });
 }
 
@@ -652,23 +738,44 @@ export function useUnpinMessageMutation() {
     },
 
     onSuccess: async ({ messageId, channelId }) => {
+      // Invalidate pinned messages query
       queryClient.invalidateQueries({
         queryKey: MESSAGE_KEYS.pinned(channelId),
       });
 
+      // Invalidate channel messages query
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.messages.byChannel(channelId),
       });
 
       try {
+        // Fetch updated message to get current state
         const response = await apiClient.get<Message>(`posts/${messageId}`);
+
+        // Update message in store
         updateMessage(response.data);
+
+        // Notify about message updated
+        messageService.notifyMessageEvent(response.data, "updated");
       } catch (error) {
         console.error("Error refetching unpinned message:", error);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId,
+          channelId,
+          method: "refreshUnpinnedMessage",
+        });
       }
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId: variables.messageId,
+          channelId: variables.channelId,
+          method: "unpinMessage",
+        });
+      },
+    }),
   });
 }
 
@@ -684,23 +791,171 @@ interface UploadFilesParams {
  * Hook for uploading files to attach to a message
  */
 export function useUploadFilesMutation() {
+  const { setLoading, setError } = useMessageStore();
+
   return useMutation<UploadFilesResponse, Error, UploadFilesParams>({
     mutationFn: async ({ channelId, files }) => {
       if (!channelId || files.length === 0) {
         throw new Error("Channel ID and files are required");
       }
 
-      const formData = new FormData();
-      formData.append("channel_id", channelId);
+      setLoading(channelId, true);
+      try {
+        const formData = new FormData();
+        formData.append("channel_id", channelId);
 
-      files.forEach((file) => {
-        formData.append("files", file);
-      });
+        files.forEach((file) => {
+          formData.append("files", file);
+        });
 
-      const response = await apiClient.uploadFiles(formData);
-      return response.data;
+        const response = await apiClient.uploadFiles(formData);
+        return response.data;
+      } catch (error) {
+        setError(channelId, error as Error);
+        throw error;
+      } finally {
+        setLoading(channelId, false);
+      }
     },
 
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          channelId: variables.channelId,
+          fileCount: variables.files.length,
+          method: "uploadFiles",
+        });
+      },
+    }),
+  });
+}
+
+/**
+ * Interface for adding a reaction to a message
+ */
+interface AddReactionParams {
+  messageId: string;
+  emoji: string;
+  channelId: string;
+}
+
+/**
+ * Hook for adding a reaction to a message
+ */
+export function useAddReactionMutation() {
+  const { addReaction, getMessageById } = useMessageStore();
+  const { currentUser } = useAuthStore.getState();
+
+  return useMutation<void, Error, AddReactionParams>({
+    mutationFn: async ({ messageId, emoji }) => {
+      if (!messageId || !emoji || !currentUser) {
+        throw new Error(
+          "Message ID, emoji, and authenticated user are required",
+        );
+      }
+
+      await apiClient.post(`reactions`, {
+        user_id: currentUser.id,
+        post_id: messageId,
+        emoji_name: emoji,
+      });
+    },
+
+    onSuccess: (_, { messageId, emoji, channelId }) => {
+      if (!currentUser) return;
+
+      // Add reaction to store
+      addReaction(messageId, currentUser.id, emoji);
+
+      // Invalidate message queries
+      invalidateQueries.channelMessages(channelId);
+
+      // If message is in a thread, invalidate thread queries too
+      const message = getMessageById(messageId);
+      if (message?.root_id) {
+        invalidateQueries.thread(message.root_id);
+      }
+
+      // Emit reaction added event
+      emitEvent(EventType.REACTION_ADDED, {
+        messageId,
+        userId: currentUser.id,
+        emoji,
+        timestamp: Date.now(),
+      });
+    },
+
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId: variables.messageId,
+          emoji: variables.emoji,
+          method: "addReaction",
+        });
+      },
+    }),
+  });
+}
+
+/**
+ * Interface for removing a reaction from a message
+ */
+interface RemoveReactionParams {
+  messageId: string;
+  emoji: string;
+  channelId: string;
+}
+
+/**
+ * Hook for removing a reaction from a message
+ */
+export function useRemoveReactionMutation() {
+  const { removeReaction, getMessageById } = useMessageStore();
+  const { currentUser } = useAuthStore.getState();
+
+  return useMutation<void, Error, RemoveReactionParams>({
+    mutationFn: async ({ messageId, emoji }) => {
+      if (!messageId || !emoji || !currentUser) {
+        throw new Error(
+          "Message ID, emoji, and authenticated user are required",
+        );
+      }
+
+      await apiClient.delete(`users/me/posts/${messageId}/reactions/${emoji}`);
+    },
+
+    onSuccess: (_, { messageId, emoji, channelId }) => {
+      if (!currentUser) return;
+
+      // Remove reaction from store
+      removeReaction(messageId, currentUser.id, emoji);
+
+      // Invalidate message queries
+      invalidateQueries.channelMessages(channelId);
+
+      // If message is in a thread, invalidate thread queries too
+      const message = getMessageById(messageId);
+      if (message?.root_id) {
+        invalidateQueries.thread(message.root_id);
+      }
+
+      // Emit reaction removed event
+      emitEvent(EventType.REACTION_REMOVED, {
+        messageId,
+        userId: currentUser.id,
+        emoji,
+        timestamp: Date.now(),
+      });
+    },
+
+    ...createMutationOptions({
+      onError: (error, variables) => {
+        handleError(error as Error, ErrorSource.API, undefined, {
+          messageId: variables.messageId,
+          emoji: variables.emoji,
+          method: "removeReaction",
+        });
+      },
+    }),
   });
 }

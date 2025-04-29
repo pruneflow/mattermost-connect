@@ -5,28 +5,41 @@
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { User, LoginParams, ApiError } from "../../../types";
-import { useAuthStore } from "../../store";
+import { emitEvent, useAuthStore, handleError } from "../../store";
 import { apiClient } from "../client";
 import { QUERY_KEYS } from "../queryClient";
 import { createQueryOptions, createMutationOptions } from "../queryUtils";
+import { EventType } from "../../../types";
+import { ErrorSource } from "../../../types";
 
 /**
  * Fetches the current authenticated user
  * @returns Query hook for current user
  */
 export const useCurrentUserQuery = () => {
-  const { refreshCurrentUser } = useAuthStore();
+  const { refreshCurrentUser, setLoading, setError } = useAuthStore();
 
   return useQuery<User, ApiError>({
     queryKey: QUERY_KEYS.auth.current,
     queryFn: async () => {
-      const user = await refreshCurrentUser();
+      setLoading(true);
 
-      if (!user) {
-        throw new Error("Failed to fetch current user");
+      try {
+        const user = await refreshCurrentUser();
+
+        if (!user) {
+          throw new Error("Failed to fetch current user");
+        }
+
+        return user;
+      } catch (error) {
+        setError(error as Error);
+        // Use standardized error handling
+        handleError(error as Error, ErrorSource.AUTH);
+        throw error;
+      } finally {
+        setLoading(false);
       }
-
-      return user;
     },
     // Only fetch if authenticated
     enabled: useAuthStore.getState().isAuthenticated,
@@ -44,11 +57,30 @@ export const useCurrentUserQuery = () => {
  * Login mutation
  */
 export const useLoginMutation = () => {
-  const { login } = useAuthStore();
+  const { login, setLoading, setError } = useAuthStore();
 
   return useMutation<User, ApiError, LoginParams>({
     mutationFn: async ({ username, password, serverUrl }: LoginParams) => {
-      return login({ username, password, serverUrl });
+      setLoading(true);
+
+      try {
+        const user = await login({ username, password, serverUrl });
+
+        // Emit login success event
+        emitEvent(EventType.LOGIN_SUCCESS, {
+          user,
+          timestamp: Date.now(),
+        });
+
+        return user;
+      } catch (error) {
+        setError(error as Error);
+        // Use standardized error handling
+        handleError(error as Error, ErrorSource.AUTH);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
     },
     ...createMutationOptions({
       // Don't retry login attempts
@@ -65,7 +97,18 @@ export const useLogoutMutation = () => {
 
   return useMutation<boolean, ApiError, void>({
     mutationFn: async () => {
+      // Get current user before logout for event emission
+      const currentUser = useAuthStore.getState().currentUser;
+
+      // Execute logout
       logout();
+
+      // Emit logout event
+      emitEvent(EventType.LOGOUT, {
+        user: currentUser,
+        timestamp: Date.now(),
+      });
+
       return true;
     },
     ...createMutationOptions(),
@@ -81,7 +124,11 @@ export const useForgotPasswordMutation = () => {
       await apiClient.post("users/password/reset", { email });
       return true;
     },
-    ...createMutationOptions(),
+    ...createMutationOptions({
+      onError: (error) => {
+        handleError(error as Error, ErrorSource.AUTH);
+      },
+    }),
   });
 };
 
@@ -98,7 +145,11 @@ export const useResetPasswordMutation = () => {
         });
         return true;
       },
-      ...createMutationOptions(),
+      ...createMutationOptions({
+        onError: (error) => {
+          handleError(error as Error, ErrorSource.AUTH);
+        },
+      }),
     },
   );
 };
@@ -108,12 +159,23 @@ export const useResetPasswordMutation = () => {
  * @returns Query hook for initializing authentication
  */
 export const useInitializeAuthQuery = () => {
-  const { initialize } = useAuthStore();
+  const { initialize, setLoading, setError } = useAuthStore();
 
   return useQuery<boolean, ApiError>({
     queryKey: QUERY_KEYS.auth.initialize,
     queryFn: async () => {
-      return initialize();
+      setLoading(true);
+
+      try {
+        const result = await initialize();
+        return result;
+      } catch (error) {
+        setError(error as Error);
+        handleError(error as Error, ErrorSource.AUTH);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
     },
     ...createQueryOptions("auth", {
       refetchOnWindowFocus: false,

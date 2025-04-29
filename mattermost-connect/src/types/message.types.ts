@@ -1,7 +1,12 @@
 /**
  * Message related type definitions
  */
-import { CommonState, Entity, PaginationParams } from "./common";
+import {
+  CommonSliceActions,
+  CommonState,
+  Entity,
+  PaginationParams,
+} from "./common";
 
 /**
  * Message attachment interface
@@ -174,7 +179,8 @@ export interface MessageState extends CommonState {
   editingMessageId: string | null;
 }
 
-export interface MessageStore {
+export interface MessageStore
+  extends Omit<CommonSliceActions, "setLoading" | "setError"> {
   // Message-specific loading states
   loadingChannelIds: string[];
   threadLoadingIds: string[];

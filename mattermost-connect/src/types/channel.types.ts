@@ -1,7 +1,12 @@
 /**
  * Channel related type definitions
  */
-import { CommonState, Entity, PaginationParams } from "./common";
+import {
+  CommonSliceActions,
+  CommonState,
+  Entity,
+  PaginationParams,
+} from "./common";
 import { UserStatus } from "./user.types";
 
 /**
@@ -154,7 +159,7 @@ export interface ChannelState extends CommonState {
   members: Record<string, ChannelMember[]>;
 }
 
-export interface ChannelStore {
+export interface ChannelStore extends CommonSliceActions {
   // Actions - Channel Data
   setChannels: (teamId: string, channels: Channel[]) => void;
   setChannel: (channel: Channel) => void;
@@ -189,7 +194,7 @@ export interface DirectChannelState extends CommonState {
   pendingUserIds: string[];
 }
 
-export interface DirectChannelStore {
+export interface DirectChannelStore extends CommonSliceActions {
   // Actions - Direct Channel Info
   setDirectChannelInfo: (channelId: string, info: DirectChannelInfo) => void;
   updateDirectChannelInfo: <K extends keyof DirectChannelInfo>(

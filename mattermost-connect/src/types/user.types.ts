@@ -1,7 +1,12 @@
 /**
  * User related type definitions
  */
-import { Entity, CommonState, PaginationParams } from "./common";
+import {
+  Entity,
+  CommonState,
+  PaginationParams,
+  CommonSliceActions,
+} from "./common";
 import { User } from "./auth.types";
 
 /**
@@ -111,7 +116,7 @@ export interface UserState extends CommonState {
   isInitialized: boolean;
 }
 
-export interface UserStore {
+export interface UserStore extends CommonSliceActions {
   // Actions - User Data
   setUser: (user: User) => void;
   setUsers: (users: User[]) => void;

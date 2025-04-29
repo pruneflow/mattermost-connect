@@ -1,7 +1,7 @@
 /**
  * Authentication related type definitions
  */
-import { Entity, CommonState } from "./common";
+import { Entity, CommonState, CommonSliceActions } from "./common";
 
 /**
  * Authentication modes
@@ -43,7 +43,7 @@ export interface AuthState extends CommonState {
   serverUrl: string | null;
 }
 
-export interface AuthStore {
+export interface AuthStore extends CommonSliceActions {
   // Actions
   initialize: () => Promise<boolean>;
   login: (params: LoginParams) => Promise<User>;

@@ -1,7 +1,7 @@
 /**
  * Types for unread count related data and functions
  */
-import { CommonState, PaginationParams } from "./common";
+import { CommonSliceActions, CommonState, PaginationParams } from "./common";
 import { Channel } from "./channel.types";
 
 /**
@@ -97,7 +97,7 @@ export interface UnreadState extends CommonState {
   lastFetchTimes: Record<string, number>;
 }
 
-export interface UnreadStore {
+export interface UnreadStore extends CommonSliceActions {
   // Actions - Basic updates
   updateUnreadCount: (
     channelId: string,

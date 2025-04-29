@@ -36,6 +36,7 @@ export enum EventType {
   CHANNEL_DELETED = "channel:deleted",
   CHANNEL_LEFT = "channel:left",
   CHANNEL_JOINED = "channel:joined",
+  CHANNEL_VIEWED = "channel:viewed",
 
   // Team events
   TEAM_SELECTED = "team:selected",

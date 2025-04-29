@@ -3,19 +3,12 @@
  * Common slice for Zustand stores
  * Provides reusable state and actions using Zustand's native patterns
  */
-import { CommonState, ErrorSource, ErrorSeverity } from "../../../types";
-
-/**
- * Interface for common slice actions
- */
-export interface CommonSliceActions {
-  setLoading: (isLoading: boolean) => void;
-  setLoadingId: (id: string, isLoading: boolean) => void;
-  setError: (error: Error | null) => void;
-  setErrorForId: (id: string, error: Error | null) => void;
-  updateLastFetchTime: (id: string) => void;
-  reset: () => void;
-}
+import {
+  CommonState,
+  ErrorSource,
+  ErrorSeverity,
+  CommonSliceActions,
+} from "../../../types";
 
 /**
  * Initial state for common slice
