@@ -8,13 +8,15 @@ import { SearchProps } from "../types/componentTypes";
 import {
   useDebouncedCallback,
   useStableCallback,
-} from "../utils/performanceUtils";
-import { createSearchFilter } from "../utils/containerUtils";
+  createSearchFilter,
+} from "../utils";
 
 /**
  * Search configuration options
  */
-export interface SearchOptions<T = any> {
+export interface SearchOptions<
+  T extends Record<string, any> = Record<string, any>,
+> {
   /** Initial search term */
   initialSearchTerm?: string;
   /** Debounce delay in milliseconds (default: 300) */
@@ -70,7 +72,9 @@ export interface SearchActions {
 /**
  * Return type for the useContainerSearch hook
  */
-export interface UseSearchResult<T = any> {
+export interface UseSearchResult<
+  T extends Record<string, any> = Record<string, any>,
+> {
   /** Search state */
   searchState: SearchState;
   /** Search actions */

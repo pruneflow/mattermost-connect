@@ -93,7 +93,9 @@ export const DefaultSearchComponent: React.FC<{
 /**
  * Options for withSearch HOC
  */
-export interface WithSearchOptions<T = any> extends SearchOptions<T> {
+export interface WithSearchOptions<
+  T extends Record<string, any> = Record<string, any>,
+> extends SearchOptions<T> {
   /** Custom search component */
   SearchComponent?: React.ComponentType<any>;
   /** Position of the search component (default: 'top') */
@@ -107,7 +109,7 @@ export interface WithSearchOptions<T = any> extends SearchOptions<T> {
   /** Whether to auto-filter data (default: true) */
   autoFilterData?: boolean;
   /** Function to get data to filter (used when autoFilterData is true) */
-  getData?: (props: any) => any[];
+  getData?: (props: any) => T[];
   /** Prop name to receive filtered data (default: 'filteredData') */
   filteredDataPropName?: string;
   /** Search input variant */
@@ -121,17 +123,19 @@ export interface WithSearchOptions<T = any> extends SearchOptions<T> {
 /**
  * Props injected by the withSearch HOC
  */
-export type WithSearchInjectedProps<T = any> = UseSearchResult<T> & {
+export type WithSearchInjectedProps<
+  T extends Record<string, any> = Record<string, any>,
+> = UseSearchResult<T> & {
   filteredData?: T[];
 };
 
 /**
  * Props for the searchable component
  */
-type SearchableComponentProps<P, T = any> = Omit<
+type SearchableComponentProps<
   P,
-  keyof WithSearchInjectedProps<T>
-> &
+  T extends Record<string, any> = Record<string, any>,
+> = Omit<P, keyof WithSearchInjectedProps<T>> &
   Partial<WithSearchInjectedProps<T>>;
 
 /**
@@ -177,7 +181,10 @@ type SearchableComponentProps<P, T = any> = Omit<
  * });
  * ```
  */
-export function withSearch<P extends object, T = any>(
+export function withSearch<
+  P extends object,
+  T extends Record<string, any> = Record<string, any>,
+>(
   Component: ComponentType<P>,
   options: WithSearchOptions<T> = {},
 ): React.FC<SearchableComponentProps<P, T>> {

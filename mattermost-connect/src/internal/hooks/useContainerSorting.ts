@@ -186,8 +186,9 @@ export function useContainerSorting<T = string, U = any>(
       // Validate field from URL is in sortFields
       const validField =
         fieldFromUrl &&
-        (sortFields.length === 0 || sortFields.includes(fieldFromUrl as T))
-          ? (fieldFromUrl as T)
+        (sortFields.length === 0 ||
+          sortFields.includes(fieldFromUrl as any as T))
+          ? (fieldFromUrl as any as T)
           : initialSortField || null;
 
       // Validate direction
@@ -354,8 +355,8 @@ export function useContainerSorting<T = string, U = any>(
         label: String(field),
       })),
       onSortChange: (field: string, direction?: "asc" | "desc") =>
-        setSorting(field as T, direction || undefined),
-      onSortFieldChange: (field: string) => changeSortField(field as T),
+        setSorting(field as any as T, direction || undefined),
+      onSortFieldChange: (field: string) => changeSortField(field as any as T),
       onSortDirectionChange: () => toggleSortDirection(),
       disabled: !enabled,
     }),

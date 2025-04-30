@@ -5,10 +5,19 @@
  * This file exports all HOCs for easy importing
  */
 
+// Import all HOCs and their types
 import withErrorBoundary, {
   WithErrorBoundaryOptions,
 } from "./withErrorBoundary";
+
 import withLoading, { WithLoadingOptions } from "./withLoading";
+
+import withPagination, { WithPaginationOptions } from "./withPagination";
+
+import withSearch, { WithSearchOptions } from "./withSearch";
+
+import withSorting, { WithSortingOptions } from "./withSorting";
+import React from "react";
 
 // Error Boundary HOC
 export {
@@ -49,7 +58,44 @@ export {
   type WithSortingInjectedProps,
 } from "./withSorting";
 
-// Composite HOCs - Convenient combinations of multiple HOCs
+// Types d'options pour les fonctions composées
+type EnhancementOption<T> = T | boolean;
+
+/**
+ * Options pour withListEnhancements
+ */
+export interface WithListEnhancementsOptions {
+  /** Options pour le HOC d'error boundary, ou false pour le désactiver */
+  errorBoundary?: EnhancementOption<WithErrorBoundaryOptions>;
+  /** Options pour le HOC de loading, ou false pour le désactiver */
+  loading?: EnhancementOption<WithLoadingOptions>;
+  /** Options pour le HOC de pagination, ou false pour le désactiver */
+  pagination?: EnhancementOption<WithPaginationOptions>;
+  /** Options pour le HOC de recherche, ou false pour le désactiver */
+  search?: EnhancementOption<WithSearchOptions<any>>;
+  /** Options pour le HOC de tri, ou false pour le désactiver */
+  sorting?: EnhancementOption<WithSortingOptions>;
+}
+
+/**
+ * Options pour withDetailEnhancements
+ */
+export interface WithDetailEnhancementsOptions {
+  /** Options pour le HOC d'error boundary, ou false pour le désactiver */
+  errorBoundary?: EnhancementOption<WithErrorBoundaryOptions>;
+  /** Options pour le HOC de loading, ou false pour le désactiver */
+  loading?: EnhancementOption<WithLoadingOptions>;
+}
+
+// Fonction utilitaire pour extraire les options correctes
+function extractOptions<T>(
+  option: EnhancementOption<T> | undefined,
+): T | undefined {
+  if (option === undefined || option === false) {
+    return undefined;
+  }
+  return option === true ? ({} as T) : option;
+}
 
 /**
  * Combines error boundary, loading, pagination, search, and sorting HOCs
@@ -91,50 +137,39 @@ export {
  */
 export function withListEnhancements<P extends object>(
   Component: React.ComponentType<P>,
-  options: {
-    errorBoundary?: WithErrorBoundaryOptions;
-    loading?: WithLoadingOptions;
-    pagination?: WithPaginationOptions;
-    search?: WithSearchOptions;
-    sorting?: WithSortingOptions;
-  } = {},
-) {
-  // Apply HOCs in specific order:
-  // 1. Error boundary (outermost) - catches errors from all other HOCs
-  // 2. Loading - manages loading state
-  // 3. Search - filter data
-  // 4. Sorting - sort the filtered data
-  // 5. Pagination - paginate the sorted data
-
+  options: WithListEnhancementsOptions = {},
+): React.ComponentType<any> {
   // Start with base component
-  let EnhancedComponent = Component;
+  let EnhancedComponent: React.ComponentType<any> = Component;
 
   // Apply pagination (innermost HOC - operates on the component first)
-  if (options.pagination !== false) {
-    EnhancedComponent = withPagination(EnhancedComponent, options.pagination);
+  const paginationOptions = extractOptions(options.pagination);
+  if (paginationOptions) {
+    EnhancedComponent = withPagination(EnhancedComponent, paginationOptions);
   }
 
   // Apply sorting
-  if (options.sorting !== false) {
-    EnhancedComponent = withSorting(EnhancedComponent, options.sorting);
+  const sortingOptions = extractOptions(options.sorting);
+  if (sortingOptions) {
+    EnhancedComponent = withSorting(EnhancedComponent, sortingOptions);
   }
 
   // Apply search
-  if (options.search !== false) {
-    EnhancedComponent = withSearch(EnhancedComponent, options.search);
+  const searchOptions = extractOptions(options.search);
+  if (searchOptions) {
+    EnhancedComponent = withSearch(EnhancedComponent, searchOptions);
   }
 
   // Apply loading state
-  if (options.loading !== false) {
-    EnhancedComponent = withLoading(EnhancedComponent, options.loading);
+  const loadingOptions = extractOptions(options.loading);
+  if (loadingOptions) {
+    EnhancedComponent = withLoading(EnhancedComponent, loadingOptions);
   }
 
   // Apply error boundary (outermost HOC - catches errors from all other HOCs)
-  if (options.errorBoundary !== false) {
-    EnhancedComponent = withErrorBoundary(
-      EnhancedComponent,
-      options.errorBoundary,
-    );
+  const errorOptions = extractOptions(options.errorBoundary);
+  if (errorOptions) {
+    EnhancedComponent = withErrorBoundary(EnhancedComponent, errorOptions);
   }
 
   // Set display name for debugging
@@ -171,25 +206,21 @@ export function withListEnhancements<P extends object>(
  */
 export function withDetailEnhancements<P extends object>(
   Component: React.ComponentType<P>,
-  options: {
-    errorBoundary?: WithErrorBoundaryOptions;
-    loading?: WithLoadingOptions;
-  } = {},
-) {
+  options: WithDetailEnhancementsOptions = {},
+): React.ComponentType<any> {
   // Start with base component
-  let EnhancedComponent = Component;
+  let EnhancedComponent: React.ComponentType<any> = Component;
 
   // Apply loading state
-  if (options.loading !== false) {
-    EnhancedComponent = withLoading(EnhancedComponent, options.loading);
+  const loadingOptions = extractOptions(options.loading);
+  if (loadingOptions) {
+    EnhancedComponent = withLoading(EnhancedComponent, loadingOptions);
   }
 
   // Apply error boundary (outermost HOC)
-  if (options.errorBoundary !== false) {
-    EnhancedComponent = withErrorBoundary(
-      EnhancedComponent,
-      options.errorBoundary,
-    );
+  const errorOptions = extractOptions(options.errorBoundary);
+  if (errorOptions) {
+    EnhancedComponent = withErrorBoundary(EnhancedComponent, errorOptions);
   }
 
   // Set display name for debugging

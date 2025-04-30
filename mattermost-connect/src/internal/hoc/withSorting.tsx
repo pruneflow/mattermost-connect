@@ -266,6 +266,17 @@ export function withSorting<P extends object, T = string, U = any>(
     // Check if we should render the sorting component
     const shouldRenderSorting = enhancedSortOptions.length > 1;
 
+    // Create proxied callbacks to handle type conversions safely for the UI component
+    const handleSortChange = (field: string, direction?: SortDirection) => {
+      // Cast string to T (safe because we're using string representation anyway)
+      sortingActions.setSorting(field as any as T, direction);
+    };
+
+    const handleSortFieldChange = (field: string) => {
+      // Cast string to T (safe because we're using string representation anyway)
+      sortingActions.changeSortField(field as any as T);
+    };
+
     return (
       <>
         {/* Top sorting controls */}
@@ -274,16 +285,9 @@ export function withSorting<P extends object, T = string, U = any>(
             sortField={sortingProps.sortField}
             sortDirection={sortingProps.sortDirection}
             sortOptions={enhancedSortOptions}
-            onSortChange={
-              sortingProps.onSortChange || sortingActions.setSorting
-            }
-            onSortFieldChange={
-              sortingProps.onSortFieldChange || sortingActions.changeSortField
-            }
-            onSortDirectionChange={
-              sortingProps.onSortDirectionChange ||
-              sortingActions.toggleSortDirection
-            }
+            onSortChange={handleSortChange}
+            onSortFieldChange={handleSortFieldChange}
+            onSortDirectionChange={sortingActions.toggleSortDirection}
             disabled={sortingProps.disabled || !sortingState.enabled}
           />
         )}
@@ -297,16 +301,9 @@ export function withSorting<P extends object, T = string, U = any>(
             sortField={sortingProps.sortField}
             sortDirection={sortingProps.sortDirection}
             sortOptions={enhancedSortOptions}
-            onSortChange={
-              sortingProps.onSortChange || sortingActions.setSorting
-            }
-            onSortFieldChange={
-              sortingProps.onSortFieldChange || sortingActions.changeSortField
-            }
-            onSortDirectionChange={
-              sortingProps.onSortDirectionChange ||
-              sortingActions.toggleSortDirection
-            }
+            onSortChange={handleSortChange}
+            onSortFieldChange={handleSortFieldChange}
+            onSortDirectionChange={sortingActions.toggleSortDirection}
             disabled={sortingProps.disabled || !sortingState.enabled}
           />
         )}
