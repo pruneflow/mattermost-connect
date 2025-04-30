@@ -1,0 +1,719 @@
+## Table des matières
+
+1. [Vue d'ensemble](#vue-densemble)
+2. [Module theme](#module-theme)
+3. [Module hooks](#module-hooks)
+4. [Module types](#module-types)
+5. [Module utils](#module-utils)
+6. [Module providers](#module-providers)
+7. [Module HOC](#module-hoc)
+
+## Vue d'ensemble
+
+Le module `src/internal` contient les composants internes et les utilitaires qui soutiennent l'architecture de MattermostConnect. Ces modules ne sont pas destinés à être utilisés directement par les consommateurs de la bibliothèque, mais plutôt à fournir une base solide et cohérente pour les composants de niveau supérieur.
+
+L'architecture interne suit plusieurs principes clés :
+
+1. **Séparation des responsabilités** : Chaque module a une responsabilité unique et bien définie
+2. **Réutilisabilité maximale** : Les composants sont conçus pour être réutilisés dans différents contextes
+3. **Typage fort** : Utilisation extensive de TypeScript pour garantir la sécurité des types
+4. **Performance optimisée** : Utilisation de techniques avancées pour minimiser les rendus inutiles
+5. **Cohérence architecturale** : Patterns cohérents à travers tous les modules
+
+L'organisation générale est la suivante :
+
+```
+src/internal/
+├── theme/                  # Configuration du thème Material-UI
+├── types/                  # Définitions de types et interfaces
+├── utils/                  # Utilitaires partagés
+├── hooks/                  # Hooks React personnalisés
+├── providers/              # Providers React pour le contexte
+└── hoc/                    # Higher-Order Components
+```
+
+## Module theme
+
+Le module `theme` définit la configuration du thème pour tous les composants de MattermostConnect, en s'appuyant sur Material-UI.
+
+### Organisation du module
+
+```
+src/internal/theme/
+└── themeConfig.tsx         # Configuration du thème Material-UI
+```
+
+### Architecture et principes
+
+Le système de thème suit plusieurs principes :
+
+1. **Cohérence visuelle** : Application uniforme des couleurs, espacements et typographie
+2. **Personnalisation flexible** : Possibilité de surcharger le thème par défaut
+3. **Sémantique des couleurs** : Utilisation cohérente des couleurs pour les états et actions
+4. **Accessibilité** : Respect des contrastes pour l'accessibilité
+
+### Configuration du thème (`themeConfig.tsx`)
+
+Ce fichier définit la configuration par défaut pour le thème Material-UI, avec :
+
+- Palette de couleurs (primaire, secondaire, erreur, avertissement, etc.)
+- Typographie (famille de police, tailles, pondérations)
+- Surcharges de composants (boutons, cartes, champs, etc.)
+
+```typescript
+// Exemple simplifié de configuration de thème
+export const defaultThemeOptions: ThemeOptions = {
+  palette: {
+    primary: {
+      main: "#1976d2",
+      // Autres nuances...
+    },
+    // Autres couleurs...
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    // Autres configurations...
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        // Surcharges...
+      }
+    },
+    // Autres composants...
+  }
+};
+```
+
+La fonction `createCustomTheme` permet de créer un thème personnalisé en fusionnant les options par défaut avec des options personnalisées :
+
+```typescript
+export const createCustomTheme = (options?: ThemeOptions): Theme => {
+  return createTheme({
+    ...defaultThemeOptions,
+    ...options,
+  });
+};
+```
+
+Le thème par défaut est exporté pour une utilisation immédiate :
+
+```typescript
+export const defaultTheme = createCustomTheme();
+```
+
+## Module hooks
+
+Le module `hooks` fournit des hooks React personnalisés qui encapsulent les fonctionnalités communes des containers et composants.
+
+### Organisation du module
+
+```
+src/internal/hooks/
+├── index.ts                        # Point d'entrée et exportation centralisée
+├── useContainerLoadingState.ts     # Gestion des états de chargement
+├── useContainerPagination.ts       # Gestion de la pagination
+├── useContainerSearch.ts           # Gestion de la recherche
+├── useContainerSelection.ts        # Gestion de la sélection d'éléments
+├── useContainerSorting.ts          # Gestion du tri de listes
+├── useDialog.tsx                   # Utilisation des dialogues
+└── autres hooks internes...
+```
+
+### Architecture et principes
+
+Les hooks internes suivent plusieurs principes communs :
+
+1. **Réutilisabilité** : Conçus pour être utilisés dans différents contextes
+2. **Indépendance** : Minimal de dépendances entre hooks
+3. **Configuration flexible** : Options extensives pour personnaliser le comportement
+4. **Performance** : Utilisation optimale de `useMemo` et `useCallback`
+5. **Interface cohérente** : Structure commune pour tous les hooks (state, actions, props)
+
+### Hook de gestion d'état de chargement (`useContainerLoadingState.ts`)
+
+Ce hook gère les états de chargement avec des fonctionnalités avancées :
+
+```typescript
+// Interface de retour simplifiée
+interface UseLoadingStateResult {
+  loadingState: LoadingState;        // État de chargement
+  loadingActions: LoadingActions;    // Actions pour manipuler l'état
+  loadingProps: LoadingProps;        // Props UI standardisées
+  errorProps: ErrorStateProps;       // Props d'erreur standardisées
+  withLoading: <T>(fn: () => Promise<T>) => Promise<T>;  // Exécution avec suivi
+  createAbortController: () => AbortController;          // Gestion d'annulation
+}
+```
+
+Fonctionnalités principales :
+- Suivi des états de chargement initial, de rafraîchissement, et d'erreur
+- Délai configurable pour éviter les flashs de chargement 
+- Durée minimale de chargement pour une meilleure UX
+- Gestion granulaire avec des IDs de chargement spécifiques
+- Création d'AbortController pour les requêtes annulables
+- Génération automatique des props UI pour les composants de chargement et d'erreur
+
+### Hook de pagination (`useContainerPagination.ts`)
+
+Ce hook gère la pagination de manière standardisée :
+
+```typescript
+// Interface de retour simplifiée
+interface UsePaginationResult {
+  paginationState: PaginationState;    // État de pagination
+  paginationActions: PaginationActions;  // Actions de pagination
+  paginationProps: PaginationProps;    // Props UI standardisées
+  getOffset: () => number;             // Calcul d'offset pour requêtes
+  getLimit: () => number;              // Calcul de limite pour requêtes
+}
+```
+
+Fonctionnalités principales :
+- Navigation par page (suivant, précédent, première, dernière)
+- Options de taille de page configurables
+- Persistance des préférences dans l'URL (optionnel)
+- Calcul automatique du nombre total de pages
+- Suivi des plages actuelles (début/fin)
+- Métadonnées pour l'affichage des contrôles de pagination
+
+### Hook de recherche (`useContainerSearch.ts`)
+
+Ce hook standardise la fonctionnalité de recherche :
+
+```typescript
+// Interface de retour simplifiée
+interface UseSearchResult<T> {
+  searchState: SearchState;            // État de recherche
+  searchActions: SearchActions;        // Actions de recherche
+  searchProps: SearchProps;            // Props UI standardisées
+  filterBySearch: (items: T[]) => T[]; // Filtrage côté client
+  matchesSearch: (item: T) => boolean; // Vérification de correspondance
+}
+```
+
+Fonctionnalités principales :
+- Debounce automatique des entrées de recherche
+- Filtrage configurable par champs multiples
+- Longueur minimale configurable pour déclencher la recherche
+- Possibilité de persistance dans l'URL
+- Modes de recherche (contient, commence par, exact)
+- Gestion de l'état de recherche en cours
+
+### Hook de sélection (`useContainerSelection.ts`)
+
+Ce hook gère la sélection d'éléments dans une liste :
+
+```typescript
+// Interface de retour simplifiée
+interface UseSelectionResult<T> {
+  selectionState: SelectionState;      // État de sélection
+  selectionActions: SelectionActions;  // Actions de sélection
+  selectionProps: SelectionProps;      // Props UI standardisées
+  getSelectedItems: () => T[];         // Récupération des éléments sélectionnés
+  getOnlySelected: (items: T[]) => T[]; // Filtrage des éléments sélectionnés
+}
+```
+
+Fonctionnalités principales :
+- Modes de sélection (simple, multiple, aucun)
+- Sélection/désélection d'éléments individuels
+- Sélection/désélection de tous les éléments
+- Limitation du nombre maximum d'éléments sélectionnables
+- Préservation de la sélection lors des changements de données
+- Validation automatique des IDs sélectionnés
+
+### Hook de tri (`useContainerSorting.ts`)
+
+Ce hook standardise le tri de listes de données :
+
+```typescript
+// Interface de retour simplifiée
+interface UseSortingResult<T, U> {
+  sortingState: SortingState<T>;          // État de tri
+  sortingActions: SortingActions<T>;      // Actions de tri
+  sortingProps: SortingProps;             // Props UI standardisées
+  sortItems: (items: U[]) => U[];         // Fonction de tri
+  getSortParams: () => { sortBy?, sortDirection? }; // Paramètres pour API
+}
+```
+
+Fonctionnalités principales :
+- Tri sur des champs multiples (avec direction asc/desc)
+- Changement facile de champ de tri et de direction
+- Persistance des préférences dans l'URL (optionnel)
+- Fonction de tri par défaut avec support pour types primitifs et objets
+- Fonction de tri personnalisable
+- Génération des paramètres pour tri côté serveur
+
+### Hook de dialogue (`useDialog.tsx`)
+
+Ce hook fournit une interface standardisée pour les dialogues :
+
+```typescript
+// Interface de retour simplifiée (partielle)
+interface UseDialogResult {
+  confirm(options: ConfirmDialogOptions): string;      // Dialogue de confirmation
+  alert(options: AlertDialogOptions): string;          // Dialogue d'alerte
+  custom(options: CustomDialogOptions): string;        // Dialogue personnalisé
+  confirmAsync(options): Promise<boolean>;             // Confirmation asynchrone
+  alertAsync(options): Promise<void>;                  // Alerte asynchrone
+  formAsync<T>(options): Promise<DialogResult<T>>;     // Dialogue avec formulaire
+  showError(title: string, message: string): Promise<void>;   // Afficher erreur
+  showSuccess(title: string, message: string): Promise<void>; // Afficher succès
+}
+```
+
+Fonctionnalités principales :
+- API simplifiée pour différents types de dialogues
+- Support pour les dialogues asynchrones (retournant des Promises)
+- Gestion des états de chargement pour les actions asynchrones
+- Support pour les dialogues avec formulaires et retour de données
+- Dialogues destructifs avec style spécial
+- Dialogues de succès et d'erreur préconfiguré
+
+### Point d'entrée centralisé (`index.ts`)
+
+Le fichier `index.ts` exporte tous les hooks de manière organisée :
+
+```typescript
+// Exports nommés pour utilisation individuelle
+export { useContainerLoadingState } from './useContainerLoadingState';
+export { useContainerPagination } from './useContainerPagination';
+// ...autres exports
+
+// Type exports pour une meilleure expérience de développement
+export type { LoadingState, LoadingActions } from './useContainerLoadingState';
+// ...autres exports de types
+
+// Objet contenant tous les hooks pour un import plus simple
+export const containerHooks = {
+  useContainerLoadingState,
+  useContainerPagination,
+  // ...autres hooks
+};
+
+export default containerHooks;
+```
+
+## Module types
+
+Le module `types` définit les interfaces et types TypeScript partagés par les composants internes.
+
+### Organisation du module
+
+```
+src/internal/types/
+└── componentTypes.ts       # Types communs pour les composants
+```
+
+### Architecture et principes
+
+Le système de types suit plusieurs principes :
+
+1. **Cohérence** : Types uniformes à travers l'application
+2. **Expressivité** : Types expressifs qui capturent les contraintes métier
+3. **Extensibilité** : Types extensibles pour des besoins spécifiques
+4. **Documentation** : Documentation JSDoc complète pour les types
+
+### Types de composants (`componentTypes.ts`)
+
+Ce fichier définit les interfaces communes pour tous les composants de l'application :
+
+```typescript
+// Types de base
+export interface BaseComponentProps {
+  className?: string;             // Classe CSS
+  sx?: any;                       // Style Material-UI
+  id?: string;                    // ID du composant
+}
+
+// Types de variantes
+export type DisplayVariant = "list" | "grid" | "sidebar" | "tabs"; 
+export type DensityVariant = "compact" | "comfortable" | "spacious";
+export type SizeVariant = "small" | "medium" | "large";
+export type ItemState = "default" | "selected" | "disabled" | "loading" | "error";
+```
+
+Le fichier définit plusieurs groupes de props standardisées :
+
+1. **Props liées au chargement** :
+   - `LoadingProps` : Propriétés pour les indicateurs de chargement
+   - `ErrorStateProps` : Propriétés pour les états d'erreur
+   - `EmptyStateProps` : Propriétés pour les états vides
+
+2. **Props liées à la recherche** :
+   - `SearchProps` : Propriétés pour les contrôles de recherche
+
+3. **Props liées au tri** :
+   - `SortOption` : Option de tri individuelle
+   - `SortingProps` : Propriétés pour les contrôles de tri
+
+4. **Props liées à la sélection** :
+   - `SelectionProps` : Propriétés pour la sélection d'éléments
+
+5. **Props liées à la pagination** :
+   - `PaginationProps` : Propriétés pour les contrôles de pagination
+
+6. **Props liées au filtrage** :
+   - `FilterOption` : Option de filtre
+   - `FilterGroup` : Groupe d'options de filtre
+   - `FilterProps` : Propriétés pour les contrôles de filtre
+
+7. **Props liées aux actions** :
+   - `ActionProps` : Propriétés pour les actions disponibles
+
+8. **Props liées à la virtualisation** :
+   - `VirtualizationProps` : Propriétés pour les listes virtualisées
+
+Ces types standardisés permettent une interface cohérente entre les différents composants de l'application et simplifient la création de nouveaux composants.
+
+## Module utils
+
+Le module `utils` fournit des fonctions utilitaires partagées par les composants internes.
+
+### Organisation du module
+
+```
+src/internal/utils/
+├── index.ts                # Point d'entrée et exportation centralisée
+├── containerUtils.ts       # Utilitaires pour les containers
+└── performanceUtils.ts     # Utilitaires d'optimisation de performance
+```
+
+### Architecture et principes
+
+Les utilitaires suivent plusieurs principes :
+
+1. **Pureté fonctionnelle** : Fonctions sans effets secondaires
+2. **Performance** : Optimisations pour les opérations fréquentes
+3. **Réutilisabilité** : Conçus pour être utilisés dans différents contextes
+4. **Simplicité** : API simple et intuitive
+5. **Documentation** : Documentation JSDoc complète
+
+### Utilitaires de container (`containerUtils.ts`)
+
+Ce fichier fournit des fonctions utilitaires pour les containers :
+
+```typescript
+// Quelques fonctions utilitaires importantes
+export function mergeBaseProps(baseProps, additionalProps): Record<string, any>;
+export function createElementId(base: string, suffix?: string): string;
+export function mapItemState<T>(item: T, options): ItemState;
+export function createItemsById<T>(items: T[], options): Record<string, T>;
+export function memoizeItemsById<T>(items, prevItemsById, options): Record<string, T>;
+export function createSearchFilter<T>(fields: string[], options): (item: T, searchTerm: string) => boolean;
+export function mergeLoadingStates(loadingStates: boolean[]): boolean;
+export function createLoadingStateProps(isLoading: boolean, options?): LoadingProps;
+export function createErrorStateProps(error: Error | null, options?): ErrorStateProps;
+export function createEmptyStateProps(options?): EmptyStateProps;
+export function createDefaultPagination(): PaginationProps;
+export function createUiProps<T>(data: T, options?): Record<string, any>;
+export function createItemActionHandlers<T>(handlers: T, itemId: string): T;
+export function formatCompactCount(count: number, digits?: number): string;
+export function generateTempId(): string;
+export function getNestedProperty<T, D>(obj, path: string, defaultValue?: D): T | D;
+export function delay(ms: number): Promise<void>;
+export function safeCall<T, A extends any[]>(fn: (...args: A) => T, ...args: A): T | undefined;
+```
+
+Ces fonctions fournissent des utilitaires pour :
+- Fusion de props React
+- Manipulation d'éléments et d'identifiants
+- Création et gestion de maps par ID pour des accès rapides
+- Création de filtres de recherche configurables
+- Génération de props UI standardisées
+- Formatage de données
+- Gestion des erreurs et du chargement
+- Utilitaires d'exécution sécurisée
+
+### Utilitaires de performance (`performanceUtils.ts`)
+
+Ce fichier fournit des hooks et fonctions pour optimiser les performances :
+
+```typescript
+// Hooks d'optimisation
+export function useStableCallback<T extends Function>(callback: T, deps?): T;
+export function useDebouncedCallback<T extends Function>(callback: T, wait?, deps?): T;
+export function useThrottledCallback<T extends Function>(callback: T, limit?, deps?): T;
+export function usePrevious<T>(value: T): T | undefined;
+export function useDeepMemo<T>(value: T, deps): T;
+export function useOptimizedState<T>(initialValue: T): [T, (value: T) => void];
+export function useDelayedLoading(isLoading: boolean, options?): boolean;
+export function useMemoizedProps<T>(props: T): T;
+export function useRenderTracker(componentName: string): void;
+```
+
+Ces utilitaires offrent :
+- Stabilisation des références de callback pour éviter les re-rendus
+- Fonctions de debounce et throttle pour limiter la fréquence d'exécution
+- Comparaisons profondes pour les objets complexes
+- Gestion optimisée des états
+- Délai configurable pour les indicateurs de chargement
+- Mémoisation des props pour les composants enfants
+- Suivi des rendus pour le débogage en développement
+
+### Point d'entrée centralisé (`index.ts`)
+
+Le fichier `index.ts` exporte tous les utilitaires de manière organisée :
+
+```typescript
+// Export de tous les utilitaires
+export * from './containerUtils';
+export * from './performanceUtils';
+// ...autres exports
+```
+
+## Module providers
+
+Le module `providers` fournit des contextes React et des providers pour les fonctionnalités partagées.
+
+### Organisation du module
+
+```
+src/internal/providers/
+├── index.ts               # Point d'entrée et exportation centralisée
+└── DialogProvider.tsx     # Provider pour le système de dialogues
+```
+
+### Architecture et principes
+
+Les providers suivent plusieurs principes :
+
+1. **Contexte React** : Utilisation du contexte React pour partager l'état
+2. **API intuitive** : API simple pour les consommateurs
+3. **Gestion d'état interne** : Encapsulation de la complexité
+4. **Indépendance** : Providers autonomes qui peuvent être utilisés indépendamment
+
+### Provider de dialogues (`DialogProvider.tsx`)
+
+Ce provider gère un système centralisé de dialogues pour l'application :
+
+```typescript
+// Types principaux simplifiés
+interface DialogConfig {
+  id: string;
+  type: "confirm" | "alert" | "form" | "custom";
+  title: string;
+  message?: string;
+  confirmText?: string;
+  cancelText?: string;
+  isDestructive?: boolean;
+  isLoading?: boolean;
+  onConfirm?: () => void | Promise<void>;
+  onCancel?: () => void;
+  preventBackdropClose?: boolean;
+  component?: React.ReactNode;
+  maxWidth?: "xs" | "sm" | "md" | "lg" | "xl" | false;
+}
+
+interface DialogContextValue {
+  openDialog: (dialog: Omit<DialogConfig, "id">) => string;
+  closeDialog: (id: string) => void;
+  closeAllDialogs: () => void;
+  confirm: (options: ConfirmDialogOptions) => string;
+  alert: (options: AlertDialogOptions) => string;
+  custom: (options: CustomDialogOptions) => string;
+}
+```
+
+Fonctionnalités principales :
+- Système centralisé pour gérer tous les dialogues de l'application
+- Support pour différents types de dialogues (confirmation, alerte, formulaire, personnalisé)
+- Gestion des états de chargement pour les actions asynchrones
+- Prévention des clics multiples
+- File d'attente pour éviter l'empilement des dialogues
+- API simplifiée pour les types de dialogues courants
+- Support pour les composants personnalisés dans les dialogues
+
+Le provider gère le rendu de tous les dialogues actifs et expose un hook `useDialog` pour accéder au contexte :
+
+```typescript
+export function useDialog(): DialogContextValue {
+  const context = useContext(DialogContext);
+  if (context === undefined) {
+    throw new Error("useDialog must be used within a DialogProvider");
+  }
+  return context;
+}
+```
+
+### Point d'entrée centralisé (`index.ts`)
+
+Le fichier `index.ts` exporte tous les providers :
+
+```typescript
+export { DialogProvider, useDialog } from './DialogProvider';
+// ...autres exports de providers futurs
+```
+
+## Module HOC
+
+Le module `hoc` (Higher-Order Components) fournit des composants de niveau supérieur qui ajoutent des fonctionnalités aux composants existants.
+
+### Organisation du module
+
+```
+src/internal/hoc/
+├── index.ts               # Point d'entrée et exportation centralisée
+├── withErrorBoundary.tsx  # HOC pour la gestion des erreurs
+├── withLoading.tsx        # HOC pour les états de chargement
+├── withPagination.tsx     # HOC pour la pagination
+├── withSearch.tsx         # HOC pour la recherche
+└── withSorting.tsx        # HOC pour le tri
+```
+
+### Architecture et principes
+
+Les HOCs suivent plusieurs principes :
+
+1. **Composition** : Conçus pour être combinés avec d'autres HOCs
+2. **Fonctionnalité ciblée** : Chaque HOC a une responsabilité unique
+3. **Transparence** : Transmission des props non utilisées au composant sous-jacent
+4. **Configuration flexible** : Options extensives pour personnaliser le comportement
+5. **Cohérence** : API similaire pour tous les HOCs
+
+### HOC de gestion d'erreurs (`withErrorBoundary.tsx`)
+
+Ce HOC enveloppe un composant avec un boundary d'erreur React :
+
+```typescript
+// Fonction principale simplifiée
+export function withErrorBoundary<P extends object>(
+  Component: ComponentType<P>,
+  options: WithErrorBoundaryOptions = {},
+): React.FC<P> {
+  // Implémentation...
+}
+```
+
+Fonctionnalités principales :
+- Capture des erreurs JavaScript dans l'arbre de composants enfants
+- Affichage d'un composant d'erreur personnalisable
+- Callback pour la gestion des erreurs capturées
+- Option pour permettre une nouvelle tentative après une erreur
+- Personnalisation du message et du titre d'erreur
+
+### HOC d'état de chargement (`withLoading.tsx`)
+
+Ce HOC ajoute la gestion des états de chargement à un composant :
+
+```typescript
+// Fonction principale simplifiée
+export function withLoading<P extends object>(
+  Component: ComponentType<P>,
+  options: WithLoadingOptions = {},
+): React.FC<Omit<P, keyof WithLoadingInjectedProps> & Partial<WithLoadingInjectedProps>> {
+  // Implémentation...
+}
+```
+
+Fonctionnalités principales :
+- Affichage automatique d'un indicateur de chargement pendant le chargement
+- Affichage d'un composant d'erreur en cas d'erreur
+- Injection des props de chargement (état, actions, etc.) dans le composant
+- Composants de chargement et d'erreur personnalisables
+- Contrôle fin sur quand afficher les composants de chargement/erreur
+
+### HOC de pagination (`withPagination.tsx`)
+
+Ce HOC ajoute des fonctionnalités de pagination à un composant :
+
+```typescript
+// Fonction principale simplifiée
+export function withPagination<P extends object>(
+  Component: ComponentType<P>,
+  options: WithPaginationOptions = {},
+): React.FC<PaginatedComponentProps<P>> {
+  // Implémentation...
+}
+```
+
+Fonctionnalités principales :
+- Rendu automatique des contrôles de pagination (haut/bas/les deux)
+- Pagination automatique des données
+- Composant de pagination personnalisable
+- Injection des props de pagination (état, actions, etc.) dans le composant
+- Options pour la position des contrôles et l'affichage du sélecteur de page
+
+### HOC de recherche (`withSearch.tsx`)
+
+Ce HOC ajoute des fonctionnalités de recherche à un composant :
+
+```typescript
+// Fonction principale simplifiée
+export function withSearch<P extends object, T extends Record<string, any> = Record<string, any>>(
+  Component: ComponentType<P>,
+  options: WithSearchOptions<T> = {},
+): React.FC<SearchableComponentProps<P, T>> {
+  // Implémentation...
+}
+```
+
+Fonctionnalités principales :
+- Rendu automatique d'un champ de recherche
+- Filtrage automatique des données
+- Composant de recherche personnalisable
+- Injection des props de recherche (état, actions, etc.) dans le composant
+- Options pour la position du champ de recherche et l'apparence
+
+### HOC de tri (`withSorting.tsx`)
+
+Ce HOC ajoute des fonctionnalités de tri à un composant :
+
+```typescript
+// Fonction principale simplifiée
+export function withSorting<P extends object, T = string, U = any>(
+  Component: ComponentType<P>,
+  options: WithSortingOptions<T, U> = {},
+): React.FC<SortableComponentProps<P, T, U>> {
+  // Implémentation...
+}
+```
+
+Fonctionnalités principales :
+- Rendu automatique des contrôles de tri
+- Tri automatique des données
+- Composant de tri personnalisable
+- Injection des props de tri (état, actions, etc.) dans le composant
+- Options pour la position des contrôles de tri
+- Support pour les étiquettes personnalisées des champs de tri
+
+### Combinaison de HOCs (`index.ts`)
+
+Le fichier `index.ts` exporte des utilitaires pour combiner plusieurs HOCs :
+
+```typescript
+// Combinaison de HOCs pour les listes
+export function withListEnhancements<P extends object>(
+  Component: React.ComponentType<P>,
+  options: WithListEnhancementsOptions = {},
+): React.ComponentType<any> {
+  // Application de plusieurs HOCs dans un ordre spécifique
+}
+
+// Combinaison de HOCs pour les détails
+export function withDetailEnhancements<P extends object>(
+  Component: React.ComponentType<P>,
+  options: WithDetailEnhancementsOptions = {},
+): React.ComponentType<any> {
+  // Application d'un sous-ensemble de HOCs pour les vues de détail
+}
+```
+
+Ces fonctions permettent d'appliquer facilement plusieurs HOCs dans un ordre optimal, avec une configuration simplifiée.
+
+## Conclusion
+
+L'architecture interne de MattermostConnect offre une base solide et cohérente pour le développement des composants de niveau supérieur. La séparation claire des responsabilités, la réutilisabilité maximale, et l'attention portée aux performances font de cette architecture un exemple d'organisation moderne pour une bibliothèque de composants React.
+
+Les principes clés qui ressortent de cette analyse sont :
+
+1. **Modularité** : Chaque module a une responsabilité unique et bien définie
+2. **Cohérence** : Patterns et APIs cohérents à travers tous les modules
+3. **Performance** : Utilisation extensive de techniques d'optimisation
+4. **Typage fort** : Sécurité des types avec TypeScript
+5. **Réutilisabilité** : Composants conçus pour être réutilisés dans différents contextes
+6. **Configurabilité** : Options extensives pour personnaliser le comportement
+
+Cette architecture permet aux développeurs de construire rapidement des interfaces utilisateur complexes et cohérentes, tout en garantissant une maintenabilité à long terme.

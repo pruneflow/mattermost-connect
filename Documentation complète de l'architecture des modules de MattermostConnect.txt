@@ -1,0 +1,1738 @@
+## Table des matières
+
+1. [Module hooks](#module-hooks)
+2. [Module types](#module-types)
+3. [Module providers](#module-providers)
+4. [Module utils](#module-utils)
+
+## Module hooks
+
+Le module `hooks` fournit des abstractions réutilisables pour accéder aux fonctionnalités du système via des hooks React personnalisés. Ces hooks servent de pont entre les composants UI et la couche métier.
+
+### Organisation du module
+
+```
+src/hooks/
+├── index.ts                     # Point d'entrée et exportation centralisée
+├── useAuth.tsx                  # Hooks d'authentification
+├── useChannels.tsx              # Hooks de gestion des canaux
+├── useDirectChannels.tsx        # Hooks pour canaux directs
+├── useDirectChannelUsers.tsx    # Hooks pour utilisateurs de canaux directs
+├── useEntityQuery.tsx           # Hook générique pour requêtes d'entités
+├── useMessages.tsx              # Hooks de gestion des messages
+├── useTeams.tsx                 # Hooks de gestion des équipes
+├── useUnreadCounts.tsx          # Hooks pour compteurs de non-lus
+├── useUsers.tsx                 # Hooks de gestion des utilisateurs
+└── useWebSocket.tsx             # Hooks de gestion WebSocket
+```
+
+### Architecture et principes
+
+Les hooks suivent une structure cohérente et des principes communs :
+
+1. **Abstraction des stores et services** : Chaque hook encapsule la logique d'accès aux stores Zustand et aux services métier
+2. **Optimisation des performances** : Utilisation extensive de `useMemo` et `useCallback` pour éviter les re-rendus
+3. **Gestion des erreurs** : Utilisation du système centralisé de gestion d'erreurs
+4. **Standardisation** : Interface cohérente pour tous les hooks du même type
+5. **Composition** : Les hooks complexes sont souvent composés de hooks plus simples
+
+### Hooks d'authentification (`useAuth.tsx`)
+
+Fournit des hooks pour les opérations d'authentification et la gestion des sessions.
+
+```typescript
+// Hooks exportés
+useAuth(): {                      // Accès à l'état d'authentification et actions
+  isAuthenticated: boolean;
+  currentUser: User | null;
+  login(credentials): Promise<User>;
+  logout(): void;
+  refreshUser(): Promise<User | null>;
+  // ...
+}
+
+useRequireAuth(onUnauthenticated?): User  // Assure qu'un utilisateur est authentifié ou redirige
+
+useAuthInitialize(): {            // Initialisation de l'état d'authentification
+  isInitialized: boolean;
+  isInitializing: boolean;
+  // ...
+}
+
+useCurrentUser(): {               // Accès aux données de l'utilisateur actuel
+  currentUser: User | null;
+  isLoading: boolean;
+  refetch(): Promise<User>;
+  // ...
+}
+```
+
+### Hooks pour équipes (`useTeams.tsx`)
+
+Fournit des hooks pour la gestion des équipes.
+
+```typescript
+// Hooks exportés
+useTeams(): {                     // Liste et gestion des équipes
+  teams: Team[];
+  formattedTeams: FormattedTeam[];
+  activeTeam: Team | null;
+  selectTeam(team: Team): void;
+  refreshTeams(): Promise<Team[]>;
+  // ...
+}
+
+useTeam(teamId?: string): {       // Détails et opérations sur une équipe spécifique
+  team: Team | null;
+  stats: TeamStats | null;
+  members: TeamMember[];
+  update(data): Promise<Team>;
+  deleteTeam(): Promise<void>;
+  refreshTeam(): Promise<Team>;
+  // ...
+}
+
+useTeamCreation(): {              // Création d'équipes
+  createTeam(data): Promise<Team>;
+  validateTeamName(name): boolean;
+  sanitizeTeamName(name): string;
+  // ...
+}
+```
+
+### Hooks pour canaux (`useChannels.tsx`)
+
+Fournit des hooks pour la gestion des canaux.
+
+```typescript
+// Hooks exportés
+useChannels(teamId?: string): {   // Liste et gestion des canaux
+  channels: Channel[];
+  publicChannels: Channel[];
+  privateChannels: Channel[];
+  directChannels: Channel[];
+  groupChannels: Channel[];
+  favoriteChannels: Channel[];
+  activeChannel: Channel | null;
+  selectChannel(channel): Promise<void>;
+  refreshChannels(): Promise<Channel[]>;
+  // ...
+}
+
+useChannel(channelId?: string): { // Détails et opérations sur un canal spécifique
+  channel: Channel | null;
+  members: ChannelMember[];
+  isFavorite: boolean;
+  isMuted: boolean;
+  update(data): Promise<Channel>;
+  deleteChannel(): Promise<void>;
+  markAsViewed(): Promise<void>;
+  toggleFavoriteStatus(): Promise<void>;
+  toggleMutedStatus(): Promise<void>;
+  // ...
+}
+
+useChannelCreation(teamId?: string): { // Création de canaux
+  createChannel(data): Promise<Channel>;
+  validateChannelName(name): boolean;
+  sanitizeChannelName(name): string;
+  // ...
+}
+```
+
+### Hooks pour messages (`useMessages.tsx`)
+
+Fournit des hooks pour la gestion des messages.
+
+```typescript
+// Hooks exportés
+useMessages(channelId?, options?): { // Messages dans un canal
+  messages: Message[];
+  messagesByDate: Map<string, Message[]>;
+  sendMessage(text, fileIds?): Promise<Message | null>;
+  deleteMessage(messageId): Promise<boolean>;
+  togglePin(messageId, isPinned): Promise<boolean>;
+  toggleReaction(messageId, emoji): Promise<boolean>;
+  uploadFiles(files): Promise<string[]>;
+  replyTo(message): void;
+  startEditing(messageId): void;
+  refreshMessages(): Promise<Message[]>;
+  // ...
+}
+
+useThread(rootMessageId?: string): { // Messages dans un fil de discussion
+  rootMessage: Message | null;
+  threadMessages: Message[];
+  replyCount: number;
+  sendReply(text, fileIds?): Promise<Message | null>;
+  toggleReaction(messageId, emoji): Promise<boolean>;
+  refreshThread(): Promise<Message[]>;
+  // ...
+}
+
+useMessageReactions(messageId?: string): { // Réactions à un message
+  reactionsByEmoji: Record<string, MessageReaction[]>;
+  reactionCounts: ReactionCount[];
+  addReaction(emoji): Promise<boolean>;
+  removeReaction(emoji): Promise<boolean>;
+  toggleReaction(emoji): Promise<boolean>;
+  hasReacted(emoji): boolean;
+  // ...
+}
+
+useFileInfo(fileId?: string): {    // Informations sur un fichier
+  fileInfo: MessageAttachment | null;
+  getDownloadUrl(): string;
+  getPreviewUrl(): string;
+  isImage(): boolean;
+  isVideo(): boolean;
+  isAudio(): boolean;
+  isPdf(): boolean;
+  // ...
+}
+```
+
+### Hooks pour utilisateurs (`useUsers.tsx`)
+
+Fournit des hooks pour la gestion des utilisateurs.
+
+```typescript
+// Hooks exportés
+useUser(userId?: string): {      // Détails et opérations sur un utilisateur
+  user: User | null;
+  status: UserStatus;
+  displayName: string;
+  initials: string;
+  profileImageUrl: string;
+  isCurrentUser: boolean;
+  updateProfile(data): Promise<User | null>;
+  updateStatus(status): Promise<boolean>;
+  updatePassword(current, new): Promise<boolean>;
+  uploadProfileImage(file): Promise<boolean>;
+  // ...
+}
+
+useUsers(options?): {            // Liste d'utilisateurs
+  users: User[];
+  usersWithStatus: UserWithStatus[];
+  getUserInfo(userId): User | null;
+  getStatus(userId): UserStatus;
+  getDisplayName(userId): string;
+  refreshUsers(): Promise<User[]>;
+  // ...
+}
+
+useUserSearch(searchTerm?, options?): { // Recherche d'utilisateurs
+  results: User[];
+  search(): Promise<User[]>;
+  filterUsers(users, term): User[];
+  // ...
+}
+
+useUserProfile(): {              // Utilitaires pour profils utilisateur
+  formatUserName(user): string;
+  getUserInitials(user): string;
+  getProfilePictureUrl(user, size?): string;
+  getUserColor(userId): string;
+  formatUserList(users, maxUsers?): string;
+  formatUserStatus(status): string;
+  // ...
+}
+```
+
+### Hooks pour WebSocket (`useWebSocket.tsx`)
+
+Fournit des hooks pour la gestion des connexions WebSocket.
+
+```typescript
+// Hooks exportés
+useWebSocket(): {                // Gestion de la connexion WebSocket
+  isConnected: boolean;
+  isConnecting: boolean;
+  hasBeenDisconnected: boolean;
+  connect(url?, token?): Promise<void>;
+  disconnect(code?, reason?): void;
+  reconnect(): Promise<void>;
+  sendMessage(message): boolean;
+  // ...
+}
+
+useWebSocketEvent(eventType, handler, options?): { // Écoute d'un événement
+  isConnected: boolean;
+}
+
+useWebSocketEvents(handlers, options?): {  // Écoute de plusieurs événements
+  isConnected: boolean;
+}
+
+useWebSocketMessageEvents(channelId?, handler): { // Événements de messages
+  isConnected: boolean;
+}
+
+useWebSocketTypingEvents(channelId?, parentId?, handler): { // Événements de frappe
+  isConnected: boolean;
+}
+
+useTypingIndicator(channelId?, parentId?): { // Indicateurs de frappe
+  typingUserIds: string[];
+  sendTypingEvent(): void;
+  isTyping: boolean;
+}
+```
+
+### Hooks pour canaux directs (`useDirectChannels.tsx` & `useDirectChannelUsers.tsx`)
+
+Fournit des hooks spécifiques pour la gestion des canaux directs et des groupes.
+
+```typescript
+// Hooks exportés de useDirectChannels.tsx
+useDirectChannels(): {          // Gestion des canaux directs
+  directChannels: Channel[];
+  groupChannels: Channel[];
+  createDirectChannel(userId): Promise<Channel | null>;
+  createGroupChannel(userIds): Promise<Channel | null>;
+  getDirectChannelInfo(channelId): DirectChannelInfo | null;
+  refreshDirectChannelInfo(channelId): void;
+  // ...
+}
+
+useDirectChannel(channelId?: string): { // Canal direct spécifique
+  channel: Channel | null;
+  directInfo: DirectChannelInfo | null;
+  otherUser: User | null;
+  groupUsers: UserWithStatus[];
+  isDirect: boolean;
+  isGroup: boolean;
+  refreshDirectInfo(): void;
+  // ...
+}
+
+// Hooks exportés de useDirectChannelUsers.tsx
+useDirectChannelUsers(channelId?: string): { // Utilisateurs d'un canal direct
+  userIds: string[];
+  otherUserIds: string[];
+  isDirect: boolean;
+  isGroup: boolean;
+  otherUser: User | null;
+  groupUsers: User[];
+  usersWithStatus: UserWithStatus[];
+  refreshUsers(): Promise<User[]>;
+  refreshInfo(): void;
+  formatDisplayName(userId): string;
+  // ...
+}
+```
+
+### Hooks pour compteurs non-lus (`useUnreadCounts.tsx`)
+
+Fournit des hooks pour gérer les compteurs de messages non lus.
+
+```typescript
+// Hooks exportés
+useChannelUnreadCount(channelId?: string): { // Compteurs pour un canal
+  unreadCount: ChannelUnreadCount | null;
+  formattedCount: FormattedUnreadCount;
+  hasUnreads: boolean;
+  hasMentions: boolean;
+  isMuted: boolean;
+  markAsRead(): Promise<void>;
+  toggleMuted(): Promise<void>;
+  refresh(): Promise<ChannelUnreadCount>;
+  // ...
+}
+
+useTeamUnreadCount(teamId?: string): {  // Compteurs pour une équipe
+  unreadCount: { msg_count: number; mention_count: number };
+  formattedCount: FormattedUnreadCount;
+  hasUnreads: boolean;
+  hasMentions: boolean;
+  markAllAsRead(): Promise<void>;
+  refresh(): Promise<TeamUnreadCount>;
+  // ...
+}
+
+useTotalUnreadCount(): {        // Compteurs globaux
+  totalUnreadCount: { msg_count: number; mention_count: number };
+  formattedCount: FormattedUnreadCount;
+  hasUnreads: boolean;
+  hasMentions: boolean;
+  formatUnreadCount(count, maxCount?): string;
+  // ...
+}
+
+useUnreadChannels(teamId?: string): { // Canaux avec messages non lus
+  unreadChannels: Channel[];
+  mentionChannels: Channel[];
+  getUnreadCount(channelId): ChannelUnreadCount | null;
+  getFormattedUnreadCount(channelId): FormattedUnreadCount;
+  // ...
+}
+```
+
+### Hook générique pour requêtes d'entités (`useEntityQuery.tsx`)
+
+Fournit un hook générique pour les opérations CRUD sur n'importe quel type d'entité.
+
+```typescript
+// Hook exporté
+useEntityQuery<T extends Entity>(options: EntityQueryOptions<T>): {
+  // Data
+  data: T[];
+  byId: Record<string, T>;
+  ids: string[];
+  
+  // State
+  isLoading: boolean;
+  isFetching: boolean;
+  error: ApiError | null;
+  
+  // Actions
+  refetch(): Promise<T[]>;
+  fetchById(id: string): Promise<T | null>;
+  getById(id: string): T | undefined;
+  create(data: Partial<T>): Promise<T>;
+  update(id: string, data: Partial<T>): Promise<T>;
+  remove(id: string): Promise<void>;
+  
+  // Raw mutations
+  createMutation: UseMutationResult<T, ApiError, Partial<T>>;
+  updateMutation: UseMutationResult<T, ApiError, { id: string; data: Partial<T> }>;
+  deleteMutation: UseMutationResult<void, ApiError, string>;
+}
+```
+
+### Point d'entrée centralisé (`index.ts`)
+
+Le fichier `index.ts` sert de point d'entrée unique pour tous les hooks, permettant aux consommateurs d'importer facilement les hooks dont ils ont besoin.
+
+```typescript
+// Exports centralisés
+export {
+  useAuth,
+  useRequireAuth,
+  useAuthInitialize,
+  useCurrentUser,
+} from "./useAuth";
+
+export {
+  useTeams,
+  useTeam,
+  useTeamCreation,
+} from "./useTeams";
+
+// ... (exports similaires pour tous les autres hooks)
+```
+
+## Module types
+
+Le module `types` définit toutes les interfaces, types et enums utilisés dans l'application. Il fournit un système de typage cohérent et complet.
+
+### Organisation du module
+
+```
+src/types/
+├── index.ts                 # Point d'entrée et exportation centralisée
+├── auth.types.ts            # Types liés à l'authentification
+├── channel.types.ts         # Types liés aux canaux
+├── common.ts                # Types communs et partagés
+├── error.types.ts           # Types liés aux erreurs
+├── event.types.ts           # Types liés aux événements
+├── message.types.ts         # Types liés aux messages
+├── reaction.types.ts        # Types liés aux réactions
+├── settings.types.ts        # Types liés aux paramètres utilisateur
+├── team.types.ts            # Types liés aux équipes
+├── unread.types.ts          # Types liés aux compteurs non-lus
+├── user.types.ts            # Types liés aux utilisateurs
+└── websocket.types.ts       # Types liés au WebSocket
+```
+
+### Architecture et principes
+
+Le système de types suit plusieurs principes :
+
+1. **Séparation par domaine** : Types organisés par domaine métier
+2. **Standardisation** : Patterns cohérents pour tous les types (états, stores, actions)
+3. **Héritage** : Utilisation d'interfaces de base communes (Entity, WithTimestamps, etc.)
+4. **Discrimination** : Types discriminés pour faciliter le filtrage et le type narrowing
+5. **Documentation** : Commentaires JSDoc pour documenter les interfaces et leurs champs
+
+### Types communs (`common.ts`)
+
+Définit les interfaces et types de base utilisés dans toute l'application.
+
+```typescript
+// Types de base
+interface WithId {
+  id: string;
+}
+
+interface WithTimestamps {
+  create_at: number;
+  update_at: number;
+  delete_at?: number;
+}
+
+interface Entity extends WithId, WithTimestamps {}
+
+// État commun pour les stores
+interface CommonState {
+  isLoading: boolean;
+  loadingIds: string[];
+  error: Error | null;
+  errors: AppError[];
+  lastError: AppError | null;
+  hasUnhandledError: boolean;
+  errorsBySource: Record<ErrorSource, AppError[]>;
+  errorsBySeverity: Record<ErrorSeverity, AppError[]>;
+  lastUpdated: number;
+  lastFetchTimes: Record<string, number>;
+}
+
+// Actions communes pour les stores
+interface CommonSliceActions {
+  setLoading(isLoading: boolean): void;
+  setLoadingId(id: string, isLoading: boolean): void;
+  setError(error: Error | null): void;
+  setErrorForId(id: string, error: Error | null): void;
+  updateLastFetchTime(id: string): void;
+  reset(): void;
+}
+
+// Types pour les API et requêtes
+interface PaginationParams {
+  page?: number;
+  perPage?: number;
+  after?: string;
+  before?: string;
+  since?: number;
+}
+
+interface QueryResult<T> {
+  data: T;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch: () => Promise<T>;
+}
+
+interface MutationResult<TData, TVariables> {
+  mutate: (variables: TVariables) => void;
+  mutateAsync: (variables: TVariables) => Promise<TData>;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  data?: TData;
+}
+
+interface ApiError extends Error {
+  status?: number;
+  data?: any;
+  request?: {
+    url: string;
+    method: string;
+  };
+}
+```
+
+### Types d'authentification (`auth.types.ts`)
+
+Définit les types liés à l'authentification et aux sessions utilisateur.
+
+```typescript
+// Types principaux
+type AuthMode = "direct" | "proxy";
+
+interface User extends Entity {
+  username: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  roles?: string;
+  props?: Record<string, unknown>;
+  last_picture_update?: number;
+}
+
+interface AuthToken {
+  token: string;
+  issuedAt: number;
+  expiresAt?: number;
+}
+
+interface AuthState extends CommonState {
+  isAuthenticated: boolean;
+  isAuthenticating: boolean;
+  currentUser: User | null;
+  token: string | null;
+  serverUrl: string | null;
+}
+
+interface AuthStore extends CommonSliceActions {
+  initialize(): Promise<boolean>;
+  login(params: LoginParams): Promise<User>;
+  logout(): void;
+  refreshCurrentUser(): Promise<User | null>;
+  setCurrentUser(user: User): void;
+  reset(): void;
+}
+
+interface LoginParams {
+  username: string;
+  password: string;
+  serverUrl?: string;
+}
+
+// Types supplémentaires...
+```
+
+### Types de canaux (`channel.types.ts`)
+
+Définit les types liés aux canaux de discussion.
+
+```typescript
+// Types principaux
+type ChannelType = "O" | "P" | "D" | "G";  // O = Public, P = Private, D = Direct, G = Group
+
+interface ChannelBase extends Entity {
+  team_id: string;
+  name: string;
+  display_name: string;
+  type: ChannelType;
+  header?: string;
+  purpose?: string;
+  last_post_at?: number;
+  total_msg_count?: number;
+  is_favorite?: boolean;
+}
+
+interface PublicChannel extends ChannelBase {
+  type: "O";
+}
+
+interface PrivateChannel extends ChannelBase {
+  type: "P";
+}
+
+interface DirectChannel extends ChannelBase {
+  type: "D";
+}
+
+interface GroupChannel extends ChannelBase {
+  type: "G";
+}
+
+type Channel = PublicChannel | PrivateChannel | DirectChannel | GroupChannel;
+
+interface ChannelMember {
+  channel_id: string;
+  user_id: string;
+  roles: string;
+  last_viewed_at: number;
+  msg_count: number;
+  mention_count: number;
+  scheme_admin?: boolean;
+  scheme_user?: boolean;
+  notify_props?: ChannelNotifyProps;
+}
+
+type ChannelGroupType = "public" | "private" | "direct" | "group" | "favorite";
+
+interface ChannelState extends CommonState {
+  channelsByTeam: Record<string, Channel[]>;
+  activeChannel: Channel | null;
+  members: Record<string, ChannelMember[]>;
+}
+
+interface ChannelStore extends CommonSliceActions {
+  // Actions pour les canaux
+  setChannels(teamId: string, channels: Channel[]): void;
+  setChannel(channel: Channel): void;
+  removeChannel(channelId: string): void;
+  setActiveChannel(channel: Channel | null): void;
+  updateChannel(channel: Partial<Channel> & { id: string }): void;
+  // ...autres actions
+
+  // Getters
+  getChannelById(channelId: string): Channel | null;
+  getChannelsByTeam(teamId: string): Channel[];
+  getChannelsByType(teamId: string, type: ChannelGroupType): Channel[];
+  getChannelMembers(channelId: string): ChannelMember[];
+  
+  // Reset
+  reset(): void;
+}
+
+// Canaux directs
+interface DirectChannelInfo {
+  isDirect: boolean;
+  isGroup: boolean;
+  displayName: string;
+  userIds: string[];
+  otherUserId?: string | null;
+  userImageUrl?: string;
+  userStatus?: UserStatus;
+  groupAvatarUrls?: string[];
+  status: "complete" | "loading" | "error";
+}
+
+interface DirectChannelState extends CommonState {
+  directChannelInfoById: Record<string, DirectChannelInfo>;
+  pendingUserIds: string[];
+}
+
+// Types supplémentaires...
+```
+
+### Types de messages (`message.types.ts`)
+
+Définit les types liés aux messages et pièces jointes.
+
+```typescript
+// Types principaux
+interface MessageAttachment {
+  id: string;
+  name: string;
+  type?: string;
+  size?: number;
+  url?: string;
+  link?: string;
+  width?: number;
+  height?: number;
+  mime_type?: string;
+  download_url?: string;
+  preview_url?: string;
+}
+
+interface MessageReaction {
+  emoji_name: string;
+  user_id: string;
+  post_id: string;
+  create_at: number;
+}
+
+interface MessageMetadata {
+  files?: MessageAttachment[];
+  emojis?: string[];
+  reactions?: MessageReaction[];
+  mentions?: MessageMention[];
+  images?: {
+    height: number;
+    width: number;
+    url: string;
+  }[];
+  embeds?: {
+    type: string;
+    url: string;
+    data?: any;
+  }[];
+}
+
+interface Message extends Entity {
+  user_id: string;
+  channel_id: string;
+  message: string;
+  metadata?: MessageMetadata;
+  is_pinned?: boolean;
+  has_reactions?: boolean;
+  reply_count?: number;
+  root_id?: string;
+  original_id?: string;
+  file_ids?: string[];
+  props?: MessageProps;
+  recipients?: string[];
+  is_following?: boolean;
+}
+
+interface Thread {
+  id: string;
+  reply_count: number;
+  last_reply_at: number;
+  participants?: string[];
+  is_following?: boolean;
+  unread_replies?: number;
+  unread_mentions?: number;
+}
+
+interface MessageState extends CommonState {
+  messagesByChannel: Record<string, Message[]>;
+  threadMessages: Record<string, Message[]>;
+  pinnedMessages: Record<string, Message[]>;
+  highlightedMessageId: string | null;
+  replyToMessage: Message | null;
+  editingMessageId: string | null;
+}
+
+interface MessageStore extends Omit<CommonSliceActions, "setLoading" | "setError"> {
+  // Actions
+  setMessages(channelId: string, messages: Message[]): void;
+  addMessage(message: Message): void;
+  // ...autres actions
+  
+  // Getters
+  getMessageById(messageId: string): Message | null;
+  getChannelMessages(channelId: string): Message[];
+  // ...autres getters
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types d'équipes (`team.types.ts`)
+
+Définit les types liés aux équipes.
+
+```typescript
+// Types principaux
+type TeamType = "O" | "I";  // O = Open, I = Invite Only
+
+interface Team extends Entity {
+  name: string;
+  display_name: string;
+  description?: string;
+  type: TeamType;
+  company_name?: string;
+  allowed_domains?: string;
+  invite_id?: string;
+  allow_open_invite?: boolean;
+  scheme_id?: string;
+  group_constrained?: boolean;
+  email?: string;
+}
+
+interface TeamStats {
+  team_id: string;
+  total_member_count: number;
+  active_member_count: number;
+}
+
+interface TeamMember {
+  team_id: string;
+  user_id: string;
+  roles: string;
+  scheme_admin?: boolean;
+  scheme_user?: boolean;
+  mention_count?: number;
+  msg_count?: number;
+}
+
+interface TeamState extends CommonState {
+  teams: Team[];
+  activeTeam: Team | null;
+  teamStats: Record<string, TeamStats>;
+  teamMembers: Record<string, TeamMember[]>;
+}
+
+interface TeamStore extends CommonSliceActions {
+  // Actions
+  setTeams(teams: Team[]): void;
+  setTeam(team: Team): void;
+  // ...autres actions
+  
+  // Getters
+  getTeamById(teamId: string): Team | null;
+  getTeamStats(teamId: string): TeamStats | null;
+  getTeamMembers(teamId: string): TeamMember[];
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types d'utilisateurs (`user.types.ts`)
+
+Définit les types liés aux utilisateurs et à leurs statuts.
+
+```typescript
+// Types principaux
+type UserStatus = "online" | "away" | "dnd" | "offline";
+
+interface UserStatusInfo {
+  user_id: string;
+  status: UserStatus;
+  custom_status?: string;
+  last_activity_at?: number;
+  is_bot?: boolean;
+}
+
+interface UserWithStatus {
+  user: User;
+  status: UserStatus;
+  displayName: string;
+  isTyping?: boolean;
+}
+
+interface UserState extends CommonState {
+  byId: Record<string, User>;
+  statusByUserId: Record<string, UserStatus>;
+  typingUsers: Record<string, Record<string, number>>;
+  isInitialized: boolean;
+}
+
+interface UserStore extends CommonSliceActions {
+  // Actions
+  setUser(user: User): void;
+  setUsers(users: User[]): void;
+  // ...autres actions
+  
+  // Getters
+  getUserById(userId: string): User | null;
+  getUserStatus(userId: string): UserStatus;
+  getUserDisplayName(userId: string): string;
+  // ...autres getters
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types d'erreurs (`error.types.ts`)
+
+Définit les types pour le système de gestion d'erreurs centralisé.
+
+```typescript
+// Types principaux
+enum ErrorSeverity {
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
+  CRITICAL = "critical",
+}
+
+enum ErrorSource {
+  API = "api",
+  AUTH = "auth",
+  WEBSOCKET = "websocket",
+  UI = "ui",
+  STORAGE = "storage",
+  UNKNOWN = "unknown",
+}
+
+interface AppError {
+  id: string;
+  message: string;
+  source: ErrorSource;
+  severity: ErrorSeverity;
+  timestamp: number;
+  handled: boolean;
+  details?: any;
+  stack?: string;
+  metadata?: Record<string, any> | null;
+}
+
+interface ErrorState {
+  errors: AppError[];
+  lastError: AppError | null;
+  hasUnhandledError: boolean;
+  errorsBySource: Record<ErrorSource, AppError[]>;
+  errorsBySeverity: Record<ErrorSeverity, AppError[]>;
+  error: Error | null;
+  errorMap?: Record<string, Error | null>;
+  isLoading: boolean;
+  loadingIds: string[];
+  lastUpdated: number;
+  lastFetchTimes: Record<string, number>;
+}
+
+interface ErrorStore {
+  // Actions
+  addError(error: Error | ApiError, source: ErrorSource, severity?: ErrorSeverity, metadata?: Record<string, any>): AppError;
+  handleError(errorId: string): void;
+  // ...autres actions
+  
+  // Getters
+  getErrors(filter?: ErrorFilter): AppError[];
+  getErrorsBySource(source: ErrorSource): AppError[];
+  // ...autres getters
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types d'événements (`event.types.ts`)
+
+Définit les types pour le système d'événements.
+
+```typescript
+// Types principaux
+enum EventCategory {
+  AUTH = "auth",
+  TEAM = "team",
+  CHANNEL = "channel",
+  MESSAGE = "message",
+  USER = "user",
+  UNREAD = "unread",
+  WEBSOCKET = "websocket",
+  REACTION = "reaction",
+  SETTINGS = "settings",
+  ERROR = "error",
+}
+
+enum EventType {
+  // Auth events
+  LOGIN_SUCCESS = "auth:login_success",
+  LOGOUT = "auth:logout",
+  
+  // Channel events
+  CHANNEL_SELECTED = "channel:selected",
+  CHANNEL_CREATED = "channel:created",
+  
+  // ...autres types d'événements
+}
+
+interface EventPayload<T = any> {
+  type: EventType;
+  data: T;
+  timestamp: number;
+  meta?: Record<string, any>;
+}
+
+type EventHandler<T = any> = (payload: EventPayload<T>) => void;
+
+interface EventState {
+  handlers: Record<string, Set<EventHandler>>;
+  lastEvents: Record<string, EventPayload>;
+}
+
+// Types d'événements spécifiques
+interface AuthEventData {
+  user?: any;
+  timestamp: number;
+  reason?: string;
+}
+
+interface ChannelEventData {
+  channel: any;
+  teamId?: string;
+  userId?: string;
+}
+
+// ...autres types de données d'événements
+```
+
+### Types WebSocket (`websocket.types.ts`)
+
+Définit les types pour la gestion des connexions WebSocket.
+
+```typescript
+// Types principaux
+enum WebSocketEventType {
+  POSTED = "posted",
+  POST_EDITED = "post_edited",
+  POST_DELETED = "post_deleted",
+  CHANNEL_VIEWED = "channel_viewed",
+  // ...autres types d'événements
+}
+
+type MessageHandler<T = any> = (data: T) => void;
+
+interface WebSocketOptions {
+  onOpen?: () => void;
+  onClose?: (event: CloseEvent) => void;
+  onError?: (event: Event) => void;
+  pingInterval?: number;
+  maxReconnectAttempts?: number;
+  reconnectDelay?: number;
+}
+
+interface WebSocketMessage {
+  seq?: number;
+  action?: string;
+  data?: any;
+  event?: string;
+  broadcast?: {
+    omit_users?: null | string[];
+    user_id?: string;
+    channel_id?: string;
+    team_id?: string;
+  };
+}
+
+interface WebSocketState extends CommonState {
+  isConnected: boolean;
+  isConnecting: boolean;
+  url: string | null;
+  reconnectAttempts: number;
+  lastConnectedAt: number | null;
+  lastDisconnectedAt: number | null;
+  hasBeenDisconnected: boolean;
+}
+
+interface WebSocketStore {
+  // Actions - Connection
+  connect(url: string, token: string, options?: WebSocketOptions): Promise<void>;
+  disconnect(code?: number, reason?: string): void;
+  reconnect(url?: string, token?: string, options?: WebSocketOptions): Promise<void>;
+  
+  // Actions - Messaging
+  sendMessage(message: WebSocketMessage | string): boolean;
+  
+  // Actions - Event Handling
+  addMessageHandler<T = any>(eventType: string, handler: (data: T) => void): () => void;
+  addMessageHandlers<T = any>(handlers: Record<string, (data: T) => void>): () => void;
+  
+  // ...autres actions
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types de paramètres (`settings.types.ts`)
+
+Définit les types pour les paramètres et préférences utilisateur.
+
+```typescript
+// Types principaux
+type NotificationLevel = "all" | "mentions" | "none";
+type ThemeOption = "default" | "dark" | "light" | "system" | string;
+type ClockDisplay = "12h" | "24h";
+type MessageDisplay = "clean" | "compact" | "standard";
+type PerformanceMode = "default" | "high" | "low";
+type FontSize = "small" | "medium" | "large" | "x-large" | string;
+
+interface NotificationSettings {
+  desktop: NotificationLevel;
+  mobile: NotificationLevel;
+  email: NotificationLevel;
+  sound: boolean;
+  channelOverrides: Record<string, ChannelNotificationOverride>;
+}
+
+interface AppearanceSettings {
+  theme: ThemeOption;
+  compactView: boolean;
+  clockDisplay: ClockDisplay;
+  linkPreview: boolean;
+  collapseLinks: boolean;
+  messageDisplay: MessageDisplay;
+  customFontSize?: FontSize;
+  language?: string;
+}
+
+interface UserSettingsState extends CommonState {
+  favorites: Set<string>;
+  mutedChannels: Set<string>;
+  notifications: NotificationSettings;
+  appearance: AppearanceSettings;
+  privacy: PrivacySettings;
+  advanced: AdvancedSettings;
+}
+
+interface UserSettingsStore {
+  // Actions - Favorites
+  toggleFavorite(channelId: string): void;
+  addFavorite(channelId: string): void;
+  removeFavorite(channelId: string): void;
+  getFavorites(): string[];
+  isFavorite(channelId: string): boolean;
+  
+  // ...autres actions pour paramètres
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types de non-lus (`unread.types.ts`)
+
+Définit les types pour les compteurs de messages non lus.
+
+```typescript
+// Types principaux
+interface ChannelUnreadCount {
+  msg_count: number;
+  mention_count: number;
+  lastMessageId?: string;
+  lastViewedAt?: number;
+  totalMessageCount?: number;
+  isMuted?: boolean;
+}
+
+interface TeamUnreadCount {
+  msg_count: number;
+  mention_count: number;
+  channelIds?: string[];
+}
+
+interface TotalUnreadCount {
+  msg_count: number;
+  mention_count: number;
+  teamCounts?: Record<string, TeamUnreadCount>;
+}
+
+interface FormattedUnreadCount {
+  text: string;
+  color: "primary" | "error" | "default";
+  hasMentions: boolean;
+  hasUnreads: boolean;
+}
+
+interface UnreadState extends CommonState {
+  unreadCounts: Record<string, ChannelUnreadCount>;
+  mutedChannels: Set<string>;
+  processedMessageIds: Set<string>;
+  teamUnreadCounts: Record<string, TeamUnreadCount>;
+  lastFetchTimes: Record<string, number>;
+}
+
+interface UnreadStore extends CommonSliceActions {
+  // Actions
+  updateUnreadCount(channelId: string, msgCount: number, mentionCount: number, lastMessageId?: string, lastViewedAt?: number, totalMessageCount?: number): void;
+  incrementUnreadCount(channelId: string, messageIncrement: number, mentionIncrement: number, messageId?: string): void;
+  markAsRead(channelId: string): void;
+  markAllAsRead(teamId: string, channelIds?: string[]): void;
+  
+  // ...autres actions
+  
+  // Getters
+  getChannelUnreadCount(channelId: string): ChannelUnreadCount;
+  hasUnreadsInChannel(channelId: string): boolean;
+  // ...autres getters
+  
+  // Reset
+  reset(): void;
+}
+
+// Types supplémentaires...
+```
+
+### Types de réactions (`reaction.types.ts`)
+
+Définit les types pour les réactions aux messages.
+
+```typescript
+// Types principaux
+interface ReactionState {
+  reactionsByMessage: Record<string, MessageReaction[]>;
+  lastFetchTimes: Record<string, number>;
+}
+
+interface EmojiData {
+  name: string;
+  unified?: string;
+  url?: string;
+  isCustom?: boolean;
+}
+
+interface CustomEmoji {
+  id: string;
+  name: string;
+  create_at: number;
+  update_at: number;
+  delete_at: number;
+  creator_id: string;
+}
+
+interface AddReactionParams {
+  messageId: string;
+  emoji: string;
+  userId: string;
+}
+
+interface RemoveReactionParams {
+  messageId: string;
+  emoji: string;
+  userId: string;
+}
+```
+
+### Point d'entrée centralisé (`index.ts`)
+
+Le fichier `index.ts` sert de point d'entrée unique pour tous les types, permettant aux consommateurs d'importer facilement ce dont ils ont besoin.
+
+```typescript
+/**
+ * Central type definitions export
+ * Provides easy access to all types in the application
+ */
+
+// Core shared types
+export * from "./common";
+
+// Domain-specific types
+export * from "./auth.types";
+export * from "./user.types";
+export * from "./team.types";
+export * from "./channel.types";
+export * from "./message.types";
+export * from "./unread.types";
+export * from "./websocket.types";
+export * from "./settings.types";
+export * from "./event.types";
+export * from "./error.types";
+export * from "./reaction.types";
+```
+
+## Module providers
+
+Le module `providers` fournit des composants React qui initialient et configurent l'application.
+
+### Organisation du module
+
+```
+src/providers/
+├── index.ts                    # Point d'entrée et exportation centralisée
+└── MattermostProvider.tsx      # Provider principal pour l'initialisation
+```
+
+### Architecture et principes
+
+Le module providers suit plusieurs principes :
+
+1. **Initialisation complète** : Gère l'initialisation de l'API, de l'authentification et du WebSocket
+2. **Configuration flexible** : Supporte plusieurs modes (direct, proxy) et options
+3. **Composition** : Utilise des sous-composants spécialisés pour chaque aspect de l'initialisation
+4. **Isolation** : Isole l'initialisation de la logique applicative
+5. **Performance** : Optimise pour éviter les rendus inutiles
+
+### Provider Mattermost (`MattermostProvider.tsx`)
+
+Le provider principal qui initialise tous les aspects de l'application.
+
+```typescript
+// Types
+export interface MattermostProviderProps {
+  children: ReactNode;
+  serverUrl?: string;           // URL du serveur pour le mode direct
+  proxyUrl?: string;            // URL du proxy pour le mode proxy
+  clientId?: string;            // ID client pour le mode proxy
+  token?: string;               // Token d'authentification
+  enableWebSocket?: boolean;    // Activer la connexion WebSocket
+  persistAuth?: boolean;        // Persister l'authentification
+  onInitialized?: (success: boolean) => void;     // Callback d'initialisation
+  onAuthError?: (error: Error) => void;           // Callback d'erreur d'auth
+  onWebSocketError?: (error: Error) => void;      // Callback d'erreur WebSocket
+}
+
+// Sous-composants d'initialisation
+const ApiConfigInitializer: React.FC<{
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  token?: string;
+  onError?: (error: Error) => void;
+}>;
+
+const AuthInitializer: React.FC<{
+  token?: string;
+  persistAuth?: boolean;
+  onInitialized?: (success: boolean) => void;
+  onError?: (error: Error) => void;
+}>;
+
+const WebSocketInitializer: React.FC<{
+  mode: "direct" | "proxy";
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  enabled?: boolean;
+  onError?: (error: Error) => void;
+}>;
+
+const DataInitializer: React.FC<{
+  enabled?: boolean;
+}>;
+
+// Provider principal
+export const MattermostProvider: React.FC<MattermostProviderProps>;
+
+// Variante pour le mode direct
+export const MattermostDirectProvider: React.FC<
+  Omit<MattermostProviderProps, "proxyUrl" | "clientId"> & {
+    serverUrl: string;
+  }
+>;
+
+// Variante pour le mode proxy
+export const MattermostProxyProvider: React.FC<
+  Omit<MattermostProviderProps, "serverUrl"> & {
+    proxyUrl: string;
+    clientId: string;
+  }
+>;
+```
+
+Le provider orchestre l'initialisation en plusieurs étapes :
+
+1. **Configuration API** : Configure le client API avec les paramètres fournis
+2. **Initialisation Auth** : Initialise l'authentification et restaure la session si possible
+3. **Connexion WebSocket** : Établit une connexion WebSocket si activée
+4. **Chargement des données initiales** : Charge les données initiales comme les compteurs non-lus
+
+### Point d'entrée centralisé (`index.ts`)
+
+Le fichier `index.ts` exporte les providers pour une utilisation facile.
+
+```typescript
+// Exports centralisés
+export {
+  MattermostProvider,
+  MattermostDirectProvider,
+  MattermostProxyProvider,
+  type MattermostProviderProps,
+} from "./MattermostProvider";
+```
+
+## Module utils
+
+Le module `utils` fournit des fonctions utilitaires réutilisables qui ne sont pas spécifiques à un domaine.
+
+### Organisation du module
+
+```
+src/utils/
+├── mattermostUtils.ts          # Utilitaires génériques pour Mattermost
+├── formatters.ts               # Utilitaires de formatage
+├── performance.ts              # Utilitaires de performance
+└── channelUtils.ts             # Utilitaires spécifiques aux canaux
+```
+
+### Architecture et principes
+
+Les utilitaires suivent plusieurs principes :
+
+1. **Pureté fonctionnelle** : Fonctions pures sans effets secondaires
+2. **Modularité** : Fonctions petites et ciblées à usage unique
+3. **Documentation** : Documentation JSDoc complète pour chaque fonction
+4. **Tests** : Fonctions facilement testables
+5. **Performances** : Optimisation pour les opérations fréquentes
+
+### Utilitaires génériques (`mattermostUtils.ts`)
+
+Fournit des fonctions utilitaires génériques pour l'application Mattermost.
+
+```typescript
+/**
+ * Formats a timestamp to a human-readable date
+ * @param timestamp Timestamp in milliseconds
+ * @param options Formatting options
+ * @returns Formatted date string
+ */
+function formatDate(
+  timestamp: number,
+  options: {
+    showTime?: boolean;
+    showDate?: boolean;
+    relative?: boolean;
+    format?: "short" | "medium" | "long";
+  } = {},
+): string;
+
+/**
+ * Formats a file size to a human-readable string
+ * @param bytes Size in bytes
+ * @param decimals Number of decimal places
+ * @returns Formatted size string
+ */
+function formatFileSize(bytes: number, decimals: number = 2): string;
+
+/**
+ * Parses emojis from text
+ * @param text Text to parse
+ * @returns Array of emoji names
+ */
+function parseEmojis(text: string): string[];
+
+/**
+ * Generates a channel name for direct messages
+ * @param userId Current user ID
+ * @param otherId Other user ID
+ * @returns Channel name
+ */
+function generateDirectChannelName(
+  userId: string,
+  otherId: string,
+): string;
+
+/**
+ * Gets a user's initials from their name
+ * @param firstName First name
+ * @param lastName Last name
+ * @returns User initials
+ */
+function getUserInitials(
+  firstName?: string,
+  lastName?: string,
+  username?: string,
+): string;
+
+/**
+ * Checks if a string is a valid URL
+ * @param str String to check
+ * @returns Whether the string is a URL
+ */
+function isUrl(str: string): boolean;
+
+/**
+ * Gets the file extension from a file name
+ * @param fileName File name
+ * @returns File extension
+ */
+function getFileExtension(fileName: string): string;
+
+/**
+ * Checks if a file is an image based on its type or extension
+ * @param fileType File MIME type
+ * @param fileName File name
+ * @returns Whether the file is an image
+ */
+function isImageFile(fileType?: string, fileName?: string): boolean;
+
+/**
+ * Truncates text to a specified length
+ * @param text Text to truncate
+ * @param length Maximum length
+ * @returns Truncated text
+ */
+function truncateText(text: string, length: number): string;
+
+/**
+ * Debounces a function
+ * @param func Function to debounce
+ * @param wait Wait time in milliseconds
+ * @returns Debounced function
+ */
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number,
+): (...args: Parameters<T>) => void;
+
+/**
+ * Throttles a function
+ * @param func Function to throttle
+ * @param limit Limit in milliseconds
+ * @returns Throttled function
+ */
+function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  limit: number,
+): (...args: Parameters<T>) => void;
+
+/**
+ * Escapes HTML characters in a string
+ * @param html HTML string
+ * @returns Escaped string
+ */
+function escapeHtml(html: string): string;
+
+/**
+ * Creates a color from a string (useful for user avatars)
+ * @param str String to generate color from
+ * @returns Hex color code
+ */
+function stringToColor(str: string): string;
+```
+
+### Utilitaires de formatage (`formatters.ts`)
+
+Fournit des fonctions de formatage centralisées pour l'application.
+
+```typescript
+/**
+ * Date formatting options
+ */
+interface DateFormatOptions {
+  showTime?: boolean;
+  showDate?: boolean;
+  relative?: boolean;
+  format?: "short" | "medium" | "long";
+}
+
+/**
+ * Formats a timestamp to a human-readable date using date-fns
+ */
+function formatDate(
+  timestamp: number | Date,
+  options: DateFormatOptions = {},
+): string;
+
+/**
+ * Formats a file size using the filesize library
+ */
+function formatFileSize(bytes: number, options = {}): string;
+
+/**
+ * Formats a number with the Intl API
+ */
+function formatNumber(
+  num: number,
+  options: Intl.NumberFormatOptions = {},
+): string;
+
+/**
+ * Formats a user's name for display
+ */
+function formatUserName(
+  user:
+    | {
+        first_name?: string;
+        last_name?: string;
+        username?: string;
+        nickname?: string;
+      }
+    | null
+    | undefined,
+): string;
+
+/**
+ * Gets user initials from name components
+ */
+function getUserInitials(
+  user:
+    | {
+        first_name?: string;
+        last_name?: string;
+        username?: string;
+        nickname?: string;
+      }
+    | null
+    | undefined,
+): string;
+
+/**
+ * Formats an unread count for display
+ */
+function formatUnreadCount(
+  count: number,
+  maxDisplayCount: number = 99,
+): string;
+```
+
+### Utilitaires de performance (`performance.ts`)
+
+Fournit des fonctions et hooks pour optimiser les performances.
+
+```typescript
+// Re-export lodash functions for use throughout the app
+export { debounce, throttle, memoize } from "lodash-es";
+
+/**
+ * Hook that debounces a value
+ */
+function useDebouncedValue<T>(value: T, delay = 500): T;
+
+/**
+ * Hook that creates a debounced version of a function
+ */
+function useDebouncedCallback<T extends (...args: any[]) => any>(
+  callback: T,
+  delay = 300,
+  options = {},
+): T;
+
+/**
+ * Hook that creates a throttled version of a function
+ */
+function useThrottledCallback<T extends (...args: any[]) => any>(
+  callback: T,
+  limit = 300,
+  options = {},
+): T;
+
+/**
+ * Hook that compares previous and current values
+ */
+function usePrevious<T>(value: T): T | undefined;
+
+/**
+ * Re-export useDeepCompareEffect hook from use-deep-compare-effect
+ */
+export { useDeepCompareEffect } from "use-deep-compare-effect";
+
+/**
+ * Hook that memoizes a callback with deep comparisons
+ */
+function useDeepCallback<T extends (...args: any[]) => any>(
+  callback: T,
+  deps: React.DependencyList,
+): T;
+
+/**
+ * Hook to track render performance in development
+ */
+function useRenderTimer(componentName: string): void;
+```
+
+### Utilitaires de canaux (`channelUtils.ts`)
+
+Fournit des fonctions utilitaires pour travailler avec les canaux.
+
+```typescript
+// Re-export the useful functions from channelService for backward compatibility
+export const isDirectChannel: (channel: Channel) => boolean;
+export const isGroupChannel: (channel: Channel) => boolean;
+export const isDirectOrGroupChannel: (channel: Channel) => boolean;
+export const isPublicChannel: (channel: Channel) => boolean;
+export const isPrivateChannel: (channel: Channel) => boolean;
+export const getUserIdsFromDirectChannel: (channelName: string) => string[];
+export const getOtherUserIdFromDirectChannel: (channelName: string, currentUserId: string) => string | null;
+export const getUserIdsFromGroupChannel: (channel: Channel) => string[];
+export const generateDirectChannelName: (userId1: string, userId2: string) => string;
+export const getDirectChannelDisplayName: (otherUser: User | null, fallbackName?: string) => string;
+export const getGroupChannelDisplayName: (users: User[], currentUserId: string, maxNames?: number) => string;
+export const getChannelInitials: (channel: Channel) => string;
+
+/**
+ * Generates a unique key for caching display names
+ * @param channelId Channel ID
+ * @param currentUserId Current user ID
+ * @returns Cache key
+ */
+function getDisplayNameCacheKey(
+  channelId: string,
+  currentUserId: string,
+): string;
+
+/**
+ * Gets a unique identifier for a channel type
+ * @param channelType Channel type character
+ * @returns Readable type name
+ */
+function getChannelTypeName(channelType: ChannelType): string;
+
+/**
+ * Builds a display name for a list of channel members
+ * @param members List of member names
+ * @param maxNames Maximum number of names to display
+ * @returns Formatted display name
+ */
+function buildGroupDisplayName(
+  members: string[],
+  maxNames: number = 3,
+): string;
+
+/**
+ * Converts a display name to a valid channel name
+ * @param displayName Display name
+ * @returns Valid channel name
+ */
+function sanitizeChannelName(displayName: string): string;
+
+/**
+ * Checks if a channel is a default system channel
+ * @param channel Channel to check
+ * @returns Whether the channel is a system default
+ */
+function isDefaultChannel(channel: Channel): boolean;
+
+/**
+ * Creates a canonical name for a group channel
+ * @param userIds List of user IDs
+ * @returns Canonical group channel name
+ */
+function createGroupChannelName(userIds: string[]): string;
+```

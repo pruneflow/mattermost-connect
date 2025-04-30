@@ -1,0 +1,640 @@
+## Objectifs et principes
+
+Ce plan détaille l'implémentation complète de la standardisation de MattermostConnect, en suivant une approche méthodique qui tient compte des dépendances entre les différents groupes de travail.
+
+### Principes directeurs
+1. **Cohérence maximale**: Tous les composants suivront des patterns identiques
+2. **Optimisation pour la production**: Code final prêt pour la mise en production
+3. **Remplacement complet**: Aucune rétro-compatibilité n'est nécessaire
+4. **Réutilisation systématique**: Les utilitaires, slices et helpers seront réutilisés partout
+5. **DRY (Don't Repeat Yourself)**: Élimination de toute duplication de code
+
+### Méthodologie de travail
+
+Pour chaque groupe:
+- Identification des fonctionnalités existantes à préserver
+- Extraction et centralisation des patterns communs
+- Implémentation cohérente dans tous les fichiers concernés
+- Vérification systématique des duplications potentielles entre composants
+
+## Groupe 1: Fondations communes et utilitaires de store
+
+**Dépendances**: Aucune - Ce groupe constitue la fondation pour tous les autres
+
+### Objectifs
+Créer les fondations réutilisables pour tous les autres groupes: utilitaires Zustand, gestion d'état standardisée, système d'événements.
+
+### Standardisation à appliquer
+- Création de patterns Zustand réutilisables centralisés dans `storeUtils.ts`:
+  ```typescript
+  createStore<T>() // Création de store standard avec immer et devtools
+  createPersistStore<T>() // Avec persistence locale
+  createLoadingSlice<S>() // Slice standard pour états de chargement/erreur
+  createAsyncAction<Args, Result>() // Helper pour actions asynchrones typées
+  ```
+
+- Implémentation d'un `CommonSlice` complet et réutilisable:
+  ```typescript
+  interface CommonState {
+    // État
+    isLoading: boolean;
+    loadingIds: string[];
+    error: Error | null;
+    errors: Record<string, Error>;
+    lastUpdated: number;
+    lastFetchTimes: Record<string, number>;
+    
+    // Actions
+    setLoading(isLoading: boolean): void;
+    setLoadingId(id: string, isLoading: boolean): void;
+    setError(error: Error | null): void;
+    setErrorForId(id: string, error: Error | null): void;
+    updateLastFetchTime(id: string): void;
+    reset(): void;
+  }
+  ```
+
+- Système d'événements optimisé et typé:
+  ```typescript
+  emitEvent<T>(type: EventType, data: T): void
+  onEvent<T>(type: EventType, handler: (data: T) => void): () => void
+  createTypedEmitter<T>(type: EventType): (data: T) => void
+  createTypedListener<T>(type: EventType): (handler: (data: T) => void) => () => void
+  ```
+
+### Fichiers à modifier
+- `src/core/store/storeUtils.ts`
+- `src/core/store/slices/commonSlice.ts`
+- `src/core/api/eventUtils.ts`
+- `src/types/event.types.ts`
+
+### Résultats attendus
+- Fondations réutilisables pour tous les autres groupes
+- Pattern commun pour la gestion d'état avec Zustand
+- Système d'événements standardisé pour la communication inter-composants
+
+## Groupe 2: Système de gestion d'erreurs
+
+**Dépendances**: Groupe 1 (utilise CommonSlice et utilitaires)
+
+### Objectifs
+Créer un système centralisé et standardisé pour la gestion des erreurs dans toute l'application.
+
+### Standardisation à appliquer
+- Intégration complète avec `CommonSlice` du Groupe 1
+- API simplifiée pour la gestion des erreurs:
+  ```typescript
+  handleError(error, source?: ErrorSource): AppError
+  createErrorHandler(source: ErrorSource): (error: Error) => AppError
+  ```
+
+- Handlers spécialisés prédéfinis:
+  ```typescript
+  handleApiError = createErrorHandler(ErrorSource.API)
+  handleAuthError = createErrorHandler(ErrorSource.AUTH)
+  handleWsError = createErrorHandler(ErrorSource.WEBSOCKET)
+  ```
+
+- Types d'erreur standardisés:
+  ```typescript
+  interface AppError {
+    id: string;
+    message: string;
+    source: ErrorSource;
+    severity: ErrorSeverity;
+    timestamp: number;
+    // Autres champs standardisés
+  }
+  ```
+
+### Fichiers à modifier
+- `src/core/store/errorStore.ts`
+- `src/types/error.types.ts`
+
+### Résultats attendus
+- Système d'erreur unifié utilisable par tous les composants
+- Traçabilité complète des erreurs avec source et sévérité
+- Possibilité de filtrer et gérer les erreurs de façon granulaire
+
+## Groupe 3: Services fondamentaux
+
+**Dépendances**: Groupe 1 et 2 (utilise le système d'événements et la gestion d'erreurs)
+
+### Objectifs
+Standardiser les services d'infrastructure de base: authentification et WebSocket.
+
+### Standardisation à appliquer
+- Interface commune pour tous les services:
+  ```typescript
+  interface BaseService<T> {
+    format(entity: T): FormattedEntity;
+    validate(entity: T): boolean;
+    process(entity: T, options?: any): ProcessedEntity;
+  }
+  ```
+
+- API standardisée pour l'authentification:
+  ```typescript
+  interface AuthService {
+    login(username: string, password: string): Promise<User>;
+    logout(): void;
+    initialize(): Promise<boolean>;
+    // Méthodes auxiliaires cohérentes
+  }
+  ```
+
+- Service WebSocket optimisé:
+  ```typescript
+  interface WebSocketService {
+    connect(url: string, token: string): Promise<void>;
+    disconnect(reason?: string): void;
+    on<T>(eventType: string, handler: (data: T) => void): () => void;
+    send(message: any): boolean;
+    // Méthodes standardisées
+  }
+  ```
+
+### Fichiers à modifier
+- `src/core/services/authService.ts`
+- `src/core/services/wsService.ts`
+
+### Résultats attendus
+- Services d'infrastructure standardisés et optimisés
+- API cohérentes pour les services fondamentaux
+- Utilisation systématique de la gestion d'erreurs du Groupe 2
+
+## Groupe 4: API Client et utilitaires de requête
+
+**Dépendances**: Groupe 2 et 3 (utilise la gestion d'erreurs et s'intègre aux services)
+
+### Objectifs
+Standardiser le client API et les utilitaires de requête pour une intégration optimale avec React Query.
+
+### Standardisation à appliquer
+- Client API standardisé avec gestion intelligente des modes direct/proxy:
+  ```typescript
+  class ApiClient {
+    configure(config: ApiClientConfig): void
+    request<T>(path: string, options?: RequestOptions): Promise<ApiResponse<T>>
+    get<T>(path: string, params?: any): Promise<ApiResponse<T>>
+    post<T>(path: string, body?: any): Promise<ApiResponse<T>>
+    // Méthodes HTTP standardisées
+  }
+  ```
+
+- Utilitaires de requête optimisés:
+  ```typescript
+  buildUrlWithParams(endpoint: string, params?: Record<string, any>): string
+  createQueryOptions(entityType: string, options?: any): QueryOptions
+  createMutationOptions(options?: any): MutationOptions
+  invalidateQueries(queryClient: QueryClient, entityType: string, entityId?: string): void
+  ```
+
+- Structure des clés de requête standardisée:
+  ```typescript
+  export const QUERY_KEYS = {
+    auth: {
+      current: ['auth', 'current'],
+      // Sous-clés standardisées
+    },
+    users: {
+      all: ['users'],
+      byId: (id: string) => ['users', id],
+      // Structure cohérente
+    },
+    // Structure identique pour toutes les entités
+  };
+  ```
+
+### Fichiers à modifier
+- `src/core/api/client.ts`
+- `src/core/api/apiUtils.ts`
+- `src/core/api/queryUtils.ts`
+- `src/core/api/queryClient.ts`
+
+### Résultats attendus
+- Client API hautement configurable et standardisé
+- Utilitaires de requête optimisés et réutilisables
+- Structure cohérente pour toutes les clés de requête
+
+## Groupe 5: Services métier
+
+**Dépendances**: Groupe 3 et 4 (utilise les patterns de service et le client API)
+
+### Objectifs
+Extraire toute la logique métier des stores et la centraliser dans des services spécialisés.
+
+### Standardisation à appliquer
+- Architecture cohérente pour tous les services:
+  ```typescript
+  class XXXService implements BaseService<XXX> {
+    // Méthodes publiques standardisées
+    format(entity: XXX): FormattedXXX {...}
+    validate(entity: XXX): boolean {...}
+    process(entity: XXX, options?: any): ProcessedXXX {...}
+    
+    // Méthodes spécifiques au domaine
+    domainSpecificMethod(param: Type): ReturnType {...}
+    
+    // Méthodes privées auxiliaires
+    private helperMethod(): void {...}
+  }
+  
+  // Export comme singleton
+  export const xxxService = new XXXService();
+  ```
+
+- Élimination complète des duplications:
+  - Centralisation des utilitaires génériques communs
+  - Mutualisation des fonctions de formatage
+  - Réutilisation systématique des helpers existants
+
+### Fichiers à modifier
+- `src/core/services/channelService.ts`
+- `src/core/services/messageService.ts`
+- `src/core/services/userService.ts`
+- `src/core/services/unreadService.ts`
+- `src/core/services/teamService.ts`
+
+### Résultats attendus
+- Logique métier centralisée dans des services spécialisés
+- Élimination des duplications de code
+- Services réutilisables par les stores et les hooks
+
+## Groupe 6: Stores de base (auth et user)
+
+**Dépendances**: Groupe 1, 2, 3 et 5 (utilise CommonSlice, gestion d'erreurs, services fondamentaux et services métier)
+
+### Objectifs
+Standardiser les stores d'authentification et utilisateur, qui sont les plus fondamentaux.
+
+### Standardisation à appliquer
+- Intégration complète avec `CommonSlice`:
+  ```typescript
+  export const useXXXStore = create<XXXStoreState>()(
+    immer((set, get) => ({
+      // Intégration du CommonSlice pour l'état partagé
+      ...createCommonSlice<XXXStoreState>(set),
+      
+      // État spécifique
+      specificState: initialSpecificState,
+      
+      // Actions spécifiques
+      specificAction: (param: Type) => {
+        set((state) => {
+          // Modification immer
+          state.specificState = newValue;
+          // Utiliser les méthodes de CommonSlice
+          updateLastFetchTime('key');
+        });
+      },
+    }))
+  );
+  ```
+
+- Délégation systématique aux services:
+  ```typescript
+  // Avant: Logique directement dans le store
+  doSomething: (data) => {
+    set((state) => {
+      // Logique complexe ici
+    });
+  },
+  
+  // Après: Délégation au service
+  doSomething: (data) => {
+    const result = xxxService.process(data);
+    set((state) => {
+      state.something = result;
+    });
+  },
+  ```
+
+- Émission standardisée d'événements:
+  ```typescript
+  action: (param: Type) => {
+    // Logique de l'action
+    
+    // Émission d'événement typée et cohérente
+    emitEvent(EventType.XXX_HAPPENED, { param, result });
+  },
+  ```
+
+### Fichiers à modifier
+- `src/core/store/authStore.ts`
+- `src/core/store/userStore.ts`
+- `src/core/store/userSettingsStore.ts`
+
+### Résultats attendus
+- Stores standardisés utilisant les patterns communs
+- Délégation de la logique métier aux services
+- Émission cohérente d'événements
+
+## Groupe 7: Stores métier (team, channel, message)
+
+**Dépendances**: Groupe 1, 2, 5 et 6 (utilise CommonSlice, gestion d'erreurs, services métier et s'inspire des stores de base)
+
+### Objectifs
+Standardiser les stores métier pour les équipes, canaux et messages.
+
+### Standardisation à appliquer
+- Application cohérente du pattern CommonSlice
+- Résolution des dépendances circulaires:
+  ```typescript
+  // Avant: Import direct créant des dépendances circulaires
+  import { useOtherStore } from './otherStore';
+  
+  // Après: Utilisation de getState() pour éviter les dépendances circulaires
+  const otherStoreState = useOtherStore.getState();
+  ```
+
+- Délégation de logique aux services correspondants:
+  ```typescript
+  // Avant: Logique de formatage dans le store
+  getFormattedName: (id) => {
+    const item = get().byId[id];
+    return formatName(item);  // Fonction interne
+  },
+  
+  // Après: Délégation au service
+  getFormattedName: (id) => {
+    const item = get().byId[id];
+    return xxxService.format(item);
+  },
+  ```
+
+### Fichiers à modifier
+- `src/core/store/teamStore.ts`
+- `src/core/store/channelStore.ts`
+- `src/core/store/directChannelStore.ts`
+- `src/core/store/messageStore.ts`
+- `src/core/store/unreadStore.ts`
+- `src/core/store/wsStore.ts`
+
+### Résultats attendus
+- Stores standardisés avec une structure cohérente
+- Résolution des dépendances circulaires
+- Délégation systématique aux services pour la logique métier
+
+## Groupe 8: Hooks de requête React Query
+
+**Dépendances**: Groupe 4, 5, 6 et 7 (utilise API client, services métier et s'intègre aux stores)
+
+### Objectifs
+Créer des hooks React Query standardisés pour interagir avec l'API.
+
+### Standardisation à appliquer
+- Hooks génériques standardisés:
+  ```typescript
+  useList<T>(entityType, endpoint, params?): QueryResult<T[]>
+  useItem<T>(entityType, endpoint, id?): QueryResult<T>
+  useCreate<T, V>(entityType, endpoint): MutationResult<T, V>
+  useUpdate<T, V>(entityType, endpoint): MutationResult<T, { id: string, data: V }>
+  useDelete<T>(entityType, endpoint): MutationResult<T, string>
+  ```
+
+- Configurations cohérentes par type d'entité:
+  ```typescript
+  const QUERY_CONFIG = {
+    user: { staleTime: 5 * 60 * 1000, ... },
+    team: { staleTime: 5 * 60 * 1000, ... },
+    channel: { staleTime: 2 * 60 * 1000, ... },
+    message: { staleTime: 30 * 1000, ... },
+    // Configurations standardisées par type
+  };
+  ```
+
+- Hook générique `useEntityQuery` optimisé:
+  ```typescript
+  interface EntityQueryResult<T> {
+    // Data
+    data: T[];
+    byId: Record<string, T>;
+    ids: string[];
+    
+    // State
+    isLoading: boolean;
+    isFetching: boolean;
+    error: Error | null;
+    
+    // Actions
+    refetch(): Promise<T[]>;
+    fetchById(id: string): Promise<T | null>;
+    getById(id: string): T | undefined;
+    create(data: Partial<T>): Promise<T>;
+    update(id: string, data: Partial<T>): Promise<T>;
+    remove(id: string): Promise<void>;
+  }
+  ```
+
+### Fichiers à modifier
+- `src/core/api/hooks.ts`
+- `src/hooks/useEntityQuery.tsx`
+
+### Résultats attendus
+- Hooks React Query standardisés et réutilisables
+- Configurations cohérentes pour toutes les entités
+- Hook générique pour les opérations CRUD standard
+
+## Groupe 9: Requêtes spécifiques par domaine
+
+**Dépendances**: Groupe 4, 5, 7 et 8 (utilise API client, services métier, stores et hooks génériques)
+
+### Objectifs
+Créer des hooks de requête spécifiques pour chaque domaine métier.
+
+### Standardisation à appliquer
+- Structure cohérente pour tous les fichiers de requêtes:
+  ```typescript
+  // Hooks de requête
+  export const useXXXQuery = (param: Type) => {
+    // Standardisation des options de requête, des invalidations, etc.
+  };
+  
+  // Hooks de mutation
+  export const useXXXMutation = () => {
+    // Intégration standardisée avec les stores
+  };
+  ```
+
+- Intégration optimisée avec les stores:
+  ```typescript
+  // Mise à jour automatique du store sur succès
+  onSuccess: (data) => {
+    const { setXXX } = useXXXStore.getState();
+    setXXX(data);
+    
+    // Invalidation standardisée
+    invalidateQueries.xxx(data.id);
+  },
+  ```
+
+- Gestion d'erreur centralisée:
+  ```typescript
+  onError: (error) => {
+    handleApiError(error);
+  },
+  ```
+
+### Fichiers à modifier
+- `src/core/api/queries/authQueries.ts`
+- `src/core/api/queries/userQueries.ts`
+- `src/core/api/queries/teamQueries.ts`
+- `src/core/api/queries/channelQueries.ts`
+- `src/core/api/queries/messageQueries.ts`
+- `src/core/api/queries/unreadCountQueries.ts`
+
+### Résultats attendus
+- Hooks de requête spécifiques à chaque domaine
+- Intégration optimale avec les stores correspondants
+- Gestion d'erreur cohérente et centralisée
+
+## Groupe 10: Hooks applicatifs
+
+**Dépendances**: Groupe 5, 7, 8 et 9 (utilise services métier, stores, et hooks de requête)
+
+### Objectifs
+Créer des hooks applicatifs standardisés pour exposer les fonctionnalités aux composants UI.
+
+### Standardisation à appliquer
+- Interface standardisée pour tous les hooks:
+  ```typescript
+  function useXXX(param: Type): {
+    // Data
+    xxx: XXX[];
+    activeXXX: XXX | null;
+    
+    // State
+    isLoading: boolean;
+    error: Error | null;
+    
+    // Actions
+    setActiveXXX(xxx: XXX): void;
+    refreshXXX(): Promise<XXX[]>;
+    
+    // Domain-specific
+    domainSpecificMethod(param: Type): ReturnType;
+  }
+  ```
+
+- Optimisation des dépendances:
+  ```typescript
+  // Utilisation cohérente des hooks
+  const value = useMemo(() => compute(dependency), [dependency]);
+  const handler = useCallback(() => { /* logic */ }, [dependency]);
+  
+  // Gestion optimisée des effets
+  useEffect(() => {
+    // Effet avec dépendances explicites
+  }, [dep1, dep2, dep3]);
+  ```
+
+- Délégation aux services:
+  ```typescript
+  // Utilisation cohérente des services
+  const formattedResult = xxxService.format(result);
+  const isValid = xxxService.validate(input);
+  ```
+
+### Fichiers à modifier
+- `src/hooks/useAuth.tsx`
+- `src/hooks/useTeams.tsx`
+- `src/hooks/useChannels.tsx`
+- `src/hooks/useDirectChannels.tsx`
+- `src/hooks/useMessages.tsx`
+- `src/hooks/useUnreadCounts.tsx`
+- `src/hooks/useUsers.tsx`
+- `src/hooks/useWebSocket.tsx`
+
+### Résultats attendus
+- Hooks applicatifs avec une structure cohérente
+- Utilisation optimisée des hooks React (useMemo, useCallback, useEffect)
+- Délégation systématique aux services pour la logique métier
+
+## Groupe 11: Providers et exportations
+
+**Dépendances**: Tous les groupes précédents (finalise l'intégration)
+
+### Objectifs
+Finaliser l'intégration avec des providers standardisés et des exports centralisés.
+
+### Standardisation à appliquer
+- Exports centralisés cohérents:
+  ```typescript
+  // Exports des stores
+  export { useXXXStore, getXXX, isXXX } from './xxxStore';
+  
+  // Helper de reset
+  export const resetAllStores = () => {
+    useStore1.getState().reset();
+    useStore2.getState().reset();
+    // Reset standardisé de tous les stores
+  };
+  ```
+
+- Provider optimisé:
+  ```typescript
+  const MattermostProvider: React.FC<Props> = ({
+    // Props standardisées
+  }) => {
+    // Initialisation optimisée
+    // Gestion cohérente des erreurs
+    // Connexion WebSocket améliorée
+  };
+  ```
+
+- Point d'entrée simplifié pour l'intégration:
+  ```typescript
+  // Dans src/index.ts
+  export { MattermostProvider } from './providers';
+  export * from './hooks';
+  export * from './types';
+  ```
+
+### Fichiers à modifier
+- `src/core/store/index.ts`
+- `src/hooks/index.ts`
+- `src/providers/MattermostProvider.tsx`
+- `src/index.ts`
+
+### Résultats attendus
+- Exports centralisés pour tous les modules
+- Provider standardisé pour l'initialisation
+- Point d'entrée clair pour l'intégration externe
+
+## Récapitulatif des dépendances et ordre d'implémentation
+
+1. **Fondations communes et utilitaires de store**
+   - Aucune dépendance
+
+2. **Système de gestion d'erreurs**
+   - Dépend de: Groupe 1
+
+3. **Services fondamentaux**
+   - Dépend de: Groupe 1, 2
+
+4. **API Client et utilitaires de requête**
+   - Dépend de: Groupe 2, 3
+
+5. **Services métier**
+   - Dépend de: Groupe 3, 4
+
+6. **Stores de base (auth et user)**
+   - Dépend de: Groupe 1, 2, 3, 5
+
+7. **Stores métier (team, channel, message)**
+   - Dépend de: Groupe 1, 2, 5, 6
+
+8. **Hooks de requête React Query**
+   - Dépend de: Groupe 4, 5, 6, 7
+
+9. **Requêtes spécifiques par domaine**
+   - Dépend de: Groupe 4, 5, 7, 8
+
+10. **Hooks applicatifs**
+    - Dépend de: Groupe 5, 7, 8, 9
+
+11. **Providers et exportations**
+    - Dépend de: Tous les groupes précédents
+
+Cet ordre d'implémentation garantit que chaque groupe peut s'appuyer sur des fondations solides et standardisées fournies par les groupes précédents.

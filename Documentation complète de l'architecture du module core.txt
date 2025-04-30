@@ -1,0 +1,960 @@
+## Vue d'ensemble
+
+Le module `src/core` est le cœur de l'application Mattermost Connect, implémentant une architecture modulaire et réutilisable basée sur les patterns suivants :
+
+- **Architecture en couches** : API → Services → Stores → Hooks → Composants
+- **State management** : Utilisation de Zustand avec immer pour une gestion d'état immutable
+- **Services** : Logique métier centralisée dans des services spécialisés
+- **Communication** : Système d'événements pour la communication entre modules
+
+## Organisation des modules
+
+```
+src/core/
+├── api/                 # Client API, utilitaires de requête et hooks React Query
+├── services/            # Services métier encapsulant la logique business
+├── store/               # Stores Zustand pour la gestion d'état globale
+└── providers/           # Providers React pour l'initialisation de l'application
+```
+
+## 1. API Client et utilitaires de requête
+
+### Client API (`api/client.ts`)
+
+Le client API est une classe singleton qui sert d'interface unifiée pour communiquer avec l'API Mattermost.
+
+**Caractéristiques principales :**
+- Support des modes "direct" (connexion directe au serveur Mattermost) et "proxy" (via un proxy)
+- Gestion automatique des tokens d'authentification
+- Traitement standardisé des erreurs
+- Méthodes HTTP (GET, POST, PUT, DELETE) avec typage fort
+
+```typescript
+// Structure du client API
+class ApiClient {
+  // Configuration du client
+  configure(config: ApiClientConfig): void
+  
+  // Méthodes HTTP principales
+  async request<T>(path: string, options?: RequestOptions): Promise<ApiResponse<T>>
+  async get<T>(path: string, options?): Promise<ApiResponse<T>>
+  async post<T>(path: string, body?, options?): Promise<ApiResponse<T>>
+  async put<T>(path: string, body?, options?): Promise<ApiResponse<T>>
+  async delete<T>(path: string, options?): Promise<ApiResponse<T>>
+  
+  // Méthodes utilitaires
+  setToken(token: string | null): void
+  getMode(): ApiMode // 'direct' | 'proxy'
+  // ...
+}
+
+// Utilisation comme singleton
+export const apiClient = new ApiClient();
+```
+
+### Utilitaires d'API (`api/apiUtils.ts`)
+
+Ce module contient des fonctions utilitaires pour travailler avec l'API, comme :
+
+- `buildUrlWithParams` : Construction d'URLs avec paramètres de requête
+- `extractPaginationInfo` : Extraction des informations de pagination des headers
+- `normalizeEntities` : Conversion des tableaux d'entités en objets indexés par ID
+
+### Intégration React Query
+
+#### Client de requête (`api/queryClient.ts`)
+
+Configure le client React Query avec des paramètres standardisés et définit les clés de requête utilisées dans l'application.
+
+```typescript
+// Configuration de React Query
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      // ...autres options
+    }
+  }
+});
+
+// Clés de requête standardisées
+export const QUERY_KEYS = {
+  auth: {
+    current: ["auth", "current"],
+    // ...
+  },
+  users: {
+    all: ["users"],
+    byId: (id: string) => ["users", id],
+    // ...
+  },
+  // ...autres entités
+};
+```
+
+#### Utilitaires de requête (`api/queryUtils.ts`)
+
+Fournit des utilitaires pour standardiser la configuration des requêtes React Query :
+
+- `createQueryOptions` : Crée des options de requête standard par type d'entité
+- `createMutationOptions` : Crée des options de mutation standard
+- `invalidateRelated` : Invalide les requêtes liées lors d'une mise à jour
+
+#### Hooks génériques (`api/hooks.ts`)
+
+Hooks génériques pour les opérations CRUD basiques avec React Query :
+
+```typescript
+// Hooks génériques pour les opérations CRUD
+export function useList<TData, TParams>(entityType, endpoint, params?, options?)
+export function useItem<TData>(entityType, endpoint, id?, options?)
+export function useCreate<TData, TVariables>(entityType, endpoint, options?)
+export function useUpdate<TData, TVariables>(entityType, endpoint, options?)
+export function useDelete<TData>(entityType, endpoint, options?)
+export function usePagination<TData, TParams>(entityType, endpoint, params?, options?)
+export function useSearch<TData, TParams>(entityType, endpoint, searchTerm?, params?, options?)
+```
+
+#### Hooks spécialisés (`api/queries/`)
+
+Implémentations spécifiques pour chaque type d'entité :
+
+- `authQueries.ts` : Authentification (login, logout, etc.)
+- `userQueries.ts` : Opérations sur les utilisateurs
+- `teamQueries.ts` : Opérations sur les équipes
+- etc.
+
+### Système d'événements (`api/eventUtils.ts`)
+
+Un mécanisme de publication/abonnement (pub/sub) pour la communication entre modules :
+
+```typescript
+// Émission d'événements
+emitEvent<T>(eventType: EventType, data: T, meta?: object): void
+
+// Abonnement aux événements
+onEvent<T>(eventType: EventType, listener: (payload: EventPayload<T>) => void): () => void
+
+// Abonnement à plusieurs événements
+onEvents(handlers: Record<EventType, EventListener>): () => void
+
+// Version typée pour une meilleure sécurité
+createTypedEmitter<T>(eventType: EventType): (data: T, meta?: object) => void
+createTypedListener<T>(eventType: EventType): (listener: (data: T, meta?) => void) => () => void
+```
+
+## 2. Services
+
+Les services encapsulent la logique métier et servent d'intermédiaire entre les API et les stores.
+
+### Architecture des services
+
+Chaque service :
+- Est implémenté comme un singleton
+- Se concentre sur un domaine métier spécifique
+- Est indépendant des stores (pas de dépendances circulaires)
+- Inclut la validation et le formatage des données
+
+```typescript
+// Structure générale d'un service
+class XXXService {
+  // Méthodes publiques avec logique métier
+  public doSomething(): Result { /* ... */ }
+  
+  // Méthodes de formatage et de validation
+  public format(entity: Entity): FormattedEntity { /* ... */ }
+  public validate(entity: Entity): boolean { /* ... */ }
+  
+  // Méthodes utilitaires privées
+  private helperMethod(): void { /* ... */ }
+  
+  // Notification d'événements
+  public notifyXXXUpdated(entity): void {
+    emitEvent(EventType.XXX_UPDATED, { entity });
+  }
+}
+
+// Export comme singleton
+export const xxxService = new XXXService();
+```
+
+### Services principaux
+
+#### AuthService (`services/authService.ts`)
+
+Gère l'authentification et les sessions utilisateur.
+
+Fonctionnalités principales :
+- Login/logout
+- Stockage sécurisé des tokens
+- Gestion des sessions
+- Initialisation de l'authentification au démarrage
+
+```typescript
+class AuthService {
+  // Authentification
+  public async login(username: string, password: string, serverUrl?: string): Promise<LoginResponse>
+  public logout(): void
+  
+  // Gestion de session
+  public async getCurrentUser(): Promise<User | null>
+  public async initializeAuth(): Promise<boolean>
+  
+  // Utilitaires de token
+  public getStoredToken(): string | null
+  public validateTokenFormat(token: string): boolean
+  // ...
+}
+```
+
+#### UserService (`services/userService.ts`)
+
+Gère les opérations liées aux utilisateurs.
+
+Fonctionnalités principales :
+- Formatage des noms d'utilisateur
+- Gestion des status
+- Gestion des avatars
+- Indicateurs de frappe
+
+```typescript
+class UserService {
+  // Formatage
+  public formatUserName(user: User | null, preferUsername?: boolean): string
+  public getUserInitials(user: User | null): string
+  
+  // Avatars et status
+  public getProfilePictureUrl(user: User, size?: number): string
+  public getUserColor(userId: string): string
+  public formatUserStatus(status: UserStatus): string
+  
+  // Indicateurs de frappe
+  public isUserTyping(typingTimestamp: number): boolean
+  public getTypingUsers(typingUsers: Record<string, number>): string[]
+  // ...
+}
+```
+
+#### ChannelService (`services/channelService.ts`)
+
+Gère les opérations liées aux canaux de discussion.
+
+Fonctionnalités principales :
+- Classification des canaux (direct, groupe, public, privé)
+- Formatage des noms de canaux
+- Gestion des membres
+- Utilitaires pour les canaux directs
+
+```typescript
+class ChannelService {
+  // Classification
+  public isDirectChannel(channel: Channel): boolean
+  public isGroupChannel(channel: Channel): boolean
+  
+  // Formatage
+  public getDirectChannelDisplayName(otherUser: User | null, fallbackName?: string): string
+  public getGroupChannelDisplayName(users: User[], currentUserId: string, maxNames?: number): string
+  
+  // Opérations sur les canaux directs
+  public getUserIdsFromDirectChannel(channelName: string): string[]
+  public getOtherUserIdFromDirectChannel(channelName: string, currentUserId: string): string | null
+  // ...
+}
+```
+
+#### MessageService (`services/messageService.ts`)
+
+Gère les opérations liées aux messages.
+
+Fonctionnalités principales :
+- Formatage des messages
+- Traitement des mentions et emojis
+- Gestion des réactions
+- Organisation des fils de discussion
+
+```typescript
+class MessageService {
+  // Organisation
+  public sortMessages(messages: Message[]): Message[]
+  public groupMessagesByDate(messages: Message[]): Map<string, Message[]>
+  public organizeThreads(messages: Message[]): Map<string, Message[]>
+  
+  // Formatage
+  public formatMessageText(message: string, users?: Record<string, User>): string
+  
+  // Réactions
+  public getReactionsByEmoji(message: Message): Record<string, MessageReaction[]>
+  public hasUserReacted(message: Message, userId: string, emoji: string): boolean
+  
+  // Pièces jointes
+  public getImageAttachments(message: Message): MessageAttachment[]
+  // ...
+}
+```
+
+#### TeamService (`services/teamService.ts`)
+
+Gère les opérations liées aux équipes.
+
+```typescript
+class TeamService {
+  // Formatage
+  public formatTeam(team: Team): FormattedTeam
+  public formatTeamMembers(members: TeamMember[], users: Record<string, User>): Array<TeamMember & { user?: User; displayName: string }>
+  
+  // Utilitaires
+  public getTeamUrl(team: Team): string
+  public isTeamAdmin(member: TeamMember): boolean
+  // ...
+}
+```
+
+#### UnreadService (`services/unreadService.ts`)
+
+Gère le calcul et l'affichage des compteurs de messages non lus.
+
+```typescript
+class UnreadService {
+  // Calcul
+  public calculateUnreadCounts(messages: Message[], currentUserId: string, lastViewedAt: number): ChannelUnreadCount
+  public calculateTeamUnreadCounts(channelsByTeam: Record<string, Channel[]>, unreadState: UnreadState, teamId: string, options?: CalculateUnreadOptions): { msg_count: number; mention_count: number }
+  
+  // Formatage
+  public formatUnreadCount(count: number, maxDisplayCount?: number): string
+  public getUnreadBadgeColor(hasMentions: boolean, hasUnreads: boolean, isMuted?: boolean): "primary" | "error" | "default"
+  // ...
+}
+```
+
+#### WebSocketService (`services/wsService.ts`)
+
+Gère la connexion WebSocket pour les mises à jour en temps réel.
+
+```typescript
+class WebSocketService {
+  // Connexion
+  public async connect(url: string, token: string, options?: WebSocketOptions): Promise<void>
+  public disconnect(code?: number, reason?: string): void
+  
+  // Gestion des messages
+  public send(message: WebSocketMessage | string): boolean
+  
+  // Abonnements aux événements
+  public on<T = any>(eventType: string, listener: (data: T) => void): () => void
+  public onMultiple<T = any>(listeners: Record<string, (data: T) => void>): () => void
+  // ...
+}
+```
+
+## 3. Stores (Zustand)
+
+Les stores gèrent l'état global de l'application en utilisant Zustand avec le middleware immer pour une mise à jour immutable de l'état.
+
+### Architecture des stores
+
+Chaque store :
+- Utilise Zustand + immer pour la gestion d'état immutable
+- Inclut CommonSlice pour les fonctionnalités partagées
+- Expose des actions pour manipuler l'état
+- Délègue la logique métier aux services
+
+```typescript
+// Structure générale d'un store
+export const useXXXStore = create<XXXState & XXXStore>()(
+  subscribeWithSelector(
+    immer((set, get) => {
+      // Inclusion de CommonSlice
+      const commonSlice = createCommonSlice<XXXState>(set);
+      
+      return {
+        // État de CommonSlice
+        ...commonSlice,
+        
+        // État spécifique au store
+        specificState: initialValue,
+        
+        // Actions
+        doSomething: (param: Type) => {
+          // Utilisation de services
+          const result = xxxService.process(param);
+          
+          // Mise à jour de l'état avec immer
+          set((state) => {
+            state.specificState = result;
+            state.lastUpdated = Date.now();
+          });
+          
+          // Émission d'événements
+          emitEvent(EventType.SOMETHING_HAPPENED, { param });
+        },
+        
+        // Getters
+        getSomething: () => {
+          return get().specificState;
+        },
+        
+        // Reset
+        reset: () => {
+          set((state) => {
+            // Réinitialisation de l'état
+            state.specificState = initialValue;
+            // Réinitialisation de CommonSlice
+            state.isLoading = false;
+            state.error = null;
+            // ...
+          });
+        }
+      };
+    })
+  )
+);
+```
+
+### CommonSlice (`store/slices/commonSlice.ts`)
+
+Slice réutilisable qui fournit un état et des actions communs à tous les stores :
+
+```typescript
+// État commun
+export interface CommonState {
+  isLoading: boolean;
+  loadingIds: string[];
+  error: Error | null;
+  errors: Record<string, Error>;
+  lastUpdated: number;
+  lastFetchTimes: Record<string, number>;
+  // ...
+}
+
+// Actions communes
+export interface CommonSliceActions {
+  setLoading(isLoading: boolean): void;
+  setLoadingId(id: string, isLoading: boolean): void;
+  setError(error: Error | null): void;
+  setErrorForId(id: string, error: Error | null): void;
+  updateLastFetchTime(id: string): void;
+  reset(): void;
+}
+
+// Création du slice commun
+export const createCommonSlice = <T extends CommonState>(
+  set: (fn: (state: T) => void) => void
+): CommonState & CommonSliceActions => ({
+  // Implémentation standard des états et actions communs
+});
+```
+
+### Stores principaux
+
+#### AuthStore (`store/authStore.ts`)
+
+Gère l'état d'authentification et la session utilisateur.
+
+```typescript
+interface AuthState extends CommonState {
+  isAuthenticated: boolean;
+  isAuthenticating: boolean;
+  currentUser: User | null;
+  token: string | null;
+  serverUrl: string | null;
+}
+
+interface AuthStore {
+  // Actions
+  initialize(): Promise<boolean>;
+  login(params: LoginParams): Promise<User>;
+  logout(): void;
+  refreshCurrentUser(): Promise<User | null>;
+  setCurrentUser(user: User): void;
+  reset(): void;
+}
+```
+
+#### UserStore (`store/userStore.ts`)
+
+Gère les utilisateurs et leurs statuts.
+
+```typescript
+interface UserState extends CommonState {
+  byId: Record<string, User>;
+  statusByUserId: Record<string, UserStatus>;
+  typingUsers: Record<string, Record<string, number>>;
+  isInitialized: boolean;
+}
+
+interface UserStore {
+  // Actions
+  setUser(user: User): void;
+  setUsers(users: User[]): void;
+  updateUser(userData: Partial<User> & { id: string }): void;
+  removeUser(userId: string): void;
+  setUserStatus(userId: string, status: UserStatus): void;
+  setUserStatuses(statuses: UserStatusInfo[] | Record<string, UserStatus>): void;
+  setTyping(channelId: string, userId: string): void;
+  clearTyping(channelId: string, userId: string): void;
+  cleanupExpiredTyping(): void;
+  
+  // Getters
+  getUserById(userId: string): User | null;
+  getUsersByIds(userIds: string[]): User[];
+  getUserStatus(userId: string): UserStatus;
+  getUserDisplayName(userId: string): string;
+  getTypingUsers(channelId: string): string[];
+  getUsersWithStatus(userIds: string[]): Array<{ user: User; status: UserStatus; displayName: string }>;
+  isPendingUser(userId: string): boolean;
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### TeamStore (`store/teamStore.ts`)
+
+Gère les équipes et leurs membres.
+
+```typescript
+interface TeamState extends CommonState {
+  teams: Team[];
+  activeTeam: Team | null;
+  teamStats: Record<string, TeamStats>;
+  teamMembers: Record<string, TeamMember[]>;
+}
+
+interface TeamStore {
+  // Actions
+  setTeams(teams: Team[]): void;
+  setTeam(team: Team): void;
+  removeTeam(teamId: string): void;
+  setActiveTeam(team: Team | null): void;
+  setTeamStats(teamId: string, stats: TeamStats): void;
+  setTeamMembers(teamId: string, members: TeamMember[]): void;
+  updateTeam(team: Partial<Team> & { id: string }): void;
+  clearTeams(): void;
+  
+  // Getters
+  getTeamById(teamId: string): Team | null;
+  getTeamStats(teamId: string): TeamStats | null;
+  getTeamMembers(teamId: string): TeamMember[];
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### ChannelStore (`store/channelStore.ts`)
+
+Gère les canaux par équipe.
+
+```typescript
+interface ChannelState extends CommonState {
+  channelsByTeam: Record<string, Channel[]>;
+  activeChannel: Channel | null;
+  members: Record<string, ChannelMember[]>;
+}
+
+interface ChannelStore {
+  // Actions
+  setChannels(teamId: string, channels: Channel[]): void;
+  setChannel(channel: Channel): void;
+  removeChannel(channelId: string): void;
+  setActiveChannel(channel: Channel | null): void;
+  setChannelMembers(channelId: string, members: ChannelMember[]): void;
+  updateChannel(channel: Partial<Channel> & { id: string }): void;
+  setChannelProperty<K extends keyof Channel>(channelId: string, key: K, value: Channel[K]): void;
+  
+  // Getters
+  getChannelById(channelId: string): Channel | null;
+  getChannelsByTeam(teamId: string): Channel[];
+  getChannelsByType(teamId: string, type: ChannelGroupType): Channel[];
+  getChannelMembers(channelId: string): ChannelMember[];
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### DirectChannelStore (`store/directChannelStore.ts`)
+
+Gère les canaux directs (messages privés).
+
+```typescript
+interface DirectChannelState extends CommonState {
+  directChannelInfoById: Record<string, DirectChannelInfo>;
+  pendingUserIds: string[];
+}
+
+interface DirectChannelStore {
+  // Actions
+  setDirectChannelInfo(channelId: string, info: DirectChannelInfo): void;
+  updateDirectChannelInfo<K extends keyof DirectChannelInfo>(channelId: string, key: K, value: DirectChannelInfo[K]): void;
+  setDirectChannelUserStatus(channelId: string, status: UserStatus): void;
+  setDirectChannelUserImage(channelId: string, imageUrl: string): void;
+  addPendingUser(userId: string): void;
+  removePendingUser(userId: string): void;
+  refreshDirectChannelInfo(channelId: string, currentUserId: string): void;
+  
+  // Getters
+  getDirectChannelInfo(channelId: string): DirectChannelInfo | null;
+  isDirectChannelLoading(channelId: string): boolean;
+  isPendingUser(userId: string): boolean;
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### MessageStore (`store/messageStore.ts`)
+
+Gère les messages par canal et les fils de discussion.
+
+```typescript
+interface MessageState extends CommonState {
+  messagesByChannel: Record<string, Message[]>;
+  threadMessages: Record<string, Message[]>;
+  pinnedMessages: Record<string, Message[]>;
+  highlightedMessageId: string | null;
+  replyToMessage: Message | null;
+  editingMessageId: string | null;
+  loadingChannelIds: string[];
+  threadLoadingIds: string[];
+}
+
+interface MessageStore {
+  // Actions
+  setLoading(channelId: string, isLoading: boolean): void;
+  setError(channelId: string, error: Error | null): void;
+  setMessages(channelId: string, messages: Message[]): void;
+  addMessage(message: Message): void;
+  updateMessage(message: Message): void;
+  deleteMessage(messageId: string, channelId: string): void;
+  setThreadMessages(rootMessageId: string, messages: Message[]): void;
+  setThreadLoading(rootMessageId: string, isLoading: boolean): void;
+  setPinnedMessages(channelId: string, messages: Message[]): void;
+  addReaction(messageId: string, userId: string, emoji: string): void;
+  removeReaction(messageId: string, userId: string, emoji: string): void;
+  setHighlightedMessage(messageId: string | null): void;
+  setReplyToMessage(message: Message | null): void;
+  setEditingMessage(messageId: string | null): void;
+  
+  // Getters
+  getMessageById(messageId: string): Message | null;
+  getChannelMessages(channelId: string): Message[];
+  getThreadMessages(rootMessageId: string): Message[];
+  getPinnedMessages(channelId: string): Message[];
+  getMessageReactions(messageId: string): MessageReaction[];
+  getReactionsByEmoji(messageId: string): Record<string, MessageReaction[]>;
+  getReactionCounts(messageId: string): ReactionCount[];
+  hasUserReacted(messageId: string, userId: string, emoji: string): boolean;
+  isChannelLoading(channelId: string): boolean;
+  isThreadLoading(rootMessageId: string): boolean;
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### UnreadStore (`store/unreadStore.ts`)
+
+Gère les compteurs de messages non lus.
+
+```typescript
+interface UnreadState extends CommonState {
+  unreadCounts: Record<string, ChannelUnreadCount>;
+  mutedChannels: Set<string>;
+  processedMessageIds: Set<string>;
+  teamUnreadCounts: Record<string, { msg_count: number; mention_count: number }>;
+}
+
+interface UnreadStore {
+  // Actions
+  updateUnreadCount(channelId: string, msgCount: number, mentionCount: number, lastMessageId?: string, lastViewedAt?: number, totalMessageCount?: number): void;
+  incrementUnreadCount(channelId: string, messageIncrement: number, mentionIncrement: number, messageId?: string): void;
+  markAsRead(channelId: string): void;
+  markAllAsRead(teamId: string, channelIds?: string[]): void;
+  setChannelMuted(channelId: string, isMuted: boolean): void;
+  addProcessedMessageId(messageId: string, channelId?: string): void;
+  clearProcessedMessageIds(): void;
+  
+  // Getters
+  getChannelUnreadCount(channelId: string): ChannelUnreadCount;
+  hasUnreadsInChannel(channelId: string): boolean;
+  hasMentionsInChannel(channelId: string): boolean;
+  isChannelMuted(channelId: string): boolean;
+  getTeamUnreadCount(teamId: string, channels: Channel[]): { msg_count: number; mention_count: number };
+  hasUnreadsInTeam(teamId: string, channels: Channel[]): boolean;
+  hasMentionsInTeam(teamId: string, channels: Channel[]): boolean;
+  getTotalUnreadCount(): { msg_count: number; mention_count: number };
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### WebSocketStore (`store/wsStore.ts`)
+
+Gère la connexion WebSocket pour les mises à jour en temps réel.
+
+```typescript
+interface WebSocketState extends CommonState {
+  isConnected: boolean;
+  isConnecting: boolean;
+  url: string | null;
+  reconnectAttempts: number;
+  lastConnectedAt: number | null;
+  lastDisconnectedAt: number | null;
+  hasBeenDisconnected: boolean;
+}
+
+interface WebSocketStore {
+  // Actions
+  connect(url: string, token: string, options?: WebSocketOptions): Promise<void>;
+  disconnect(code?: number, reason?: string): void;
+  reconnect(url?: string, token?: string, options?: WebSocketOptions): Promise<void>;
+  sendMessage(message: WebSocketMessage | string): boolean;
+  addMessageHandler<T = any>(eventType: string, handler: (data: T) => void): () => void;
+  addMessageHandlers<T = any>(handlers: Record<string, (data: T) => void>): () => void;
+  setConnected(isConnected: boolean): void;
+  setConnecting(isConnecting: boolean): void;
+  setUrl(url: string | null): void;
+  setError(error: Error | null): void;
+  resetDisconnectedState(): void;
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### ErrorStore (`store/errorStore.ts`)
+
+Gère les erreurs de manière centralisée dans l'application.
+
+```typescript
+interface ErrorState extends CommonState {
+  errors: AppError[];
+  lastError: AppError | null;
+  hasUnhandledError: boolean;
+  errorsBySource: Record<ErrorSource, AppError[]>;
+  errorsBySeverity: Record<ErrorSeverity, AppError[]>;
+}
+
+interface ErrorStore {
+  // Actions
+  addError(error: Error | ApiError, source?: ErrorSource, severity?: ErrorSeverity, metadata?: Record<string, any>): AppError;
+  handleError(errorId: string): void;
+  handleAllErrors(): void;
+  clearErrors(filter?: ErrorFilter): void;
+  clearAllErrors(): void;
+  clearErrorsBySource(source: ErrorSource): void;
+  
+  // Getters
+  getErrors(filter?: ErrorFilter): AppError[];
+  getErrorsBySource(source: ErrorSource): AppError[];
+  getErrorsBySeverity(severity: ErrorSeverity): AppError[];
+  getLastError(): AppError | null;
+  getUnhandledErrors(): AppError[];
+  hasErrors(filter?: ErrorFilter): boolean;
+  
+  // Reset
+  reset(): void;
+}
+```
+
+#### UserSettingsStore (`store/userSettingsStore.ts`)
+
+Gère les préférences utilisateur.
+
+```typescript
+interface UserSettingsState extends CommonState {
+  favorites: Set<string>;
+  mutedChannels: Set<string>;
+  notifications: NotificationSettings;
+  appearance: AppearanceSettings;
+  privacy: PrivacySettings;
+  advanced: AdvancedSettings;
+}
+
+interface UserSettingsStore {
+  // Favorites
+  toggleFavorite(channelId: string): void;
+  addFavorite(channelId: string): void;
+  removeFavorite(channelId: string): void;
+  getFavorites(): string[];
+  isFavorite(channelId: string): boolean;
+  
+  // Muted channels
+  toggleMuted(channelId: string): void;
+  muteChannel(channelId: string, expirationTime?: number): void;
+  unmuteChannel(channelId: string): void;
+  getMutedChannels(): string[];
+  isChannelMuted(channelId: string): boolean;
+  
+  // Appearance settings
+  setTheme(theme: ThemeOption): void;
+  setAppearanceSetting<K extends keyof AppearanceSettings>(key: K, value: AppearanceSettings[K]): void;
+  getAppearanceSettings(): AppearanceSettings;
+  
+  // Notification settings
+  setNotificationSetting<K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]): void;
+  setChannelNotificationOverride(channelId: string, setting: "desktop" | "mobile" | "email", level: NotificationLevel): void;
+  getNotificationSettings(): NotificationSettings;
+  getChannelNotificationOverride(channelId: string, setting: "desktop" | "mobile" | "email"): NotificationLevel | undefined;
+  
+  // Privacy settings
+  setPrivacySetting<K extends keyof PrivacySettings>(key: K, value: PrivacySettings[K]): void;
+  getPrivacySettings(): PrivacySettings;
+  
+  // Advanced settings
+  setAdvancedSetting<K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]): void;
+  getAdvancedSettings(): AdvancedSettings;
+  
+  // Language
+  setLanguage(langCode: string): void;
+  getLanguage(): string;
+  
+  // Reset
+  resetAppearanceSettings(): void;
+  resetNotificationSettings(): void;
+  resetPrivacySettings(): void;
+  resetAdvancedSettings(): void;
+  resetAllSettings(preservePreferences?: boolean): void;
+  reset(): void;
+}
+```
+
+## 4. Intégration et utilisation
+
+### Point d'entrée central (`src/core/store/index.ts`)
+
+Le fichier `index.ts` du dossier `store` sert de point d'entrée central pour tous les stores et fonctionnalités :
+
+```typescript
+// Imports de tous les stores
+import { useAuthStore } from "./authStore";
+import { useUserStore } from "./userStore";
+// ...
+
+// Réexportation de tout
+export { useAuthStore } from "./authStore";
+export { useUserStore, formatUserName, getUserStatus } from "./userStore";
+// ...
+
+// Fonction pour réinitialiser tous les stores
+export const resetAllStores = () => {
+  // Réinitialisation dans l'ordre pour gérer les dépendances
+  useWsStore.getState().reset();
+  useAuthStore.getState().reset();
+  // ...
+};
+
+// Fonction pour créer un snapshot de l'état actuel
+export const getStoresSnapshot = () => {
+  return {
+    auth: useAuthStore.getState(),
+    user: useUserStore.getState(),
+    // ...
+  };
+};
+```
+
+### Flux de données typique
+
+1. **Composant UI** appelle un hook ou une action de store
+2. **Store** met à jour son état et délègue la logique métier au service approprié
+3. **Service** traite les données et effectue les opérations nécessaires
+4. **API Client** communique avec le serveur si nécessaire
+5. **Store** met à jour son état avec les résultats
+6. **Composant UI** se met à jour avec les nouvelles données
+
+### Optimisations de performance
+
+- **Memoization** : Les getters complexes utilisent `useMemo` ou des calculs mémoïsés dans les services
+- **Subscription sélective** : `subscribeWithSelector` permet de s'abonner uniquement aux parties nécessaires de l'état
+- **Mise à jour immutable efficace** : `immer` permet des mises à jour immutables sans surcoût de performance
+
+### Gestion des erreurs centralisée
+
+Le système d'erreur centralisé permet une gestion cohérente des erreurs :
+
+```typescript
+// Dans un service ou un store
+try {
+  // Code qui peut échouer
+} catch (error) {
+  // Utilisation du handler d'erreur centralisé
+  handleError(error as Error, ErrorSource.API, ErrorSeverity.WARNING, {
+    additionalContext: "some context",
+  });
+  throw error; // Optionnel : propager l'erreur
+}
+```
+
+L'erreur est alors :
+1. Enregistrée dans le ErrorStore
+2. Catégorisée par source et sévérité
+3. Enrichie avec des métadonnées
+4. Propagée via le système d'événements si nécessaire
+
+### Patterns d'utilisation courants
+
+#### Création ou mise à jour d'entité
+
+```typescript
+// Dans un hook ou un composant
+const { setChannel } = useChannelStore();
+
+// Création
+setChannel(newChannel);
+
+// Mise à jour
+updateChannel({ id: channelId, name: "Nouveau nom" });
+```
+
+#### Réaction aux événements
+
+```typescript
+// Abonnement à un événement
+const unsubscribe = onEvent(EventType.MESSAGE_RECEIVED, (payload) => {
+  // Traitement du message reçu
+});
+
+// Nettoyage lors du démontage
+useEffect(() => {
+  return () => unsubscribe();
+}, []);
+```
+
+#### Utilisation de React Query
+
+```typescript
+// Hook spécifique à l'entité
+const { data: channels, isLoading, error } = useChannelsQuery(teamId);
+
+// Mutation pour modification
+const { mutate: createChannel, isLoading: isCreating } = useCreateChannelMutation();
+
+// Appel de la mutation
+createChannel(newChannelData, {
+  onSuccess: (result) => {
+    // Traitement après succès
+  }
+});
+```
+
+## Résumé
+
+L'architecture du module `src/core` suit un pattern modulaire et bien structuré :
+
+- **Client API** : Interface unique pour communiquer avec le serveur Mattermost
+- **Services** : Logique métier encapsulée et réutilisable
+- **Stores** : État global géré avec Zustand et immer
+- **Événements** : Communication entre modules via un système pub/sub
+
+Cette architecture offre plusieurs avantages :
+- Séparation claire des responsabilités
+- Code hautement réutilisable
+- Facilité de maintenance et d'évolution
+- Performance optimisée
+- Gestion cohérente des erreurs
+
+En comprenant cette architecture et ses composants, vous pouvez efficacement étendre ou modifier l'application tout en maintenant sa cohérence globale.
