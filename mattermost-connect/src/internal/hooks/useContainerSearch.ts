@@ -105,9 +105,9 @@ export interface UseSearchResult<T = any> {
  * const filteredItems = filterBySearch(users);
  * ```
  */
-export function useContainerSearch<T = any>(
-  options: SearchOptions<T> = {},
-): UseSearchResult<T> {
+export function useContainerSearch<
+  T extends Record<string, any> = Record<string, any>,
+>(options: SearchOptions<T> = {}): UseSearchResult<T> {
   const {
     initialSearchTerm = "",
     debounceMs = 300,

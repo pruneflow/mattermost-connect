@@ -5,8 +5,7 @@
  */
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { SortingProps } from "../types/componentTypes";
-import { useStableCallback } from "../utils/performanceUtils";
-import { mapSortDirectionToUI } from "../utils";
+import { useStableCallback } from "../utils";
 
 /**
  * Sort direction type
@@ -349,7 +348,7 @@ export function useContainerSorting<T = string, U = any>(
   const sortingProps: SortingProps = useMemo(
     () => ({
       sortField: sortField !== null ? String(sortField) : undefined,
-      sortDirection: mapSortDirectionToUI(sortDirection),
+      sortDirection,
       sortOptions: sortFields.map((field) => ({
         field: String(field),
         label: String(field),
