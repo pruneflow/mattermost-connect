@@ -1,7 +1,7 @@
 // src/core/store/index.ts
 /**
  * Central export point for all stores
- * Provides easy access to all stores and their helpers
+ * Provides easy access to all application stores and their helpers
  */
 
 // Import all stores directly for internal use
@@ -84,6 +84,13 @@ export { emitEvent, onEvent, onEvents } from "../api/eventUtils";
 /**
  * Resets all stores to their initial state
  * Useful for logout or testing
+ *
+ * The order is important to handle dependencies between stores:
+ * 1. WebSocket first to close connections
+ * 2. Auth related stores
+ * 3. Data stores
+ * 4. Settings
+ * 5. Error store last to clean up any errors during reset
  */
 export const resetAllStores = () => {
   try {

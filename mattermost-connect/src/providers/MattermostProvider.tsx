@@ -13,11 +13,16 @@ import React, {
 import { QueryClientProvider } from "@tanstack/react-query";
 import { apiClient } from "../core/api/client";
 import { queryClient } from "../core/api/queryClient";
-import { useWsStore, useAuthStore } from "../core/store";
-import { wsService } from "../core/services/wsService";
-import { useUnreadCounts } from "../hooks";
 import { emitEvent } from "../core/api/eventUtils";
 import { EventType } from "../types";
+
+// Using hooks instead of directly accessing stores
+import {
+  useAuth,
+  useWebSocket,
+  useAuthInitialize,
+  useTeamUnreadCount,
+} from "../hooks";
 
 /**
  * Props for the MattermostProvider component
@@ -64,43 +69,23 @@ function determineMode(
 }
 
 /**
- * Initialization component that handles API client and authentication setup
- * Separated to avoid unnecessary re-renders of the children
+ * API Configuration Initializer
+ * Responsible for configuring the API client
  */
-const MattermostInitializer: React.FC<MattermostProviderProps> = ({
-  serverUrl,
-  proxyUrl,
-  clientId,
-  token,
-  enableWebSocket = true,
-  onInitialized,
-  onAuthError,
-  onWebSocketError,
-}) => {
-  // Get state and actions from stores
-  const { initialize, setError: setAuthError } = useAuthStore();
-  const { connect: connectWs, setError: setWsError } = useWsStore();
-
-  // Use ref for tracking initialization to prevent unnecessary effect triggers
-  const isInitializedRef = useRef(false);
-
-  // Hook that uses React Query - safe to use here as no rendering depends on it
-  const { loadInitialUnreadCounts } = useUnreadCounts();
-
-  // WebSocket connection tracking ref to avoid state-based re-renders
-  const wsConnectionStatusRef = useRef({
-    hadSuccessfulConnection: false,
-    hasDisconnected: false,
-    lastConnectedAt: 0,
-  });
-
+const ApiConfigInitializer: React.FC<{
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  token?: string;
+  onError?: (error: Error) => void;
+}> = ({ serverUrl, proxyUrl, clientId, token, onError }) => {
   // Determine the API mode (direct/proxy)
   const mode = useMemo(
     () => determineMode(serverUrl, proxyUrl, clientId),
     [serverUrl, proxyUrl, clientId],
   );
 
-  // Configure API client
+  // Configure API client on mount or when configuration changes
   useEffect(() => {
     try {
       apiClient.configure({
@@ -111,169 +96,296 @@ const MattermostInitializer: React.FC<MattermostProviderProps> = ({
         clientId,
         onError: (error) => {
           console.error("API client error:", error);
-          if (onAuthError && error.status === 401) {
-            onAuthError(error as Error);
+          if (onError && error.status === 401) {
+            onError(error as Error);
           }
         },
       });
     } catch (error) {
       console.error("Failed to configure API client:", error);
-      if (onAuthError) {
-        onAuthError(error as Error);
+      if (onError) {
+        onError(error as Error);
       }
     }
-  }, [serverUrl, proxyUrl, clientId, token, mode, onAuthError]);
-
-  // Handle WebSocket reconnection - optimized to reduce dependencies
-  const handleWsReconnect = useCallback(() => {
-    if (
-      wsConnectionStatusRef.current.hadSuccessfulConnection &&
-      wsConnectionStatusRef.current.hasDisconnected
-    ) {
-      void loadInitialUnreadCounts();
-      wsConnectionStatusRef.current.hasDisconnected = false;
-
-      // Emit reconnection event
-      emitEvent(EventType.WEBSOCKET_CONNECTED, {
-        timestamp: Date.now(),
-        reconnected: true,
-      });
-    }
-  }, [loadInitialUnreadCounts]);
-
-  // Update WebSocket connection status
-  useEffect(() => {
-    const handleWsConnection = (state: any) => {
-      const isConnected = state.isConnected;
-      if (isConnected) {
-        if (wsConnectionStatusRef.current.hasDisconnected) {
-          handleWsReconnect();
-        }
-
-        wsConnectionStatusRef.current = {
-          hadSuccessfulConnection: true,
-          hasDisconnected: false,
-          lastConnectedAt: Date.now(),
-        };
-      } else if (wsConnectionStatusRef.current.hadSuccessfulConnection) {
-        wsConnectionStatusRef.current.hasDisconnected = true;
-      }
-    };
-
-    // Subscribe to WebSocket connection events
-    return useWsStore.subscribe(handleWsConnection);
-  }, [handleWsReconnect]);
-
-  // Initialize authentication and WebSocket connection
-  useEffect(() => {
-    // Skip if already initialized
-    if (isInitializedRef.current) return;
-
-    const initAuth = async () => {
-      try {
-        // Initialize from stored token or provided token
-        const isAuthenticated = await initialize();
-
-        // Call initialization callback
-        if (onInitialized) {
-          onInitialized(isAuthenticated);
-        }
-
-        // Connect WebSocket if enabled and authenticated
-        if (enableWebSocket && isAuthenticated) {
-          try {
-            // Only connect in direct mode for now
-            if (mode === "direct" && serverUrl) {
-              const wsUrl =
-                serverUrl.replace(
-                  /^http(s)?:\/\//,
-                  window.location.protocol === "https:" ? "wss://" : "ws://",
-                ) + "/api/v4/websocket";
-
-              const authToken = useAuthStore.getState().token;
-              if (authToken) {
-                await connectWs(wsUrl, authToken);
-
-                // Load initial unread counts
-                await loadInitialUnreadCounts();
-              }
-            }
-          } catch (wsError) {
-            console.error("Failed to connect WebSocket:", wsError);
-            setWsError(wsError as Error);
-
-            if (onWebSocketError) {
-              onWebSocketError(wsError as Error);
-            }
-          }
-        } else if (isAuthenticated) {
-          // Even without WebSocket, load unread counts
-          await loadInitialUnreadCounts();
-        }
-
-        // Mark as initialized
-        isInitializedRef.current = true;
-      } catch (authError) {
-        console.error("Failed to initialize authentication:", authError);
-        setAuthError(authError as Error);
-
-        if (onAuthError) {
-          onAuthError(authError as Error);
-        }
-      }
-    };
-
-    // Only initialize with the required configuration
-    if (
-      (mode === "direct" && serverUrl) ||
-      (mode === "proxy" && proxyUrl && clientId)
-    ) {
-      void initAuth();
-    }
-
-    // Cleanup WebSocket connection on unmount
-    return () => {
-      if (wsService.isSocketConnected()) {
-        wsService.disconnect();
-      }
-    };
-  }, [
-    serverUrl,
-    proxyUrl,
-    clientId,
-    token,
-    enableWebSocket,
-    mode,
-    initialize,
-    connectWs,
-    setAuthError,
-    setWsError,
-    onInitialized,
-    onAuthError,
-    onWebSocketError,
-    loadInitialUnreadCounts,
-  ]);
+  }, [serverUrl, proxyUrl, clientId, token, mode, onError]);
 
   // This component doesn't render anything
   return null;
 };
 
 /**
- * Memoized Initializer component to prevent unnecessary re-renders
+ * Auth Initializer
+ * Responsible for initializing authentication
  */
-const MemoizedInitializer = React.memo(MattermostInitializer);
+const AuthInitializer: React.FC<{
+  token?: string;
+  persistAuth?: boolean;
+  onInitialized?: (success: boolean) => void;
+  onError?: (error: Error) => void;
+}> = ({ onInitialized, onError }) => {
+  const { isInitialized, error: authError } = useAuthInitialize();
+  const { isAuthenticated, error } = useAuth();
+
+  // Track initialization status to prevent multiple callbacks
+  const hasCalledInitCallback = useRef(false);
+
+  // Call onInitialized when auth is initialized
+  useEffect(() => {
+    if (isInitialized && !hasCalledInitCallback.current) {
+      hasCalledInitCallback.current = true;
+      if (onInitialized) {
+        onInitialized(isAuthenticated);
+      }
+    }
+  }, [isInitialized, isAuthenticated, onInitialized]);
+
+  // Report auth errors
+  useEffect(() => {
+    const errorToReport = error || authError;
+    if (errorToReport && onError) {
+      onError(errorToReport);
+    }
+  }, [error, authError, onError]);
+
+  // This component doesn't render anything
+  return null;
+};
+
+/**
+ * WebSocket Initializer
+ * Responsible for establishing and maintaining WebSocket connection
+ */
+const WebSocketInitializer: React.FC<{
+  mode: "direct" | "proxy";
+  serverUrl?: string;
+  proxyUrl?: string;
+  clientId?: string;
+  enabled?: boolean;
+  onError?: (error: Error) => void;
+}> = ({ mode, serverUrl, proxyUrl, clientId, enabled = true, onError }) => {
+  const { isAuthenticated, token } = useAuth();
+  const {
+    connect: connectWebSocket,
+    disconnect: disconnectWebSocket,
+    isConnected,
+    error: wsError,
+  } = useWebSocket();
+
+  // WebSocket connection tracking ref to optimize reconnection logic
+  const wsConnectionStatusRef = useRef({
+    hadSuccessfulConnection: false,
+    hasDisconnected: false,
+    lastConnectedAt: 0,
+  });
+
+  // Connect to WebSocket when authenticated and enabled
+  useEffect(() => {
+    // Skip if not enabled or not authenticated
+    if (!enabled || !isAuthenticated || !token) return;
+
+    // Skip if missing required URLs for the mode
+    if (
+      (mode === "direct" && !serverUrl) ||
+      (mode === "proxy" && (!proxyUrl || !clientId))
+    ) {
+      return;
+    }
+
+    const initWebSocket = async () => {
+      try {
+        let wsUrl;
+
+        if (mode === "direct" && serverUrl) {
+          // Direct mode WebSocket URL
+          wsUrl =
+            serverUrl.replace(
+              /^http(s)?:\/\//,
+              window.location.protocol === "https:" ? "wss://" : "ws://",
+            ) + "/api/v4/websocket";
+        } else if (mode === "proxy" && proxyUrl) {
+          // Proxy mode WebSocket URL
+          wsUrl =
+            proxyUrl.replace(
+              /^http(s)?:\/\//,
+              window.location.protocol === "https:" ? "wss://" : "ws://",
+            ) + "/ws"; // Assuming proxy WebSocket endpoint
+        }
+
+        if (wsUrl) {
+          await connectWebSocket(wsUrl, token);
+        }
+      } catch (error) {
+        console.error("Failed to connect WebSocket:", error);
+        if (onError) {
+          onError(error as Error);
+        }
+      }
+    };
+
+    void initWebSocket();
+
+    // Cleanup WebSocket connection on unmount
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [
+    mode,
+    serverUrl,
+    proxyUrl,
+    clientId,
+    enabled,
+    isAuthenticated,
+    token,
+    connectWebSocket,
+    disconnectWebSocket,
+    onError,
+  ]);
+
+  // Update connection tracking status
+  useEffect(() => {
+    if (isConnected) {
+      // Determine if this is a reconnection
+      const isReconnection =
+        wsConnectionStatusRef.current.hadSuccessfulConnection &&
+        wsConnectionStatusRef.current.hasDisconnected;
+
+      // Emit connected event with reconnection flag if appropriate
+      emitEvent(EventType.WEBSOCKET_CONNECTED, {
+        timestamp: Date.now(),
+        reconnected: isReconnection,
+      });
+
+      // Update connection status
+      wsConnectionStatusRef.current = {
+        hadSuccessfulConnection: true,
+        hasDisconnected: false,
+        lastConnectedAt: Date.now(),
+      };
+    } else if (wsConnectionStatusRef.current.hadSuccessfulConnection) {
+      wsConnectionStatusRef.current.hasDisconnected = true;
+
+      // Optionally emit disconnected event
+      emitEvent(EventType.WEBSOCKET_DISCONNECTED, {
+        timestamp: Date.now(),
+        reason: "Connection lost",
+      });
+    }
+  }, [isConnected]);
+
+  // Report WebSocket errors
+  useEffect(() => {
+    if (wsError && onError) {
+      onError(wsError);
+    }
+  }, [wsError, onError]);
+
+  // This component doesn't render anything
+  return null;
+};
+
+/**
+ * Data Initializer
+ * Responsible for loading initial data like unread counts
+ */
+const DataInitializer: React.FC<{
+  enabled?: boolean;
+}> = ({ enabled = true }) => {
+  const { isAuthenticated } = useAuth();
+  const { isConnected } = useWebSocket();
+
+  const { refresh: refreshTeamUnreads } = useTeamUnreadCount("");
+
+  // Load initial unread counts
+  const loadInitialUnreadCounts = useCallback(async () => {
+    try {
+      // Refresh team unread counts which should update all unread data
+      if (refreshTeamUnreads) {
+        await refreshTeamUnreads();
+        return true;
+      }
+
+      console.warn("Team unread refresh method not available");
+      return false;
+    } catch (error) {
+      console.error("Failed to load initial unread counts:", error);
+      return false;
+    }
+  }, [refreshTeamUnreads]);
+
+  useEffect(() => {
+    if (!enabled || !isAuthenticated) return;
+
+    void loadInitialUnreadCounts();
+  }, [enabled, isAuthenticated, loadInitialUnreadCounts]);
+
+  // Handle WebSocket reconnection
+  useEffect(() => {
+    if (isConnected && isAuthenticated) {
+      // When WebSocket reconnects, refresh data
+      void loadInitialUnreadCounts();
+    }
+  }, [isConnected, isAuthenticated, loadInitialUnreadCounts]);
+
+  // This component doesn't render anything
+  return null;
+};
+
+// Memoize initializers to prevent unnecessary re-renders
+const MemoizedApiConfigInitializer = React.memo(ApiConfigInitializer);
+const MemoizedAuthInitializer = React.memo(AuthInitializer);
+const MemoizedWebSocketInitializer = React.memo(WebSocketInitializer);
+const MemoizedDataInitializer = React.memo(DataInitializer);
 
 /**
  * Main provider component for MattermostConnect
  * Initializes all required services and provides context to child components
  */
-export const MattermostProvider: React.FC<MattermostProviderProps> = (
-  props,
-) => {
+export const MattermostProvider: React.FC<MattermostProviderProps> = ({
+  children,
+  serverUrl,
+  proxyUrl,
+  clientId,
+  token,
+  enableWebSocket = true,
+  persistAuth = true,
+  onInitialized,
+  onAuthError,
+  onWebSocketError,
+}) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <MemoizedInitializer {...props} />
-      {props.children}
+      {/* API Configuration Initializer */}
+      <MemoizedApiConfigInitializer
+        serverUrl={serverUrl}
+        proxyUrl={proxyUrl}
+        clientId={clientId}
+        token={token}
+        onError={onAuthError}
+      />
+
+      {/* Auth Initializer */}
+      <MemoizedAuthInitializer
+        token={token}
+        persistAuth={persistAuth}
+        onInitialized={onInitialized}
+        onError={onAuthError}
+      />
+
+      {/* WebSocket Initializer - only when enabled */}
+      <MemoizedWebSocketInitializer
+        mode={determineMode(serverUrl, proxyUrl, clientId)}
+        serverUrl={serverUrl}
+        proxyUrl={proxyUrl}
+        clientId={clientId}
+        enabled={enableWebSocket}
+        onError={onWebSocketError}
+      />
+
+      {/* Data Initializer */}
+      <MemoizedDataInitializer enabled={true} />
+
+      {/* Render children directly */}
+      {children}
     </QueryClientProvider>
   );
 };

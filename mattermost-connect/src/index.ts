@@ -40,18 +40,6 @@ export {
   useUserProfile,
 } from "./hooks/useUsers";
 
-// Export store types for advanced usage
-export type { User } from "./core/services/authService";
-export type { Team } from "./core/store/teamStore";
-export type { Channel, ChannelGroupType } from "./core/store/channelStore";
-export type {
-  Message,
-  MessageAttachment,
-  MessageReaction,
-} from "./core/store/messageStore";
-export type { UserStatus } from "./core/store/userStore";
-export { WebSocketEventType } from "./core/services/wsService";
-
 // Export utility functions
 export * from "./utils/mattermostUtils";
 
@@ -63,4 +51,4 @@ export { queryClient } from "./core/api/queryClient";
 export { QUERY_KEYS, invalidateQueries } from "./core/api/queryClient";
 
 // Export all components
-export * from "./components"; // Assurez-vous que cette ligne existe
+export * from "./components";
