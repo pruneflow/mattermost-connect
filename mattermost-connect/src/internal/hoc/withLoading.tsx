@@ -5,97 +5,13 @@
  * Provides a standardized way to handle loading states in components
  */
 import React, { ComponentType, useMemo } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
 import {
   useContainerLoadingState,
   LoadingStateOptions,
   UseLoadingStateResult,
 } from "../hooks/useContainerLoadingState";
 import { ErrorStateProps, LoadingProps } from "../types/componentTypes";
-
-/**
- * Default loading component that displays a centered spinner
- */
-const DefaultLoadingComponent: React.FC<LoadingProps> = ({
-  show = true,
-  text = "Loading...",
-}) => {
-  if (!show) return null;
-
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        p: 3,
-        width: "100%",
-        height: "100%",
-        minHeight: 200,
-      }}
-    >
-      <CircularProgress size={40} color="primary" />
-      {text && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          {text}
-        </Typography>
-      )}
-    </Box>
-  );
-};
-
-/**
- * Default error component that displays an error message
- */
-const DefaultErrorComponent: React.FC<ErrorStateProps> = ({
-  message,
-  showRetry = true,
-  retryText = "Retry",
-  onRetry,
-}) => {
-  if (!message) return null;
-
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        p: 3,
-        width: "100%",
-        bgcolor: "error.light",
-        color: "error.contrastText",
-        borderRadius: 1,
-        minHeight: 200,
-      }}
-    >
-      <Typography variant="body1" textAlign="center" gutterBottom>
-        {message}
-      </Typography>
-
-      {showRetry && onRetry && (
-        <Box sx={{ mt: 2 }}>
-          <button
-            onClick={onRetry}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "4px",
-              border: "none",
-              backgroundColor: "#fff",
-              color: "#f44336",
-              cursor: "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            {retryText}
-          </button>
-        </Box>
-      )}
-    </Box>
-  );
-};
+import { ErrorState, LoadingSpinner } from "../components/common";
 
 /**
  * Options for withLoading HOC
@@ -135,8 +51,8 @@ export function withLoading<P extends object>(
   Omit<P, keyof WithLoadingInjectedProps> & Partial<WithLoadingInjectedProps>
 > {
   const {
-    LoadingComponent = DefaultLoadingComponent,
-    ErrorComponent = DefaultErrorComponent,
+    LoadingComponent = LoadingSpinner,
+    ErrorComponent = ErrorState,
     loadingStatePropName = "loadingState",
     loadingActionsPropName = "loadingActions",
     showLoadingComponent = true,

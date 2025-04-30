@@ -11,95 +11,7 @@ import {
   UseSortingResult,
   SortDirection,
 } from "../hooks/useContainerSorting";
-import {
-  Box,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  IconButton,
-  Tooltip,
-  Stack,
-  SelectChangeEvent,
-} from "@mui/material";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-
-/**
- * Default sorting component that displays sort controls
- */
-export const DefaultSortingComponent: React.FC<{
-  sortField?: string;
-  sortDirection?: SortDirection;
-  sortOptions: Array<{ field: string; label: string }>;
-  onSortChange: (field: string, direction?: SortDirection) => void;
-  onSortFieldChange: (field: string) => void;
-  onSortDirectionChange: () => void;
-  disabled?: boolean;
-}> = ({
-  sortField,
-  sortDirection,
-  sortOptions,
-  onSortChange,
-  onSortFieldChange,
-  onSortDirectionChange,
-  disabled = false,
-}) => {
-  // If no sort options or just one, don't render
-  if (!sortOptions.length || sortOptions.length === 1) {
-    return null;
-  }
-
-  // Handle field change
-  const handleFieldChange = (event: SelectChangeEvent<string>) => {
-    const newField = event.target.value;
-    onSortFieldChange(newField);
-  };
-
-  return (
-    <Box sx={{ mb: 2, display: "flex", alignItems: "center" }}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <FormControl size="small" disabled={disabled} sx={{ minWidth: 150 }}>
-          <InputLabel id="sort-field-label">Sort by</InputLabel>
-          <Select
-            labelId="sort-field-label"
-            id="sort-field-select"
-            value={sortField || ""}
-            label="Sort by"
-            onChange={handleFieldChange}
-          >
-            {sortOptions.map((option) => (
-              <MenuItem key={option.field} value={option.field}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {sortField && (
-          <Tooltip
-            title={`Sort ${sortDirection === "asc" ? "Descending" : "Ascending"}`}
-          >
-            <IconButton
-              onClick={onSortDirectionChange}
-              disabled={disabled}
-              color="primary"
-              size="small"
-              sx={{ ml: 1 }}
-            >
-              {sortDirection === "asc" ? (
-                <ArrowUpwardIcon fontSize="small" />
-              ) : (
-                <ArrowDownwardIcon fontSize="small" />
-              )}
-            </IconButton>
-          </Tooltip>
-        )}
-      </Stack>
-    </Box>
-  );
-};
-
+import { SortingControls } from "../components/common";
 /**
  * Options for withSorting HOC
  */
@@ -192,7 +104,7 @@ export function withSorting<P extends object, T = string, U = any>(
   options: WithSortingOptions<T, U> = {},
 ): React.FC<SortableComponentProps<P, T, U>> {
   const {
-    SortingComponent = DefaultSortingComponent,
+    SortingComponent = SortingControls,
     position = "top",
     sortingStatePropName = "sortingState",
     sortingActionsPropName = "sortingActions",

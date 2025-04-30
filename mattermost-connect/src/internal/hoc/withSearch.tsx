@@ -5,20 +5,13 @@
  * Provides a standardized way to handle search in list components
  */
 import React, { ComponentType, useMemo } from "react";
+import { SearchInput } from "../components/common";
 import {
   useContainerSearch,
   SearchOptions,
   UseSearchResult,
 } from "../hooks/useContainerSearch";
-import {
-  Box,
-  TextField,
-  InputAdornment,
-  IconButton,
-  Tooltip,
-} from "@mui/material";
-import SearchIcon from "@mui/icons-material/Search";
-import ClearIcon from "@mui/icons-material/Clear";
+import { Box } from "@mui/material";
 
 /**
  * Default search component that displays a search input field
@@ -34,61 +27,20 @@ export const DefaultSearchComponent: React.FC<{
   variant?: "outlined" | "filled" | "standard";
   size?: "small" | "medium";
   fullWidth?: boolean;
-}> = ({
-  searchTerm,
-  onSearchChange,
-  onSearchClear,
-  placeholder = "Search...",
-  disabled = false,
-  isSearching = false,
-  minSearchLength = 2,
-  variant = "outlined",
-  size = "small",
-  fullWidth = true,
-}) => {
-  return (
-    <Box sx={{ mb: 2, width: fullWidth ? "100%" : "auto" }}>
-      <TextField
-        value={searchTerm}
-        onChange={(e) => onSearchChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        variant={variant}
-        size={size}
-        fullWidth={fullWidth}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon color="action" />
-            </InputAdornment>
-          ),
-          endAdornment: searchTerm ? (
-            <InputAdornment position="end">
-              <Tooltip title="Clear search">
-                <IconButton
-                  size="small"
-                  onClick={onSearchClear}
-                  disabled={disabled || isSearching}
-                  edge="end"
-                  aria-label="clear search"
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </InputAdornment>
-          ) : null,
-        }}
-        helperText={
-          minSearchLength > 1 &&
-          searchTerm.length > 0 &&
-          searchTerm.length < minSearchLength
-            ? `Enter at least ${minSearchLength} characters to search`
-            : undefined
-        }
-      />
-    </Box>
-  );
-};
+}> = (props) => (
+  <Box sx={{ mb: 2, width: props.fullWidth ? "100%" : "auto" }}>
+    <SearchInput
+      value={props.searchTerm}
+      onSearch={props.onSearchChange}
+      placeholder={props.placeholder}
+      disabled={props.disabled}
+      showFilter={false}
+      debounceMs={300}
+      fullWidth={props.fullWidth}
+      size={props.size as any}
+    />
+  </Box>
+);
 
 /**
  * Options for withSearch HOC

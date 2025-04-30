@@ -5,7 +5,7 @@
  * Provides a standardized way to handle errors in components
  */
 import React, { Component, ComponentType, ErrorInfo, ReactNode } from "react";
-import { Box, Typography, Button } from "@mui/material";
+import { ErrorState } from "../components/common";
 
 /**
  * Error boundary props including error display customization
@@ -47,67 +47,14 @@ const DefaultErrorComponent: React.FC<{
   allowRetry?: boolean;
   retryText?: string;
   onRetry: () => void;
-}> = ({
-  error,
-  title = "Something went wrong",
-  message,
-  allowRetry = true,
-  retryText = "Retry",
-  onRetry,
-}) => (
-  <Box
-    sx={{
-      p: 3,
-      borderRadius: 1,
-      bgcolor: "error.light",
-      color: "error.contrastText",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      textAlign: "center",
-      gap: 2,
-      minHeight: 200,
-      width: "100%",
-    }}
-  >
-    <Typography variant="h6" component="h3">
-      {title}
-    </Typography>
-
-    <Typography variant="body2">
-      {message || error.message || "An unexpected error occurred"}
-    </Typography>
-
-    {process.env.NODE_ENV === "development" && (
-      <Typography
-        variant="caption"
-        component="pre"
-        sx={{
-          mt: 2,
-          p: 2,
-          bgcolor: "rgba(0,0,0,0.1)",
-          borderRadius: 1,
-          overflowX: "auto",
-          maxWidth: "100%",
-          textAlign: "left",
-        }}
-      >
-        {error.stack}
-      </Typography>
-    )}
-
-    {allowRetry && (
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={onRetry}
-        sx={{ mt: 2 }}
-      >
-        {retryText}
-      </Button>
-    )}
-  </Box>
+}> = (props) => (
+  <ErrorState
+    title={props.title || "Something went wrong"}
+    message={props.message || props.error.message}
+    error={props.error}
+    retryText={props.retryText}
+    onRetry={props.allowRetry ? props.onRetry : undefined}
+  />
 );
 
 /**

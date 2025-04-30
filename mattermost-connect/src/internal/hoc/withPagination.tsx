@@ -10,90 +10,7 @@ import {
   PaginationOptions,
   UsePaginationResult,
 } from "../hooks/useContainerPagination";
-import {
-  Pagination,
-  Box,
-  FormControl,
-  Select,
-  MenuItem,
-  InputLabel,
-} from "@mui/material";
-
-/**
- * Default pagination component that displays pagination controls
- */
-export const DefaultPaginationComponent: React.FC<{
-  page: number;
-  totalPages: number;
-  perPage: number;
-  perPageOptions: number[];
-  onPageChange: (page: number) => void;
-  onPerPageChange: (perPage: number) => void;
-  disabled?: boolean;
-  showPerPageSelect?: boolean;
-}> = ({
-  page,
-  totalPages,
-  perPage,
-  perPageOptions,
-  onPageChange,
-  onPerPageChange,
-  disabled = false,
-  showPerPageSelect = true,
-}) => {
-  if (totalPages <= 1 && !showPerPageSelect) return null;
-
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        py: 2,
-        px: 1,
-      }}
-    >
-      {/* Pagination controls */}
-      {totalPages > 1 && (
-        <Pagination
-          page={page}
-          count={totalPages}
-          disabled={disabled}
-          color="primary"
-          size="medium"
-          showFirstButton
-          showLastButton
-          onChange={(_, value) => onPageChange(value)}
-          sx={{ flexGrow: 1, display: "flex", justifyContent: "center" }}
-        />
-      )}
-
-      {/* Items per page selector */}
-      {showPerPageSelect && (
-        <FormControl
-          sx={{ minWidth: 120, ml: totalPages > 1 ? 2 : 0 }}
-          size="small"
-        >
-          <InputLabel id="items-per-page-label">Per Page</InputLabel>
-          <Select
-            labelId="items-per-page-label"
-            value={perPage}
-            label="Per Page"
-            disabled={disabled}
-            onChange={(e) => onPerPageChange(Number(e.target.value))}
-          >
-            {perPageOptions.map((option) => (
-              <MenuItem key={option} value={option}>
-                {option}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      )}
-    </Box>
-  );
-};
+import { PaginationControls } from "../components/common";
 
 /**
  * Options for withPagination HOC
@@ -176,7 +93,7 @@ export function withPagination<P extends object>(
   options: WithPaginationOptions = {},
 ): React.FC<PaginatedComponentProps<P>> {
   const {
-    PaginationComponent = DefaultPaginationComponent,
+    PaginationComponent = PaginationControls,
     position = "bottom",
     showPerPageSelect = true,
     paginationStatePropName = "paginationState",
