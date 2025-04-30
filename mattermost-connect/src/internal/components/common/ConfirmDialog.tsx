@@ -1,80 +1,83 @@
 // src/internal/components/common/ConfirmDialog.tsx
 /**
- * A reusable confirmation dialog component
+ * Confirm Dialog Component
+ * A standardized confirmation dialog that can be used directly in components
+ * Utilizes the DialogRenderer for consistent styling and behavior
  */
 import React from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-} from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
+import DialogRenderer from "./DialogRenderer";
 
 export interface ConfirmDialogProps extends BaseComponentProps {
   /** Whether the dialog is open */
   open: boolean;
-  /** Dialog title */
+  /** Title for the dialog */
   title: string;
-  /** Dialog message */
+  /** Message content */
   message: React.ReactNode;
-  /** Confirm button text */
+  /** Text for the confirm button */
   confirmText?: string;
-  /** Cancel button text */
+  /** Text for the cancel button */
   cancelText?: string;
-  /** Whether the confirm action is destructive */
+  /** Whether the confirmation action is destructive (will style accordingly) */
   isDestructive?: boolean;
-  /** Callback when confirm button is clicked */
-  onConfirm: () => void;
-  /** Callback when cancel button is clicked */
+  /** Whether the dialog is in a loading state */
+  isLoading?: boolean;
+  /** Whether to prevent closing on backdrop click */
+  preventBackdropClose?: boolean;
+  /** Callback when confirm is clicked */
+  onConfirm: () => void | Promise<void>;
+  /** Callback when cancel is clicked or dialog is closed */
   onCancel: () => void;
+  /** Maximum width of the dialog */
+  maxWidth?: "xs" | "sm" | "md" | "lg" | "xl" | false;
 }
 
-const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
+/**
+ * A standardized confirmation dialog component
+ *
+ * Use this component when you need to directly include a confirmation dialog
+ * in your component rather than using the useDialog hook.
+ */
+export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   open,
   title,
   message,
   confirmText = "Confirm",
   cancelText = "Cancel",
   isDestructive = false,
+  isLoading = false,
+  preventBackdropClose = false,
   onConfirm,
   onCancel,
+  maxWidth = "sm",
   className,
   sx,
   id,
 }) => {
+  // Generate a stable dialog ID if none is provided
+  const dialogId =
+    id || `confirm-dialog-${title.toLowerCase().replace(/\s+/g, "-")}`;
+
   return (
-    <Dialog
+    <DialogRenderer
+      id={dialogId}
       open={open}
+      title={title}
+      message={message}
+      confirmText={confirmText}
+      cancelText={cancelText}
+      isDestructive={isDestructive}
+      isLoading={isLoading}
+      preventBackdropClose={preventBackdropClose || isLoading}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
       onClose={onCancel}
-      aria-labelledby="confirm-dialog-title"
-      aria-describedby="confirm-dialog-description"
+      maxWidth={maxWidth}
+      variant="confirm"
       className={className}
       sx={sx}
-      id={id}
-    >
-      <DialogTitle id="confirm-dialog-title">{title}</DialogTitle>
-      <DialogContent>
-        <DialogContentText id="confirm-dialog-description">
-          {message}
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} color="primary">
-          {cancelText}
-        </Button>
-        <Button
-          onClick={onConfirm}
-          color={isDestructive ? "error" : "primary"}
-          variant="contained"
-          autoFocus
-        >
-          {confirmText}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    />
   );
 };
 

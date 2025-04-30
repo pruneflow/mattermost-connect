@@ -20,3 +20,6 @@ export { default as TypingIndicator } from "./TypingIndicator";
 export { default as TimeAgo } from "./TimeAgo";
 export { default as RelativeTime } from "./RelativeTime";
 export { default as UserStatus } from "./UserStatus";
+export { default as AlertDialog } from "./AlertDialog";
+export { default as FormDialog } from "./FormDialog";
+export { default as DialogRenderer } from "./DialogRenderer";
