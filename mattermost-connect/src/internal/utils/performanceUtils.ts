@@ -1,150 +1,83 @@
 // src/internal/utils/performanceUtils.ts
 /**
- * Performance optimization utilities for containers
+ * Performance utilities for components
+ * Provides optimization helpers to prevent unnecessary rerenders and improve UX
  */
-import React, {
+import {
   useCallback,
-  useMemo,
+  useEffect,
   useRef,
   useState,
-  useEffect,
+  DependencyList,
+  useMemo,
 } from "react";
 import { debounce, throttle } from "lodash-es";
+import useDeepCompareEffect from "use-deep-compare-effect";
 
-// Define basic interfaces for debounced and throttled functions
-interface CancellableFunction {
-  cancel(): void;
-  flush(): void;
-}
-
-// Custom type definitions for lodash functions to avoid dependency on @types/lodash
-interface DebouncedFunction<T extends (...args: any[]) => any>
-  extends CancellableFunction {
-  (...args: Parameters<T>): ReturnType<T> | undefined;
-}
-
-interface ThrottledFunction<T extends (...args: any[]) => any>
-  extends CancellableFunction {
-  (...args: Parameters<T>): ReturnType<T>;
+/**
+ * Options for delayed loading hook
+ */
+export interface DelayedLoadingOptions {
+  /** Delay before showing loading state (ms) */
+  delay?: number;
+  /** Minimum duration to show loading state (ms) */
+  minDuration?: number;
 }
 
 /**
- * Creates a stable callback that keeps the same reference
+ * Creates a stable callback that doesn't change unless dependencies change
+ *
+ * @param callback - Function to stabilize
+ * @param deps - Dependencies to watch for changes
+ * @returns Stable callback function
  */
 export function useStableCallback<T extends (...args: any[]) => any>(
   callback: T,
-  deps: React.DependencyList,
+  deps: DependencyList = [],
 ): T {
-  const callbackRef = useRef<T>(callback);
-
-  useEffect(() => {
-    callbackRef.current = callback;
-  }, [callback, ...deps]);
-
-  return useCallback(
-    ((...args: Parameters<T>) => callbackRef.current(...args)) as T,
-    [],
-  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useCallback(callback, deps);
 }
 
 /**
- * Creates a debounced version of a function
+ * Creates a debounced version of a callback function
+ *
+ * @param callback - Function to debounce
+ * @param wait - Debounce wait time in milliseconds
+ * @param deps - Dependencies to watch for changes
+ * @returns Debounced callback function
  */
 export function useDebouncedCallback<T extends (...args: any[]) => any>(
-  func: T,
-  wait = 300,
-  options = {},
-): DebouncedFunction<T> {
-  const debouncedFunc = useRef(
-    debounce(func, wait, options) as unknown as DebouncedFunction<T>,
-  );
-
-  useEffect(() => {
-    const newDebouncedFunc = debounce(
-      func,
-      wait,
-      options,
-    ) as unknown as DebouncedFunction<T>;
-    debouncedFunc.current = newDebouncedFunc;
-
-    return () => {
-      debouncedFunc.current.cancel();
-    };
-  }, [func, wait]);
-
-  return debouncedFunc.current;
+  callback: T,
+  wait: number = 300,
+  deps: DependencyList = [],
+): T {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useCallback(debounce(callback, wait), deps) as unknown as T;
 }
 
 /**
- * Creates a throttled version of a function
+ * Creates a throttled version of a callback function
+ *
+ * @param callback - Function to throttle
+ * @param limit - Throttle limit in milliseconds
+ * @param deps - Dependencies to watch for changes
+ * @returns Throttled callback function
  */
 export function useThrottledCallback<T extends (...args: any[]) => any>(
-  func: T,
-  wait = 300,
-  options = {},
-): ThrottledFunction<T> {
-  const throttledFunc = useRef(
-    throttle(func, wait, options) as unknown as ThrottledFunction<T>,
-  );
-
-  useEffect(() => {
-    const newThrottledFunc = throttle(
-      func,
-      wait,
-      options,
-    ) as unknown as ThrottledFunction<T>;
-    throttledFunc.current = newThrottledFunc;
-
-    return () => {
-      throttledFunc.current.cancel();
-    };
-  }, [func, wait]);
-
-  return throttledFunc.current;
-}
-
-/**
- * Creates a memoized object by deeply comparing dependencies
- */
-export function useDeepMemo<T>(
-  factory: () => T,
-  deps: React.DependencyList,
+  callback: T,
+  limit: number = 300,
+  deps: DependencyList = [],
 ): T {
-  const ref = useRef<{ deps: React.DependencyList; value: T }>({
-    deps: [],
-    value: {} as T,
-  });
-
-  const depsChanged = !deps.every((dep, i) => {
-    try {
-      return JSON.stringify(dep) === JSON.stringify(ref.current.deps[i]);
-    } catch (e) {
-      return dep === ref.current.deps[i];
-    }
-  });
-
-  if (depsChanged || ref.current.deps.length !== deps.length) {
-    ref.current = {
-      deps,
-      value: factory(),
-    };
-  }
-
-  return ref.current.value;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useCallback(throttle(callback, limit), deps) as unknown as T;
 }
 
 /**
- * Creates a stable handler function for component events
- */
-export function useEventHandler<
-  E extends React.SyntheticEvent<any>,
-  T extends (event: E, ...args: any[]) => void,
->(handler: T, deps: React.DependencyList): T {
-  return useStableCallback(handler, deps);
-}
-
-/**
- * Tracks previous value of a variable across renders
+ * Provides access to previous value of a variable
+ *
+ * @param value - Current value
+ * @returns The previous value
  */
 export function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T>();
@@ -157,89 +90,156 @@ export function usePrevious<T>(value: T): T | undefined {
 }
 
 /**
- * Creates an optimized state that only updates when value actually changes
+ * Creates a deeply memoized value that only changes if deep contents change
+ *
+ * @param value - Value to memoize
+ * @param deps - Dependencies to watch for changes
+ * @returns Memoized value
+ */
+export function useDeepMemo<T>(value: T, deps: DependencyList): T {
+  const ref = useRef<T>(value);
+
+  useDeepCompareEffect(() => {
+    ref.current = value;
+  }, [value, ...deps]);
+
+  return ref.current;
+}
+
+/**
+ * Creates an optimized state that only updates when the value actually changes
+ *
+ * @param initialValue - Initial state value
+ * @returns [value, setValue] tuple like React.useState
  */
 export function useOptimizedState<T>(initialValue: T): [T, (value: T) => void] {
   const [state, setState] = useState<T>(initialValue);
-  const prevValueRef = useRef<T>(initialValue);
 
-  const setOptimizedState = useCallback((newValue: T) => {
-    try {
-      if (JSON.stringify(newValue) !== JSON.stringify(prevValueRef.current)) {
-        prevValueRef.current = newValue;
-        setState(newValue);
+  const setOptimizedState = useCallback((value: T) => {
+    setState((prevValue) => {
+      // Simple equality check for primitives
+      if (prevValue === value) {
+        return prevValue;
       }
-    } catch (e) {
-      prevValueRef.current = newValue;
-      setState(newValue);
-    }
+
+      // Deep equality check for objects and arrays
+      if (
+        typeof prevValue === "object" &&
+        prevValue !== null &&
+        typeof value === "object" &&
+        value !== null
+      ) {
+        const prevKeys = Object.keys(prevValue);
+        const nextKeys = Object.keys(value);
+
+        if (
+          prevKeys.length === nextKeys.length &&
+          prevKeys.every(
+            (key) =>
+              // @ts-ignore - dynamic keys
+              prevValue[key] === value[key],
+          )
+        ) {
+          return prevValue;
+        }
+      }
+
+      return value;
+    });
   }, []);
 
   return [state, setOptimizedState];
 }
 
 /**
- * Memoizes UI props to prevent unnecessary re-renders
+ * Delays showing loading state to prevent flickering for fast operations
+ *
+ * @param isLoading - Current loading state
+ * @param options - Delay and minimum duration options
+ * @returns Delayed loading state
  */
-export function useMemoizedProps<T extends Record<string, any>>(
-  propsFactory: () => T,
-  deps: React.DependencyList,
-): T {
-  return useMemo(propsFactory, deps);
-}
-
-/**
- * Tracks render count and time for performance debugging
- */
-export function useRenderTracker(componentName: string): void {
-  if (process.env.NODE_ENV !== "development") {
-    return;
-  }
-
-  const renderCount = useRef(0);
-  const lastRenderTime = useRef(performance.now());
-
-  useEffect(() => {
-    const newTime = performance.now();
-    const timeSinceLastRender = newTime - lastRenderTime.current;
-    renderCount.current += 1;
-
-    console.log(
-      `%c[${componentName}] render #${renderCount.current} (${timeSinceLastRender.toFixed(2)}ms)`,
-      "color: #6495ED",
-    );
-
-    lastRenderTime.current = newTime;
-  });
-}
-
-/**
- * Delays the loading state to prevent flicker for fast operations
- */
-export function useDelayedLoading(isLoading: boolean, delayMs = 300): boolean {
+export function useDelayedLoading(
+  isLoading: boolean,
+  options: DelayedLoadingOptions = {},
+): boolean {
+  const { delay = 300, minDuration = 500 } = options;
   const [delayedLoading, setDelayedLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isLoading) {
-      timerRef.current = setTimeout(() => {
-        setDelayedLoading(true);
-      }, delayMs);
-    } else {
+      // Clear any existing delay timer
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      setDelayedLoading(false);
+
+      // Set a timer to show loading after delay
+      timerRef.current = setTimeout(() => {
+        setDelayedLoading(true);
+        loadingStartRef.current = Date.now();
+      }, delay);
+    } else {
+      // If loading stops
+      if (delayedLoading && loadingStartRef.current) {
+        const timeElapsed = Date.now() - loadingStartRef.current;
+
+        // If hasn't shown for minimum duration, keep showing for a bit longer
+        if (timeElapsed < minDuration) {
+          timerRef.current = setTimeout(() => {
+            setDelayedLoading(false);
+            loadingStartRef.current = null;
+          }, minDuration - timeElapsed);
+        } else {
+          // Has already shown long enough, hide immediately
+          setDelayedLoading(false);
+          loadingStartRef.current = null;
+        }
+      }
+
+      // Cancel any pending delay timer if loading stopped before it triggered
+      if (!delayedLoading && timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     }
 
+    // Clean up timers
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
-        timerRef.current = null;
       }
     };
-  }, [isLoading, delayMs]);
+  }, [isLoading, delayedLoading, delay, minDuration]);
 
   return delayedLoading;
+}
+
+/**
+ * Memoizes complex props to prevent rerenders in child components
+ *
+ * @param props - Props object to memoize
+ * @returns Memoized props object
+ */
+export function useMemoizedProps<T extends Record<string, any>>(props: T): T {
+  return useMemo(() => props, Object.values(props));
+}
+
+/**
+ * Tracks renders in development mode for debugging
+ *
+ * @param componentName - Name of the component to track
+ */
+export function useRenderTracker(componentName: string): void {
+  const renderCount = useRef(0);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      renderCount.current += 1;
+      console.log(
+        `[RENDER] ${componentName} rendered ${renderCount.current} times`,
+      );
+    }
+  });
 }

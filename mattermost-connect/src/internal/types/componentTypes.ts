@@ -1,253 +1,316 @@
 // src/internal/types/componentTypes.ts
 /**
- * Common type definitions for UI components
- * Provides standardized prop interfaces and variants for all components
+ * Common component types for the internal components library
+ * Defines standardized props interfaces for all container components
  */
-import { Theme } from "@mui/material/styles";
-
-// Use a more compatible type definition for SxProps
-type SxProps = object | ((theme: Theme) => object);
 
 /**
- * Base component props interface
- * Extended by all component props to ensure consistent styling and identification
+ * Base component props for all components
  */
 export interface BaseComponentProps {
-  /** Optional CSS class name */
+  /** CSS class name */
   className?: string;
-  /** MUI system props for advanced styling */
-  sx?: SxProps;
-  /** Element ID for testing or accessibility */
+  /** Material-UI sx prop for custom styling */
+  sx?: any;
+  /** Component ID */
   id?: string;
 }
 
 /**
- * Display variants for list-based components
+ * Display variant options for components
  */
-export type DisplayVariant = "list" | "grid" | "sidebar" | "tabs" | "cards";
+export type DisplayVariant = "list" | "grid" | "sidebar" | "tabs";
 
 /**
- * Density variants for spacing control
+ * Density variant options for components
  */
 export type DensityVariant = "compact" | "comfortable" | "spacious";
 
 /**
- * Size variants for component scaling
+ * Size variant options for components
  */
 export type SizeVariant = "small" | "medium" | "large";
 
 /**
- * Authentication mode options
+ * Item state options
  */
-export type LoginMode = "direct" | "proxy" | "sso";
+export type ItemState =
+  | "default"
+  | "selected"
+  | "disabled"
+  | "loading"
+  | "error";
 
 /**
- * Status for asynchronous operations
+ * Login mode options
  */
-export type AsyncStatus = "idle" | "loading" | "success" | "error";
+export type LoginMode = "direct" | "proxy";
+
+// --------------------------
+// LOADING RELATED PROPS
+// --------------------------
 
 /**
- * Icon position options
- */
-export type IconPosition = "left" | "right" | "top" | "bottom";
-
-/**
- * Alignment options for content positioning
- */
-export type AlignmentOption = "start" | "center" | "end" | "stretch";
-
-/**
- * Visual item state
- */
-export interface ItemState {
-  /** Whether the item is currently selected */
-  isSelected?: boolean;
-  /** Whether the item is currently active */
-  isActive?: boolean;
-  /** Whether the item is currently focused */
-  isFocused?: boolean;
-  /** Whether the item is currently hovered */
-  isHovered?: boolean;
-  /** Whether the item is currently disabled */
-  isDisabled?: boolean;
-  /** Whether the item is currently loading */
-  isLoading?: boolean;
-  /** Whether the item has unread content */
-  hasUnread?: boolean;
-  /** Whether the item has mentions */
-  hasMention?: boolean;
-  /** Whether the item is muted */
-  isMuted?: boolean;
-  /** Whether the item is favorited */
-  isFavorite?: boolean;
-}
-
-/**
- * Common selection props for list-based components
- */
-export interface SelectionProps {
-  /** Whether selection is enabled */
-  selectable?: boolean;
-  /** Whether multiple selection is allowed */
-  multiSelect?: boolean;
-  /** Currently selected item IDs */
-  selectedIds?: string[];
-  /** Callback when selection changes */
-  onSelectionChange?: (ids: string[]) => void;
-}
-
-/**
- * Common loading state props
+ * Loading props for components
  */
 export interface LoadingProps {
-  /** Whether component is in loading state */
-  isLoading?: boolean;
-  /** Whether to show a loading indicator */
-  showLoadingIndicator?: boolean;
-  /** Custom loading text */
-  loadingText?: string;
-  /** Loading indicator variant */
-  loadingVariant?: "circular" | "linear" | "skeleton";
+  /** Whether the component is in loading state */
+  show?: boolean;
+  /** Loading variant */
+  variant?: "circular" | "linear" | "skeleton";
+  /** Loading text */
+  text?: string;
 }
 
 /**
- * Common empty state props
- */
-export interface EmptyStateProps {
-  /** Whether to show an empty state when no items exist */
-  showEmptyState?: boolean;
-  /** Custom empty state message */
-  emptyStateMessage?: string;
-  /** Custom empty state icon name */
-  emptyStateIcon?: string;
-  /** Action button text for empty state */
-  emptyStateActionText?: string;
-  /** Callback for empty state action button */
-  onEmptyStateAction?: () => void;
-}
-
-/**
- * Common error state props
+ * Error state props for components
  */
 export interface ErrorStateProps {
-  /** Error object if an error occurred */
-  error?: Error | null;
-  /** Whether to show error state */
-  showError?: boolean;
-  /** Custom error message override */
-  errorMessage?: string;
+  /** Error message */
+  message?: string;
   /** Whether to show retry button */
   showRetry?: boolean;
-  /** Custom retry button text */
+  /** Retry button text */
   retryText?: string;
-  /** Callback for retry button */
+  /** Retry action callback */
   onRetry?: () => void;
 }
 
 /**
- * Common search props
+ * Empty state props for components
+ */
+export interface EmptyStateProps {
+  /** Empty state message */
+  message?: string;
+  /** Whether to show an action button */
+  showAction?: boolean;
+  /** Action button text */
+  actionText?: string;
+  /** Action callback */
+  onAction?: () => void;
+  /** Empty state icon type */
+  icon?: "search" | "add" | "info" | "error" | "none";
+}
+
+// --------------------------
+// SEARCH RELATED PROPS
+// --------------------------
+
+/**
+ * Search props for components
  */
 export interface SearchProps {
-  /** Whether search is enabled */
-  showSearch?: boolean;
-  /** Current search term */
+  /** Search text */
   searchTerm?: string;
-  /** Placeholder text for search input */
+  /** Search placeholder */
   searchPlaceholder?: string;
-  /** Callback when search term changes */
+  /** Whether search is disabled */
+  disabled?: boolean;
+  /** Minimum characters to start searching */
+  minSearchLength?: number;
+  /** Whether search is currently processing */
+  isSearching?: boolean;
+  /** Search change callback */
   onSearchChange?: (term: string) => void;
-  /** Fields to search in */
-  searchFields?: string[];
+  /** Search clear callback */
+  onSearchClear?: () => void;
 }
 
+// --------------------------
+// SORTING RELATED PROPS
+// --------------------------
+
 /**
- * Common pagination props
+ * Sort option item
  */
-export interface PaginationProps {
-  /** Whether pagination is enabled */
-  paginated?: boolean;
-  /** Current page number (1-based) */
-  page?: number;
-  /** Number of items per page */
-  perPage?: number;
-  /** Total number of items */
-  totalItems?: number;
-  /** Callback when page changes */
-  onPageChange?: (page: number) => void;
-  /** Callback when items per page changes */
-  onPerPageChange?: (perPage: number) => void;
+export interface SortOption {
+  /** Field identifier */
+  field: string;
+  /** Display label */
+  label: string;
 }
 
 /**
- * Common sorting props
+ * Sorting props for components
  */
 export interface SortingProps {
-  /** Whether sorting is enabled */
-  sortable?: boolean;
   /** Current sort field */
   sortField?: string;
   /** Current sort direction */
   sortDirection?: "asc" | "desc";
   /** Available sort options */
-  sortOptions?: Array<{
-    field: string;
-    label: string;
-  }>;
-  /** Callback when sort changes */
-  onSortChange?: (field: string, direction: "asc" | "desc") => void;
+  sortOptions?: SortOption[];
+  /** Whether sorting is disabled */
+  disabled?: boolean;
+  /** Sort change callback */
+  onSortChange?: (field: string, direction?: "asc" | "desc") => void;
+  /** Sort field change callback */
+  onSortFieldChange?: (field: string) => void;
+  /** Sort direction change callback */
+  onSortDirectionChange?: () => void;
+}
+
+// --------------------------
+// SELECTION RELATED PROPS
+// --------------------------
+
+/**
+ * Selection props for components
+ */
+export interface SelectionProps {
+  /** Selected item IDs */
+  selectedIds?: string[];
+  /** Selection mode */
+  mode?: "single" | "multiple" | "none";
+  /** Whether selection is disabled */
+  disabled?: boolean;
+  /** Whether all items are selected */
+  isAllSelected?: boolean;
+  /** Whether any items are selected */
+  hasSelection?: boolean;
+  /** Number of selected items */
+  selectedCount?: number;
+  /** Maximum number of selectable items */
+  maxSelectedItems?: number;
+  /** Whether to allow deselection by clicking selected item */
+  allowDeselect?: boolean;
+  /** Selection change callback */
+  onSelectionChange?: (ids: string[]) => void;
+  /** Toggle selection callback */
+  onToggleSelection?: (id: string) => void;
+  /** Select item callback */
+  onSelectItem?: (id: string) => void;
+  /** Deselect item callback */
+  onDeselectItem?: (id: string) => void;
+  /** Select all callback */
+  onSelectAll?: () => void;
+  /** Deselect all callback */
+  onDeselectAll?: () => void;
+}
+
+// --------------------------
+// PAGINATION RELATED PROPS
+// --------------------------
+
+/**
+ * Pagination props for components
+ */
+export interface PaginationProps {
+  /** Current page number */
+  page?: number;
+  /** Items per page */
+  perPage?: number;
+  /** Total number of pages */
+  totalPages?: number;
+  /** Total number of items */
+  totalItems?: number;
+  /** Available page size options */
+  perPageOptions?: number[];
+  /** Whether pagination is disabled */
+  disabled?: boolean;
+  /** Whether to show first/last page buttons */
+  showFirstLastButtons?: boolean;
+  /** Number of page buttons to show before/after current page */
+  siblingCount?: number;
+  /** Page change callback */
+  onPageChange?: (page: number) => void;
+  /** Per page change callback */
+  onPerPageChange?: (perPage: number) => void;
+}
+
+// --------------------------
+// FILTERING RELATED PROPS
+// --------------------------
+
+/**
+ * Filter option
+ */
+export interface FilterOption {
+  /** Filter value */
+  value: string;
+  /** Display label */
+  label: string;
+  /** Filter count */
+  count?: number;
+  /** Whether this filter is selected */
+  selected?: boolean;
 }
 
 /**
- * Common action props
+ * Filter group
+ */
+export interface FilterGroup {
+  /** Filter group ID */
+  id: string;
+  /** Display label */
+  label: string;
+  /** Filter options */
+  options: FilterOption[];
+  /** Whether multiple options can be selected */
+  multiSelect?: boolean;
+}
+
+/**
+ * Filter props for components
+ */
+export interface FilterProps {
+  /** Filter groups */
+  filterGroups?: FilterGroup[];
+  /** Whether filtering is disabled */
+  disabled?: boolean;
+  /** Filter change callback */
+  onFilterChange?: (
+    groupId: string,
+    value: string | string[],
+    selected: boolean,
+  ) => void;
+  /** Reset filters callback */
+  onResetFilters?: () => void;
+}
+
+// --------------------------
+// ACTION RELATED PROPS
+// --------------------------
+
+/**
+ * Action props for components
  */
 export interface ActionProps {
   /** Whether actions are enabled */
-  showActions?: boolean;
+  actionsEnabled?: boolean;
   /** Available actions */
   actions?: Array<{
+    /** Action ID */
     id: string;
+    /** Display label */
     label: string;
+    /** Action icon */
     icon?: string;
-    color?: "primary" | "secondary" | "error" | "warning" | "info" | "success";
-    isDestructive?: boolean;
-    isDisabled?: boolean;
+    /** Whether this action is disabled */
+    disabled?: boolean;
+    /** Whether this action is destructive */
+    destructive?: boolean;
+    /** Whether this action requires confirmation */
+    requiresConfirmation?: boolean;
+    /** Confirmation message */
+    confirmationMessage?: string;
   }>;
-  /** Callback when an action is triggered */
+  /** Action click callback */
   onAction?: (actionId: string, itemId?: string) => void;
 }
 
-/**
- * Common filter props
- */
-export interface FilterProps {
-  /** Whether filtering is enabled */
-  showFilters?: boolean;
-  /** Current active filters */
-  activeFilters?: Record<string, any>;
-  /** Available filter options */
-  filterOptions?: Array<{
-    id: string;
-    label: string;
-    type: "checkbox" | "radio" | "select" | "date" | "text";
-    options?: Array<{
-      value: string;
-      label: string;
-    }>;
-  }>;
-  /** Callback when filters change */
-  onFilterChange?: (filters: Record<string, any>) => void;
-}
+// --------------------------
+// VIRTUALIZATION PROPS
+// --------------------------
 
 /**
- * Common virtualization props
+ * Virtualization props for list components
  */
 export interface VirtualizationProps {
   /** Whether virtualization is enabled */
-  virtualized?: boolean;
-  /** Height of the virtualized container */
-  height?: number | string;
-  /** Estimated item height for virtualization */
+  enabled?: boolean;
+  /** Fixed item height (for better performance) */
   itemHeight?: number;
-  /** Buffer size (number of items to render outside viewport) */
+  /** Number of items to render beyond visible area */
   overscanCount?: number;
 }

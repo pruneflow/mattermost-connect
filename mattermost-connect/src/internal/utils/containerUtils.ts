@@ -1,390 +1,493 @@
-// src/internal/utils/containerUtils.ts
 /**
- * Utility functions for container components
- * Provides helpers for common container patterns and optimizations
+ * Container utilities
+ * Provides helper functions for container components
  */
-import React, { useMemo } from "react";
-import { SxProps, Theme } from "@mui/material";
 import {
-  BaseComponentProps,
+  LoadingProps,
+  ErrorStateProps,
+  SortOption,
+  PaginationProps,
+  EmptyStateProps,
   ItemState,
-  AsyncStatus,
 } from "../types/componentTypes";
-import { useStableCallback, useMemoizedProps } from "./performanceUtils";
 
 /**
- * Merges component props with base properties
- * Allows containers to pass styling and identification props to UI components
+ * Options for identifying items
+ */
+export interface ItemIdentifierOptions<T> {
+  /** Field to use as ID */
+  idField: keyof T;
+}
+
+/**
+ * Options for search filtering
+ */
+export interface SearchFilterOptions {
+  /** Whether search is case sensitive */
+  caseSensitive?: boolean;
+  /** Search mode */
+  mode?: "contains" | "startsWith" | "exact";
+}
+
+/**
+ * Item state mapping options
+ */
+export interface ItemStateMapOptions<T> {
+  /** Function to determine if item is selected */
+  isSelected?: (item: T) => boolean;
+  /** Function to determine if item is disabled */
+  isDisabled?: (item: T) => boolean;
+  /** Function to determine if item is loading */
+  isLoading?: (item: T) => boolean;
+  /** Function to determine if item has error */
+  hasError?: (item: T) => boolean;
+}
+
+/**
+ * Empty state options
+ */
+export interface EmptyStateOptions {
+  /** Empty message */
+  message?: string;
+  /** Action text */
+  actionText?: string;
+  /** Icon type */
+  icon?: "search" | "add" | "info" | "error" | "none";
+  /** Action callback */
+  onAction?: () => void;
+}
+
+/**
+ * UI props generation options
+ */
+export interface UiPropsOptions {
+  /** Base props */
+  baseProps?: Record<string, any>;
+  /** Whether to include common props */
+  includeCommonProps?: boolean;
+  /** Whether component is disabled */
+  disabled?: boolean;
+}
+
+/**
+ * Merges base props with additional props
  *
- * @param props Base component props
- * @param additionalSx Additional sx props to merge
- * @param additionalClassName Additional className to merge
- * @param additionalId Additional id to merge
- * @returns Merged base component props
+ * @param baseProps - Base props
+ * @param additionalProps - Additional props to merge
+ * @returns Merged props
  */
 export function mergeBaseProps(
-  props?: BaseComponentProps,
-  additionalSx?: SxProps<Theme>,
-  additionalClassName?: string,
-  additionalId?: string,
-): BaseComponentProps {
-  const baseProps: BaseComponentProps = { ...props };
+  baseProps: Record<string, any>,
+  additionalProps: Record<string, any>,
+): Record<string, any> {
+  const {
+    className: baseClassName,
+    sx: baseSx,
+    id: baseId,
+    ...baseRest
+  } = baseProps;
+  const {
+    className: addClassName,
+    sx: addSx,
+    id: addId,
+    ...addRest
+  } = additionalProps;
 
-  // Merge sx props if both exist
-  if (props?.sx && additionalSx) {
-    baseProps.sx = [props.sx, additionalSx];
-  } else if (additionalSx) {
-    baseProps.sx = additionalSx;
-  }
-
-  // Merge classNames if both exist
-  if (props?.className && additionalClassName) {
-    baseProps.className = `${props.className} ${additionalClassName}`;
-  } else if (additionalClassName) {
-    baseProps.className = additionalClassName;
-  }
-
-  // Use additionalId as fallback
-  if (!baseProps.id && additionalId) {
-    baseProps.id = additionalId;
-  }
-
-  return baseProps;
+  return {
+    className:
+      [baseClassName, addClassName].filter(Boolean).join(" ") || undefined,
+    sx: { ...baseSx, ...addSx },
+    id: addId || baseId,
+    ...baseRest,
+    ...addRest,
+  };
 }
 
 /**
- * Creates an id with optional prefix for DOM elements
- * Useful for generating consistent IDs for accessibility
+ * Creates an element ID from a base and suffix
  *
- * @param base Base string for the ID
- * @param suffix Optional suffix to add
- * @param prefix Optional prefix to add
- * @returns Generated ID string
+ * @param base - Base ID
+ * @param suffix - Suffix to append
+ * @returns Generated ID
  */
-export function createElementId(
-  base: string,
-  suffix?: string | number,
-  prefix = "mc",
-): string {
-  return `${prefix}-${base}${suffix ? `-${suffix}` : ""}`;
+export function createElementId(base: string, suffix?: string): string {
+  return suffix ? `${base}-${suffix}` : base;
 }
 
 /**
- * Type for item state mapper function
+ * Maps item data to UI item state
+ *
+ * @param item - Item data
+ * @param options - Mapping options
+ * @returns Item state
  */
-type ItemStateMapper<T> = (item: T, index: number) => ItemState;
+export function mapItemState<T>(
+  item: T,
+  options: ItemStateMapOptions<T> = {},
+): ItemState {
+  const { isSelected, isDisabled, isLoading, hasError } = options;
+
+  if (isLoading && isLoading(item)) return "loading";
+  if (hasError && hasError(item)) return "error";
+  if (isDisabled && isDisabled(item)) return "disabled";
+  if (isSelected && isSelected(item)) return "selected";
+
+  return "default";
+}
 
 /**
- * Maps item data to standardized item states
- * Used to convert domain data to UI state flags
+ * Creates a map of items by ID for quick lookup
  *
- * @param items Array of items to map
- * @param mapper Function that maps each item to its state
- * @returns Array of items with their associated states
+ * @param items - Array of items
+ * @param options - Item identifier options
+ * @returns Map of items by ID
  */
-export function mapItemStates<T>(
+export function createItemsById<T extends Record<string, any>>(
   items: T[],
-  mapper: ItemStateMapper<T>,
-): Array<T & ItemState> {
-  return items.map((item, index) => ({
-    ...item,
-    ...mapper(item, index),
-  }));
-}
+  options: ItemIdentifierOptions<T>,
+): Record<string, T> {
+  const { idField } = options;
+  const result: Record<string, T> = {};
 
-/**
- * Helper to create a stable handler with item ID
- * Creates a callback that includes the item ID when triggered
- *
- * @param handler Base handler function that receives item ID and event
- * @param itemId ID of the item associated with this handler
- * @returns Stable handler function with the item ID pre-bound
- */
-export function createItemHandler<E extends React.SyntheticEvent<any>>(
-  handler: ((itemId: string, event: E) => void) | undefined,
-  itemId: string,
-): ((event: E) => void) | undefined {
-  if (!handler) return undefined;
-
-  return useStableCallback(
-    (event: E) => {
-      handler(itemId, event);
-    },
-    [itemId, handler],
-  );
-}
-
-/**
- * Creates standard item action handlers
- * Maps common actions to stable handlers with pre-bound item IDs
- *
- * @param itemId ID of the item
- * @param handlers Object containing handler functions
- * @returns Object with stable handler functions
- */
-export function createItemActionHandlers<T extends Record<string, any>>(
-  itemId: string,
-  handlers: T,
-): {
-  [K in keyof T]: T[K] extends Function
-    ? (event: React.SyntheticEvent) => void
-    : T[K];
-} {
-  const result: any = {};
-
-  Object.entries(handlers).forEach(([key, handler]) => {
-    if (typeof handler === "function") {
-      result[key] = createItemHandler(handler as any, itemId);
-    } else {
-      result[key] = handler;
-    }
-  });
+  for (const item of items) {
+    const id = String(item[idField]);
+    result[id] = item;
+  }
 
   return result;
 }
 
 /**
- * Type for consistent API loading states
- */
-interface ApiLoadingState {
-  isLoading: boolean;
-  isError: boolean;
-  error: Error | null;
-  status: AsyncStatus;
-}
-
-/**
- * Merges multiple API loading states
- * Useful when a container uses multiple API hooks
+ * Creates a memoized version of items by ID
  *
- * @param states Array of loading states to merge
- * @returns Merged loading state
+ * @param items - Items array
+ * @param prevItemsById - Previous items by ID map
+ * @param options - Item identifier options
+ * @returns Memoized items by ID map
  */
-export function mergeLoadingStates(states: ApiLoadingState[]): ApiLoadingState {
-  return {
-    isLoading: states.some((state) => state.isLoading),
-    isError: states.some((state) => state.isError),
-    error: states.find((state) => state.error)?.error || null,
-    status: determineAggregateStatus(states.map((state) => state.status)),
-  };
-}
-
-/**
- * Determines the aggregate status from multiple status values
- *
- * @param statuses Array of status values
- * @returns Aggregate status
- */
-function determineAggregateStatus(statuses: AsyncStatus[]): AsyncStatus {
-  if (statuses.some((status) => status === "error")) return "error";
-  if (statuses.some((status) => status === "loading")) return "loading";
-  if (statuses.every((status) => status === "success")) return "success";
-  return "idle";
-}
-
-/**
- * Type for item identity function
- */
-type ItemIdentifier<T> = (item: T) => string;
-
-/**
- * Creates a map of items by ID
- *
- * @param items Array of items to map
- * @param idGetter Function to extract ID from an item
- * @returns Record mapping IDs to items
- */
-export function createItemsById<T>(
+export function memoizeItemsById<T extends Record<string, any>>(
   items: T[],
-  idGetter: ItemIdentifier<T>,
+  prevItemsById: Record<string, T> | null,
+  options: ItemIdentifierOptions<T>,
 ): Record<string, T> {
-  return items.reduce<Record<string, T>>((acc, item) => {
-    const id = idGetter(item);
-    acc[id] = item;
-    return acc;
-  }, {});
+  const { idField } = options;
+
+  // If no previous map or no items, create from scratch
+  if (!prevItemsById || items.length === 0) {
+    return createItemsById(items, options);
+  }
+
+  // Check if the items array has changed significantly
+  const itemsCount = items.length;
+  const prevItemsCount = Object.keys(prevItemsById).length;
+
+  // If the count is very different, recreate from scratch
+  if (
+    Math.abs(itemsCount - prevItemsCount) >
+    Math.min(itemsCount, prevItemsCount) * 0.2
+  ) {
+    return createItemsById(items, options);
+  }
+
+  // Update incrementally for better performance
+  const result = { ...prevItemsById };
+  const seenIds = new Set<string>();
+
+  // Update or add items
+  for (const item of items) {
+    const id = String(item[idField]);
+    seenIds.add(id);
+
+    // Only update if the item has changed
+    if (!prevItemsById[id] || !areItemsEqual(prevItemsById[id], item)) {
+      result[id] = item;
+    }
+  }
+
+  // Remove items that no longer exist
+  for (const id in result) {
+    if (!seenIds.has(id)) {
+      delete result[id];
+    }
+  }
+
+  return result;
 }
 
 /**
- * Creates default pagination state
+ * Simple equality check for objects
  *
- * @param initialPage Initial page number (1-based)
- * @param initialPerPage Initial items per page
- * @returns Default pagination state
+ * @param a - First object
+ * @param b - Second object
+ * @returns Whether objects are equal
  */
-export function createDefaultPagination(
-  initialPage = 1,
-  initialPerPage = 20,
-): { page: number; perPage: number } {
-  return {
-    page: initialPage,
-    perPage: initialPerPage,
+function areItemsEqual<T extends Record<string, any>>(a: T, b: T): boolean {
+  // Simple reference equality check
+  if (a === b) return true;
+
+  // Compare serialized values for deep equality
+  // This is a simplification - in a real app, use a more efficient deep equality check
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Creates a search filter function for filtering items
+ *
+ * @param fields - Fields to search in
+ * @param options - Search filter options
+ * @returns Filter function
+ */
+export function createSearchFilter<T extends Record<string, any>>(
+  fields: string[],
+  options: SearchFilterOptions = {},
+): (item: T, searchTerm: string) => boolean {
+  const { caseSensitive = false, mode = "contains" } = options;
+
+  return (item: T, searchTerm: string): boolean => {
+    if (!searchTerm) return true;
+
+    const term = caseSensitive ? searchTerm : searchTerm.toLowerCase();
+
+    for (const field of fields) {
+      const value = item[field];
+
+      if (value == null) continue;
+
+      const stringValue = caseSensitive
+        ? String(value)
+        : String(value).toLowerCase();
+
+      if (mode === "contains" && stringValue.includes(term)) {
+        return true;
+      }
+
+      if (mode === "startsWith" && stringValue.startsWith(term)) {
+        return true;
+      }
+
+      if (mode === "exact" && stringValue === term) {
+        return true;
+      }
+    }
+
+    return false;
   };
 }
 
 /**
- * Creates standard UI props for a component
- * Memoizes the props to prevent unnecessary re-renders
+ * Merges multiple loading states
  *
- * @param propsFactory Function that creates the props
- * @param deps Dependencies array
- * @returns Memoized UI props
+ * @param loadingStates - Array of loading states
+ * @returns Combined loading state
  */
-export function createUiProps<T extends Record<string, any>>(
-  propsFactory: () => T,
-  deps: React.DependencyList,
-): T {
-  return useMemoizedProps(propsFactory, deps);
+export function mergeLoadingStates(loadingStates: boolean[]): boolean {
+  return loadingStates.some((state) => state);
 }
 
 /**
- * Generates standard empty state props
+ * Creates standardized loading props
  *
- * @param state State object with count and loading status
- * @param options Configuration options
- * @returns Empty state props
- */
-export function createEmptyStateProps(
-  state: { count: number; isLoading: boolean },
-  options: {
-    message?: string;
-    icon?: string;
-    actionText?: string;
-    onAction?: () => void;
-  } = {},
-): {
-  showEmptyState: boolean;
-  emptyStateMessage: string;
-  emptyStateIcon: string;
-  emptyStateActionText?: string;
-  onEmptyStateAction?: () => void;
-} {
-  return {
-    showEmptyState: !state.isLoading && state.count === 0,
-    emptyStateMessage: options.message || "No items found",
-    emptyStateIcon: options.icon || "inbox",
-    emptyStateActionText: options.actionText,
-    onEmptyStateAction: options.onAction,
-  };
-}
-
-/**
- * Generates standard loading state props
- *
- * @param isLoading Whether currently loading
- * @param options Configuration options
- * @returns Loading state props
+ * @param isLoading - Loading state
+ * @param options - Additional options
+ * @returns Loading props
  */
 export function createLoadingStateProps(
   isLoading: boolean,
-  options: {
-    text?: string;
-    variant?: "circular" | "linear" | "skeleton";
-    show?: boolean;
-  } = {},
-): {
-  isLoading: boolean;
-  showLoadingIndicator: boolean;
-  loadingText: string;
-  loadingVariant: "circular" | "linear" | "skeleton";
-} {
+  options: Record<string, any> = {},
+): LoadingProps {
   return {
-    isLoading,
-    showLoadingIndicator: options.show ?? isLoading,
-    loadingText: options.text || "Loading...",
-    loadingVariant: options.variant || "circular",
+    show: isLoading,
+    variant: options.variant || "circular",
+    text: options.text || "Loading...",
   };
 }
 
 /**
- * Generates standard error state props
+ * Creates standardized error props
  *
- * @param error Error object or null
- * @param options Configuration options
- * @returns Error state props
+ * @param error - Error object
+ * @param options - Additional options
+ * @returns Error props
  */
 export function createErrorStateProps(
   error: Error | null,
-  options: {
-    message?: string;
-    showRetry?: boolean;
-    retryText?: string;
-    onRetry?: () => void;
-  } = {},
-): {
-  error: Error | null;
-  showError: boolean;
-  errorMessage: string;
-  showRetry: boolean;
-  retryText: string;
-  onRetry?: () => void;
-} {
+  options: Record<string, any> = {},
+): ErrorStateProps {
+  if (!error) {
+    return {
+      message: undefined,
+      showRetry: false,
+    };
+  }
+
   return {
-    error,
-    showError: !!error,
-    errorMessage: options.message || error?.message || "An error occurred",
-    showRetry: options.showRetry ?? true,
+    message: error.message || "An error occurred",
+    showRetry: options.onRetry !== undefined,
     retryText: options.retryText || "Retry",
     onRetry: options.onRetry,
   };
 }
 
 /**
- * Memoizes an array of items by their IDs
- * Useful to prevent re-renders when only references change
+ * Creates standardized empty state props
  *
- * @param items Array of items
- * @param idGetter Function to extract ID from an item
- * @returns Memoized array of items
+ * @param options - Empty state options
+ * @returns Empty state props
  */
-export function memoizeItemsById<T>(
-  items: T[] | undefined | null,
-  idGetter: ItemIdentifier<T>,
-): T[] {
-  return useMemo(() => {
-    if (!items) return [];
-
-    // Create a map of items by ID
-    const itemsById = createItemsById(items, idGetter);
-
-    // Create an array of IDs
-    const ids = Object.keys(itemsById);
-
-    // Return items in same order as original array
-    return ids.map((id) => itemsById[id]);
-  }, [
-    // Generate a stable dependency key from item IDs and a hash of each item
-    items ? JSON.stringify(items.map((item) => idGetter(item))) : "",
-    // The length is also a dependency to handle additions/removals
-    items?.length,
-  ]);
+export function createEmptyStateProps(
+  options: EmptyStateOptions = {},
+): EmptyStateProps {
+  return {
+    message: options.message || "No items to display",
+    showAction: !!options.onAction,
+    actionText: options.actionText || "Add Item",
+    onAction: options.onAction,
+    icon: options.icon || "info",
+  };
 }
 
 /**
- * Creates filter function for search
+ * Creates default pagination configuration
  *
- * @param searchTerm Term to search for
- * @param fields Fields to search in
- * @returns Filter function
+ * @returns Default pagination props
  */
-export function createSearchFilter<T>(
-  searchTerm: string,
-  fields: (keyof T)[],
-): (item: T) => boolean {
-  if (!searchTerm) return () => true;
-
-  const lowerTerm = searchTerm.toLowerCase();
-
-  return (item: T) => {
-    return fields.some((field) => {
-      const value = item[field];
-      if (typeof value === "string") {
-        return value.toLowerCase().includes(lowerTerm);
-      }
-      if (typeof value === "number" || typeof value === "boolean") {
-        return String(value).toLowerCase().includes(lowerTerm);
-      }
-      return false;
-    });
+export function createDefaultPagination(): PaginationProps {
+  return {
+    page: 1,
+    perPage: 20,
+    perPageOptions: [10, 20, 50, 100],
+    showFirstLastButtons: true,
+    siblingCount: 1,
   };
+}
+
+/**
+ * Creates UI props from data and options
+ *
+ * @param data - Data object
+ * @param options - UI props options
+ * @returns UI props
+ */
+export function createUiProps<T extends Record<string, any>>(
+  data: T,
+  options: UiPropsOptions = {},
+): Record<string, any> {
+  const {
+    baseProps = {},
+    includeCommonProps = true,
+    disabled = false,
+  } = options;
+
+  const props: Record<string, any> = { ...data };
+
+  // Add common props if requested
+  if (includeCommonProps) {
+    props.disabled = disabled;
+  }
+
+  // Merge with base props
+  return mergeBaseProps(baseProps, props);
+}
+
+/**
+ * Creates item action handlers map
+ *
+ * @param handlers - Base handlers
+ * @param itemId - Item ID
+ * @returns Bound handlers
+ */
+export function createItemActionHandlers<
+  T extends Record<string, (...args: any[]) => void>,
+>(handlers: T, itemId: string): T {
+  const result = {} as T;
+
+  for (const [key, handler] of Object.entries(handlers)) {
+    result[key as keyof T] = ((...args: any[]) =>
+      handler(itemId, ...args)) as any;
+  }
+
+  return result;
+}
+
+/**
+ * Formats a count with K/M suffixes for large numbers
+ *
+ * @param count - Number to format
+ * @param digits - Number of decimal digits
+ * @returns Formatted count
+ */
+export function formatCompactCount(count: number, digits: number = 1): string {
+  if (count < 1000) {
+    return count.toString();
+  }
+
+  if (count < 1000000) {
+    return (count / 1000).toFixed(digits) + "K";
+  }
+
+  return (count / 1000000).toFixed(digits) + "M";
+}
+
+/**
+ * Generates random ID for temporary elements
+ *
+ * @returns Random ID string
+ */
+export function generateTempId(): string {
+  return "temp-" + Math.random().toString(36).substring(2, 11);
+}
+
+/**
+ * Safely accesses a nested object property by path
+ *
+ * @param obj - Object to access
+ * @param path - Property path (e.g., 'user.profile.name')
+ * @param defaultValue - Default value if path doesn't exist
+ * @returns Property value or default
+ */
+export function getNestedProperty<T, D = undefined>(
+  obj: Record<string, any>,
+  path: string,
+  defaultValue?: D,
+): T | D {
+  const keys = path.split(".");
+  let current: any = obj;
+
+  for (const key of keys) {
+    if (current === undefined || current === null) {
+      return defaultValue as D;
+    }
+    current = current[key];
+  }
+
+  return current === undefined ? (defaultValue as D) : (current as T);
+}
+
+/**
+ * Delays execution for specified time
+ *
+ * @param ms - Milliseconds to delay
+ * @returns Promise that resolves after delay
+ */
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Safely calls a function with error handling
+ *
+ * @param fn - Function to call
+ * @param args - Arguments to pass
+ * @returns Function result or undefined on error
+ */
+export function safeCall<T, A extends any[]>(
+  fn: (...args: A) => T,
+  ...args: A
+): T | undefined {
+  try {
+    return fn(...args);
+  } catch (err) {
+    console.error("Error in safeCall:", err);
+    return undefined;
+  }
 }

@@ -9,7 +9,7 @@ import {
   ConfirmDialogOptions,
   AlertDialogOptions,
   CustomDialogOptions,
-} from "../../providers/DialogProvider";
+} from "../providers/DialogProvider";
 
 /**
  * Dialog result type for async dialog operations
