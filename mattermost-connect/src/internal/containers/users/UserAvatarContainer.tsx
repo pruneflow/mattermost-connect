@@ -1,17 +1,14 @@
 // src/internal/containers/users/UserAvatarContainer.tsx
 /**
  * User Avatar Container
- * Standardized container for displaying user avatars
+ * Container component that handles user avatar logic and state
  */
-import React, { useMemo } from "react";
+import React from "react";
 import { BaseContainer, BaseContainerProps } from "../base/BaseContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import { Avatar, Badge, Tooltip, Box, Typography } from "@mui/material";
-import { styled } from "@mui/material/styles";
+import { default as UserAvatarUI } from "../../components/users/UserAvatarUI";
 
-/**
- * User avatar container props
- */
+// Keep the existing props interface
 export interface UserAvatarContainerProps extends BaseContainerProps {
   /** User ID */
   userId?: string;
@@ -50,41 +47,8 @@ export interface UserAvatarContainerProps extends BaseContainerProps {
 }
 
 /**
- * Styled components for avatar styling
- */
-const StyledBadge = styled(Badge)(({ theme }) => ({
-  "& .MuiBadge-badge": {
-    width: 12,
-    height: 12,
-    borderRadius: "50%",
-    border: `2px solid ${theme.palette.background.paper}`,
-    padding: 0,
-  },
-}));
-
-/**
- * Status color mapping
- */
-const statusColors = {
-  online: "success.main",
-  away: "warning.main",
-  dnd: "error.main",
-  offline: "text.disabled",
-};
-
-/**
- * User Avatar Container
- * Displays a user avatar with optional status and name
- *
- * @example
- * ```tsx
- * <UserAvatarContainer
- *   userId="user123"
- *   size={48}
- *   showStatus
- *   showName
- * />
- * ```
+ * Container component for user avatars
+ * Handles user data fetching and state, while delegating rendering to UserAvatarUI
  */
 export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
   props,
@@ -110,7 +74,7 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
     ...restProps
   } = props;
 
-  // Use container user hook
+  // Keep the useContainerUser hook for logic
   const { displayName, initials, imageUrl, status, isLoading, error } =
     useContainerUser(userId, {
       avatarSize: size,
@@ -126,116 +90,38 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
   const finalSrc = srcOverride || imageUrl;
   const finalStatus = statusOverride || status;
 
-  // Generate avatar content
-  const avatarContent = useMemo(() => {
-    if (isLoading) {
-      return null; // Empty avatar while loading
+  // Handle click event, maintaining container logic
+  const handleClick = React.useCallback(() => {
+    if (onClick && userId) {
+      onClick(userId);
     }
+  }, [onClick, userId]);
 
-    if (finalSrc) {
-      return null; // Let Avatar component handle image display
-    }
-
-    return finalInitials || "?";
-  }, [isLoading, finalSrc, finalInitials]);
-
-  // Create avatar component with or without status badge
-  const avatarComponent = useMemo(() => {
-    const avatarElement = (
-      <Avatar
-        src={finalSrc}
-        alt={finalDisplayName}
-        sx={{
-          width: size,
-          height: size,
-          fontSize: size / 2,
-          cursor: clickable ? "pointer" : "default",
-        }}
-        className={avatarClassName}
-        onClick={onClick ? () => onClick(userId || "") : undefined}
-      >
-        {avatarContent}
-      </Avatar>
-    );
-
-    if (!showStatus) {
-      return avatarElement;
-    }
-
-    return (
-      <StyledBadge
-        overlap="circular"
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        variant="dot"
-        sx={{
-          "& .MuiBadge-badge": {
-            bgcolor:
-              statusColors[finalStatus as keyof typeof statusColors] ||
-              statusColors.offline,
-          },
-        }}
-        className={badgeClassName}
-      >
-        {avatarElement}
-      </StyledBadge>
-    );
-  }, [
-    finalSrc,
-    finalDisplayName,
+  // Prepare UI props - this is the key transformation between container and UI
+  const avatarUiProps = {
+    displayName: finalDisplayName,
+    initials: finalInitials,
+    src: finalSrc,
+    status: showStatus ? finalStatus : undefined,
     size,
-    clickable,
-    avatarClassName,
-    onClick,
-    userId,
-    avatarContent,
-    showStatus,
-    finalStatus,
-    badgeClassName,
-  ]);
-
-  // Create complete component with name if needed
-  const containerContent = useMemo(() => {
-    const avatar = showTooltip ? (
-      <Tooltip title={finalDisplayName}>{avatarComponent}</Tooltip>
-    ) : (
-      avatarComponent
-    );
-
-    if (!showName) {
-      return avatar;
-    }
-
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: namePosition === "right" ? "row" : "column",
-          alignItems: namePosition === "right" ? "center" : "flex-start",
-          gap: 1,
-        }}
-      >
-        {avatar}
-        <Typography
-          variant={textVariant}
-          className={nameClassName}
-          sx={{ fontWeight: 500 }}
-        >
-          {finalDisplayName}
-        </Typography>
-      </Box>
-    );
-  }, [
-    showTooltip,
-    finalDisplayName,
-    avatarComponent,
     showName,
     namePosition,
     textVariant,
+    isLoading,
+    error,
+    showTooltip,
+    onClick: clickable ? handleClick : undefined,
+    avatarClassName,
     nameClassName,
-  ]);
+    badgeClassName,
+  };
 
+  // Render the UI component with the prepared props
   return (
-    <BaseContainer {...restProps} render={(api, state) => containerContent} />
+    <BaseContainer
+      {...restProps}
+      render={(api, state) => <UserAvatarUI {...avatarUiProps} />}
+    />
   );
 };
 

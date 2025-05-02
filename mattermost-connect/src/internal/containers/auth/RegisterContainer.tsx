@@ -1,21 +1,18 @@
 // src/internal/containers/auth/RegisterContainer.tsx
 /**
  * Register Container
- * Handles user registration form with standardized patterns
+ * Container component that handles user registration logic and state
  */
-import React, { useMemo, useCallback, useState } from "react";
-import { FormContainer, FormContainerProps } from "../base/FormContainer";
+import React, { useCallback, useState } from "react";
+import { BaseContainer } from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
+import { RegisterFormUI } from "../../components/auth/RegisterFormUI";
 import { User, RegistrationParams, AuthMode } from "../../../types";
 import { useAuth } from "../../../hooks";
-import {
-  validateUsername,
-  validateEmail,
-  validatePassword,
-  getPasswordStrength,
-} from "../../../utils/authValidation";
+import { getPasswordStrength } from "../../../utils/authValidation";
 
+// Keep the existing props interface
 /**
  * Registration container props
  */
@@ -59,15 +56,8 @@ export interface RegisterContainerProps {
 }
 
 /**
- * Extended registration params to include confirmPassword
- */
-interface ExtendedRegistrationParams extends RegistrationParams {
-  confirmPassword?: string;
-}
-
-/**
- * Register container component
- * Provides standardized user registration form
+ * Container component for user registration
+ * Handles registration logic while delegating rendering to RegisterFormUI
  */
 export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
   const {
@@ -91,17 +81,13 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
     disabled,
   } = props;
 
-  // Use Auth hook instead of direct authStore access
+  // Keep all hooks for business logic
   const { register, login, setAuthMode } = useAuth();
-
-  // Use loading state hook for standardized loading management
   const { loadingState, loadingActions } = useContainerLoadingState({
     initialLoading,
     initialError,
     minLoadingTime: 500,
   });
-
-  // Use dialog hook for error handling and success messages
   const dialog = useDialog();
 
   // Track password strength
@@ -119,10 +105,10 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
 
   // Handle password field change to update strength
   const handlePasswordChange = useCallback(
-    (value: string) => {
+    (password: string) => {
       if (!showPasswordStrength) return;
 
-      const strength = getPasswordStrength(value);
+      const strength = getPasswordStrength(password);
       setPasswordStrength({
         score: strength.id,
         message: strength.message,
@@ -131,25 +117,33 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
     [showPasswordStrength],
   );
 
-  // Handle form submission
+  // Handle registration form submission
   const handleSubmit = useCallback(
-    async (data: Partial<ExtendedRegistrationParams>) => {
+    async (
+      username: string,
+      email: string,
+      password: string,
+      confirmPassword: string,
+      firstName?: string,
+      lastName?: string,
+      serverUrlValue?: string,
+    ) => {
       try {
         loadingActions.setLoading(true);
 
         // Verify passwords match
-        if (data.password !== data.confirmPassword) {
+        if (password !== confirmPassword) {
           throw new Error("Passwords do not match");
         }
 
         // Prepare registration parameters
         const registrationParams: RegistrationParams = {
-          username: data.username || "",
-          password: data.password || "",
-          email: data.email || "",
-          firstName: data.firstName,
-          lastName: data.lastName,
-          serverUrl: showServerUrl ? data.serverUrl : serverUrl,
+          username,
+          password,
+          email,
+          firstName,
+          lastName,
+          serverUrl: showServerUrl ? serverUrlValue : serverUrl,
         };
 
         // Perform registration
@@ -218,7 +212,6 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
           onRegisterError(error as Error);
         }
 
-        // Re-throw error for form container to handle
         throw error;
       }
     },
@@ -237,162 +230,31 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
     ],
   );
 
-  // Create form validators
-  const fieldValidators = useMemo(
-    () => ({
-      username: (value: string) => {
-        const result = validateUsername(value);
-        return result.isValid ? true : Object.values(result.errors)[0];
-      },
-      email: (value: string) => {
-        const result = validateEmail(value);
-        return result.isValid ? true : Object.values(result.errors)[0];
-      },
-      password: (value: string) => {
-        const result = validatePassword(value);
-        handlePasswordChange(value);
-        return result.isValid ? true : Object.values(result.errors)[0];
-      },
-      confirmPassword: (value: string, formData: any) => {
-        return value === formData.password ? true : "Passwords do not match";
-      },
-    }),
-    [handlePasswordChange],
-  );
-
-  // Create form props
-  const formProps: FormContainerProps = useMemo(() => {
-    // Initialize field configurations
-    const fieldConfigs: Record<string, any> = {};
-
-    // Username field
-    fieldConfigs.username = {
-      label: "Username",
-      type: "text",
-      autoComplete: "username",
-      required: true,
-      requiredMessage: "Username is required",
-      placeholder: "Choose a username",
-      validator: fieldValidators.username,
-      helperText:
-        "Username must contain only letters, numbers, dots, hyphens, and underscores",
-    };
-
-    // Email field
-    fieldConfigs.email = {
-      label: "Email",
-      type: "email",
-      autoComplete: "email",
-      required: true,
-      requiredMessage: "Email is required",
-      placeholder: "Enter your email",
-      validator: fieldValidators.email,
-    };
-
-    // Password field
-    fieldConfigs.password = {
-      label: "Password",
-      type: "password",
-      autoComplete: "new-password",
-      required: true,
-      requiredMessage: "Password is required",
-      placeholder: "Create a password",
-      validator: fieldValidators.password,
-      helperText: showPasswordStrength ? passwordStrength.message : undefined,
-    };
-
-    // Confirm password field
-    fieldConfigs.confirmPassword = {
-      label: "Confirm Password",
-      type: "password",
-      autoComplete: "new-password",
-      required: true,
-      requiredMessage: "Please confirm your password",
-      placeholder: "Confirm your password",
-      validator: fieldValidators.confirmPassword,
-    };
-
-    // First name field
-    fieldConfigs.firstName = {
-      label: "First Name",
-      type: "text",
-      autoComplete: "given-name",
-      required: false,
-      placeholder: "Enter your first name",
-    };
-
-    // Last name field
-    fieldConfigs.lastName = {
-      label: "Last Name",
-      type: "text",
-      autoComplete: "family-name",
-      required: false,
-      placeholder: "Enter your last name",
-    };
-
-    // Server URL field (conditional)
-    if (showServerUrl) {
-      fieldConfigs.serverUrl = {
-        label: "Server URL",
-        type: "url",
-        required: true,
-        requiredMessage: "Server URL is required",
-        placeholder: "https://your-mattermost-server.com",
-        defaultValue: serverUrl || "",
-      };
-    }
-
-    // Configure available actions
-    const availableActions = [];
-
-    if (showLogin && onLoginClick) {
-      availableActions.push({
-        id: "login",
-        label: "Already have an account? Login",
-        onClick: onLoginClick,
-      });
-    }
-
-    // Return the props
-    return {
-      id,
-      className,
-      sx,
-      initialData: {
-        username: "",
-        email: "",
-        password: "",
-        confirmPassword: "",
-        firstName: "",
-        lastName: "",
-        serverUrl: serverUrl || "",
-      },
-      fields: fieldConfigs,
-      onSubmit: handleSubmit,
-      readOnly: disabled || loadingState.isLoading,
-      autoFocus: "username",
-      submitText: registerButtonText,
-      availableActions,
-    };
-  }, [
-    fieldValidators,
-    showPasswordStrength,
-    passwordStrength.message,
+  // Prepare UI props for the registration form
+  const registerFormProps = {
+    error: loadingState.error?.message || null,
+    isLoading: loadingState.isLoading,
     showServerUrl,
-    serverUrl,
+    initialServerUrl: serverUrl,
+    passwordStrength: showPasswordStrength ? passwordStrength : undefined,
+    showPasswordStrength,
+    title: "Create Account",
+    submitText: registerButtonText,
     showLogin,
+    onSubmit: handleSubmit,
     onLoginClick,
-    id,
     className,
     sx,
-    handleSubmit,
-    disabled,
-    loadingState.isLoading,
-    registerButtonText,
-  ]);
+    id,
+  };
 
-  // Render form container
-  return <FormContainer {...formProps} />;
+  // Render the UI component
+  return (
+    <BaseContainer
+      {...props}
+      render={(api, state) => <RegisterFormUI {...registerFormProps} />}
+    />
+  );
 };
 
 export default RegisterContainer;
