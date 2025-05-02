@@ -10,7 +10,6 @@ export { default as useDialog, type DialogResult } from "./useDialog";
 
 // Hook for pagination management
 export {
-  useContainerPagination as useContainerPagination,
   type PaginationOptions,
   type PaginationState,
   type PaginationActions,
@@ -19,7 +18,6 @@ export {
 
 // Hook for search functionality
 export {
-  useContainerSearch as useContainerSearch,
   type SearchOptions,
   type SearchState,
   type SearchActions,
@@ -28,7 +26,6 @@ export {
 
 // Hook for sorting functionality
 export {
-  useContainerSorting as useContainerSorting,
   type SortingOptions,
   type SortingState,
   type SortingActions,
@@ -39,7 +36,6 @@ export {
 
 // Hook for selection management
 export {
-  useContainerSelection as useContainerSelection,
   type SelectionOptions,
   type SelectionState,
   type SelectionActions,
@@ -49,12 +45,16 @@ export {
 
 // Hook for loading state management
 export {
-  useContainerLoadingState as useContainerLoadingState,
   type LoadingStateOptions,
   type LoadingState,
   type LoadingActions,
   type UseLoadingStateResult,
 } from "./useContainerLoadingState";
+
+export {
+  type UserContainerOptions,
+  type UseUserContainerResult,
+} from "./useContainerUser";
 
 // Directly import each hook for the containerHooks object
 import useContainerPaginationHook from "./useContainerPagination";
@@ -63,6 +63,7 @@ import useContainerSortingHook from "./useContainerSorting";
 import useContainerSelectionHook from "./useContainerSelection";
 import useContainerLoadingStateHook from "./useContainerLoadingState";
 import useDialogHook from "./useDialog";
+import useContainerUserHook from "./useContainerUser";
 
 // Export all hooks as a named object for easier access
 export const containerHooks = {
@@ -72,6 +73,7 @@ export const containerHooks = {
   useContainerSelection: useContainerSelectionHook,
   useContainerLoadingState: useContainerLoadingStateHook,
   useDialog: useDialogHook,
+  useContainerUser: useContainerUserHook,
 };
 
 export default containerHooks;
