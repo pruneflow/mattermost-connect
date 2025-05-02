@@ -1,147 +1,280 @@
 // src/internal/containers/auth/LoginContainer.tsx
 /**
- * Container component that handles login logic
+ * Login Container
+ * Handles user authentication login form with standardized patterns
  */
-import React, { useState, useCallback } from "react";
-import { useAuth } from "../../../hooks/useAuth";
-import { BaseComponentProps, LoginMode } from "../../types/componentTypes";
-import DirectLoginFormUI from "../../components/auth/DirectLoginFormUI";
-import ProxyLoginFormUI from "../../components/auth/ProxyLoginFormUI";
-import LoginModeSelectorUI from "../../components/auth/LoginModeSelectorUI";
-import { Box, Paper } from "@mui/material";
+import React, { useMemo, useCallback } from "react";
+import { FormContainer, FormContainerProps } from "../base/FormContainer";
+import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
+import { useDialog } from "../../hooks/useDialog";
+import { User, LoginParams, AuthMode } from "../../../types";
+import { useAuthStore } from "../../../core/store/authStore";
 
-export interface LoginContainerProps extends BaseComponentProps {
-  /** Initial login mode */
-  initialMode?: LoginMode;
-  /** Whether to show mode selector */
-  showModeSelector?: boolean;
-  /** Whether to allow remembering credentials */
-  allowRememberMe?: boolean;
-  /** Callback when login is successful */
-  onLoginSuccess?: (user: any) => void;
-  /** Callback when login fails */
+/**
+ * Login container props
+ */
+export interface LoginContainerProps {
+  /** CSS class name */
+  className?: string;
+  /** Additional style properties */
+  sx?: any;
+  /** Server URL for direct mode */
+  serverUrl?: string;
+  /** Whether to display server URL field */
+  showServerUrl?: boolean;
+  /** Which auth mode to use */
+  authMode?: AuthMode;
+  /** Whether to remember the username */
+  rememberUsername?: boolean;
+  /** Custom text for login button */
+  loginButtonText?: string;
+  /** Callback after successful login */
+  onLoginSuccess?: (user: User) => void;
+  /** Callback after login failure */
   onLoginError?: (error: Error) => void;
-  /** Custom form title */
-  title?: string;
-  /** Custom submit button text */
-  submitText?: string;
-  /** Initial server URL for direct mode */
-  initialServerUrl?: string;
-  /** Initial username */
-  initialUsername?: string;
+  /** URL to redirect to after successful login */
+  redirectUrl?: string;
+  /** Whether to auto-focus the username field */
+  autoFocusUsername?: boolean;
+  /** Whether to show forgot password link */
+  showForgotPassword?: boolean;
+  /** Callback when forgot password is clicked */
+  onForgotPasswordClick?: () => void;
+  /** Whether to show registration link */
+  showRegister?: boolean;
+  /** Callback when register is clicked */
+  onRegisterClick?: () => void;
+  /** ID for the container */
+  id?: string;
+  /** Initial loading state */
+  initialLoading?: boolean;
+  /** Initial error */
+  initialError?: Error | null;
+  /** Whether the component is disabled */
+  disabled?: boolean;
 }
 
-const LoginContainer: React.FC<LoginContainerProps> = ({
-  initialMode = "direct",
-  showModeSelector = true,
-  allowRememberMe = true,
-  onLoginSuccess,
-  onLoginError,
-  title,
-  submitText,
-  initialServerUrl = "",
-  initialUsername = "",
-  className,
-  sx,
-  id,
-}) => {
-  // State
-  const [mode, setMode] = useState<LoginMode>(initialMode);
+/**
+ * Login container component
+ * Provides standardized authentication login form
+ */
+export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
+  const {
+    className,
+    sx,
+    serverUrl,
+    showServerUrl = false,
+    authMode,
+    rememberUsername = true,
+    loginButtonText = "Login",
+    onLoginSuccess,
+    onLoginError,
+    redirectUrl,
+    autoFocusUsername = true,
+    showForgotPassword = true,
+    onForgotPasswordClick,
+    showRegister = true,
+    onRegisterClick,
+    id,
+    initialLoading,
+    initialError,
+    disabled,
+  } = props;
 
-  // Auth hook
-  const { login, isAuthenticating, error } = useAuth();
+  // Get auth store functionality
+  const { login, setMode } = useAuthStore();
 
-  // Handle login form submission
+  // Use loading state hook for standardized loading management
+  const { loadingState, loadingActions, loadingProps, withLoading } =
+    useContainerLoadingState({
+      initialLoading,
+      initialError,
+      minLoadingTime: 500,
+    });
+
+  // Use dialog hook for error handling
+  const dialog = useDialog();
+
+  // Set authentication mode if provided
+  React.useEffect(() => {
+    if (authMode) {
+      setMode(authMode);
+    }
+  }, [authMode, setMode]);
+
+  // Handle form submission
   const handleSubmit = useCallback(
-    async (
-      username: string,
-      password: string,
-      serverUrl?: string,
-      rememberMe?: boolean,
-    ) => {
+    async (data: Partial<LoginParams>) => {
       try {
-        const user = await login({
-          username,
-          password,
-          serverUrl,
-        });
+        loadingActions.setLoading(true);
 
+        // Prepare login parameters
+        const loginParams: LoginParams = {
+          username: data.username || "",
+          password: data.password || "",
+          serverUrl: showServerUrl ? data.serverUrl : serverUrl,
+        };
+
+        // Save username if remember is enabled
+        if (rememberUsername && data.username) {
+          try {
+            localStorage.setItem("mattermost_username", data.username);
+          } catch (error) {
+            // Silently fail if localStorage is not available
+          }
+        }
+
+        // Perform login
+        const user = await login(loginParams);
+
+        // Call success callback if provided
         if (onLoginSuccess) {
           onLoginSuccess(user);
         }
-      } catch (err) {
-        if (onLoginError) {
-          onLoginError(err as Error);
+
+        // Redirect if URL is provided
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
         }
+
+        loadingActions.setLoading(false);
+        return user;
+      } catch (error) {
+        loadingActions.setLoading(false);
+
+        // Handle error with dialog
+        void dialog.showError(
+          "Login Failed",
+          (error as Error).message || "An error occurred during login",
+        );
+
+        // Call error callback if provided
+        if (onLoginError) {
+          onLoginError(error as Error);
+        }
+
+        // Re-throw error for form container to handle
+        throw error;
       }
     },
-    [login, onLoginSuccess, onLoginError],
+    [
+      loadingActions,
+      login,
+      showServerUrl,
+      serverUrl,
+      rememberUsername,
+      onLoginSuccess,
+      redirectUrl,
+      dialog,
+      onLoginError,
+    ],
   );
 
-  // Handle mode change
-  const handleModeChange = useCallback((newMode: LoginMode) => {
-    setMode(newMode);
-  }, []);
+  // Load saved username if remember is enabled
+  const savedUsername = useMemo(() => {
+    if (!rememberUsername) return "";
 
-  // Render appropriate login form based on mode
-  const renderLoginForm = () => {
-    const commonProps = {
-      error: error?.message,
-      isLoading: isAuthenticating,
-      onSubmit: handleSubmit,
-      showRememberMe: allowRememberMe,
-      title,
-      submitText,
-      initialUsername,
+    try {
+      return localStorage.getItem("mattermost_username") || "";
+    } catch (error) {
+      return "";
+    }
+  }, [rememberUsername]);
+
+  // Create form props
+  const formProps: FormContainerProps = useMemo(() => {
+    // Initialize field configurations
+    const fieldConfigs: Record<string, any> = {};
+
+    // Username field
+    fieldConfigs.username = {
+      label: "Username or Email",
+      type: "text",
+      autoComplete: "username",
+      required: true,
+      requiredMessage: "Username is required",
+      placeholder: "Enter your username or email",
+      defaultValue: savedUsername,
     };
 
-    if (mode === "direct") {
-      return (
-        <DirectLoginFormUI
-          {...commonProps}
-          initialServerUrl={initialServerUrl}
-        />
-      );
+    // Password field
+    fieldConfigs.password = {
+      label: "Password",
+      type: "password",
+      autoComplete: "current-password",
+      required: true,
+      requiredMessage: "Password is required",
+      placeholder: "Enter your password",
+    };
+
+    // Server URL field (conditional)
+    if (showServerUrl) {
+      fieldConfigs.serverUrl = {
+        label: "Server URL",
+        type: "url",
+        required: true,
+        requiredMessage: "Server URL is required",
+        placeholder: "https://your-mattermost-server.com",
+        defaultValue: serverUrl || "",
+      };
     }
 
-    return <ProxyLoginFormUI {...commonProps} />;
-  };
+    // Configure available actions
+    const availableActions = [];
 
-  return (
-    <Box
-      className={className}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        width: "100%",
-        maxWidth: 480,
-        mx: "auto",
-        ...sx,
-      }}
-      id={id}
-    >
-      <Paper
-        elevation={3}
-        sx={{
-          width: "100%",
-          borderRadius: 2,
-          overflow: "hidden",
-        }}
-      >
-        {showModeSelector && (
-          <LoginModeSelectorUI
-            mode={mode}
-            onModeChange={handleModeChange}
-            disabled={isAuthenticating}
-            sx={{ pt: 2 }}
-          />
-        )}
+    if (showForgotPassword && onForgotPasswordClick) {
+      availableActions.push({
+        id: "forgot-password",
+        label: "Forgot Password?",
+        onClick: onForgotPasswordClick,
+      });
+    }
 
-        {renderLoginForm()}
-      </Paper>
-    </Box>
-  );
+    if (showRegister && onRegisterClick) {
+      availableActions.push({
+        id: "register",
+        label: "Create Account",
+        onClick: onRegisterClick,
+      });
+    }
+
+    // Return the props
+    return {
+      id,
+      className,
+      sx,
+      initialData: {
+        username: savedUsername,
+        password: "",
+        serverUrl: serverUrl || "",
+      },
+      fields: fieldConfigs,
+      onSubmit: handleSubmit,
+      readOnly: disabled || loadingState.isLoading,
+      autoFocus: autoFocusUsername ? "username" : undefined,
+      submitText: loginButtonText,
+      availableActions,
+    };
+  }, [
+    savedUsername,
+    showServerUrl,
+    serverUrl,
+    id,
+    className,
+    sx,
+    handleSubmit,
+    disabled,
+    loadingState.isLoading,
+    autoFocusUsername,
+    loginButtonText,
+    showForgotPassword,
+    onForgotPasswordClick,
+    showRegister,
+    onRegisterClick,
+  ]);
+
+  // Render form container
+  return <FormContainer {...formProps} />;
 };
 
 export default LoginContainer;
