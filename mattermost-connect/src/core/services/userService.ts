@@ -14,6 +14,7 @@ import {
 import { formatDate } from "../../utils/formatters";
 import { handleError } from "../store";
 import { emitEvent } from "../api/eventUtils";
+import { validateUsername, validateEmail } from "../../utils/authValidation";
 
 /**
  * Typing indicator timeout (5 seconds)
@@ -400,8 +401,8 @@ class UserService {
     if (!email) return false;
 
     try {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(email);
+      const result = validateEmail(email);
+      return result.isValid;
     } catch (error) {
       handleError(error as Error, ErrorSource.UI, undefined, {
         method: "isValidEmail",
@@ -419,9 +420,8 @@ class UserService {
     if (!username) return false;
 
     try {
-      // Username must be 3-22 characters, alphanumeric or dots, dashes, underscores
-      const usernameRegex = /^[a-zA-Z0-9\.\-\_]{3,22}$/;
-      return usernameRegex.test(username);
+      const result = validateUsername(username);
+      return result.isValid;
     } catch (error) {
       handleError(error as Error, ErrorSource.UI, undefined, {
         method: "isValidUsername",
@@ -539,6 +539,69 @@ class UserService {
       parentId,
       timestamp: Date.now(),
     });
+  }
+
+  /**
+   * Validates a user profile
+   * @param profile User profile data
+   * @returns Validation result with error messages by field
+   */
+  public validateUserProfile(profile: Partial<User>): {
+    isValid: boolean;
+    errors: Record<string, string>;
+  } {
+    const errors: Record<string, string> = {};
+    let isValid = true;
+
+    try {
+      // Validate username if present
+      if (profile.username !== undefined) {
+        const usernameResult = validateUsername(profile.username);
+        if (!usernameResult.isValid) {
+          errors.username =
+            Object.values(usernameResult.errors)[0] || "Invalid username";
+          isValid = false;
+        }
+      }
+
+      // Validate email if present
+      if (profile.email !== undefined) {
+        const emailResult = validateEmail(profile.email);
+        if (!emailResult.isValid) {
+          errors.email =
+            Object.values(emailResult.errors)[0] || "Invalid email";
+          isValid = false;
+        }
+      }
+
+      // Validate name fields
+      if (profile.first_name && profile.first_name.length > 64) {
+        errors.first_name = "First name cannot exceed 64 characters";
+        isValid = false;
+      }
+
+      if (profile.last_name && profile.last_name.length > 64) {
+        errors.last_name = "Last name cannot exceed 64 characters";
+        isValid = false;
+      }
+
+      if (profile.nickname && profile.nickname.length > 64) {
+        errors.nickname = "Nickname cannot exceed 64 characters";
+        isValid = false;
+      }
+
+      return { isValid, errors };
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "validateUserProfile",
+      });
+      return {
+        isValid: false,
+        errors: {
+          _general: "An error occurred while validating the profile",
+        },
+      };
+    }
   }
 }
 

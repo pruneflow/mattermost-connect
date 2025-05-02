@@ -28,6 +28,7 @@ export enum EventType {
   LOGIN_SUCCESS = "auth:login_success",
   LOGOUT = "auth:logout",
   SESSION_EXPIRED = "auth:session_expired",
+  REGISTRATION_SUCCESS = "auth:registration_success",
 
   // Channel events
   CHANNEL_SELECTED = "channel:selected",
