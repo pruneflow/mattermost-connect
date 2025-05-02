@@ -13,6 +13,9 @@ import {
   EventType,
   ErrorSource,
   AuthStore,
+  RegistrationParams,
+  PasswordResetParams,
+  AuthMode,
 } from "../../types";
 import { authService } from "../services/authService";
 import { emitEvent } from "../api/eventUtils";
@@ -46,14 +49,34 @@ export const useAuthStore = create<AuthState & AuthStore>()(
       return {
         // Include common slice properties
         ...commonSlice,
-
-        // Initial state
+        mode: "direct" as AuthMode,
         isAuthenticated: false,
         isAuthenticating: false,
         currentUser: null,
         token: null,
         serverUrl: null,
 
+        /**
+         * Sets the authentication mode
+         * @param mode Authentication mode
+         */
+        setMode: (mode: AuthMode) => {
+          set((state) => {
+            state.mode = mode;
+            state.lastUpdated = Date.now();
+          });
+
+          // Update auth service mode
+          authService.setMode(mode);
+        },
+
+        /**
+         * Gets the current authentication mode
+         * @returns Current authentication mode
+         */
+        getMode: () => {
+          return get().mode;
+        },
         /**
          * Initializes authentication from stored token
          * @returns Whether authentication was successful
@@ -153,6 +176,156 @@ export const useAuthStore = create<AuthState & AuthStore>()(
 
             set((state) => {
               state.isAuthenticating = false;
+              state.error = error as Error;
+              state.lastUpdated = Date.now();
+            });
+
+            throw error;
+          }
+        },
+
+        /**
+         * Registers a new user
+         * @param registrationData Registration parameters
+         * @returns The registered user
+         */
+        register: async (registrationData: RegistrationParams) => {
+          try {
+            set((state) => {
+              state.isLoading = true;
+              state.error = null;
+            });
+
+            // Call auth service to register the user
+            const user = await authService.register(
+              registrationData,
+              registrationData.serverUrl,
+            );
+
+            set((state) => {
+              state.isLoading = false;
+              state.lastUpdated = Date.now();
+            });
+
+            // Emit registration success event
+            emitEvent(EventType.REGISTRATION_SUCCESS, { user });
+
+            return user;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
+            set((state) => {
+              state.isLoading = false;
+              state.error = error as Error;
+              state.lastUpdated = Date.now();
+            });
+
+            throw error;
+          }
+        },
+
+        /**
+         * Requests a password reset for a user
+         * @param email User's email address
+         * @returns Promise resolving to success status
+         */
+        forgotPassword: async (email: string) => {
+          try {
+            set((state) => {
+              state.isLoading = true;
+              state.error = null;
+            });
+
+            const result = await authService.forgotPassword(email);
+
+            set((state) => {
+              state.isLoading = false;
+              state.lastUpdated = Date.now();
+            });
+
+            return result;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
+            set((state) => {
+              state.isLoading = false;
+              state.error = error as Error;
+              state.lastUpdated = Date.now();
+            });
+
+            throw error;
+          }
+        },
+
+        /**
+         * Updates a user's password
+         * @param currentPassword Current password
+         * @param newPassword New password
+         * @returns Promise resolving to success status
+         */
+        updatePassword: async (
+          currentPassword: string,
+          newPassword: string,
+        ) => {
+          try {
+            set((state) => {
+              state.isLoading = true;
+              state.error = null;
+            });
+
+            const result = await authService.updatePassword(
+              currentPassword,
+              newPassword,
+            );
+
+            set((state) => {
+              state.isLoading = false;
+              state.lastUpdated = Date.now();
+            });
+
+            return result;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
+            set((state) => {
+              state.isLoading = false;
+              state.error = error as Error;
+              state.lastUpdated = Date.now();
+            });
+
+            throw error;
+          }
+        },
+
+        /**
+         * Resets a user's password using a reset token
+         * @param params Password reset parameters
+         * @returns Promise resolving to success status
+         */
+        resetPassword: async (params: PasswordResetParams) => {
+          try {
+            set((state) => {
+              state.isLoading = true;
+              state.error = null;
+            });
+
+            const result = await authService.resetPassword(params);
+
+            set((state) => {
+              state.isLoading = false;
+              state.lastUpdated = Date.now();
+            });
+
+            return result;
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.AUTH);
+
+            set((state) => {
+              state.isLoading = false;
               state.error = error as Error;
               state.lastUpdated = Date.now();
             });

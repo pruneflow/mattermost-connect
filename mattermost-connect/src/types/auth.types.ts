@@ -41,6 +41,7 @@ export interface AuthState extends CommonState {
   currentUser: User | null;
   token: string | null;
   serverUrl: string | null;
+  mode: AuthMode;
 }
 
 export interface AuthStore extends CommonSliceActions {
@@ -51,6 +52,25 @@ export interface AuthStore extends CommonSliceActions {
   refreshCurrentUser: () => Promise<User | null>;
   setCurrentUser: (user: User) => void;
   reset: () => void;
+  resetPassword: (params: PasswordResetParams) => Promise<boolean>;
+  register: (registrationData: RegistrationParams) => Promise<User>;
+  forgotPassword: (email: string) => Promise<boolean>;
+  updatePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<boolean>;
+  setMode: (mode: AuthMode) => void;
+  getMode: () => AuthMode;
+}
+
+/**
+ * Validation result interface for authentication validations
+ */
+export interface ValidationResult {
+  /** Whether validation passed */
+  isValid: boolean;
+  /** Map of field names to error messages */
+  errors: Record<string, string>;
 }
 
 /**
@@ -128,6 +148,7 @@ export interface RegistrationParams {
   firstName?: string;
   lastName?: string;
   nickname?: string;
+  serverUrl?: string;
 }
 
 /**
@@ -135,4 +156,48 @@ export interface RegistrationParams {
  */
 export interface ForgotPasswordParams {
   email: string;
+}
+
+/**
+ * Authentication validation rules configuration
+ */
+export interface ValidationRules {
+  /** Minimum username length */
+  minUsernameLength: number;
+  /** Maximum username length */
+  maxUsernameLength: number;
+  /** Username pattern (for allowed characters) */
+  usernamePattern: RegExp;
+  /** Username pattern error message */
+  usernamePatternError: string;
+  /** Minimum password length */
+  minPasswordLength: number;
+  /** Maximum password length */
+  maxPasswordLength: number;
+  /** Whether to enforce password strength */
+  enforcePasswordStrength: boolean;
+  /** Minimum password strength (0-3) */
+  minPasswordStrength: number;
+  /** Email pattern (for validation beyond standard) */
+  emailPattern?: RegExp;
+  /** Email pattern error message */
+  emailPatternError?: string;
+}
+
+/**
+ * Authentication service configuration options
+ */
+export interface AuthServiceConfig {
+  /** Whether to use localStorage to persist tokens */
+  useLocalStorage?: boolean;
+  /** Key to use in localStorage for tokens */
+  storageKey?: string;
+  /** Key to use in localStorage for server URL */
+  serverStorageKey?: string;
+  /** Auth mode to use */
+  mode?: AuthMode;
+  /** Custom validation rules for authentication */
+  validationRules?: Partial<ValidationRules>;
+  /** Threshold in milliseconds before token expiration to trigger refresh */
+  tokenRefreshThreshold?: number;
 }

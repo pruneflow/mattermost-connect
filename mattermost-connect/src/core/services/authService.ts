@@ -6,7 +6,6 @@
 import { apiClient } from "../api/client";
 import {
   User,
-  LoginParams,
   LoginResponse,
   AuthMode,
   AuthServiceConfig,
@@ -14,17 +13,10 @@ import {
   EventType,
   RegistrationParams,
   PasswordResetParams,
-  ForgotPasswordParams,
 } from "../../types";
-import { handleError } from "../store/errorStore";
+import { handleError } from "../store";
 import { emitEvent } from "../api/eventUtils";
-import {
-  validateLogin,
-  validateRegistration,
-  validatePassword,
-  validateEmail,
-  AuthValidator,
-} from "../../utils/authValidation";
+import { AuthValidator } from "../../utils/authValidation";
 
 /**
  * Authentication error types
