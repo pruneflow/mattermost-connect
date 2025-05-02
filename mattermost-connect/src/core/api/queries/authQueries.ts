@@ -4,7 +4,14 @@
  * Provides standardized queries for authentication operations
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { User, LoginParams, ApiError } from "../../../types";
+import {
+  User,
+  LoginParams,
+  ApiError,
+  RegistrationParams,
+  PasswordResetParams,
+  ForgotPasswordParams,
+} from "../../../types";
 import { emitEvent, useAuthStore, handleError } from "../../store";
 import { apiClient } from "../client";
 import { QUERY_KEYS } from "../queryClient";
@@ -119,10 +126,10 @@ export const useLogoutMutation = () => {
  * Forgot password mutation
  */
 export const useForgotPasswordMutation = () => {
-  return useMutation<boolean, ApiError, string>({
-    mutationFn: async (email: string) => {
-      await apiClient.post("users/password/reset", { email });
-      return true;
+  return useMutation<boolean, ApiError, ForgotPasswordParams>({
+    mutationFn: async (data: ForgotPasswordParams) => {
+      const { forgotPassword } = useAuthStore.getState();
+      return await forgotPassword(data.email);
     },
     ...createMutationOptions({
       onError: (error) => {
@@ -136,22 +143,48 @@ export const useForgotPasswordMutation = () => {
  * Reset password mutation
  */
 export const useResetPasswordMutation = () => {
-  return useMutation<boolean, ApiError, { token: string; newPassword: string }>(
-    {
-      mutationFn: async ({ token, newPassword }) => {
-        await apiClient.post("users/password/reset/complete", {
-          token,
-          new_password: newPassword,
-        });
-        return true;
-      },
-      ...createMutationOptions({
-        onError: (error) => {
-          handleError(error as Error, ErrorSource.AUTH);
-        },
-      }),
+  return useMutation<boolean, ApiError, PasswordResetParams>({
+    mutationFn: async (data: PasswordResetParams) => {
+      const { resetPassword } = useAuthStore.getState();
+      return await resetPassword(data);
     },
-  );
+    ...createMutationOptions({
+      onError: (error) => {
+        handleError(error as Error, ErrorSource.AUTH);
+      },
+    }),
+  });
+};
+
+export const useRegisterMutation = () => {
+  const { setLoading, setError } = useAuthStore();
+
+  return useMutation<User, ApiError, RegistrationParams>({
+    mutationFn: async (registrationData: RegistrationParams) => {
+      setLoading(true);
+
+      try {
+        const { register } = useAuthStore.getState();
+        const user = await register(registrationData);
+
+        // Emit registration success event
+        emitEvent(EventType.REGISTRATION_SUCCESS, {
+          user,
+          timestamp: Date.now(),
+        });
+
+        return user;
+      } catch (error) {
+        setError(error as Error);
+        // Use standardized error handling
+        handleError(error as Error, ErrorSource.AUTH);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    ...createMutationOptions(),
+  });
 };
 
 /**

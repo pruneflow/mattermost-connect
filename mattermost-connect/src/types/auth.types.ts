@@ -117,3 +117,22 @@ export interface ApiClientConfig {
   defaultHeaders?: Record<string, string>;
   onError?: (error: any) => void;
 }
+
+/**
+ * Registration parameters for new user
+ */
+export interface RegistrationParams {
+  username: string;
+  password: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  nickname?: string;
+}
+
+/**
+ * Forgot password parameters
+ */
+export interface ForgotPasswordParams {
+  email: string;
+}
