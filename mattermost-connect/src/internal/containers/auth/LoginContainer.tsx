@@ -1,9 +1,8 @@
 // src/internal/containers/auth/LoginContainer.tsx
-
-// src/internal/containers/auth/LoginContainer.tsx
 /**
  * Login Container
  * Container component that handles login logic and state
+ * Implements the container pattern with clear separation between logic and UI
  */
 import React, { useCallback } from "react";
 import { BaseContainer } from "../base/BaseContainer";
@@ -14,6 +13,9 @@ import { default as ProxyLoginFormUI } from "../../components/auth/ProxyLoginFor
 import { User, LoginParams, AuthMode } from "../../../types";
 import { useAuth } from "../../../hooks";
 
+/**
+ * Login container props
+ */
 export interface LoginContainerProps {
   /** CSS class name */
   className?: string;
@@ -82,13 +84,17 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     disabled,
   } = props;
 
-  // Keep all the hooks for logic
+  // Use Auth hook for authentication operations
   const { login, setAuthMode } = useAuth();
+
+  // Use loading state hook for standardized loading management
   const { loadingState, loadingActions } = useContainerLoadingState({
     initialLoading,
     initialError,
     minLoadingTime: 500,
   });
+
+  // Use dialog hook for error handling
   const dialog = useDialog();
 
   // Set authentication mode if provided
@@ -98,7 +104,7 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     }
   }, [authMode, setAuthMode]);
 
-  // Handle form submission - maintain all business logic
+  // Handle form submission
   const handleSubmit = useCallback(
     async (
       username: string,
@@ -207,6 +213,12 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     className,
     sx,
     id,
+    showForgotPassword,
+    onForgotPasswordClick,
+    showRegister,
+    onRegisterClick,
+    autoFocus: autoFocusUsername,
+    disabled: disabled || loadingState.isLoading,
   };
 
   // Render the appropriate login form UI component based on showServerUrl

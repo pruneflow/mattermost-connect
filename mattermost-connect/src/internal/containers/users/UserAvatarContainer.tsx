@@ -2,13 +2,16 @@
 /**
  * User Avatar Container
  * Container component that handles user avatar logic and state
+ * Implements the container pattern with clear separation between logic and UI
  */
-import React from "react";
+import React, { useCallback } from "react";
 import { BaseContainer, BaseContainerProps } from "../base/BaseContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
 import { default as UserAvatarUI } from "../../components/users/UserAvatarUI";
 
-// Keep the existing props interface
+/**
+ * User avatar container props
+ */
 export interface UserAvatarContainerProps extends BaseContainerProps {
   /** User ID */
   userId?: string;
@@ -74,7 +77,7 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
     ...restProps
   } = props;
 
-  // Keep the useContainerUser hook for logic
+  // Use container user hook for data and state management
   const { displayName, initials, imageUrl, status, isLoading, error } =
     useContainerUser(userId, {
       avatarSize: size,
@@ -90,33 +93,34 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
   const finalSrc = srcOverride || imageUrl;
   const finalStatus = statusOverride || status;
 
-  // Handle click event, maintaining container logic
-  const handleClick = React.useCallback(() => {
+  // Handle click event
+  const handleClick = useCallback(() => {
     if (onClick && userId) {
       onClick(userId);
     }
   }, [onClick, userId]);
 
-  // Prepare UI props - this is the key transformation between container and UI
+  // Prepare props for the UI component
   const avatarUiProps = {
     displayName: finalDisplayName,
+    imageUrl: finalSrc,
     initials: finalInitials,
-    src: finalSrc,
     status: showStatus ? finalStatus : undefined,
     size,
     showName,
-    namePosition,
     textVariant,
+    namePosition,
     isLoading,
     error,
     showTooltip,
+    clickable,
     onClick: clickable ? handleClick : undefined,
     avatarClassName,
     nameClassName,
     badgeClassName,
   };
 
-  // Render the UI component with the prepared props
+  // Render the UI component with prepared props
   return (
     <BaseContainer
       {...restProps}

@@ -2,6 +2,7 @@
 /**
  * Register Container
  * Container component that handles user registration logic and state
+ * Implements the container pattern with clear separation between logic and UI
  */
 import React, { useCallback, useState } from "react";
 import { BaseContainer } from "../base/BaseContainer";
@@ -12,7 +13,6 @@ import { User, RegistrationParams, AuthMode } from "../../../types";
 import { useAuth } from "../../../hooks";
 import { getPasswordStrength } from "../../../utils/authValidation";
 
-// Keep the existing props interface
 /**
  * Registration container props
  */
@@ -81,13 +81,17 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
     disabled,
   } = props;
 
-  // Keep all hooks for business logic
+  // Use Auth hook for registration operations
   const { register, login, setAuthMode } = useAuth();
+
+  // Use loading state hook for standardized loading management
   const { loadingState, loadingActions } = useContainerLoadingState({
     initialLoading,
     initialError,
     minLoadingTime: 500,
   });
+
+  // Use dialog hook for error and success messages
   const dialog = useDialog();
 
   // Track password strength
@@ -243,12 +247,14 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
     showLogin,
     onSubmit: handleSubmit,
     onLoginClick,
+    onPasswordChange: handlePasswordChange,
     className,
     sx,
     id,
+    disabled: disabled || loadingState.isLoading,
   };
 
-  // Render the UI component
+  // Render the RegisterFormUI with prepared props
   return (
     <BaseContainer
       {...props}

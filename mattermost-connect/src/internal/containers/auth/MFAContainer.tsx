@@ -2,13 +2,14 @@
 /**
  * MFA Container
  * Handles multi-factor authentication with standardized patterns
+ * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useMemo, useCallback } from "react";
-import { FormContainer, FormContainerProps } from "../base/FormContainer";
+import React, { useCallback } from "react";
+import { BaseContainer } from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
+import { MFAUI } from "../../components/auth/MFAUI";
 import { User } from "../../../types";
-import { useAuth } from "../../../hooks/useAuth";
 import { authService } from "../../../core/services/authService";
 
 /**
@@ -68,18 +69,15 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
   } = props;
 
   // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions, loadingProps, withLoading } =
+  const { loadingState, loadingActions, withLoading } =
     useContainerLoadingState({
       initialLoading,
       initialError,
       minLoadingTime: 500,
     });
 
-  // Use dialog hook for error handling
+  // Use dialog hook for error and success messages
   const dialog = useDialog();
-
-  // Use auth hook
-  const auth = useAuth();
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -124,7 +122,7 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
           onMfaError(error as Error);
         }
 
-        // Re-throw error for form container to handle
+        // Re-throw error for UI to handle
         throw error;
       }
     },
@@ -169,89 +167,28 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     });
   }, [dialog, method, withLoading, userId]);
 
-  // Create form props
-  const formProps: FormContainerProps = useMemo(() => {
-    // Initialize field configurations
-    const fieldConfigs: Record<string, any> = {
-      code: {
-        label: method === "totp" ? "Authentication Code" : "Email Code",
-        type: "text",
-        inputMode: "numeric",
-        pattern: "[0-9]*",
-        autoComplete: "one-time-code",
-        required: true,
-        requiredMessage: "Verification code is required",
-        placeholder:
-          method === "totp" ? "Enter 6-digit code" : "Enter code from email",
-        maxLength: 6,
-        validator: (value: string) => {
-          // Validate the code format
-          if (!/^\d+$/.test(value)) {
-            return "Verification code must contain only digits";
-          }
-
-          if (value.length !== 6) {
-            return "Verification code must be 6 digits";
-          }
-
-          return true;
-        },
-      },
-    };
-
-    // Configure available actions
-    const availableActions = [];
-
-    if (showResendOption) {
-      availableActions.push({
-        id: "resend-code",
-        label: "Resend Code",
-        onClick: handleResendCode,
-      });
-    }
-
-    // Set header and helper text based on method
-    const headerText =
-      method === "totp" ? "Two-Factor Authentication" : "Email Verification";
-
-    const helperText =
-      method === "totp"
-        ? "Enter the 6-digit code from your authenticator app"
-        : "Enter the verification code sent to your email";
-
-    // Return the props
-    return {
-      id,
-      className,
-      sx,
-      initialData: {
-        code: "",
-      },
-      fields: fieldConfigs,
-      onSubmit: handleSubmit,
-      readOnly: disabled || loadingState.isLoading,
-      autoFocus: autoFocus ? "code" : undefined,
-      submitText: verifyButtonText,
-      availableActions,
-      headerText,
-      helperText,
-    };
-  }, [
+  // Prepare UI props for the MFA UI component
+  const mfaUiProps = {
     method,
-    showResendOption,
-    handleResendCode,
-    id,
+    error: loadingState.error?.message || null,
+    isLoading: loadingState.isLoading,
+    onSubmit: handleSubmit,
+    onResendCode: showResendOption ? handleResendCode : undefined,
+    submitText: verifyButtonText,
+    autoFocus,
     className,
     sx,
-    handleSubmit,
-    disabled,
-    loadingState.isLoading,
-    autoFocus,
-    verifyButtonText,
-  ]);
+    id,
+    disabled: disabled || loadingState.isLoading,
+  };
 
-  // Render form container
-  return <FormContainer {...formProps} />;
+  // Render the MFAUI with prepared props
+  return (
+    <BaseContainer
+      {...props}
+      render={(api, state) => <MFAUI {...mfaUiProps} />}
+    />
+  );
 };
 
 export default MFAContainer;

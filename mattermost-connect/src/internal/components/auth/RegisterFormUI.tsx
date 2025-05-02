@@ -3,7 +3,7 @@
  * Registration Form UI Component
  * Pure presentational component for user registration
  */
-import React from "react";
+import React, { useState } from "react";
 import {
   Box,
   TextField,
@@ -16,10 +16,14 @@ import {
 } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
 
+/**
+ * Registration form UI props
+ */
 export interface RegisterFormUIProps extends BaseComponentProps {
   // Form state
   error?: string | null;
   isLoading?: boolean;
+  disabled?: boolean;
 
   // Form configuration
   showServerUrl?: boolean;
@@ -46,6 +50,7 @@ export interface RegisterFormUIProps extends BaseComponentProps {
     serverUrl?: string,
   ) => void;
   onLoginClick?: () => void;
+  onPasswordChange?: (password: string) => void;
 }
 
 /**
@@ -56,6 +61,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
   const {
     error,
     isLoading = false,
+    disabled = false,
     showServerUrl = false,
     initialUsername = "",
     initialEmail = "",
@@ -68,26 +74,40 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
     loginText = "Already have an account? Login",
     onSubmit,
     onLoginClick,
+    onPasswordChange,
     className,
     sx,
     id,
   } = props;
 
   // Local form state
-  const [username, setUsername] = React.useState(initialUsername);
-  const [email, setEmail] = React.useState(initialEmail);
-  const [password, setPassword] = React.useState("");
-  const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [firstName, setFirstName] = React.useState("");
-  const [lastName, setLastName] = React.useState("");
-  const [serverUrl, setServerUrl] = React.useState(initialServerUrl);
+  const [username, setUsername] = useState(initialUsername);
+  const [email, setEmail] = useState(initialEmail);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [serverUrl, setServerUrl] = useState(initialServerUrl);
 
   // Validation state
-  const [usernameError, setUsernameError] = React.useState("");
-  const [emailError, setEmailError] = React.useState("");
-  const [passwordError, setPasswordError] = React.useState("");
-  const [confirmPasswordError, setConfirmPasswordError] = React.useState("");
-  const [serverUrlError, setServerUrlError] = React.useState("");
+  const [usernameError, setUsernameError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [serverUrlError, setServerUrlError] = useState("");
+
+  // Handle password change and trigger strength calculation
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newPassword = e.target.value;
+    setPassword(newPassword);
+
+    if (onPasswordChange) {
+      onPasswordChange(newPassword);
+    }
+
+    // Clear error on change
+    setPasswordError("");
+  };
 
   // Basic validation
   const validateForm = (): boolean => {
@@ -195,6 +215,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
     );
   };
 
+  // Component is fully controlled by its props
   return (
     <Box
       component="form"
@@ -235,7 +256,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
           usernameError ||
           "Username must contain only letters, numbers, dots, hyphens, and underscores"
         }
-        disabled={isLoading}
+        disabled={isLoading || disabled}
       />
 
       <TextField
@@ -250,7 +271,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
         onChange={(e) => setEmail(e.target.value)}
         error={!!emailError}
         helperText={emailError}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
       />
 
       <TextField
@@ -263,10 +284,10 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
         id="password"
         autoComplete="new-password"
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={handlePasswordChange}
         error={!!passwordError}
         helperText={passwordError}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
       />
 
       {renderPasswordStrength()}
@@ -284,7 +305,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
         onChange={(e) => setConfirmPassword(e.target.value)}
         error={!!confirmPasswordError}
         helperText={confirmPasswordError}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
       />
 
       <TextField
@@ -296,7 +317,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
         autoComplete="given-name"
         value={firstName}
         onChange={(e) => setFirstName(e.target.value)}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
       />
 
       <TextField
@@ -308,7 +329,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
         autoComplete="family-name"
         value={lastName}
         onChange={(e) => setLastName(e.target.value)}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
       />
 
       {showServerUrl && (
@@ -326,7 +347,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
           helperText={
             serverUrlError || "Example: https://mattermost.example.com"
           }
-          disabled={isLoading}
+          disabled={isLoading || disabled}
         />
       )}
 
@@ -335,7 +356,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
         fullWidth
         variant="contained"
         color="primary"
-        disabled={isLoading}
+        disabled={isLoading || disabled}
         sx={{ mt: 3, mb: 2 }}
       >
         {isLoading ? (
@@ -351,6 +372,7 @@ export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
             variant="body2"
             onClick={onLoginClick}
             sx={{ cursor: "pointer" }}
+            disabled={isLoading || disabled}
           >
             {loginText}
           </Link>

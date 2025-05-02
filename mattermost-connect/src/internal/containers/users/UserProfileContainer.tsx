@@ -2,8 +2,9 @@
 /**
  * User Profile Container
  * Container component that handles user profile logic and state
+ * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { DetailContainer, DetailContainerProps } from "../base/DetailContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
 import { UserProfileUI } from "../../components/users/UserProfileUI";
@@ -11,7 +12,6 @@ import { useUser } from "../../../hooks";
 import { User } from "../../../types";
 import { userService } from "../../../core/services/userService";
 
-// Keep the existing props interface
 /**
  * User profile container props
  */
@@ -80,7 +80,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     ...restProps
   } = props;
 
-  // Keep all hooks and state for business logic
+  // Use container user hook for data and state management
   const {
     user,
     displayName,
@@ -97,7 +97,10 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     showStatus,
   });
 
+  // Use user hook for API operations
   const userHook = useUser(userId);
+
+  // Local state for active tab, edit mode, and form data
   const [activeTab, setActiveTab] = useState<string>(
     initialActiveTab || (tabs.length > 0 ? tabs[0].id : "info"),
   );
@@ -105,7 +108,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
   const [formData, setFormData] = useState<Partial<User>>({});
 
   // Initialize form data when user data changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (user) {
       setFormData({
         username: user.username,
@@ -168,7 +171,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
       // Create profile update object
       const profileUpdate = userService.createProfileUpdate(formData);
 
-      // Use the userHook directly for API operations
+      // Update profile
       const updatedUser = await loading.withLoading(() =>
         userHook.updateProfile(profileUpdate),
       );
@@ -220,7 +223,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     customContentRenderer: contentRenderer,
   };
 
-  // Render the UI component with the prepared props
+  // Render the UI component with prepared props
   return (
     <DetailContainer
       {...restProps}

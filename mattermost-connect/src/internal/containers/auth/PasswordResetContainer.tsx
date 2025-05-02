@@ -2,28 +2,20 @@
 /**
  * Password Reset Container
  * Handles password reset functionality with standardized patterns
+ * Implements the container pattern with clear separation between logic and UI
  */
 import React, { useMemo, useCallback } from "react";
-import { FormContainer, FormContainerProps } from "../base/FormContainer";
+import { BaseContainer } from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
-import { AuthMode, PasswordResetParams } from "../../../types";
+import { PasswordResetFormUI } from "../../components/auth/PasswordResetFormUI";
+import { AuthMode } from "../../../types";
 import { useAuth } from "../../../hooks";
-import { validateEmail, validatePassword } from "../../../utils/authValidation";
 
 /**
  * Mode for the password reset container
  */
 export type PasswordResetMode = "forgot" | "reset" | "update";
-
-/**
- * Extended reset params to include confirmPassword
- */
-interface ExtendedPasswordResetParams extends PasswordResetParams {
-  confirmPassword?: string;
-  currentPassword?: string;
-  email?: string;
-}
 
 /**
  * Password reset container props
@@ -89,6 +81,20 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     disabled,
   } = props;
 
+  // Use Auth hook for password reset operations
+  const { forgotPassword, resetPassword, updatePassword, setAuthMode } =
+    useAuth();
+
+  // Use loading state hook for standardized loading management
+  const { loadingState, loadingActions } = useContainerLoadingState({
+    initialLoading,
+    initialError,
+    minLoadingTime: 500,
+  });
+
+  // Use dialog hook for error and success messages
+  const dialog = useDialog();
+
   // Default button text based on mode
   const defaultButtonText = useMemo(() => {
     switch (mode) {
@@ -102,20 +108,6 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
         return "Submit";
     }
   }, [mode]);
-
-  // Use Auth hook instead of direct authStore access
-  const { forgotPassword, resetPassword, updatePassword, setAuthMode } =
-    useAuth();
-
-  // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions } = useContainerLoadingState({
-    initialLoading,
-    initialError,
-    minLoadingTime: 500,
-  });
-
-  // Use dialog hook for error handling and success messages
-  const dialog = useDialog();
 
   // Set authentication mode if provided
   React.useEffect(() => {
@@ -137,7 +129,7 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
 
   // Handle form submission
   const handleSubmit = useCallback(
-    async (data: Partial<ExtendedPasswordResetParams>) => {
+    async (data: any) => {
       try {
         loadingActions.setLoading(true);
         let result;
@@ -247,7 +239,7 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
           onResetError(error as Error);
         }
 
-        // Re-throw error for form container to handle
+        // Re-throw error for UI to handle
         throw error;
       }
     },
@@ -265,164 +257,30 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     ],
   );
 
-  // Create field validators
-  const fieldValidators = useMemo(
-    () => ({
-      email: (value: string) => {
-        const result = validateEmail(value);
-        return result.isValid ? true : Object.values(result.errors)[0];
-      },
-      currentPassword: (value: string) => {
-        return value ? true : "Current password is required";
-      },
-      newPassword: (value: string) => {
-        const result = validatePassword(value);
-        return result.isValid ? true : Object.values(result.errors)[0];
-      },
-      confirmPassword: (value: string, formData: any) => {
-        return value === formData.newPassword ? true : "Passwords do not match";
-      },
-    }),
-    [],
-  );
-
-  // Create form props
-  const formProps: FormContainerProps = useMemo(() => {
-    // Initialize field configurations and initial data
-    const fieldConfigs: Record<string, any> = {};
-    const initialData: Record<string, any> = {};
-
-    // Set fields based on mode
-    switch (mode) {
-      case "forgot":
-        fieldConfigs.email = {
-          label: "Email",
-          type: "email",
-          autoComplete: "email",
-          required: true,
-          requiredMessage: "Email is required",
-          placeholder: "Enter your email",
-          validator: fieldValidators.email,
-          defaultValue: email,
-        };
-        initialData.email = email;
-        break;
-
-      case "reset":
-        fieldConfigs.newPassword = {
-          label: "New Password",
-          type: "password",
-          autoComplete: "new-password",
-          required: true,
-          requiredMessage: "New password is required",
-          placeholder: "Enter new password",
-          validator: fieldValidators.newPassword,
-        };
-        fieldConfigs.confirmPassword = {
-          label: "Confirm Password",
-          type: "password",
-          autoComplete: "new-password",
-          required: true,
-          requiredMessage: "Please confirm your password",
-          placeholder: "Confirm new password",
-          validator: fieldValidators.confirmPassword,
-        };
-        initialData.newPassword = "";
-        initialData.confirmPassword = "";
-        initialData.token = token;
-        break;
-
-      case "update":
-        fieldConfigs.currentPassword = {
-          label: "Current Password",
-          type: "password",
-          autoComplete: "current-password",
-          required: true,
-          requiredMessage: "Current password is required",
-          placeholder: "Enter current password",
-          validator: fieldValidators.currentPassword,
-        };
-        fieldConfigs.newPassword = {
-          label: "New Password",
-          type: "password",
-          autoComplete: "new-password",
-          required: true,
-          requiredMessage: "New password is required",
-          placeholder: "Enter new password",
-          validator: fieldValidators.newPassword,
-        };
-        fieldConfigs.confirmPassword = {
-          label: "Confirm Password",
-          type: "password",
-          autoComplete: "new-password",
-          required: true,
-          requiredMessage: "Please confirm your password",
-          placeholder: "Confirm new password",
-          validator: fieldValidators.confirmPassword,
-        };
-        initialData.currentPassword = "";
-        initialData.newPassword = "";
-        initialData.confirmPassword = "";
-        break;
-    }
-
-    // Configure available actions
-    const availableActions = [];
-
-    if (showLogin && onLoginClick) {
-      availableActions.push({
-        id: "login",
-        label: "Back to Login",
-        onClick: onLoginClick,
-      });
-    }
-
-    // Set header text based on mode
-    const headerText =
-      mode === "forgot"
-        ? "Reset Password"
-        : mode === "reset"
-          ? "Create New Password"
-          : "Update Password";
-
-    // Return the props
-    return {
-      id,
-      className,
-      sx,
-      initialData,
-      fields: fieldConfigs,
-      onSubmit: handleSubmit,
-      readOnly: disabled || loadingState.isLoading,
-      autoFocus:
-        mode === "forgot"
-          ? "email"
-          : mode === "reset"
-            ? "newPassword"
-            : "currentPassword",
-      submitText: submitButtonText || defaultButtonText,
-      availableActions,
-      headerText,
-    };
-  }, [
+  // Prepare UI props for the password reset form
+  const resetFormProps = {
     mode,
     token,
-    fieldValidators,
-    email,
+    initialEmail: email,
+    error: loadingState.error?.message || null,
+    isLoading: loadingState.isLoading,
+    onSubmit: handleSubmit,
+    submitText: submitButtonText || defaultButtonText,
     showLogin,
     onLoginClick,
-    id,
     className,
     sx,
-    handleSubmit,
-    disabled,
-    loadingState.isLoading,
-    submitButtonText,
-    defaultButtonText,
-  ]);
+    id,
+    disabled: disabled || loadingState.isLoading,
+  };
 
-  // Render form container
-  return <FormContainer {...formProps} />;
+  // Render the PasswordResetFormUI with prepared props
+  return (
+    <BaseContainer
+      {...props}
+      render={(api, state) => <PasswordResetFormUI {...resetFormProps} />}
+    />
+  );
 };
 
 export default PasswordResetContainer;
