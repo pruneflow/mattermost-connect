@@ -7,14 +7,23 @@ import React, { useMemo, useCallback } from "react";
 import { FormContainer, FormContainerProps } from "../base/FormContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
-import { AuthMode } from "../../../types";
-import { useAuthStore } from "../../../core/store";
+import { AuthMode, PasswordResetParams } from "../../../types";
+import { useAuth } from "../../../hooks";
 import { validateEmail, validatePassword } from "../../../utils/authValidation";
 
 /**
  * Mode for the password reset container
  */
 export type PasswordResetMode = "forgot" | "reset" | "update";
+
+/**
+ * Extended reset params to include confirmPassword
+ */
+interface ExtendedPasswordResetParams extends PasswordResetParams {
+  confirmPassword?: string;
+  currentPassword?: string;
+  email?: string;
+}
 
 /**
  * Password reset container props
@@ -94,9 +103,9 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     }
   }, [mode]);
 
-  // Get auth store functionality
-  const { forgotPassword, resetPassword, updatePassword, setMode } =
-    useAuthStore();
+  // Use Auth hook instead of direct authStore access
+  const { forgotPassword, resetPassword, updatePassword, setAuthMode } =
+    useAuth();
 
   // Use loading state hook for standardized loading management
   const { loadingState, loadingActions } = useContainerLoadingState({
@@ -111,9 +120,9 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
   // Set authentication mode if provided
   React.useEffect(() => {
     if (authMode) {
-      setMode(authMode);
+      setAuthMode(authMode);
     }
-  }, [authMode, setMode]);
+  }, [authMode, setAuthMode]);
 
   // Check if token is provided for reset mode
   React.useEffect(() => {
@@ -128,20 +137,27 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
 
   // Handle form submission
   const handleSubmit = useCallback(
-    async (data: any) => {
+    async (data: Partial<ExtendedPasswordResetParams>) => {
       try {
         loadingActions.setLoading(true);
-        let result = false;
+        let result;
 
         switch (mode) {
           case "forgot":
             // Handle forgot password
-            result = await forgotPassword(data.email);
-            if (result) {
+            result = await forgotPassword(data.email || "");
+            if (result.success) {
               dialog.showSuccess(
                 "Reset Email Sent",
                 "We've sent a password reset link to your email address. Please check your inbox.",
               );
+            } else if (result.error) {
+              throw result.error;
+            } else if (result.validationErrors) {
+              const errorMessage = Object.values(result.validationErrors).join(
+                ", ",
+              );
+              throw new Error(errorMessage);
             }
             break;
 
@@ -150,29 +166,54 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
             if (!token) {
               throw new Error("Reset token is missing");
             }
+
+            if (data.newPassword !== data.confirmPassword) {
+              throw new Error("Passwords do not match");
+            }
+
             result = await resetPassword({
               token,
-              newPassword: data.newPassword,
+              newPassword: data.newPassword || "",
             });
-            if (result) {
+
+            if (result.success) {
               dialog.showSuccess(
                 "Password Reset Successfully",
                 "Your password has been reset. You can now login with your new password.",
               );
+            } else if (result.error) {
+              throw result.error;
+            } else if (result.validationErrors) {
+              const errorMessage = Object.values(result.validationErrors).join(
+                ", ",
+              );
+              throw new Error(errorMessage);
             }
             break;
 
           case "update":
             // Handle password update
+            if (data.newPassword !== data.confirmPassword) {
+              throw new Error("Passwords do not match");
+            }
+
             result = await updatePassword(
-              data.currentPassword,
-              data.newPassword,
+              data.currentPassword || "",
+              data.newPassword || "",
             );
-            if (result) {
+
+            if (result.success) {
               dialog.showSuccess(
                 "Password Updated",
                 "Your password has been updated successfully.",
               );
+            } else if (result.error) {
+              throw result.error;
+            } else if (result.validationErrors) {
+              const errorMessage = Object.values(result.validationErrors).join(
+                ", ",
+              );
+              throw new Error(errorMessage);
             }
             break;
 
@@ -288,6 +329,7 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
         };
         initialData.newPassword = "";
         initialData.confirmPassword = "";
+        initialData.token = token;
         break;
 
       case "update":
@@ -364,6 +406,7 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     };
   }, [
     mode,
+    token,
     fieldValidators,
     email,
     showLogin,

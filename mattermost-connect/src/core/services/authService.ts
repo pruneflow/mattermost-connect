@@ -34,6 +34,30 @@ export enum AuthErrorType {
   UNKNOWN = "unknown",
 }
 
+// Ajout des méthodes à authService.ts
+
+/**
+ * MFA verification parameters
+ */
+export interface MfaVerificationParams {
+  /** User ID for verification */
+  userId: string;
+  /** Verification code */
+  code: string;
+  /** MFA method type */
+  method: "totp" | "email";
+}
+
+/**
+ * MFA resend parameters
+ */
+export interface MfaResendParams {
+  /** User ID to resend code for */
+  userId: string;
+  /** MFA method type */
+  method: "totp" | "email";
+}
+
 /**
  * Authentication error class
  */
@@ -761,23 +785,336 @@ class AuthService {
 
   /**
    * Validates an authentication token format
+   * Performs comprehensive validation based on token type
    * @param token Token to validate
    * @returns Whether token format is valid
    */
   public validateTokenFormat(token: string): boolean {
-    // Basic validation - can be extended based on token format
-    return !!(token && token.length > 8);
+    if (!token || token.trim() === "") {
+      return false;
+    }
+
+    try {
+      // For JWT tokens (most common in production)
+      if (token.split(".").length === 3) {
+        // JWT has three parts separated by dots: header.payload.signature
+        const [header, payload, signature] = token.split(".");
+
+        // Verify each part exists and is not empty
+        if (!header || !payload || !signature) {
+          return false;
+        }
+
+        // Basic structure check - can decode from base64
+        try {
+          const decodedHeader = JSON.parse(atob(header));
+          const decodedPayload = JSON.parse(atob(payload));
+
+          // Check for minimal required JWT fields
+          if (!decodedHeader.alg || !decodedPayload.sub) {
+            return false;
+          }
+
+          // Ensure signature is not empty
+          return signature.trim() !== "";
+        } catch (decodeError) {
+          // If we can't decode parts, it's not a valid JWT
+          return false;
+        }
+      }
+
+      // For Bearer token format
+      if (token.startsWith("Bearer ")) {
+        const tokenValue = token.substring(7).trim();
+        // Check minimum length and character set for Bearer tokens
+        return tokenValue.length >= 32 && /^[A-Za-z0-9\-_]+$/.test(tokenValue);
+      }
+
+      // For simple token formats (could be session ID or similar)
+      // Minimum 32 characters and only contains allowed characters
+      return token.length >= 32 && /^[A-Za-z0-9\-_]+$/.test(token);
+    } catch (error) {
+      // Log the error but don't expose internal details
+      console.error("Token validation error", error);
+      return false;
+    }
   }
 
   /**
    * Estimates remaining token validity
-   * @param token Authentication token
+   * Calculates the remaining validity time in seconds
+   * @param token Authentication token (optional, uses stored token if not provided)
    * @returns Estimated validity in seconds or null if unknown
    */
   public getTokenRemainingValidity(token?: string): number | null {
-    // This is a placeholder implementation - token validity would typically
-    // be determined by decoding JWT or tracking issuance time
-    return null;
+    try {
+      // Use provided token or fall back to stored token
+      const tokenToCheck = token || this.getStoredToken();
+      if (!tokenToCheck) {
+        return null;
+      }
+
+      // For JWT tokens
+      if (tokenToCheck.split(".").length === 3) {
+        try {
+          // Decode the payload
+          const payload = JSON.parse(atob(tokenToCheck.split(".")[1]));
+
+          // Check for expiration time
+          if (payload.exp) {
+            const expirationTime = payload.exp * 1000; // Convert to milliseconds
+            const currentTime = Date.now();
+
+            // Check if already expired
+            if (expirationTime <= currentTime) {
+              return 0;
+            }
+
+            // Return remaining validity in seconds
+            return Math.floor((expirationTime - currentTime) / 1000);
+          }
+        } catch (jwtError) {
+          // Error decoding JWT, can't determine validity
+          console.warn("Error determining JWT validity", jwtError);
+          return null;
+        }
+      }
+
+      // For server-stored sessions with our own expiration tracking
+      // Check if we have stored token issuance and expiration
+      const localStorageKey = `${this.storageKey}_exp`;
+
+      try {
+        if (this.useLocalStorage && localStorage.getItem(localStorageKey)) {
+          const tokenExpiration = parseInt(
+            localStorage.getItem(localStorageKey) || "0",
+            10,
+          );
+          const currentTime = Date.now();
+
+          // Check if already expired
+          if (tokenExpiration <= currentTime) {
+            return 0;
+          }
+
+          // Return remaining validity in seconds
+          return Math.floor((tokenExpiration - currentTime) / 1000);
+        }
+      } catch (storageError) {
+        console.warn(
+          "Error accessing local storage for token expiration",
+          storageError,
+        );
+        // Continue to fallback approach
+      }
+
+      // Fallback: For tokens where we can't determine expiration
+      // Make a lightweight API call to check token validity
+      // This is non-blocking and meant to be informational only
+      this.checkTokenValidityAsync(tokenToCheck).catch(() => {});
+
+      // Return a conservative estimate based on refresh threshold
+      // This assumes the refresh logic will handle token renewal appropriately
+      return Math.floor(this.tokenRefreshThreshold / 1000);
+    } catch (error) {
+      console.error("Error in getTokenRemainingValidity", error);
+      return null;
+    }
+  }
+
+  /**
+   * Helper method to check token validity asynchronously
+   * Makes a lightweight API call to verify token is still valid
+   * @param token Token to check
+   * @returns Promise resolving to boolean indicating validity
+   * @private
+   */
+  private async checkTokenValidityAsync(token: string): Promise<boolean> {
+    try {
+      // Use a lightweight endpoint that requires authentication
+      // This could be a dedicated endpoint or any existing one that's fast
+      await apiClient.get("users/status/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return true;
+    } catch (error: any) {
+      // Token is invalid if we get a 401
+      if (error.status === 401) {
+        return false;
+      }
+      // For other errors, we can't be sure
+      return true;
+    }
+  }
+
+  /**
+   * Verifies an MFA code
+   * @param params MFA verification parameters
+   * @returns Promise resolving to authenticated user
+   * @throws AuthError if verification fails
+   */
+  public async verifyMfa(params: MfaVerificationParams): Promise<User> {
+    try {
+      // Validate params
+      if (!params.userId) {
+        throw new AuthError(
+          "User ID is required",
+          AuthErrorType.VALIDATION_ERROR,
+        );
+      }
+
+      if (!params.code) {
+        throw new AuthError(
+          "Verification code is required",
+          AuthErrorType.VALIDATION_ERROR,
+        );
+      }
+
+      // Validate code format
+      if (!/^\d+$/.test(params.code) || params.code.length !== 6) {
+        throw new AuthError(
+          "Verification code must be 6 digits",
+          AuthErrorType.VALIDATION_ERROR,
+        );
+      }
+
+      let endpoint: string;
+      switch (params.method) {
+        case "totp":
+          endpoint = "users/mfa/totp/verify";
+          break;
+        case "email":
+          endpoint = "users/mfa/email/verify";
+          break;
+        default:
+          throw new AuthError(
+            `Unsupported MFA method: ${params.method}`,
+            AuthErrorType.VALIDATION_ERROR,
+          );
+      }
+
+      // Call API to verify MFA code
+      const response = await apiClient.post<{ token: string; user: User }>(
+        endpoint,
+        {
+          user_id: params.userId,
+          code: params.code,
+        },
+      );
+
+      // Update API client with new token
+      if (response.data.token) {
+        apiClient.setToken(response.data.token);
+
+        // Store credentials if localStorage is enabled
+        if (this.useLocalStorage) {
+          this.storeCredentials(response.data.token, this.getStoredServerUrl());
+        }
+
+        // Setup token refresh if needed
+        this.setupTokenRefresh(response.data.token);
+      }
+
+      // Return the authenticated user
+      return response.data.user;
+    } catch (error: any) {
+      if (error instanceof AuthError) {
+        handleError(error, ErrorSource.AUTH);
+        throw error;
+      }
+
+      // Handle specific error types
+      if (error.status === 401) {
+        throw new AuthError(
+          "Invalid verification code",
+          AuthErrorType.INVALID_CREDENTIALS,
+        );
+      } else if (!navigator.onLine) {
+        throw new AuthError(
+          "Network error. Please check your internet connection",
+          AuthErrorType.NETWORK_ERROR,
+        );
+      } else {
+        handleError(error as Error, ErrorSource.AUTH);
+        throw new AuthError(
+          error.message || "MFA verification failed",
+          AuthErrorType.SERVER_ERROR,
+        );
+      }
+    }
+  }
+
+  /**
+   * Resends an MFA code
+   * @param params MFA resend parameters
+   * @returns Promise resolving to success status
+   * @throws AuthError if resend fails
+   */
+  public async resendMfaCode(params: MfaResendParams): Promise<boolean> {
+    try {
+      // Validate params
+      if (!params.userId) {
+        throw new AuthError(
+          "User ID is required",
+          AuthErrorType.VALIDATION_ERROR,
+        );
+      }
+
+      let endpoint: string;
+      switch (params.method) {
+        case "totp":
+          // TOTP doesn't typically need resending as it's generated by the app
+          // But we provide an endpoint to possibly refresh the secret
+          endpoint = "users/mfa/totp/refresh";
+          break;
+        case "email":
+          endpoint = "users/mfa/email/resend";
+          break;
+        default:
+          throw new AuthError(
+            `Unsupported MFA method: ${params.method}`,
+            AuthErrorType.VALIDATION_ERROR,
+          );
+      }
+
+      // Call API to resend MFA code
+      await apiClient.post(endpoint, {
+        user_id: params.userId,
+      });
+
+      return true;
+    } catch (error: any) {
+      if (error instanceof AuthError) {
+        handleError(error, ErrorSource.AUTH);
+        throw error;
+      }
+
+      // Handle specific error types
+      if (error.status === 404) {
+        throw new AuthError(
+          "User not found or MFA not enabled",
+          AuthErrorType.SERVER_ERROR,
+        );
+      } else if (error.status === 429) {
+        throw new AuthError(
+          "Too many requests. Please wait before trying again",
+          AuthErrorType.SERVER_ERROR,
+        );
+      } else if (!navigator.onLine) {
+        throw new AuthError(
+          "Network error. Please check your internet connection",
+          AuthErrorType.NETWORK_ERROR,
+        );
+      } else {
+        handleError(error as Error, ErrorSource.AUTH);
+        throw new AuthError(
+          error.message || "Failed to resend MFA code",
+          AuthErrorType.SERVER_ERROR,
+        );
+      }
+    }
   }
 
   /**

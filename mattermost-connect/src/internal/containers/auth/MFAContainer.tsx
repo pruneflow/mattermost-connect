@@ -8,7 +8,8 @@ import { FormContainer, FormContainerProps } from "../base/FormContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
 import { User } from "../../../types";
-import { useAuthStore } from "../../../core/store";
+import { useAuth } from "../../../hooks/useAuth";
+import { authService } from "../../../core/services/authService";
 
 /**
  * MFA container props
@@ -45,16 +46,6 @@ export interface MFAContainerProps {
 }
 
 /**
- * Interface for handling MFA verification
- * This would typically be implemented in the authService
- */
-interface MfaVerificationParams {
-  userId: string;
-  code: string;
-  method: "totp" | "email";
-}
-
-/**
  * MFA container component
  * Provides standardized multi-factor authentication
  */
@@ -87,27 +78,8 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
   // Use dialog hook for error handling
   const dialog = useDialog();
 
-  // Get auth store
-  const authStore = useAuthStore();
-
-  // Create a mock function for MFA verification
-  // In a real implementation, this would be provided by authService
-  const verifyMfa = useCallback(
-    async (params: MfaVerificationParams): Promise<User> => {
-      // This is a placeholder. In a real implementation, this would call the auth service
-      // For now, we'll pretend the MFA verification succeeds if the code is "123456"
-      if (params.code === "123456") {
-        // For demo purposes, return the current user if available
-        const currentUser = authStore.currentUser;
-        if (currentUser) {
-          return currentUser;
-        }
-        throw new Error("User not found");
-      }
-      throw new Error("Invalid verification code");
-    },
-    [authStore.currentUser],
-  );
+  // Use auth hook
+  const auth = useAuth();
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -119,8 +91,8 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
           throw new Error("User ID is missing");
         }
 
-        // Verify MFA code
-        const user = await verifyMfa({
+        // Call authService to verify MFA code
+        const user = await authService.verifyMfa({
           userId,
           code: data.code,
           method,
@@ -159,7 +131,6 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     [
       loadingActions,
       userId,
-      verifyMfa,
       method,
       onMfaSuccess,
       redirectUrl,
@@ -170,14 +141,33 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
 
   // Handle resend code
   const handleResendCode = useCallback(() => {
-    dialog.showSuccess(
-      "Code Resent",
-      method === "totp"
-        ? "Please check your authenticator app for the new code."
-        : "A new verification code has been sent to your email.",
-    );
-    // In a real implementation, this would call the auth service to resend the code
-  }, [dialog, method]);
+    withLoading(async () => {
+      try {
+        if (!userId) {
+          throw new Error("User ID is missing");
+        }
+
+        // Call authService to resend MFA code
+        await authService.resendMfaCode({
+          userId,
+          method,
+        });
+
+        dialog.showSuccess(
+          "Code Resent",
+          method === "totp"
+            ? "Please check your authenticator app for the new code."
+            : "A new verification code has been sent to your email.",
+        );
+      } catch (error) {
+        dialog.showError(
+          "Failed to Resend Code",
+          (error as Error).message ||
+            "An error occurred when trying to resend the code.",
+        );
+      }
+    });
+  }, [dialog, method, withLoading, userId]);
 
   // Create form props
   const formProps: FormContainerProps = useMemo(() => {
@@ -194,6 +184,18 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
         placeholder:
           method === "totp" ? "Enter 6-digit code" : "Enter code from email",
         maxLength: 6,
+        validator: (value: string) => {
+          // Validate the code format
+          if (!/^\d+$/.test(value)) {
+            return "Verification code must contain only digits";
+          }
+
+          if (value.length !== 6) {
+            return "Verification code must be 6 digits";
+          }
+
+          return true;
+        },
       },
     };
 

@@ -8,7 +8,7 @@ import { FormContainer, FormContainerProps } from "../base/FormContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
 import { User, LoginParams, AuthMode } from "../../../types";
-import { useAuthStore } from "../../../core/store/authStore";
+import { useAuth } from "../../../hooks";
 
 /**
  * Login container props
@@ -81,8 +81,8 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     disabled,
   } = props;
 
-  // Get auth store functionality
-  const { login, setMode } = useAuthStore();
+  // Use Auth hook instead of direct authStore access
+  const { login, setAuthMode } = useAuth();
 
   // Use loading state hook for standardized loading management
   const { loadingState, loadingActions, loadingProps, withLoading } =
@@ -98,9 +98,9 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
   // Set authentication mode if provided
   React.useEffect(() => {
     if (authMode) {
-      setMode(authMode);
+      setAuthMode(authMode);
     }
-  }, [authMode, setMode]);
+  }, [authMode, setAuthMode]);
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -125,7 +125,22 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
         }
 
         // Perform login
-        const user = await login(loginParams);
+        const result = await login(loginParams);
+
+        if (!result.success) {
+          if (result.validationErrors) {
+            const errorMessage = Object.values(result.validationErrors).join(
+              ", ",
+            );
+            throw new Error(errorMessage);
+          }
+          if (result.error) {
+            throw result.error;
+          }
+          throw new Error("Login failed");
+        }
+
+        const user = result.data!;
 
         // Call success callback if provided
         if (onLoginSuccess) {

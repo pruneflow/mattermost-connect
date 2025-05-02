@@ -8,7 +8,7 @@ import { FormContainer, FormContainerProps } from "../base/FormContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
 import { User, RegistrationParams, AuthMode } from "../../../types";
-import { useAuthStore } from "../../../core/store";
+import { useAuth } from "../../../hooks";
 import {
   validateUsername,
   validateEmail,
@@ -59,6 +59,13 @@ export interface RegisterContainerProps {
 }
 
 /**
+ * Extended registration params to include confirmPassword
+ */
+interface ExtendedRegistrationParams extends RegistrationParams {
+  confirmPassword?: string;
+}
+
+/**
  * Register container component
  * Provides standardized user registration form
  */
@@ -84,16 +91,15 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
     disabled,
   } = props;
 
-  // Get auth store functionality
-  const { register, login, setMode } = useAuthStore();
+  // Use Auth hook instead of direct authStore access
+  const { register, login, setAuthMode } = useAuth();
 
   // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions, loadingProps, withLoading } =
-    useContainerLoadingState({
-      initialLoading,
-      initialError,
-      minLoadingTime: 500,
-    });
+  const { loadingState, loadingActions } = useContainerLoadingState({
+    initialLoading,
+    initialError,
+    minLoadingTime: 500,
+  });
 
   // Use dialog hook for error handling and success messages
   const dialog = useDialog();
@@ -107,9 +113,9 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
   // Set authentication mode if provided
   React.useEffect(() => {
     if (authMode) {
-      setMode(authMode);
+      setAuthMode(authMode);
     }
-  }, [authMode, setMode]);
+  }, [authMode, setAuthMode]);
 
   // Handle password field change to update strength
   const handlePasswordChange = useCallback(
@@ -127,7 +133,7 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
 
   // Handle form submission
   const handleSubmit = useCallback(
-    async (data: Partial<RegistrationParams>) => {
+    async (data: Partial<ExtendedRegistrationParams>) => {
       try {
         loadingActions.setLoading(true);
 
@@ -147,7 +153,22 @@ export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
         };
 
         // Perform registration
-        const user = await register(registrationParams);
+        const result = await register(registrationParams);
+
+        if (!result.success) {
+          if (result.validationErrors) {
+            const errorMessage = Object.values(result.validationErrors).join(
+              ", ",
+            );
+            throw new Error(errorMessage);
+          }
+          if (result.error) {
+            throw result.error;
+          }
+          throw new Error("Registration failed");
+        }
+
+        const user = result.data!;
 
         // Show success message
         dialog.showSuccess(
