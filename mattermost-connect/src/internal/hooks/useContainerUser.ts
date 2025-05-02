@@ -4,7 +4,7 @@
  * Provides standardized user functionality for container components
  */
 import { useCallback, useMemo } from "react";
-import { useUser, useUsers, useUserProfile } from "../../hooks";
+import { useUser, useUserProfile } from "../../hooks";
 import { userService } from "../../core/services/userService";
 import { User, UserStatus } from "../../types";
 import { useContainerLoadingState } from "./useContainerLoadingState";
@@ -108,7 +108,7 @@ export function useContainerUser(
     initials,
     profileImageUrl,
     isCurrentUser,
-    refreshUser,
+    refreshUser: originalRefreshUser,
     isLoading: isUserLoading,
     error: userError,
   } = useUser(userId);
@@ -131,6 +131,20 @@ export function useContainerUser(
 
   // Use dialog hook for user actions
   const dialog = useDialog();
+
+  // Wrapper for refreshUser to ensure correct return type
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    try {
+      const result = await withLoading(() => originalRefreshUser());
+      // originalRefreshUser returns a QueryObserverResult, we need to extract the data
+      return result.data || null;
+    } catch (error) {
+      loadingActions.setError(
+        error instanceof Error ? error : new Error("Failed to refresh user"),
+      );
+      return null;
+    }
+  }, [originalRefreshUser, withLoading, loadingActions]);
 
   // Generate avatar props
   const getAvatarProps = useCallback(() => {

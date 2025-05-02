@@ -15,7 +15,6 @@ import {
   Box,
   Button,
   Chip,
-  IconButton,
   Skeleton,
   Divider,
 } from "@mui/material";
@@ -227,7 +226,7 @@ export const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
           <Typography color="error">
             {error?.message || "Failed to load user information"}
           </Typography>
-          <Button size="small" onClick={refreshUser}>
+          <Button size="small" onClick={() => refreshUser()}>
             Retry
           </Button>
         </CardContent>

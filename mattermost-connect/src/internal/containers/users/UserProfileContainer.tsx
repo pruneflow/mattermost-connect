@@ -15,16 +15,11 @@ import {
   Divider,
   Button,
   TextField,
-  Paper,
   Grid,
-  Card,
-  CardContent,
-  CardHeader,
-  IconButton,
   Skeleton,
-  Avatar,
 } from "@mui/material";
 import { userService } from "../../../core/services/userService";
+import { useUser } from "../../../hooks";
 import { User } from "../../../types";
 
 /**
@@ -125,6 +120,9 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     showStatus,
   });
 
+  // Get the full user hook for direct API operations
+  const userHook = useUser(userId);
+
   // Track active tab
   const [activeTab, setActiveTab] = useState<string>(
     initialActiveTab || (tabs.length > 0 ? tabs[0].id : "info"),
@@ -198,12 +196,9 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
       // Create profile update object
       const profileUpdate = userService.createProfileUpdate(formData);
 
-      // Get user hook from context
-      const { updateProfile } = useUser(userId);
-
-      // Update profile
+      // Use the userHook directly for API operations
       const updatedUser = await loading.withLoading(() =>
-        updateProfile(profileUpdate),
+        userHook.updateProfile(profileUpdate),
       );
 
       if (updatedUser) {
@@ -224,7 +219,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
         (error as Error).message || "Failed to update profile",
       );
     }
-  }, [user, formData, dialog, useUser, userId, loading.withLoading, onUpdate]);
+  }, [user, formData, dialog, userHook, loading.withLoading, onUpdate]);
 
   // Render header
   const renderHeader = useMemo(() => {
@@ -250,7 +245,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
           <Typography color="error">
             {error?.message || "Failed to load user profile"}
           </Typography>
-          <Button size="small" onClick={refreshUser}>
+          <Button size="small" onClick={() => refreshUser()}>
             Retry
           </Button>
         </Box>
@@ -280,7 +275,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
             gutterBottom={variant !== "compact"}
           >
             {displayName}
-            {isCurrentUser && (
+            {isCurrentUser && showEditButton && (
               <Button
                 variant="outlined"
                 size="small"
@@ -320,6 +315,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     showStatus,
     displayName,
     isCurrentUser,
+    showEditButton,
     toggleEditMode,
     editable,
     isEditMode,
@@ -393,7 +389,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
           <Box sx={{ p: 3 }}>
             <Grid container spacing={3}>
               {editableFields.includes("username") && (
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Username"
                     fullWidth
@@ -408,7 +404,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
               )}
 
               {editableFields.includes("email") && (
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Email"
                     fullWidth
@@ -422,7 +418,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
               )}
 
               {editableFields.includes("firstName") && (
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="First Name"
                     fullWidth
@@ -437,7 +433,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
               )}
 
               {editableFields.includes("lastName") && (
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Last Name"
                     fullWidth
@@ -452,7 +448,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
               )}
 
               {editableFields.includes("nickname") && (
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Nickname"
                     fullWidth
@@ -466,7 +462,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
                 </Grid>
               )}
 
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <Box
                   sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}
                 >
@@ -496,7 +492,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
       return (
         <Box sx={{ p: 3 }}>
           <Grid container spacing={3}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <Typography variant="subtitle1" color="text.secondary">
                 Username
               </Typography>
@@ -504,7 +500,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
             </Grid>
 
             {user.email && (
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Typography variant="subtitle1" color="text.secondary">
                   Email
                 </Typography>
@@ -513,7 +509,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
             )}
 
             {(user.first_name || user.last_name) && (
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Typography variant="subtitle1" color="text.secondary">
                   Name
                 </Typography>
@@ -524,7 +520,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
             )}
 
             {user.nickname && (
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Typography variant="subtitle1" color="text.secondary">
                   Nickname
                 </Typography>
@@ -532,7 +528,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
               </Grid>
             )}
 
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <Typography variant="subtitle1" color="text.secondary">
                 Role
               </Typography>
@@ -570,20 +566,14 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
 
   // Combine the elements based on variant
   const renderProfile = useMemo(() => {
-    const content = (
+    return (
       <>
         {renderHeader}
         {renderTabs}
         {renderContent}
       </>
     );
-
-    if (variant === "card") {
-      return <Card elevation={2}>{content}</Card>;
-    }
-
-    return content;
-  }, [variant, renderHeader, renderTabs, renderContent]);
+  }, [renderHeader, renderTabs, renderContent]);
 
   // Return the detail container with user profile
   return (
@@ -595,8 +585,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
       onEditRequest={() => setIsEditMode(true)}
       onEditCancel={() => setIsEditMode(false)}
       onUpdateItem={async (id, data) => {
-        const { updateProfile } = useUser(id);
-        return await updateProfile(data);
+        return await userHook.updateProfile(data);
       }}
       onUpdateComplete={onUpdate}
       render={(api, state) => renderProfile}
