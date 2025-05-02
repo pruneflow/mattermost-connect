@@ -4,15 +4,17 @@
  * Container component that handles user profile logic and state
  * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useCallback, useState, useEffect, useMemo } from "react";
-import { DetailContainer, DetailContainerProps } from "../base/DetailContainer";
-import { useContainerUser } from "../../hooks/useContainerUser";
+import React, { useCallback, useState, useEffect } from "react";
 import {
-  UserProfileUI,
-  UserProfileUIProps,
-} from "../../components/users/UserProfileUI";
+  DetailContainer,
+  DetailContainerProps,
+  DetailContainerState,
+  DetailContainerAPI,
+} from "../base/DetailContainer";
+import { useContainerUser } from "../../hooks/useContainerUser";
+import { UserProfileUI } from "../../components/users/UserProfileUI";
 import { useUser } from "../../../hooks";
-import { User } from "../../../types";
+import { User, UserStatus } from "../../../types";
 import { userService } from "../../../core/services/userService";
 
 /**
@@ -123,19 +125,6 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     }
   }, [user]);
 
-  // Transform tabs to include content from renderers
-  const processedTabs = useMemo(() => {
-    return tabs.map((tab) => {
-      if (tab.renderer && !tab.content) {
-        return {
-          ...tab,
-          content: tab.renderer(userId || "", user),
-        };
-      }
-      return tab;
-    });
-  }, [tabs, userId, user]);
-
   // Handle tab change
   const handleTabChange = useCallback(
     (tabId: string) => {
@@ -171,75 +160,62 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     }));
   }, []);
 
-  // Handle profile update
-  const handleUpdateProfile = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      // Validate form data
-      const validationResult = userService.validateUserProfile(formData);
-      if (!validationResult.isValid) {
-        const errorMessages = Object.values(validationResult.errors).join(", ");
-        dialog.showError("Validation Error", errorMessages);
-        return;
-      }
-
-      // Create profile update object
-      const profileUpdate = userService.createProfileUpdate(formData);
-
-      // Update profile
-      const updatedUser = await loading.withLoading(() =>
-        userHook.updateProfile(profileUpdate),
-      );
-
-      if (updatedUser) {
-        dialog.showSuccess(
-          "Profile Updated",
-          "Your profile has been updated successfully.",
-        );
-        setIsEditMode(false);
-
-        // Call update callback if provided
-        if (onUpdate) {
-          onUpdate(updatedUser);
-        }
-      }
-    } catch (error) {
-      dialog.showError(
-        "Update Failed",
-        (error as Error).message || "Failed to update profile",
-      );
-    }
-  }, [user, formData, dialog, userHook, loading.withLoading, onUpdate]);
-
-  // Transform custom renderers to match UI component API
-  const transformedHeaderRenderer = useMemo(() => {
-    if (!headerRenderer) return undefined;
-    return (userParam: User | null) => headerRenderer(userId || "", userParam);
-  }, [headerRenderer, userId]);
-
-  const transformedContentRenderer = useMemo(() => {
-    if (!contentRenderer) return undefined;
-    return (userParam: User | null, activeTabId: string) =>
-      contentRenderer(userId || "", userParam, activeTabId);
-  }, [contentRenderer, userId]);
-
-  // Prepare UI component renderer function
+  // Create UI component factory function
   const createUI = useCallback(
-    (detailState: any, detailApi: any): React.ReactElement => {
-      // Create UI props
-      const profileUIProps: UserProfileUIProps = {
-        user,
+    (
+      api: DetailContainerAPI,
+      state: DetailContainerState,
+    ): React.ReactElement => {
+      // Utiliser api et state quand c'est pertinent
+      const handleUpdateProfile = async () => {
+        if (!user) return;
+
+        try {
+          // Validate form data
+          const validationResult = userService.validateUserProfile(formData);
+          if (!validationResult.isValid) {
+            const errorMessages = Object.values(validationResult.errors).join(
+              ", ",
+            );
+            dialog.showError("Validation Error", errorMessages);
+            return;
+          }
+
+          // Create profile update object
+          const profileUpdate = userService.createProfileUpdate(formData);
+
+          // Utiliser l'API du DetailContainer pour mettre à jour
+          if (state.itemId) {
+            await api.updateItem(profileUpdate);
+
+            dialog.showSuccess(
+              "Profile Updated",
+              "Your profile has been updated successfully.",
+            );
+            setIsEditMode(false);
+          }
+        } catch (error) {
+          dialog.setError(
+            error instanceof Error
+              ? error
+              : new Error("Failed to update profile"),
+          );
+        }
+      };
+
+      // Create UI props en utilisant state et api
+      const profileUIProps = {
+        user: state.item as User | null,
         displayName,
         status,
-        isLoading: isLoading || detailState.isLoading,
-        hasError: hasError || !!detailState.error,
-        error: error || detailState.error,
-        isEditMode,
+        isLoading: state.isLoading || isLoading,
+        hasError: state.hasError || hasError,
+        error: state.error || error,
+        isEditMode: state.isEditMode,
         variant,
         avatarSize,
         showStatus,
-        tabs: processedTabs,
+        tabs,
         activeTab,
         editableFields,
         formData,
@@ -247,14 +223,16 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
         isCurrentUser,
         onTabChange: handleTabChange,
         onFieldChange: handleFieldChange,
-        onToggleEditMode: toggleEditMode,
+        onToggleEditMode: api.startEdit,
         onUpdateProfile: handleUpdateProfile,
-        onRefresh: refreshUser,
-        customHeaderRenderer: transformedHeaderRenderer,
-        customContentRenderer: transformedContentRenderer,
-        className: restProps.className,
-        sx: restProps.sx,
-        id: restProps.id,
+        onRefresh: () => api.refresh(),
+        customHeaderRenderer: headerRenderer
+          ? (userObj: User | null) => headerRenderer(userId || "", userObj)
+          : undefined,
+        customContentRenderer: contentRenderer
+          ? (userObj: User | null, activeTabId: string) =>
+              contentRenderer(userId || "", userObj, activeTabId)
+          : undefined,
       };
 
       return <UserProfileUI {...profileUIProps} />;
@@ -266,11 +244,10 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
       isLoading,
       hasError,
       error,
-      isEditMode,
       variant,
       avatarSize,
       showStatus,
-      processedTabs,
+      tabs,
       activeTab,
       editableFields,
       formData,
@@ -278,18 +255,14 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
       isCurrentUser,
       handleTabChange,
       handleFieldChange,
-      toggleEditMode,
-      handleUpdateProfile,
-      refreshUser,
-      transformedHeaderRenderer,
-      transformedContentRenderer,
-      restProps.className,
-      restProps.sx,
-      restProps.id,
+      dialog,
+      userId,
+      headerRenderer,
+      contentRenderer,
     ],
   );
 
-  // Render the UI component using DetailContainer
+  // Render the UI component with prepared props through the factory function
   return (
     <DetailContainer
       {...restProps}

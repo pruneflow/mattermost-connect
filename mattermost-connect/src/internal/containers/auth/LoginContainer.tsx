@@ -5,7 +5,12 @@
  * Implements the container pattern with clear separation between logic and UI
  */
 import React, { useCallback } from "react";
-import { BaseContainer } from "../base/BaseContainer";
+import {
+  BaseContainer,
+  BaseContainerProps,
+  BaseContainerState,
+  BaseContainerAPI,
+} from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
 import { default as DirectLoginFormUI } from "../../components/auth/DirectLoginFormUI";
@@ -16,11 +21,7 @@ import { useAuth } from "../../../hooks";
 /**
  * Login container props
  */
-export interface LoginContainerProps {
-  /** CSS class name */
-  className?: string;
-  /** Additional style properties */
-  sx?: any;
+export interface LoginContainerProps extends BaseContainerProps {
   /** Server URL for direct mode */
   serverUrl?: string;
   /** Whether to display server URL field */
@@ -47,14 +48,6 @@ export interface LoginContainerProps {
   showRegister?: boolean;
   /** Callback when register is clicked */
   onRegisterClick?: () => void;
-  /** ID for the container */
-  id?: string;
-  /** Initial loading state */
-  initialLoading?: boolean;
-  /** Initial error */
-  initialError?: Error | null;
-  /** Whether the component is disabled */
-  disabled?: boolean;
 }
 
 /**
@@ -82,6 +75,7 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     initialLoading,
     initialError,
     disabled,
+    ...restProps
   } = props;
 
   // Use Auth hook for authentication operations
@@ -119,7 +113,7 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
         const loginParams: LoginParams = {
           username,
           password,
-          serverUrl: showServerUrl ? serverUrl : serverUrl,
+          serverUrl: showServerUrl ? serverUrl : undefined,
         };
 
         // Save username if remember is enabled
@@ -201,45 +195,80 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     }
   }, [rememberUsername]);
 
-  // Prepare common props for login UI components
-  const commonLoginProps = {
-    error: loadingState.error?.message || null,
-    isLoading: loadingState.isLoading,
-    showRememberMe: rememberUsername,
-    onSubmit: handleSubmit,
-    title: "Sign In",
-    submitText: loginButtonText,
-    initialUsername: savedUsername,
-    className,
-    sx,
-    id,
-    showForgotPassword,
-    onForgotPasswordClick,
-    showRegister,
-    onRegisterClick,
-    autoFocus: autoFocusUsername,
-    disabled: disabled || loadingState.isLoading,
-  };
+  // Create UI component factory function
+  const createUI = useCallback(
+    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
+      // Utiliser l'API et l'état du container quand c'est pertinent
+      const componentError = state.error || loadingState.error;
+      const isComponentLoading = state.isLoading || loadingState.isLoading;
 
-  // Render the appropriate login form UI component based on showServerUrl
-  return (
-    <BaseContainer
-      {...props}
-      render={(api, state) => {
-        // Choose the appropriate UI component based on whether server URL is needed
-        if (showServerUrl) {
-          return (
-            <DirectLoginFormUI
-              {...commonLoginProps}
-              initialServerUrl={serverUrl}
-            />
-          );
-        } else {
-          return <ProxyLoginFormUI {...commonLoginProps} />;
-        }
-      }}
-    />
+      // Tirer parti de l'API du container pour la gestion des erreurs
+      const handleFormSubmit = async (
+        username: string,
+        password: string,
+        serverUrl?: string,
+        rememberMe?: boolean,
+      ) => {
+        return api.withLoading(() =>
+          handleSubmit(username, password, serverUrl, rememberMe),
+        );
+      };
+
+      // Create common props for login UI components
+      const commonLoginProps = {
+        error: componentError?.message || null,
+        isLoading: isComponentLoading,
+        showRememberMe: rememberUsername,
+        onSubmit: handleFormSubmit,
+        title: "Sign In",
+        submitText: loginButtonText,
+        initialUsername: savedUsername,
+        className,
+        sx,
+        id,
+        showForgotPassword,
+        onForgotPasswordClick,
+        showRegister,
+        onRegisterClick,
+        autoFocus: autoFocusUsername,
+        disabled: disabled || isComponentLoading,
+      };
+
+      // Choose the appropriate UI component based on whether server URL is needed
+      if (showServerUrl) {
+        return (
+          <DirectLoginFormUI
+            {...commonLoginProps}
+            initialServerUrl={serverUrl}
+          />
+        );
+      } else {
+        return <ProxyLoginFormUI {...commonLoginProps} />;
+      }
+    },
+    [
+      loadingState.error,
+      loadingState.isLoading,
+      rememberUsername,
+      handleSubmit,
+      loginButtonText,
+      savedUsername,
+      className,
+      sx,
+      id,
+      showForgotPassword,
+      onForgotPasswordClick,
+      showRegister,
+      onRegisterClick,
+      autoFocusUsername,
+      disabled,
+      showServerUrl,
+      serverUrl,
+    ],
   );
+
+  // Render the UI component with prepared props through the factory function
+  return <BaseContainer {...restProps} render={createUI} />;
 };
 
 export default LoginContainer;

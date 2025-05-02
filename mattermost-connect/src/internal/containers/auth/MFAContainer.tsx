@@ -4,22 +4,23 @@
  * Handles multi-factor authentication with standardized patterns
  * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useCallback, useMemo } from "react";
-import { BaseContainer } from "../base/BaseContainer";
+import React, { useCallback } from "react";
+import {
+  BaseContainer,
+  BaseContainerProps,
+  BaseContainerState,
+  BaseContainerAPI,
+} from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
-import { MFAUI, MFAUIProps } from "../../components/auth/MFAUI";
+import { MFAUI } from "../../components/auth/MFAUI";
 import { User } from "../../../types";
 import { authService } from "../../../core/services/authService";
 
 /**
  * MFA container props
  */
-export interface MFAContainerProps {
-  /** CSS class name */
-  className?: string;
-  /** Additional style properties */
-  sx?: any;
+export interface MFAContainerProps extends BaseContainerProps {
   /** User ID for which MFA is being verified */
   userId?: string;
   /** Callback after successful MFA verification */
@@ -36,16 +37,6 @@ export interface MFAContainerProps {
   method?: "totp" | "email";
   /** Whether the form should auto-focus */
   autoFocus?: boolean;
-  /** ID for the container */
-  id?: string;
-  /** Initial loading state */
-  initialLoading?: boolean;
-  /** Initial error */
-  initialError?: Error | null;
-  /** Whether the component is disabled */
-  disabled?: boolean;
-  /** Length of the verification code (default: 6) */
-  codeLength?: number;
 }
 
 /**
@@ -68,7 +59,7 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     initialLoading,
     initialError,
     disabled,
-    codeLength = 6,
+    ...restProps
   } = props;
 
   // Use loading state hook for standardized loading management
@@ -170,51 +161,57 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     });
   }, [dialog, method, withLoading, userId]);
 
-  // Create MFA UI renderer function
+  // Create UI component factory function
   const createUI = useCallback(
-    (baseState: any, baseApi: any): React.ReactElement => {
-      // Merge loading and error states
-      const mergedLoading = loadingState.isLoading || baseState.isLoading;
-      const mergedError = loadingState.error || baseState.error;
-      const errorMessage = mergedError?.message || null;
+    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
+      // Utiliser l'API et l'état du container quand c'est pertinent
+      const componentError = state.error || loadingState.error;
+      const isComponentLoading = state.isLoading || loadingState.isLoading;
 
-      // Create MFA UI props
-      const mfaUIProps: MFAUIProps = {
+      // Tirer parti de l'API du container pour la gestion des erreurs et du chargement
+      const handleFormSubmit = async (data: { code: string }) => {
+        return api.withLoading(() => handleSubmit(data));
+      };
+
+      const handleResendWithApi = () => {
+        api.withLoading(handleResendCode);
+      };
+
+      // Prepare UI props
+      const mfaUiProps = {
         method,
-        error: errorMessage,
-        isLoading: mergedLoading,
-        onSubmit: handleSubmit,
-        onResendCode: showResendOption ? handleResendCode : undefined,
+        error: componentError?.message || null,
+        isLoading: isComponentLoading,
+        onSubmit: handleFormSubmit,
+        onResendCode: showResendOption ? handleResendWithApi : undefined,
         submitText: verifyButtonText,
         autoFocus,
-        disabled: disabled || mergedLoading,
-        codeLength,
         className,
         sx,
         id,
+        disabled: disabled || isComponentLoading,
       };
 
-      return <MFAUI {...mfaUIProps} />;
+      return <MFAUI {...mfaUiProps} />;
     },
     [
-      loadingState.isLoading,
       loadingState.error,
-      method,
+      loadingState.isLoading,
       handleSubmit,
-      showResendOption,
       handleResendCode,
+      method,
+      showResendOption,
       verifyButtonText,
       autoFocus,
-      disabled,
-      codeLength,
       className,
       sx,
       id,
+      disabled,
     ],
   );
 
-  // Render the MFAUI with prepared props
-  return <BaseContainer {...props} render={createUI} />;
+  // Render the UI component with prepared props through the factory function
+  return <BaseContainer {...restProps} render={createUI} />;
 };
 
 export default MFAContainer;

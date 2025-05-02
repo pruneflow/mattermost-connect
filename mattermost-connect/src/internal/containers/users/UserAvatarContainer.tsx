@@ -5,11 +5,15 @@
  * Implements the container pattern with clear separation between logic and UI
  */
 import React, { useCallback } from "react";
-import { BaseContainer, BaseContainerProps } from "../base/BaseContainer";
+import {
+  BaseContainer,
+  BaseContainerProps,
+  BaseContainerState,
+  BaseContainerAPI,
+} from "../base/BaseContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import UserAvatarUI, {
-  UserAvatarUIProps,
-} from "../../components/users/UserAvatarUI";
+import { default as UserAvatarUI } from "../../components/users/UserAvatarUI";
+import { UserStatus } from "../../../types";
 
 /**
  * User avatar container props
@@ -18,7 +22,7 @@ export interface UserAvatarContainerProps extends BaseContainerProps {
   /** User ID */
   userId?: string;
   /** Avatar size (default: 40) */
-  size?: number | "small" | "medium" | "large";
+  size?: "small" | "medium" | "large" | number;
   /** Whether to show status indicator (default: true) */
   showStatus?: boolean;
   /** Whether to show user name (default: false) */
@@ -28,7 +32,7 @@ export interface UserAvatarContainerProps extends BaseContainerProps {
   /** Prefer username over full name (default: false) */
   preferUsername?: boolean;
   /** Override status */
-  status?: string;
+  status?: UserStatus;
   /** Override display name */
   displayName?: string;
   /** Override initials */
@@ -36,7 +40,7 @@ export interface UserAvatarContainerProps extends BaseContainerProps {
   /** Override image src */
   src?: string;
   /** Text variant for name */
-  textVariant?: "body1" | "body2" | "subtitle1" | "subtitle2" | "caption";
+  textVariant?: "body1" | "body2" | "subtitle1" | "subtitle2";
   /** Name position relative to avatar (default: "right") */
   namePosition?: "right" | "bottom";
   /** Callback on avatar click */
@@ -102,56 +106,46 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
     }
   }, [onClick, userId]);
 
-  // Prepare props for the UI component based on BaseContainer state and API
+  // Create UI component factory function
   const createUI = useCallback(
-    (baseState: any, baseApi: any): React.ReactElement => {
-      // Combine loading state from container user hook and base container
-      const combinedLoading = isLoading || baseState.isLoading;
-      const combinedError = error || baseState.error;
+    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
+      // Utiliser l'état du container et l'API quand c'est pertinent
+      const isComponentLoading = state.isLoading || isLoading;
+      const componentError = state.error || error;
 
-      // Create UI props
-      const avatarUIProps: UserAvatarUIProps = {
+      // Créer les props UI en utilisant aussi les états du container
+      const avatarUIProps = {
         displayName: finalDisplayName,
         imageUrl: finalSrc,
-        initials: finalInitials,
-        status: showStatus ? finalStatus : undefined,
+        status: finalStatus,
         size,
         showStatus,
         clickable,
         onClick: clickable ? handleClick : undefined,
-        showName,
-        namePosition,
-        textVariant,
-        tooltipDisabled: !showTooltip,
         className: avatarClassName,
-        sx: restProps.sx,
-        id: restProps.id,
+        sx: {},
+        // Utiliser l'état de chargement et d'erreur du container
+        isLoading: isComponentLoading,
+        error: componentError,
       };
 
       return <UserAvatarUI {...avatarUIProps} />;
     },
     [
-      isLoading,
-      error,
       finalDisplayName,
       finalSrc,
-      finalInitials,
       finalStatus,
-      showStatus,
       size,
+      showStatus,
       clickable,
       handleClick,
-      showName,
-      namePosition,
-      textVariant,
-      showTooltip,
       avatarClassName,
-      restProps.sx,
-      restProps.id,
+      isLoading,
+      error,
     ],
   );
 
-  // Render the UI component with prepared props
+  // Render the UI component with prepared props through the factory function
   return <BaseContainer {...restProps} render={createUI} />;
 };
 

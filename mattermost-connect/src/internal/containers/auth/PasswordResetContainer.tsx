@@ -4,15 +4,17 @@
  * Handles password reset functionality with standardized patterns
  * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useMemo, useCallback } from "react";
-import { BaseContainer } from "../base/BaseContainer";
+import React, { useCallback } from "react";
+import {
+  BaseContainer,
+  BaseContainerProps,
+  BaseContainerState,
+  BaseContainerAPI,
+} from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
-import {
-  PasswordResetFormUI,
-  PasswordResetFormUIProps,
-} from "../../components/auth/PasswordResetFormUI";
-import { AuthMode } from "../../../types";
+import { PasswordResetFormUI } from "../../components/auth/PasswordResetFormUI";
+import { AuthMode, User } from "../../../types";
 import { useAuth } from "../../../hooks";
 
 /**
@@ -23,11 +25,7 @@ export type PasswordResetMode = "forgot" | "reset" | "update";
 /**
  * Password reset container props
  */
-export interface PasswordResetContainerProps {
-  /** CSS class name */
-  className?: string;
-  /** Additional style properties */
-  sx?: any;
+export interface PasswordResetContainerProps extends BaseContainerProps {
   /** Mode of the password reset container */
   mode?: PasswordResetMode;
   /** Reset token (required for reset mode) */
@@ -48,14 +46,6 @@ export interface PasswordResetContainerProps {
   onLoginClick?: () => void;
   /** Email for forgot password (pre-filled) */
   email?: string;
-  /** ID for the container */
-  id?: string;
-  /** Initial loading state */
-  initialLoading?: boolean;
-  /** Initial error */
-  initialError?: Error | null;
-  /** Whether the component is disabled */
-  disabled?: boolean;
 }
 
 /**
@@ -82,6 +72,7 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     initialLoading,
     initialError,
     disabled,
+    ...restProps
   } = props;
 
   // Use Auth hook for password reset operations
@@ -97,20 +88,6 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
 
   // Use dialog hook for error and success messages
   const dialog = useDialog();
-
-  // Default button text based on mode
-  const defaultButtonText = useMemo(() => {
-    switch (mode) {
-      case "forgot":
-        return "Send Reset Link";
-      case "reset":
-        return "Reset Password";
-      case "update":
-        return "Update Password";
-      default:
-        return "Submit";
-    }
-  }, [mode]);
 
   // Set authentication mode if provided
   React.useEffect(() => {
@@ -260,37 +237,59 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     ],
   );
 
-  // Create UI renderer function
+  // Create UI component factory function
   const createUI = useCallback(
-    (baseState: any, baseApi: any): React.ReactElement => {
-      // Create UI props
-      const resetFormProps: PasswordResetFormUIProps = {
+    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
+      // Utiliser l'API et l'état du container quand c'est pertinent
+      const componentError = state.error || loadingState.error;
+      const isComponentLoading = state.isLoading || loadingState.isLoading;
+
+      // Tirer parti de l'API du container pour la gestion des erreurs et du chargement
+      const handleFormSubmit = async (data: any) => {
+        return api.withLoading(() => handleSubmit(data));
+      };
+
+      // Default button text based on mode
+      const defaultButtonText = (() => {
+        switch (mode) {
+          case "forgot":
+            return "Send Reset Link";
+          case "reset":
+            return "Reset Password";
+          case "update":
+            return "Update Password";
+          default:
+            return "Submit";
+        }
+      })();
+
+      // Prepare UI props
+      const resetFormProps = {
         mode,
         token,
         initialEmail: email,
-        error: loadingState.error?.message || baseState.error?.message || null,
-        isLoading: loadingState.isLoading || baseState.isLoading,
-        onSubmit: handleSubmit,
+        error: componentError?.message || null,
+        isLoading: isComponentLoading,
+        onSubmit: handleFormSubmit,
         submitText: submitButtonText || defaultButtonText,
         showLogin,
         onLoginClick,
         className,
         sx,
         id,
-        disabled: disabled || loadingState.isLoading || baseState.isLoading,
+        disabled: disabled || isComponentLoading,
       };
 
       return <PasswordResetFormUI {...resetFormProps} />;
     },
     [
-      mode,
-      token,
-      email,
       loadingState.error,
       loadingState.isLoading,
       handleSubmit,
+      mode,
+      token,
+      email,
       submitButtonText,
-      defaultButtonText,
       showLogin,
       onLoginClick,
       className,
@@ -300,8 +299,8 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     ],
   );
 
-  // Render the PasswordResetFormUI with prepared props
-  return <BaseContainer {...props} render={createUI} />;
+  // Render the UI component with prepared props through the factory function
+  return <BaseContainer {...restProps} render={createUI} />;
 };
 
 export default PasswordResetContainer;
