@@ -1,6 +1,7 @@
 // src/internal/components/users/UserCardUI.tsx
 /**
- * Card component that displays user information
+ * User Card UI Component
+ * Pure presentational component for displaying user cards
  */
 import React from "react";
 import {
@@ -12,89 +13,353 @@ import {
   Button,
   Chip,
   IconButton,
+  Skeleton,
+  CardActionArea,
+  CardActions,
+  Alert,
 } from "@mui/material";
 import {
   Message as MessageIcon,
   MoreVert as MoreIcon,
+  Refresh as RefreshIcon,
+  Person as PersonIcon,
 } from "@mui/icons-material";
-import { BaseComponentProps } from "../../types/componentTypes";
 import UserAvatarUI from "./UserAvatarUI";
-import { User, UserStatus } from "../../../index";
+import { BaseComponentProps } from "../../types/componentTypes";
+import { User, UserStatus } from "../../../types";
 
+/**
+ * User card UI props
+ */
 export interface UserCardUIProps extends BaseComponentProps {
   /** User data */
-  user: User;
+  user: User | null;
+  /** User's display name */
+  displayName: string;
   /** User's status */
-  status?: UserStatus;
-  /** Whether to show the message button */
-  showMessageButton?: boolean;
-  /** Whether to show the more options button */
-  showMoreOptions?: boolean;
-  /** Whether to show user roles */
-  showRoles?: boolean;
-  /** User's roles (array of role names) */
-  roles?: string[];
-  /** Card size variant */
-  variant?: "compact" | "normal" | "expanded";
-  /** Callback when message button is clicked */
-  onMessageClick?: () => void;
-  /** Callback when more options button is clicked */
-  onMoreOptionsClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  status: UserStatus;
+  /** Card variant */
+  variant?: "default" | "compact" | "expanded";
+  /** Whether the component is loading */
+  isLoading?: boolean;
+  /** Whether the component has an error */
+  hasError?: boolean;
+  /** Error object if there is an error */
+  error?: Error | null;
+  /** Whether the user is the current user */
+  isCurrentUser?: boolean;
+  /** Whether to show user status */
+  showStatus?: boolean;
+  /** Whether to show actions */
+  showActions?: boolean;
+  /** Available actions */
+  availableActions?: string[];
+  /** Whether to show user role */
+  showRole?: boolean;
+  /** Whether to show user email */
+  showEmail?: boolean;
+  /** Card elevation */
+  elevation?: number;
+  /** Whether card is outlined */
+  outlined?: boolean;
+  /** Whether card is selected */
+  selected?: boolean;
+  /** Avatar size */
+  avatarSize?: number;
+  /** Callback when an action is clicked */
+  onActionClick?: (actionId: string) => void;
   /** Callback when card is clicked */
   onClick?: () => void;
+  /** Callback to refresh user data */
+  onRefresh?: () => void;
+  /** Custom actions renderer */
+  actionsRenderer?: (user: User | null) => React.ReactNode;
+  /** Custom content renderer */
+  contentRenderer?: (user: User | null) => React.ReactNode;
 }
 
-const UserCardUI: React.FC<UserCardUIProps> = ({
-  user,
-  status,
-  showMessageButton = true,
-  showMoreOptions = true,
-  showRoles = false,
-  roles = [],
-  variant = "normal",
-  onMessageClick,
-  onMoreOptionsClick,
-  onClick,
-  className,
-  sx,
-  id,
-}) => {
-  // Format display name
-  const displayName =
-    user.first_name && user.last_name
-      ? `${user.first_name} ${user.last_name}`
-      : user.username;
+/**
+ * User Card UI Component
+ * Displays user information in a card format with various layouts
+ */
+export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
+  const {
+    user,
+    displayName,
+    status,
+    variant = "default",
+    isLoading = false,
+    hasError = false,
+    error,
+    isCurrentUser = false,
+    showStatus = true,
+    showActions = true,
+    availableActions = ["message", "profile"],
+    showRole = true,
+    showEmail = true,
+    elevation = 1,
+    outlined = false,
+    selected = false,
+    avatarSize,
+    onActionClick,
+    onClick,
+    onRefresh,
+    actionsRenderer,
+    contentRenderer,
+    className,
+    sx,
+    id,
+  } = props;
 
-  // Format subtitle based on variant
-  const subtitle =
-    variant === "compact"
-      ? user.username
-      : user.nickname || user.email || user.username;
+  // Determine avatar size based on variant
+  const getAvatarSize = () => {
+    if (avatarSize) return avatarSize;
 
-  // Handle click on message button
-  const handleMessageClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onMessageClick) {
-      onMessageClick();
+    switch (variant) {
+      case "compact":
+        return 40;
+      case "expanded":
+        return 80;
+      default:
+        return 56;
     }
   };
 
-  // Handle click on more options button
-  const handleMoreOptionsClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (onMoreOptionsClick) {
-      onMoreOptionsClick(e);
-    }
-  };
+  // Render loading state
+  if (isLoading) {
+    return (
+      <Card
+        className={className}
+        sx={{
+          width: "100%",
+          ...sx,
+        }}
+        id={id}
+        elevation={elevation}
+        variant={outlined ? "outlined" : undefined}
+        raised={selected}
+      >
+        <CardContent>
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <Skeleton
+              variant="circular"
+              width={getAvatarSize()}
+              height={getAvatarSize()}
+            />
+            <Box sx={{ ml: 2, flexGrow: 1 }}>
+              <Skeleton variant="text" width="60%" height={28} />
+              <Skeleton variant="text" width="40%" height={20} />
+            </Box>
+          </Box>
+          {variant === "expanded" && (
+            <>
+              <Skeleton
+                variant="text"
+                width="100%"
+                height={20}
+                sx={{ mt: 2 }}
+              />
+              <Skeleton variant="text" width="80%" height={20} />
+            </>
+          )}
+        </CardContent>
+        {showActions && variant !== "compact" && (
+          <CardActions>
+            <Skeleton
+              variant="rectangular"
+              width={90}
+              height={36}
+              sx={{ borderRadius: 1 }}
+            />
+          </CardActions>
+        )}
+      </Card>
+    );
+  }
 
-  // Define avatar size based on variant
-  const avatarSize =
-    variant === "compact"
-      ? "small"
-      : variant === "expanded"
-        ? "large"
-        : "medium";
+  // Render error state
+  if (hasError || !user) {
+    return (
+      <Card
+        className={className}
+        sx={{ width: "100%", ...sx }}
+        id={id}
+        elevation={elevation}
+        variant={outlined ? "outlined" : undefined}
+      >
+        <CardContent>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error?.message || "Failed to load user data"}
+          </Alert>
+          <Button
+            size="small"
+            startIcon={<RefreshIcon />}
+            onClick={onRefresh}
+            variant="outlined"
+          >
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
+  const showMoreOptions = showActions && availableActions.includes("more");
+  // Create card content
+  const content = (
+    <CardContent>
+      {contentRenderer ? (
+        contentRenderer(user)
+      ) : (
+        <Box>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <UserAvatarUI
+                displayName={displayName}
+                imageUrl={
+                  user.last_picture_update
+                    ? `${user.id}/image?_=${user.last_picture_update}`
+                    : undefined
+                }
+                status={showStatus ? status : undefined}
+                size={getAvatarSize()}
+              />
+              <Box sx={{ ml: 2 }}>
+                <Typography
+                  variant={variant === "compact" ? "subtitle1" : "h6"}
+                  component="div"
+                >
+                  {displayName}
+                  {isCurrentUser && (
+                    <Chip
+                      label="You"
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                      sx={{ ml: 1, height: 20, fontSize: "0.7rem" }}
+                    />
+                  )}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {variant === "compact"
+                    ? user.username
+                    : showEmail && user.email
+                      ? user.email
+                      : user.username}
+                </Typography>
+              </Box>
+            </Box>
+
+            {showActions && showMoreOptions && (
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onActionClick) onActionClick("more");
+                }}
+                aria-label="more options"
+              >
+                <MoreIcon />
+              </IconButton>
+            )}
+          </Box>
+
+          {variant === "expanded" && (
+            <>
+              <Divider sx={{ my: 2 }} />
+
+              {showRole && user.roles && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    Roles
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 0.5,
+                      mt: 0.5,
+                    }}
+                  >
+                    {user.roles.split(" ").map((role) => (
+                      <Chip
+                        key={role}
+                        label={role}
+                        size="small"
+                        variant="outlined"
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </>
+          )}
+        </Box>
+      )}
+    </CardContent>
+  );
+
+  // Show message button and custom actions
+  const showMessageButton =
+    showActions &&
+    availableActions.includes("message") &&
+    variant !== "compact";
+
+  const showProfileButton =
+    showActions &&
+    availableActions.includes("profile") &&
+    variant === "expanded";
+
+  // Render actions if needed
+  const actions =
+    showActions &&
+    (showMessageButton || showProfileButton || actionsRenderer) ? (
+      <CardActions>
+        {actionsRenderer ? (
+          actionsRenderer(user)
+        ) : (
+          <>
+            {showProfileButton && (
+              <Button
+                size="small"
+                startIcon={<PersonIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onActionClick) onActionClick("profile");
+                }}
+              >
+                Profile
+              </Button>
+            )}
+
+            {showMessageButton && (
+              <Button
+                size="small"
+                startIcon={<MessageIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onActionClick) onActionClick("message");
+                }}
+              >
+                Message
+              </Button>
+            )}
+          </>
+        )}
+      </CardActions>
+    ) : null;
+
+  // Main card component
   return (
     <Card
       className={className}
@@ -108,99 +373,21 @@ const UserCardUI: React.FC<UserCardUIProps> = ({
               transform: "translateY(-2px)",
             }
           : {},
+        ...(selected
+          ? {
+              border: (theme) => `2px solid ${theme.palette.primary.main}`,
+              boxShadow: (theme) => theme.shadows[4],
+            }
+          : {}),
         ...sx,
       }}
       id={id}
+      elevation={elevation}
+      variant={outlined ? "outlined" : undefined}
       onClick={onClick}
     >
-      <CardContent>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "center" }}>
-            <UserAvatarUI
-              displayName={displayName}
-              imageUrl={
-                user.last_picture_update
-                  ? `${user.id}/image?_=${user.last_picture_update}`
-                  : undefined
-              }
-              status={status}
-              size={avatarSize}
-              showStatus
-            />
-            <Box sx={{ ml: 2 }}>
-              <Typography
-                variant={variant === "compact" ? "subtitle1" : "h6"}
-                component="div"
-              >
-                {displayName}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {subtitle}
-              </Typography>
-            </Box>
-          </Box>
-
-          <Box>
-            {showMoreOptions && (
-              <IconButton
-                size="small"
-                onClick={handleMoreOptionsClick}
-                aria-label="more options"
-              >
-                <MoreIcon />
-              </IconButton>
-            )}
-          </Box>
-        </Box>
-
-        {variant === "expanded" && (
-          <>
-            <Divider sx={{ my: 2 }} />
-
-            {showRoles && roles.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  gutterBottom
-                >
-                  Roles
-                </Typography>
-                <Box
-                  sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}
-                >
-                  {roles.map((role) => (
-                    <Chip
-                      key={role}
-                      label={role}
-                      size="small"
-                      variant="outlined"
-                    />
-                  ))}
-                </Box>
-              </Box>
-            )}
-          </>
-        )}
-
-        {showMessageButton && variant !== "compact" && (
-          <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
-            <Button
-              size="small"
-              startIcon={<MessageIcon />}
-              onClick={handleMessageClick}
-            >
-              Message
-            </Button>
-          </Box>
-        )}
-      </CardContent>
+      {onClick ? <CardActionArea>{content}</CardActionArea> : content}
+      {actions}
     </Card>
   );
 };

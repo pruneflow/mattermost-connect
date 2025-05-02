@@ -1,12 +1,16 @@
 // src/internal/components/users/UserStatusIndicatorUI.tsx
 /**
- * Component that displays a user's online status
+ * User Status Indicator UI Component
+ * Pure presentational component for displaying user status indicators
  */
 import React from "react";
 import { Box, Tooltip } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { UserStatus } from "../../../index";
+import { UserStatus } from "../../../types";
 
+/**
+ * User status indicator UI props
+ */
 export interface UserStatusIndicatorUIProps extends BaseComponentProps {
   /** User status */
   status: UserStatus;
@@ -18,6 +22,10 @@ export interface UserStatusIndicatorUIProps extends BaseComponentProps {
   bordered?: boolean;
 }
 
+/**
+ * User Status Indicator UI component
+ * Displays a user's online status with appropriate colors
+ */
 const UserStatusIndicatorUI: React.FC<UserStatusIndicatorUIProps> = ({
   status,
   size = "medium",

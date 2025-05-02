@@ -14,16 +14,23 @@ import {
   TextField,
   Grid,
   Skeleton,
+  Card,
+  Paper,
+  CircularProgress,
 } from "@mui/material";
-import { default as UserAvatarUI } from "./UserAvatarUI";
-import { User } from "../../../types";
+import { Edit as EditIcon, Refresh as RefreshIcon } from "@mui/icons-material";
+import UserAvatarUI from "./UserAvatarUI";
+import { BaseComponentProps } from "../../types/componentTypes";
+import { User, UserStatus } from "../../../types";
 
-// Define the props interface for the UI component
-export interface UserProfileUIProps {
+/**
+ * User profile UI props
+ */
+export interface UserProfileUIProps extends BaseComponentProps {
   // User data
   user: User | null;
   displayName: string;
-  status: string;
+  status: UserStatus;
 
   // UI state
   isLoading: boolean;
@@ -93,6 +100,9 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
     onRefresh,
     customHeaderRenderer,
     customContentRenderer,
+    className,
+    sx,
+    id,
   } = props;
 
   // Render header section
@@ -119,7 +129,12 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
           <Typography color="error">
             {error?.message || "Failed to load user profile"}
           </Typography>
-          <Button size="small" onClick={onRefresh}>
+          <Button
+            size="small"
+            onClick={onRefresh}
+            startIcon={<RefreshIcon />}
+            sx={{ mt: 1 }}
+          >
             Retry
           </Button>
         </Box>
@@ -138,30 +153,45 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
       >
         <UserAvatarUI
           displayName={displayName}
+          imageUrl={
+            user.last_picture_update
+              ? `${user.id}/image?_=${user.last_picture_update}`
+              : undefined
+          }
           size={avatarSize}
           showStatus={showStatus}
           status={status}
         />
 
-        <Box>
-          <Typography
-            variant={variant === "compact" ? "h6" : "h4"}
-            component="div"
-            gutterBottom={variant !== "compact"}
+        <Box sx={{ flexGrow: 1 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              width: "100%",
+            }}
           >
-            {displayName}
+            <Typography
+              variant={variant === "compact" ? "h6" : "h4"}
+              component="div"
+              gutterBottom={variant !== "compact"}
+            >
+              {displayName}
+            </Typography>
+
             {isCurrentUser && showEditButton && (
               <Button
                 variant="outlined"
                 size="small"
-                sx={{ ml: 2 }}
+                startIcon={<EditIcon />}
                 onClick={onToggleEditMode}
                 disabled={!isCurrentUser}
               >
                 {isEditMode ? "Cancel" : "Edit Profile"}
               </Button>
             )}
-          </Typography>
+          </Box>
 
           {showStatus && (
             <Typography variant="body1" color="text.secondary">
@@ -206,6 +236,41 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
     );
   };
 
+  // Render field in edit form
+  const renderField = (
+    field: "username" | "email" | "firstName" | "lastName" | "nickname",
+    label: string,
+    autoFocus: boolean = false,
+  ) => {
+    if (!editableFields.includes(field)) return null;
+
+    // Map field name to formData property
+    const fieldMap: Record<string, keyof typeof formData> = {
+      username: "username",
+      email: "email",
+      firstName: "first_name",
+      lastName: "last_name",
+      nickname: "nickname",
+    };
+
+    const formField = fieldMap[field];
+
+    return (
+      <Grid size={{ xs: 12, sm: 6 }}>
+        <TextField
+          label={label}
+          fullWidth
+          value={formData[formField] || ""}
+          onChange={(e) => onFieldChange(formField as string, e.target.value)}
+          disabled={!isCurrentUser || isLoading}
+          variant="outlined"
+          autoFocus={autoFocus}
+          margin="normal"
+        />
+      </Grid>
+    );
+  };
+
   // Render content based on active tab and mode
   const renderContent = () => {
     if (customContentRenderer && user) {
@@ -240,21 +305,11 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
         return (
           <Box sx={{ p: 3 }}>
             <Grid container spacing={3}>
-              {editableFields.includes("username") && (
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Username"
-                    fullWidth
-                    value={formData.username || ""}
-                    onChange={(e) => onFieldChange("username", e.target.value)}
-                    disabled={!isCurrentUser || isLoading}
-                    variant="outlined"
-                  />
-                </Grid>
-              )}
-
-              {/* Other editable fields */}
-              {/* ... similar TextField components for each editable field ... */}
+              {renderField("username", "Username", true)}
+              {renderField("email", "Email Address")}
+              {renderField("firstName", "First Name")}
+              {renderField("lastName", "Last Name")}
+              {renderField("nickname", "Nickname")}
 
               <Grid size={{ xs: 12 }}>
                 <Box
@@ -273,6 +328,9 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
                     onClick={onUpdateProfile}
                     disabled={isLoading}
                   >
+                    {isLoading ? (
+                      <CircularProgress size={24} sx={{ mr: 1 }} />
+                    ) : null}
                     Save Changes
                   </Button>
                 </Box>
@@ -293,8 +351,41 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
               <Typography variant="body1">{user.username}</Typography>
             </Grid>
 
-            {/* Other display fields */}
-            {/* ... similar Typography components for each field ... */}
+            {user.email && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="subtitle1" color="text.secondary">
+                  Email
+                </Typography>
+                <Typography variant="body1">{user.email}</Typography>
+              </Grid>
+            )}
+
+            {user.first_name && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="subtitle1" color="text.secondary">
+                  First Name
+                </Typography>
+                <Typography variant="body1">{user.first_name}</Typography>
+              </Grid>
+            )}
+
+            {user.last_name && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="subtitle1" color="text.secondary">
+                  Last Name
+                </Typography>
+                <Typography variant="body1">{user.last_name}</Typography>
+              </Grid>
+            )}
+
+            {user.nickname && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="subtitle1" color="text.secondary">
+                  Nickname
+                </Typography>
+                <Typography variant="body1">{user.nickname}</Typography>
+              </Grid>
+            )}
           </Grid>
         </Box>
       );
@@ -308,13 +399,49 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = (props) => {
     );
   };
 
-  return (
-    <Box>
+  // Render based on variant
+  const content = (
+    <>
       {renderHeader()}
       {renderTabs()}
       {renderContent()}
-    </Box>
+    </>
   );
+
+  // Wrap in appropriate container based on variant
+  if (variant === "card") {
+    return (
+      <Card
+        className={className}
+        sx={{
+          ...sx,
+          overflow: "hidden",
+        }}
+        id={id}
+      >
+        {content}
+      </Card>
+    );
+  } else if (variant === "compact") {
+    return (
+      <Paper
+        className={className}
+        sx={{
+          ...sx,
+          overflow: "hidden",
+        }}
+        id={id}
+      >
+        {content}
+      </Paper>
+    );
+  } else {
+    return (
+      <Box className={className} sx={sx} id={id}>
+        {content}
+      </Box>
+    );
+  }
 };
 
 export default UserProfileUI;

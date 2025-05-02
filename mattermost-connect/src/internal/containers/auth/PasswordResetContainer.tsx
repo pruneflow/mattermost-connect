@@ -8,7 +8,10 @@ import React, { useMemo, useCallback } from "react";
 import { BaseContainer } from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
-import { PasswordResetFormUI } from "../../components/auth/PasswordResetFormUI";
+import {
+  PasswordResetFormUI,
+  PasswordResetFormUIProps,
+} from "../../components/auth/PasswordResetFormUI";
 import { AuthMode } from "../../../types";
 import { useAuth } from "../../../hooks";
 
@@ -257,30 +260,48 @@ export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
     ],
   );
 
-  // Prepare UI props for the password reset form
-  const resetFormProps = {
-    mode,
-    token,
-    initialEmail: email,
-    error: loadingState.error?.message || null,
-    isLoading: loadingState.isLoading,
-    onSubmit: handleSubmit,
-    submitText: submitButtonText || defaultButtonText,
-    showLogin,
-    onLoginClick,
-    className,
-    sx,
-    id,
-    disabled: disabled || loadingState.isLoading,
-  };
+  // Create UI renderer function
+  const createUI = useCallback(
+    (baseState: any, baseApi: any): React.ReactElement => {
+      // Create UI props
+      const resetFormProps: PasswordResetFormUIProps = {
+        mode,
+        token,
+        initialEmail: email,
+        error: loadingState.error?.message || baseState.error?.message || null,
+        isLoading: loadingState.isLoading || baseState.isLoading,
+        onSubmit: handleSubmit,
+        submitText: submitButtonText || defaultButtonText,
+        showLogin,
+        onLoginClick,
+        className,
+        sx,
+        id,
+        disabled: disabled || loadingState.isLoading || baseState.isLoading,
+      };
+
+      return <PasswordResetFormUI {...resetFormProps} />;
+    },
+    [
+      mode,
+      token,
+      email,
+      loadingState.error,
+      loadingState.isLoading,
+      handleSubmit,
+      submitButtonText,
+      defaultButtonText,
+      showLogin,
+      onLoginClick,
+      className,
+      sx,
+      id,
+      disabled,
+    ],
+  );
 
   // Render the PasswordResetFormUI with prepared props
-  return (
-    <BaseContainer
-      {...props}
-      render={(api, state) => <PasswordResetFormUI {...resetFormProps} />}
-    />
-  );
+  return <BaseContainer {...props} render={createUI} />;
 };
 
 export default PasswordResetContainer;

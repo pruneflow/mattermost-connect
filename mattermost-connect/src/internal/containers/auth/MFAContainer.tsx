@@ -4,11 +4,11 @@
  * Handles multi-factor authentication with standardized patterns
  * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { BaseContainer } from "../base/BaseContainer";
 import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
 import { useDialog } from "../../hooks/useDialog";
-import { MFAUI } from "../../components/auth/MFAUI";
+import { MFAUI, MFAUIProps } from "../../components/auth/MFAUI";
 import { User } from "../../../types";
 import { authService } from "../../../core/services/authService";
 
@@ -44,6 +44,8 @@ export interface MFAContainerProps {
   initialError?: Error | null;
   /** Whether the component is disabled */
   disabled?: boolean;
+  /** Length of the verification code (default: 6) */
+  codeLength?: number;
 }
 
 /**
@@ -66,6 +68,7 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     initialLoading,
     initialError,
     disabled,
+    codeLength = 6,
   } = props;
 
   // Use loading state hook for standardized loading management
@@ -167,28 +170,51 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     });
   }, [dialog, method, withLoading, userId]);
 
-  // Prepare UI props for the MFA UI component
-  const mfaUiProps = {
-    method,
-    error: loadingState.error?.message || null,
-    isLoading: loadingState.isLoading,
-    onSubmit: handleSubmit,
-    onResendCode: showResendOption ? handleResendCode : undefined,
-    submitText: verifyButtonText,
-    autoFocus,
-    className,
-    sx,
-    id,
-    disabled: disabled || loadingState.isLoading,
-  };
+  // Create MFA UI renderer function
+  const createUI = useCallback(
+    (baseState: any, baseApi: any): React.ReactElement => {
+      // Merge loading and error states
+      const mergedLoading = loadingState.isLoading || baseState.isLoading;
+      const mergedError = loadingState.error || baseState.error;
+      const errorMessage = mergedError?.message || null;
+
+      // Create MFA UI props
+      const mfaUIProps: MFAUIProps = {
+        method,
+        error: errorMessage,
+        isLoading: mergedLoading,
+        onSubmit: handleSubmit,
+        onResendCode: showResendOption ? handleResendCode : undefined,
+        submitText: verifyButtonText,
+        autoFocus,
+        disabled: disabled || mergedLoading,
+        codeLength,
+        className,
+        sx,
+        id,
+      };
+
+      return <MFAUI {...mfaUIProps} />;
+    },
+    [
+      loadingState.isLoading,
+      loadingState.error,
+      method,
+      handleSubmit,
+      showResendOption,
+      handleResendCode,
+      verifyButtonText,
+      autoFocus,
+      disabled,
+      codeLength,
+      className,
+      sx,
+      id,
+    ],
+  );
 
   // Render the MFAUI with prepared props
-  return (
-    <BaseContainer
-      {...props}
-      render={(api, state) => <MFAUI {...mfaUiProps} />}
-    />
-  );
+  return <BaseContainer {...props} render={createUI} />;
 };
 
 export default MFAContainer;

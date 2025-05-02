@@ -48,7 +48,9 @@ export interface PasswordResetFormUIProps extends BaseComponentProps {
  * Password Reset Form UI component
  * Handles rendering of password reset forms with different modes
  */
-export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (props) => {
+export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (
+  props,
+) => {
   const {
     error,
     isLoading = false,
@@ -56,7 +58,11 @@ export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (props) =
     mode = "forgot",
     token,
     initialEmail = "",
-    submitText = mode === "forgot" ? "Send Reset Link" : mode === "reset" ? "Reset Password" : "Update Password",
+    submitText = mode === "forgot"
+      ? "Send Reset Link"
+      : mode === "reset"
+        ? "Reset Password"
+        : "Update Password",
     showLogin = true,
     loginText = "Back to Login",
     onSubmit,
@@ -326,8 +332,52 @@ export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (props) =
         {getTitle()}
       </Typography>
 
-      <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography
+        variant="body2"
+        align="center"
+        color="text.secondary"
+        sx={{ mb: 2 }}
+      >
         {getHelpText()}
       </Typography>
 
-      {
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {renderFormFields()}
+
+      <Button
+        type="submit"
+        fullWidth
+        variant="contained"
+        color="primary"
+        disabled={isLoading || disabled}
+        sx={{ mt: 3, mb: 2 }}
+      >
+        {isLoading ? (
+          <CircularProgress color="inherit" size={24} sx={{ mr: 1 }} />
+        ) : null}
+        {submitText}
+      </Button>
+
+      {showLogin && onLoginClick && (
+        <Box sx={{ textAlign: "center" }}>
+          <Link
+            component="button"
+            variant="body2"
+            onClick={onLoginClick}
+            sx={{ cursor: "pointer" }}
+            disabled={isLoading || disabled}
+          >
+            {loginText}
+          </Link>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+export default PasswordResetFormUI;

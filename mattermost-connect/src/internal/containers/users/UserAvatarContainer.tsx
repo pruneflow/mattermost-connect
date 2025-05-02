@@ -7,7 +7,9 @@
 import React, { useCallback } from "react";
 import { BaseContainer, BaseContainerProps } from "../base/BaseContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import { default as UserAvatarUI } from "../../components/users/UserAvatarUI";
+import UserAvatarUI, {
+  UserAvatarUIProps,
+} from "../../components/users/UserAvatarUI";
 
 /**
  * User avatar container props
@@ -16,7 +18,7 @@ export interface UserAvatarContainerProps extends BaseContainerProps {
   /** User ID */
   userId?: string;
   /** Avatar size (default: 40) */
-  size?: number;
+  size?: number | "small" | "medium" | "large";
   /** Whether to show status indicator (default: true) */
   showStatus?: boolean;
   /** Whether to show user name (default: false) */
@@ -34,7 +36,7 @@ export interface UserAvatarContainerProps extends BaseContainerProps {
   /** Override image src */
   src?: string;
   /** Text variant for name */
-  textVariant?: "body1" | "body2" | "subtitle1" | "subtitle2";
+  textVariant?: "body1" | "body2" | "subtitle1" | "subtitle2" | "caption";
   /** Name position relative to avatar (default: "right") */
   namePosition?: "right" | "bottom";
   /** Callback on avatar click */
@@ -80,7 +82,7 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
   // Use container user hook for data and state management
   const { displayName, initials, imageUrl, status, isLoading, error } =
     useContainerUser(userId, {
-      avatarSize: size,
+      avatarSize: typeof size === "number" ? size : undefined,
       showStatus,
       showName,
       showTooltip,
@@ -100,33 +102,57 @@ export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
     }
   }, [onClick, userId]);
 
-  // Prepare props for the UI component
-  const avatarUiProps = {
-    displayName: finalDisplayName,
-    imageUrl: finalSrc,
-    initials: finalInitials,
-    status: showStatus ? finalStatus : undefined,
-    size,
-    showName,
-    textVariant,
-    namePosition,
-    isLoading,
-    error,
-    showTooltip,
-    clickable,
-    onClick: clickable ? handleClick : undefined,
-    avatarClassName,
-    nameClassName,
-    badgeClassName,
-  };
+  // Prepare props for the UI component based on BaseContainer state and API
+  const createUI = useCallback(
+    (baseState: any, baseApi: any): React.ReactElement => {
+      // Combine loading state from container user hook and base container
+      const combinedLoading = isLoading || baseState.isLoading;
+      const combinedError = error || baseState.error;
+
+      // Create UI props
+      const avatarUIProps: UserAvatarUIProps = {
+        displayName: finalDisplayName,
+        imageUrl: finalSrc,
+        initials: finalInitials,
+        status: showStatus ? finalStatus : undefined,
+        size,
+        showStatus,
+        clickable,
+        onClick: clickable ? handleClick : undefined,
+        showName,
+        namePosition,
+        textVariant,
+        tooltipDisabled: !showTooltip,
+        className: avatarClassName,
+        sx: restProps.sx,
+        id: restProps.id,
+      };
+
+      return <UserAvatarUI {...avatarUIProps} />;
+    },
+    [
+      isLoading,
+      error,
+      finalDisplayName,
+      finalSrc,
+      finalInitials,
+      finalStatus,
+      showStatus,
+      size,
+      clickable,
+      handleClick,
+      showName,
+      namePosition,
+      textVariant,
+      showTooltip,
+      avatarClassName,
+      restProps.sx,
+      restProps.id,
+    ],
+  );
 
   // Render the UI component with prepared props
-  return (
-    <BaseContainer
-      {...restProps}
-      render={(api, state) => <UserAvatarUI {...avatarUiProps} />}
-    />
-  );
+  return <BaseContainer {...restProps} render={createUI} />;
 };
 
 export default UserAvatarContainer;

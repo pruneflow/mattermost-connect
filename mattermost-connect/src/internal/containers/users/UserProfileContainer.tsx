@@ -4,10 +4,13 @@
  * Container component that handles user profile logic and state
  * Implements the container pattern with clear separation between logic and UI
  */
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { DetailContainer, DetailContainerProps } from "../base/DetailContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import { UserProfileUI } from "../../components/users/UserProfileUI";
+import {
+  UserProfileUI,
+  UserProfileUIProps,
+} from "../../components/users/UserProfileUI";
 import { useUser } from "../../../hooks";
 import { User } from "../../../types";
 import { userService } from "../../../core/services/userService";
@@ -120,6 +123,19 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     }
   }, [user]);
 
+  // Transform tabs to include content from renderers
+  const processedTabs = useMemo(() => {
+    return tabs.map((tab) => {
+      if (tab.renderer && !tab.content) {
+        return {
+          ...tab,
+          content: tab.renderer(userId || "", user),
+        };
+      }
+      return tab;
+    });
+  }, [tabs, userId, user]);
+
   // Handle tab change
   const handleTabChange = useCallback(
     (tabId: string) => {
@@ -196,34 +212,84 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
     }
   }, [user, formData, dialog, userHook, loading.withLoading, onUpdate]);
 
-  // Prepare props for the UI component
-  const profileUiProps = {
-    user,
-    displayName,
-    status,
-    isLoading,
-    hasError,
-    error,
-    isEditMode,
-    variant,
-    avatarSize,
-    showStatus,
-    tabs,
-    activeTab,
-    editableFields,
-    formData,
-    showEditButton,
-    isCurrentUser,
-    onTabChange: handleTabChange,
-    onFieldChange: handleFieldChange,
-    onToggleEditMode: toggleEditMode,
-    onUpdateProfile: handleUpdateProfile,
-    onRefresh: refreshUser,
-    customHeaderRenderer: headerRenderer,
-    customContentRenderer: contentRenderer,
-  };
+  // Transform custom renderers to match UI component API
+  const transformedHeaderRenderer = useMemo(() => {
+    if (!headerRenderer) return undefined;
+    return (userParam: User | null) => headerRenderer(userId || "", userParam);
+  }, [headerRenderer, userId]);
 
-  // Render the UI component with prepared props
+  const transformedContentRenderer = useMemo(() => {
+    if (!contentRenderer) return undefined;
+    return (userParam: User | null, activeTabId: string) =>
+      contentRenderer(userId || "", userParam, activeTabId);
+  }, [contentRenderer, userId]);
+
+  // Prepare UI component renderer function
+  const createUI = useCallback(
+    (detailState: any, detailApi: any): React.ReactElement => {
+      // Create UI props
+      const profileUIProps: UserProfileUIProps = {
+        user,
+        displayName,
+        status,
+        isLoading: isLoading || detailState.isLoading,
+        hasError: hasError || !!detailState.error,
+        error: error || detailState.error,
+        isEditMode,
+        variant,
+        avatarSize,
+        showStatus,
+        tabs: processedTabs,
+        activeTab,
+        editableFields,
+        formData,
+        showEditButton,
+        isCurrentUser,
+        onTabChange: handleTabChange,
+        onFieldChange: handleFieldChange,
+        onToggleEditMode: toggleEditMode,
+        onUpdateProfile: handleUpdateProfile,
+        onRefresh: refreshUser,
+        customHeaderRenderer: transformedHeaderRenderer,
+        customContentRenderer: transformedContentRenderer,
+        className: restProps.className,
+        sx: restProps.sx,
+        id: restProps.id,
+      };
+
+      return <UserProfileUI {...profileUIProps} />;
+    },
+    [
+      user,
+      displayName,
+      status,
+      isLoading,
+      hasError,
+      error,
+      isEditMode,
+      variant,
+      avatarSize,
+      showStatus,
+      processedTabs,
+      activeTab,
+      editableFields,
+      formData,
+      showEditButton,
+      isCurrentUser,
+      handleTabChange,
+      handleFieldChange,
+      toggleEditMode,
+      handleUpdateProfile,
+      refreshUser,
+      transformedHeaderRenderer,
+      transformedContentRenderer,
+      restProps.className,
+      restProps.sx,
+      restProps.id,
+    ],
+  );
+
+  // Render the UI component using DetailContainer
   return (
     <DetailContainer
       {...restProps}
@@ -236,7 +302,7 @@ export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
         return await userHook.updateProfile(data);
       }}
       onUpdateComplete={onUpdate}
-      render={(api, state) => <UserProfileUI {...profileUiProps} />}
+      render={createUI}
     />
   );
 };
