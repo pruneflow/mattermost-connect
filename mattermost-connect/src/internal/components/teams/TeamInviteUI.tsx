@@ -246,9 +246,7 @@ const TeamInviteUI: React.FC<TeamInviteUIProps> = ({
                     return (
                       <ListItem
                         key={user.id}
-                        button
                         onClick={() => !isSelected && handleSelectUser(user)}
-                        disabled={isSelected || isLoading}
                         sx={{
                           bgcolor: isSelected ? "action.selected" : undefined,
                         }}

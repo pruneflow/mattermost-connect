@@ -196,7 +196,7 @@ const TeamDetailUI: React.FC<TeamDetailUIProps> = ({
           <Button
             size="small"
             startIcon={<PeopleIcon />}
-            onClick={() => handleTabChange(null, "members")}
+            onClick={() => console.debug("see all members")}
           >
             View All ({members.length})
           </Button>
@@ -334,8 +334,7 @@ const TeamDetailUI: React.FC<TeamDetailUIProps> = ({
       case "info":
         return renderTeamInfo();
       case "members":
-        // This would show the full members list - placeholder until we implement TeamMembersUI
-        return <Box p={2}>Full members list will be displayed here.</Box>;
+        return renderMemberPreview();
       case "channels":
         return <Box p={2}>Channels list will be displayed here.</Box>;
       default:
