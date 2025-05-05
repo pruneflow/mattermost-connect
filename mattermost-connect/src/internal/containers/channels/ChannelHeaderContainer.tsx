@@ -10,6 +10,7 @@ import ChannelHeaderUI from "../../components/channels/ChannelHeaderUI";
 import { Channel } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
 import { isChannelMuted } from "../../../core/store/userSettingsStore";
+import { ChannelHeaderData } from "../../types/componentTypes";
 
 export interface ChannelHeaderContainerProps {
   /** Channel ID */
@@ -225,7 +226,7 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     return {
       channel,
       membersCount: members?.length,
-      isFavorite: isFavorite(channel.id),
+      isFavorite,
       onToggleFavorite: handleToggleFavorite,
       onViewMembers: handleViewMembers,
       onSettings: handleSettings,

@@ -276,7 +276,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
         onAction(`member_${action}`, {
           ...channel,
           memberId: userId,
-        } as Channel);
+        } as any);
       }
     },
     [onAction, channel],
@@ -342,7 +342,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
     }
 
     // Default tabs based on channel type
-    const tabs = [
+    const tabs: any = [
       {
         id: "info",
         label: "Info",
@@ -378,7 +378,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
     hasError: detailState.hasError,
     error: detailState.error,
     isEditMode: isSettingsEditMode || detailState.isEditMode,
-    isFavorite: channelId ? isFavorite(channelId) : false,
+    isFavorite,
     isMuted: channelId ? isChannelMuted(channelId) : false,
     isDirect,
     isGroup,

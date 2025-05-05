@@ -36,6 +36,8 @@ export interface ChannelListUIProps extends ListComponentProps<Channel> {
   onCreateChannel?: () => void;
   /** Callback when a channel action is performed */
   onChannelAction?: (action: string, channel: Channel) => void;
+  /** Callback when a search is perform */
+  onSearchChange: (value: string) => void;
 }
 
 /**

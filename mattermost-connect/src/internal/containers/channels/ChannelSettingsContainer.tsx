@@ -164,7 +164,7 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
     onError: (error) => {
       dialog.showError(
         "Update Failed",
-        error.message || "Failed to update channel settings",
+        error?.message || "Failed to update channel settings",
       );
     },
   });
@@ -196,7 +196,7 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
 
   // Handle field change
   const handleFieldChange = useCallback(
-    (field: string, value: any) => {
+    (field: "name" | "display_name" | "header" | "purpose", value: any) => {
       formAPI.setFieldValue(field, value);
     },
     [formAPI],

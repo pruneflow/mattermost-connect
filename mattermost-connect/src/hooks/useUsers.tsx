@@ -343,7 +343,7 @@ export function useUsers(options: GetUsersOptions = {}) {
  */
 export function useUserSearch(
   searchTerm: string | undefined,
-  options: { inTeam?: string; inChannel?: string } = {},
+  options: { inTeam?: string; inChannel?: string; notInChannel?: string } = {},
 ) {
   // Get search query
   const searchQuery = useSearchUsersQuery(searchTerm, options);

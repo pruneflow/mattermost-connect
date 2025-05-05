@@ -4,6 +4,8 @@
  * Defines standardized props interfaces for all container components
  */
 
+import { Channel } from "../../types";
+
 /**
  * Base component props for all components
  */
@@ -323,3 +325,65 @@ export type TeamField =
   | "company_name"
   | "allowed_domains"
   | "allow_open_invite";
+
+/**
+ * List component props for list display components
+ */
+export interface ListComponentProps<T = any> extends BaseComponentProps {
+  /** Items array to display */
+  items: T[];
+  /** Currently active/selected item ID */
+  activeId?: string;
+  /** Display variant for the list */
+  variant?: "list" | "grid" | "sidebar" | "tabs";
+  /** Density of the list items */
+  density?: DensityVariant;
+  /** Whether the list is in loading state */
+  isLoading?: boolean;
+  /** Message to display when list is empty */
+  emptyMessage?: string;
+  /** Current search term */
+  searchTerm?: string;
+  /** Callback when an item is clicked */
+  onItemClick?: (item: T) => void;
+  /** Callback when an action is performed on an item */
+  onAction?: (action: string, item: T) => void;
+}
+
+/**
+ * Item component props for single item display
+ */
+export interface ItemComponentProps<T = any> extends BaseComponentProps {
+  /** Item data to display */
+  item: T;
+  /** Whether the item is active/selected */
+  isActive?: boolean;
+  /** Whether to show action buttons */
+  showActions?: boolean;
+  /** Whether the item is in a loading state */
+  isLoading?: boolean;
+  /** Callback when item is clicked */
+  onClick?: (item: T) => void;
+  /** Callback when an action is performed */
+  onAction?: (action: string, item: T) => void;
+}
+
+/**
+ * Channel header data props
+ */
+export interface ChannelHeaderData {
+  /** Channel object */
+  channel: Channel;
+  /** Number of channel members */
+  membersCount?: number;
+  /** Whether the channel is a favorite */
+  isFavorite?: boolean;
+  /** Callback when toggle favorite is clicked */
+  onToggleFavorite?: () => void;
+  /** Callback when view members is clicked */
+  onViewMembers?: () => void;
+  /** Callback when settings is clicked */
+  onSettings?: () => void;
+  /** Callback when info is clicked */
+  onInfo?: () => void;
+}

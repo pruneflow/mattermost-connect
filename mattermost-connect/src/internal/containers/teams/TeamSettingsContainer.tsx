@@ -3,9 +3,7 @@ import React, { useCallback, useEffect } from "react";
 import { useFormContainer } from "../base/FormContainer";
 import { useContainerTeam } from "../../hooks/useContainerTeam";
 import { Team, UpdateTeamParams } from "../../../types";
-import TeamSettingsUI, {
-  TeamField,
-} from "../../components/teams/TeamSettingsUI";
+import TeamSettingsUI from "../../components/teams/TeamSettingsUI";
 import { useDialog } from "../../hooks";
 
 export interface TeamSettingsContainerProps {
@@ -151,7 +149,7 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
   }, [formState.isDirty, dialog, formAPI, onCancel]);
 
   const handleFieldChange = useCallback(
-    (field: TeamField, value: any) => {
+    (field: any, value: any) => {
       formAPI.setFieldValue(field, value);
     },
     [formAPI],
