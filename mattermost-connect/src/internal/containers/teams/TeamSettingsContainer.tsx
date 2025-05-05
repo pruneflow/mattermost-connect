@@ -3,7 +3,9 @@ import React, { useCallback, useEffect } from "react";
 import { useFormContainer } from "../base/FormContainer";
 import { useContainerTeam } from "../../hooks/useContainerTeam";
 import { Team, UpdateTeamParams } from "../../../types";
-import TeamSettingsUI from "../../components/teams/TeamSettingsUI";
+import TeamSettingsUI, {
+  TeamField,
+} from "../../components/teams/TeamSettingsUI";
 import { useDialog } from "../../hooks";
 
 export interface TeamSettingsContainerProps {
@@ -149,15 +151,7 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
   }, [formState.isDirty, dialog, formAPI, onCancel]);
 
   const handleFieldChange = useCallback(
-    (
-      field:
-        | "display_name"
-        | "description"
-        | "company_name"
-        | "allowed_domains"
-        | "allow_open_invite",
-      value: any,
-    ) => {
+    (field: TeamField, value: any) => {
       formAPI.setFieldValue(field, value);
     },
     [formAPI],

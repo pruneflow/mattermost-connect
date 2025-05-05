@@ -24,6 +24,13 @@ import {
 import { Team } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
 
+export type TeamField =
+  | "display_name"
+  | "description"
+  | "company_name"
+  | "allowed_domains"
+  | "allow_open_invite";
+
 export interface TeamSettingsUIProps extends BaseComponentProps {
   // Data props
   team: Team | null;
@@ -34,15 +41,9 @@ export interface TeamSettingsUIProps extends BaseComponentProps {
   isValid?: boolean;
   isDirty?: boolean;
   // Config props
-  editableFields?: Array<
-    | "display_name"
-    | "description"
-    | "company_name"
-    | "allowed_domains"
-    | "allow_open_invite"
-  >;
+  editableFields?: Array<TeamField>;
   // Callback props
-  onFieldChange: (field: string, value: any) => void;
+  onFieldChange: (field: TeamField, value: any) => void;
   onSubmit: () => void;
   onCancel: () => void;
 }
