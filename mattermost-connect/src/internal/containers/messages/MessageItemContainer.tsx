@@ -171,7 +171,7 @@ const MessageItemContainer: React.FC<MessageItemContainerProps> = (props) => {
 
   // Prepare UI props
   const uiProps = {
-    message,
+    item: message,
     user: {
       id: message.user_id,
       displayName: displayName,

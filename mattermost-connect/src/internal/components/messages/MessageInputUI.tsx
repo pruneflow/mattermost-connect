@@ -32,104 +32,114 @@ import {
   ExpandLess as CollapseIcon,
   ExpandMore as ExpandIcon,
 } from "@mui/icons-material";
-import { MessageInputData } from "../../types/componentTypes";
-import { Message } from "../../../index";
-import FileUploadUI from "./FileUploadUI";
-import FilePreviewUI from "./FilePreviewUI";
+import { BaseComponentProps } from "../../types/componentTypes";
+import { Message } from "../../../types";
+import { TypingIndicator } from "../common";
 
-export interface MessageInputUIProps extends MessageInputData {
-  /** Placeholder text for the input */
-  placeholder?: string;
-  /** Initial value for the input */
-  initialValue?: string;
-  /** Whether to allow file attachments */
-  allowAttachments?: boolean;
-  /** Whether to allow emoji reactions */
-  allowEmojis?: boolean;
-  /** Whether the input is in editing state */
-  isEditing?: boolean;
-  /** Whether the input is in reply state */
-  isReply?: boolean;
+export interface MessageInputUIProps extends BaseComponentProps {
+  /** Current message text */
+  messageText: string;
+  /** File IDs attached to the message */
+  fileIds?: string[];
   /** Message being replied to (if any) */
   replyToMessage?: Message | null;
-  /** Whether files are being uploaded */
-  isUploading?: boolean;
-  /** Whether the message is being sent */
+  /** Message being edited (if any) */
+  editingMessage?: Message | null;
+  /** Placeholder text for the input */
+  placeholder?: string;
+  /** Whether to allow file attachments */
+  showFileUpload?: boolean;
+  /** Whether to show emoji picker */
+  suggestEmojis?: boolean;
+  /** Whether to suggest mentions */
+  suggestMentions?: boolean;
+  /** Whether to suggest channels */
+  suggestChannels?: boolean;
+  /** Whether to show formatting toolbar */
+  showFormatting?: boolean;
+  /** Whether the component is in loading state */
+  isLoading?: boolean;
+  /** Whether a message is being sent */
   isSending?: boolean;
-  /** Maximum number of files that can be attached */
-  maxAttachments?: number;
-  /** Maximum file size in bytes */
-  maxFileSize?: number;
-  /** Callback when a message is submitted */
-  onSubmit?: (text: string, attachments: File[]) => void;
-  /** Callback when editing is cancelled */
-  onCancel?: () => void;
+  /** Whether a file is being uploaded */
+  isUploading?: boolean;
+  /** Whether the emoji picker is visible */
+  showEmojiPicker?: boolean;
+  /** IDs of users currently typing */
+  typingUsers?: string[];
+  /** Input element ref */
+  inputRef?: React.RefObject<HTMLTextAreaElement>;
+  /** Callback when text changes */
+  onTextChange?: (text: string) => void;
+  /** Callback when message is submitted */
+  onSend?: () => void;
+  /** Callback when file upload is triggered */
+  onFileUpload?: (files: File[]) => void;
+  /** Callback when file is removed */
+  onRemoveFile?: (fileId: string) => void;
+  /** Callback when emoji is selected */
+  onEmojiSelect?: (emoji: string) => void;
+  /** Callback to toggle emoji picker visibility */
+  onToggleEmojiPicker?: () => void;
   /** Callback when reply is cancelled */
   onCancelReply?: () => void;
-  /** Callback when the user is typing */
-  onTyping?: () => void;
-  /** Emoji picker component */
-  emojiPickerComponent?: React.ReactNode;
-  /** User display name for the reply message */
-  replyToUserName?: string;
+  /** Callback when edit is cancelled */
+  onCancelEdit?: () => void;
+  /** Component to render file upload UI */
+  fileUploadRenderer?: React.ReactNode | ((props: any) => React.ReactNode);
 }
 
+/**
+ * Message Input UI Component
+ *
+ * Provides a rich text input for composing and sending messages
+ */
 const MessageInputUI: React.FC<MessageInputUIProps> = ({
-  placeholder = "Type a message...",
-  initialValue = "",
-  allowAttachments = true,
-  allowEmojis = true,
-  isEditing = false,
-  isReply = false,
+  messageText = "",
+  fileIds = [],
   replyToMessage = null,
-  isUploading = false,
+  editingMessage = null,
+  placeholder = "Type a message...",
+  showFileUpload = true,
+  suggestEmojis = true,
+  suggestMentions = true,
+  suggestChannels = true,
+  showFormatting = true,
+  isLoading = false,
   isSending = false,
-  maxAttachments = 10,
-  maxFileSize = 50 * 1024 * 1024, // 50MB
-  onSubmit,
-  onCancel,
+  isUploading = false,
+  showEmojiPicker = false,
+  typingUsers = [],
+  inputRef: propInputRef,
+  onTextChange,
+  onSend,
+  onFileUpload,
+  onRemoveFile,
+  onEmojiSelect,
+  onToggleEmojiPicker,
   onCancelReply,
-  onTyping,
-  emojiPickerComponent,
-  replyToUserName = "User",
+  onCancelEdit,
+  fileUploadRenderer,
   className,
   sx,
   id,
 }) => {
-  // State for message text
-  const [messageText, setMessageText] = useState(initialValue);
-
-  // State for attachments
-  const [attachments, setAttachments] = useState<File[]>([]);
-
-  // State for formatting toolbar visibility
-  const [showFormatting, setShowFormatting] = useState(false);
-
-  // State for emoji picker
-  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLButtonElement | null>(
-    null,
-  );
-  const emojiPickerOpen = Boolean(emojiAnchorEl);
-
-  // Input ref for focusing
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Local input ref if none provided
+  const localInputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = propInputRef || localInputRef;
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset input when editing is cancelled
-  useEffect(() => {
-    if (!isEditing && !isReply) {
-      setMessageText("");
-    }
-  }, [isEditing, isReply]);
+  // State for formatting toolbar visibility
+  const [showFormattingToolbar, setShowFormattingToolbar] = useState(false);
 
-  // Set initial value
-  useEffect(() => {
-    setMessageText(initialValue);
-  }, [initialValue]);
+  // Emoji anchor for popover
+  const [emojiAnchorEl, setEmojiAnchorEl] = useState<HTMLButtonElement | null>(
+    null,
+  );
 
-  // Focus input when component mounts
+  // Focus input on mount
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
@@ -137,12 +147,9 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
   }, []);
 
   // Handle text change
-  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMessageText(e.target.value);
-
-    // Trigger typing indicator
-    if (onTyping) {
-      onTyping();
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (onTextChange) {
+      onTextChange(e.target.value);
     }
   };
 
@@ -157,69 +164,59 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
 
   // Handle submit
   const handleSubmit = () => {
-    if ((!messageText && attachments.length === 0) || isSending || isUploading)
-      return;
+    if ((!messageText.trim() && fileIds.length === 0) || isLoading) return;
 
-    if (onSubmit) {
-      onSubmit(messageText, attachments);
-    }
-
-    if (!isEditing) {
-      // Clear input only if not editing
-      setMessageText("");
-      setAttachments([]);
+    if (onSend) {
+      onSend();
     }
   };
 
-  // Handle cancel
-  const handleCancel = () => {
-    if (onCancel) {
-      onCancel();
-    }
-    setMessageText("");
-    setShowFormatting(false);
-  };
-
-  // Handle cancel reply
-  const handleCancelReply = () => {
-    if (onCancelReply) {
-      onCancelReply();
-    }
-  };
-
-  // Handle file input click
+  // Handle file selection
   const handleFileClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
 
-  // Handle file selection
+  // Handle file change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || !onFileUpload) return;
 
-    const newFiles = Array.from(files);
-
-    // Check for max attachments
-    if (attachments.length + newFiles.length > maxAttachments) {
-      // Show error or alert - simplified for now
-      console.error(`Maximum ${maxAttachments} files allowed`);
-      return;
-    }
-
-    setAttachments([...attachments, ...newFiles]);
+    const fileArray = Array.from(files);
+    onFileUpload(fileArray);
 
     // Reset input so the same file can be selected again
     e.target.value = "";
   };
 
-  // Handle file removal
-  const handleRemoveFile = (index: number) => {
-    setAttachments(attachments.filter((_, i) => i !== index));
+  // Handle emoji button click
+  const handleEmojiButtonClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    setEmojiAnchorEl(event.currentTarget);
+    if (onToggleEmojiPicker) {
+      onToggleEmojiPicker();
+    }
   };
 
-  // Handle insert formatting
+  // Handle emoji picker close
+  const handleEmojiPickerClose = () => {
+    setEmojiAnchorEl(null);
+    if (onToggleEmojiPicker && showEmojiPicker) {
+      onToggleEmojiPicker();
+    }
+  };
+
+  // Handle emoji selection
+  const handleEmojiSelect = (emoji: string) => {
+    if (onEmojiSelect) {
+      onEmojiSelect(emoji);
+    }
+    handleEmojiPickerClose();
+  };
+
+  // Formatting functions
   const insertFormatting = (opening: string, closing: string) => {
     if (!inputRef.current) return;
 
@@ -231,7 +228,10 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
     const afterText = messageText.substring(end);
 
     const newText = beforeText + opening + selectedText + closing + afterText;
-    setMessageText(newText);
+
+    if (onTextChange) {
+      onTextChange(newText);
+    }
 
     // Focus and set cursor position after formatting is inserted
     setTimeout(() => {
@@ -240,64 +240,31 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
     }, 0);
   };
 
-  // Handle bold click
-  const handleBoldClick = () => {
-    insertFormatting("**", "**");
-  };
+  // Format handlers
+  const handleBoldClick = () => insertFormatting("**", "**");
+  const handleItalicClick = () => insertFormatting("*", "*");
+  const handleCodeClick = () => insertFormatting("`", "`");
+  const handleBulletListClick = () => insertFormatting("\n- ", "");
+  const handleNumberListClick = () => insertFormatting("\n1. ", "");
+  const handleLinkClick = () => insertFormatting("[", "](url)");
 
-  // Handle italic click
-  const handleItalicClick = () => {
-    insertFormatting("*", "*");
-  };
+  // Check if we're in edit or reply mode
+  const isEditing = editingMessage !== null;
+  const isReplying = replyToMessage !== null;
 
-  // Handle code click
-  const handleCodeClick = () => {
-    insertFormatting("`", "`");
-  };
-
-  // Handle bullet list click
-  const handleBulletListClick = () => {
-    insertFormatting("\n- ", "");
-  };
-
-  // Handle number list click
-  const handleNumberListClick = () => {
-    insertFormatting("\n1. ", "");
-  };
-
-  // Handle link click
-  const handleLinkClick = () => {
-    insertFormatting("[", "](url)");
-  };
-
-  // Handle emoji button click
-  const handleEmojiButtonClick = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    setEmojiAnchorEl(event.currentTarget);
-  };
-
-  // Handle emoji picker close
-  const handleEmojiPickerClose = () => {
-    setEmojiAnchorEl(null);
-  };
-
-  // Handle emoji selection
-  const handleEmojiSelect = (emoji: string) => {
-    setMessageText(messageText + emoji);
-    setEmojiAnchorEl(null);
-
-    // Focus input after emoji is inserted
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  };
+  // Get display name for reply
+  const replyToUserName = replyToMessage?.user_id || "User";
 
   // Truncate text for preview
   const truncateText = (text: string, maxLength: number = 50): string => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + "...";
+    if (!text) return "";
+    return text.length <= maxLength
+      ? text
+      : text.substring(0, maxLength) + "...";
   };
+
+  // Disabled state
+  const isDisabled = isSending || isUploading;
 
   return (
     <Paper
@@ -310,7 +277,7 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
       id={id}
     >
       {/* Reply indicator */}
-      {isReply && replyToMessage && (
+      {isReplying && replyToMessage && (
         <Box
           sx={{
             display: "flex",
@@ -347,35 +314,46 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
               {truncateText(replyToMessage.message)}
             </Box>
           </Box>
-          <IconButton size="small" onClick={handleCancelReply}>
+          <IconButton
+            size="small"
+            onClick={onCancelReply}
+            disabled={isDisabled}
+          >
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
       )}
 
-      {/* File attachments preview */}
-      {attachments.length > 0 && (
-        <Box
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 1,
-            mb: 1,
-          }}
-        >
-          {attachments.map((file, index) => (
-            <FilePreviewUI
-              key={index}
-              file={file}
-              isUploading={isUploading}
-              onRemove={() => handleRemoveFile(index)}
-            />
-          ))}
+      {/* File attachments area */}
+      {fileIds && fileIds.length > 0 && (
+        <Box sx={{ mb: 1 }}>
+          {/* Here you would render the file attachments */}
+          {/* This would integrate with a FileAttachmentList component */}
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            {fileIds.map((fileId) => (
+              <Chip
+                key={fileId}
+                label={`File ${fileId}`}
+                onDelete={() => onRemoveFile && onRemoveFile(fileId)}
+                disabled={isDisabled}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Typing indicator */}
+      {typingUsers && typingUsers.length > 0 && (
+        <Box sx={{ mb: 1 }}>
+          <TypingIndicator
+            userIds={typingUsers}
+            userNames={{}} // Would be populated from container
+          />
         </Box>
       )}
 
       {/* Formatting toolbar */}
-      <Collapse in={showFormatting}>
+      <Collapse in={showFormattingToolbar && showFormatting}>
         <Box
           sx={{
             display: "flex",
@@ -387,32 +365,56 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
           }}
         >
           <Tooltip title="Bold">
-            <IconButton size="small" onClick={handleBoldClick}>
+            <IconButton
+              size="small"
+              onClick={handleBoldClick}
+              disabled={isDisabled}
+            >
               <BoldIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Italic">
-            <IconButton size="small" onClick={handleItalicClick}>
+            <IconButton
+              size="small"
+              onClick={handleItalicClick}
+              disabled={isDisabled}
+            >
               <ItalicIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Code">
-            <IconButton size="small" onClick={handleCodeClick}>
+            <IconButton
+              size="small"
+              onClick={handleCodeClick}
+              disabled={isDisabled}
+            >
               <CodeIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Bullet List">
-            <IconButton size="small" onClick={handleBulletListClick}>
+            <IconButton
+              size="small"
+              onClick={handleBulletListClick}
+              disabled={isDisabled}
+            >
               <BulletListIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Numbered List">
-            <IconButton size="small" onClick={handleNumberListClick}>
+            <IconButton
+              size="small"
+              onClick={handleNumberListClick}
+              disabled={isDisabled}
+            >
               <NumberListIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Link">
-            <IconButton size="small" onClick={handleLinkClick}>
+            <IconButton
+              size="small"
+              onClick={handleLinkClick}
+              disabled={isDisabled}
+            >
               <LinkIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -427,15 +429,22 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
         }}
       >
         {/* Toggle formatting button */}
-        <Tooltip title={showFormatting ? "Hide formatting" : "Show formatting"}>
-          <IconButton
-            size="small"
-            onClick={() => setShowFormatting(!showFormatting)}
-            sx={{ mb: 0.5 }}
+        {showFormatting && (
+          <Tooltip
+            title={
+              showFormattingToolbar ? "Hide formatting" : "Show formatting"
+            }
           >
-            {showFormatting ? <CollapseIcon /> : <ExpandIcon />}
-          </IconButton>
-        </Tooltip>
+            <IconButton
+              size="small"
+              onClick={() => setShowFormattingToolbar(!showFormattingToolbar)}
+              sx={{ mb: 0.5 }}
+              disabled={isDisabled}
+            >
+              {showFormattingToolbar ? <CollapseIcon /> : <ExpandIcon />}
+            </IconButton>
+          </Tooltip>
+        )}
 
         {/* Text input */}
         <TextField
@@ -448,7 +457,7 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
           onKeyPress={handleKeyPress}
           variant="outlined"
           size="small"
-          disabled={isSending || isUploading}
+          disabled={isDisabled}
           InputProps={{
             sx: {
               borderRadius: 2,
@@ -469,16 +478,12 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
           }}
         >
           {/* Attachment button */}
-          {allowAttachments && (
+          {showFileUpload && (
             <Tooltip title="Attach file">
               <IconButton
                 size="small"
                 onClick={handleFileClick}
-                disabled={
-                  attachments.length >= maxAttachments ||
-                  isSending ||
-                  isUploading
-                }
+                disabled={isDisabled}
                 sx={{ mb: 0.5 }}
               >
                 <AttachIcon />
@@ -487,12 +492,12 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
           )}
 
           {/* Emoji button */}
-          {allowEmojis && (
+          {suggestEmojis && (
             <Tooltip title="Add emoji">
               <IconButton
                 size="small"
                 onClick={handleEmojiButtonClick}
-                disabled={isSending || isUploading}
+                disabled={isDisabled}
                 sx={{ mb: 0.5 }}
               >
                 <EmojiIcon />
@@ -506,8 +511,8 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
               <Tooltip title="Cancel">
                 <IconButton
                   size="small"
-                  onClick={handleCancel}
-                  disabled={isSending}
+                  onClick={onCancelEdit}
+                  disabled={isDisabled}
                   sx={{ mb: 0.5 }}
                 >
                   <CloseIcon />
@@ -518,7 +523,7 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
                   color="primary"
                   size="small"
                   onClick={handleSubmit}
-                  disabled={!messageText || isSending}
+                  disabled={!messageText.trim() || isDisabled}
                   sx={{ mb: 0.5 }}
                 >
                   {isSending ? (
@@ -536,9 +541,7 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
                 size="small"
                 onClick={handleSubmit}
                 disabled={
-                  (!messageText && attachments.length === 0) ||
-                  isSending ||
-                  isUploading
+                  (!messageText.trim() && fileIds.length === 0) || isDisabled
                 }
                 sx={{ mb: 0.5 }}
               >
@@ -565,7 +568,7 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
 
       {/* Emoji picker popover */}
       <Popover
-        open={emojiPickerOpen}
+        open={showEmojiPicker && Boolean(emojiAnchorEl)}
         anchorEl={emojiAnchorEl}
         onClose={handleEmojiPickerClose}
         anchorOrigin={{
@@ -577,14 +580,17 @@ const MessageInputUI: React.FC<MessageInputUIProps> = ({
           horizontal: "left",
         }}
       >
-        {emojiPickerComponent || (
-          <Box sx={{ p: 2 }}>
-            <Typography variant="body2">Emoji picker placeholder</Typography>
-          </Box>
-        )}
+        {/* This would integrate with an EmojiPicker component */}
+        <Box sx={{ p: 2, width: 300, height: 300 }}>
+          <Typography variant="body2">Emoji picker would go here</Typography>
+        </Box>
       </Popover>
+
+      {/* File upload UI */}
+      {typeof fileUploadRenderer === "function" &&
+        fileUploadRenderer({ onUpload: onFileUpload })}
     </Paper>
   );
 };
 
-export default MessageInputUI;
+export default React.memo(MessageInputUI);

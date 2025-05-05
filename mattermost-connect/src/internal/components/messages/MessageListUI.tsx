@@ -1,169 +1,132 @@
 // src/internal/components/messages/MessageListUI.tsx
 /**
- * Component that displays a list of messages
+ * Component that displays a list of messages with virtualization support
  */
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
   Box,
   Typography,
-  Paper,
   Button,
   CircularProgress,
   Fade,
-  Divider,
   Alert,
+  useTheme,
 } from "@mui/material";
 import {
   ArrowDownward as ScrollDownIcon,
   ArrowUpward as LoadMoreIcon,
 } from "@mui/icons-material";
-import { Message } from "../../../index";
+import { Message } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
-import MessageItemUI from "./MessageItemUI";
-import { EmptyState, TypingIndicator } from "../common";
+import { EmptyState } from "../common";
+import { FixedSizeList, VariableSizeList } from "react-window";
+import AutoSizer from "react-virtualized-auto-sizer";
+import { isSameDay } from "date-fns";
 
 export interface MessageListUIProps extends BaseComponentProps {
   /** Messages to display */
   messages: Message[];
+  /** Messages grouped by date for better rendering */
+  messagesByDate?: Map<string, Message[]>;
   /** Whether messages are loading */
   isLoading?: boolean;
-  /** Whether more past messages are available */
-  hasMorePastMessages?: boolean;
-  /** Whether more recent messages are available */
-  hasMoreRecentMessages?: boolean;
-  /** ID of the highlighted message */
-  highlightedMessageId?: string | null;
-  /** ID of message being edited */
-  editingMessageId?: string | null;
-  /** Error message if loading failed */
-  error?: Error | string | null;
-  /** User display names by user ID */
-  userDisplayNames?: Record<string, string>;
-  /** User image URLs by user ID */
-  userImageUrls?: Record<string, string>;
-  /** User statuses by user ID */
-  userStatuses?: Record<string, "online" | "away" | "dnd" | "offline">;
-  /** IDs of pinned messages */
-  pinnedMessageIds?: Set<string>;
-  /** Current user ID */
-  currentUserId?: string;
+  /** Whether to use virtualization for better performance */
+  virtualized?: boolean;
+  /** Whether to show date separators */
+  showDateSeparators?: boolean;
+  /** Whether to group messages by the same user */
+  groupByUser?: boolean;
+  /** Whether view should be compact */
+  compact?: boolean;
+  /** Whether to show avatars */
+  showAvatars?: boolean;
+  /** Element ref for scrolling */
+  scrollRef?: React.RefObject<HTMLDivElement>;
   /** Empty state message */
   emptyMessage?: string;
-  /** Callback for message click */
-  onMessageClick?: (message: Message) => void;
   /** Callback for loading more past messages */
-  onLoadMorePast?: () => void;
-  /** Callback for loading more recent messages */
-  onLoadMoreRecent?: () => void;
-  /** Callback for edit message */
-  onEditMessage?: (message: Message) => void;
-  /** Callback for reply to message */
-  onReplyToMessage?: (message: Message) => void;
-  /** Callback for delete message */
-  onDeleteMessage?: (message: Message) => void;
-  /** Callback for toggle pin */
-  onTogglePin?: (message: Message) => void;
-  /** Callback for add reaction */
-  onAddReaction?: (message: Message) => void;
-  /** Callback for reaction click */
-  onReactionClick?: (message: Message, emoji: string) => void;
+  onLoadMore?: () => void;
+  /** Callback for scrolling events */
+  onScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
   /** Callback when scrolled to bottom */
   onScrollToBottom?: () => void;
-  /** Custom render function for edit form */
-  renderEditForm?: (message: Message) => React.ReactNode;
-  /** IDs of users currently typing */
-  typingUserIds?: string[];
+  /** Custom render function for messages */
+  renderMessage: (message: Message) => React.ReactNode;
 }
 
-// Helper to format date for separator
-const formatDateForSeparator = (date: Date): string => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const messageDate = new Date(date);
-  messageDate.setHours(0, 0, 0, 0);
-
-  if (messageDate.getTime() === today.getTime()) {
-    return "Today";
-  } else if (messageDate.getTime() === yesterday.getTime()) {
-    return "Yesterday";
-  } else {
-    return messageDate.toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  }
-};
-
-// Check if two dates are the same day
-const isSameDay = (date1: Date, date2: Date): boolean => {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
-};
-
+/**
+ * Message List UI Component
+ *
+ * Displays a list of messages with support for virtualization,
+ * date separators, and message grouping
+ */
 const MessageListUI: React.FC<MessageListUIProps> = ({
   messages,
+  messagesByDate,
   isLoading = false,
-  hasMorePastMessages = false,
-  hasMoreRecentMessages = false,
-  highlightedMessageId = null,
-  editingMessageId = null,
-  error = null,
-  userDisplayNames = {},
-  userImageUrls = {},
-  userStatuses = {},
-  pinnedMessageIds = new Set(),
-  currentUserId,
+  virtualized = false,
+  showDateSeparators = true,
+  groupByUser = true,
+  compact = false,
+  showAvatars = true,
+  scrollRef,
   emptyMessage = "No messages yet",
-  onMessageClick,
-  onLoadMorePast,
-  onLoadMoreRecent,
-  onEditMessage,
-  onReplyToMessage,
-  onDeleteMessage,
-  onTogglePin,
-  onAddReaction,
-  onReactionClick,
+  onLoadMore,
+  onScroll,
   onScrollToBottom,
-  renderEditForm,
-  typingUserIds = [],
+  renderMessage,
   className,
   sx,
   id,
 }) => {
-  // State for scroll to bottom button visibility
+  const theme = useTheme();
+  const localScrollRef = useRef<HTMLDivElement>(null);
+  const effectiveScrollRef = scrollRef || localScrollRef;
+
+  // State for scroll-to-bottom button visibility
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  // Refs for scroll handling
-  const containerRef = useRef<HTMLDivElement>(null);
-  const lastScrollHeightRef = useRef<number>(0);
-  const lastScrollTopRef = useRef<number>(0);
+  // Track if scrolled to bottom to maintain position on new messages
   const isScrolledToBottomRef = useRef<boolean>(true);
 
-  // Parse error message
-  const errorMessage = error
-    ? error instanceof Error
-      ? error.message
-      : error.toString()
-    : null;
+  // Track last scroll height to maintain position when new messages load
+  const lastScrollHeightRef = useRef<number>(0);
+  const lastScrollTopRef = useRef<number>(0);
+
+  // Helper to format date for separator
+  const formatDateForSeparator = (date: Date): string => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const messageDate = new Date(date);
+    messageDate.setHours(0, 0, 0, 0);
+
+    if (messageDate.getTime() === today.getTime()) {
+      return "Today";
+    } else if (messageDate.getTime() === yesterday.getTime()) {
+      return "Yesterday";
+    } else {
+      return messageDate.toLocaleDateString(undefined, {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    }
+  };
 
   // Scroll to bottom on mount or when new messages arrive
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!effectiveScrollRef.current) return;
 
     if (isScrolledToBottomRef.current) {
       scrollToBottom();
     } else {
       // If the user has scrolled up, preserve their scroll position
-      const container = containerRef.current;
+      const container = effectiveScrollRef.current;
       const newScrollHeight = container.scrollHeight;
       const scrollDiff = newScrollHeight - lastScrollHeightRef.current;
 
@@ -172,40 +135,20 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
       }
     }
 
-    lastScrollHeightRef.current = containerRef.current.scrollHeight;
-    lastScrollTopRef.current = containerRef.current.scrollTop;
-  }, [messages]);
-
-  // Scroll to highlighted message
-  useEffect(() => {
-    if (highlightedMessageId && containerRef.current) {
-      const highlightedElement = document.getElementById(
-        `message-${highlightedMessageId}`,
-      );
-      if (highlightedElement) {
-        highlightedElement.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      }
-    }
-  }, [highlightedMessageId]);
+    lastScrollHeightRef.current = effectiveScrollRef.current.scrollHeight;
+    lastScrollTopRef.current = effectiveScrollRef.current.scrollTop;
+  }, [messages.length]);
 
   // Handle scroll events
-  const handleScroll = () => {
-    if (!containerRef.current) return;
+  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    if (!effectiveScrollRef.current) return;
 
-    const container = containerRef.current;
+    const container = effectiveScrollRef.current;
     const { scrollTop, scrollHeight, clientHeight } = container;
 
     // Check if scrolled to top (load older messages)
-    if (
-      scrollTop === 0 &&
-      hasMorePastMessages &&
-      onLoadMorePast &&
-      !isLoading
-    ) {
-      onLoadMorePast();
+    if (scrollTop < 50 && onLoadMore && !isLoading) {
+      onLoadMore();
     }
 
     // Check if scrolled to bottom
@@ -218,12 +161,18 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
     // Save scroll position
     lastScrollHeightRef.current = scrollHeight;
     lastScrollTopRef.current = scrollTop;
+
+    // Call parent onScroll if provided
+    if (onScroll) {
+      onScroll(event);
+    }
   };
 
-  // Scroll to bottom
-  const scrollToBottom = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    if (effectiveScrollRef.current) {
+      effectiveScrollRef.current.scrollTop =
+        effectiveScrollRef.current.scrollHeight;
       isScrolledToBottomRef.current = true;
       setShowScrollToBottom(false);
 
@@ -231,55 +180,24 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
         onScrollToBottom();
       }
     }
-  };
+  }, [onScrollToBottom]);
 
-  // Handle message click
-  const handleMessageClick = (message: Message) => {
-    if (onMessageClick) {
-      onMessageClick(message);
-    }
-  };
+  // Should we show a message as grouped with the previous?
+  const shouldGroupWithPrevious = (
+    currentMsg: Message,
+    prevMsg: Message | null,
+  ): boolean => {
+    if (!groupByUser || !prevMsg) return false;
 
-  // Handle edit message
-  const handleEditMessage = (message: Message) => {
-    if (onEditMessage) {
-      onEditMessage(message);
-    }
-  };
+    const currentDate = new Date(currentMsg.create_at);
+    const prevDate = new Date(prevMsg.create_at);
 
-  // Handle reply to message
-  const handleReplyToMessage = (message: Message) => {
-    if (onReplyToMessage) {
-      onReplyToMessage(message);
-    }
-  };
-
-  // Handle delete message
-  const handleDeleteMessage = (message: Message) => {
-    if (onDeleteMessage) {
-      onDeleteMessage(message);
-    }
-  };
-
-  // Handle toggle pin
-  const handleTogglePin = (message: Message) => {
-    if (onTogglePin) {
-      onTogglePin(message);
-    }
-  };
-
-  // Handle add reaction
-  const handleAddReaction = (message: Message) => {
-    if (onAddReaction) {
-      onAddReaction(message);
-    }
-  };
-
-  // Handle reaction click
-  const handleReactionClick = (message: Message, emoji: string) => {
-    if (onReactionClick) {
-      onReactionClick(message, emoji);
-    }
+    // Group if: same user, within 5 minutes, and same day
+    return (
+      currentMsg.user_id === prevMsg.user_id &&
+      currentDate.getTime() - prevDate.getTime() < 5 * 60 * 1000 &&
+      isSameDay(currentDate, prevDate)
+    );
   };
 
   // Render loading placeholder
@@ -306,31 +224,6 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
     );
   }
 
-  // Render error state
-  if (errorMessage && messages.length === 0) {
-    return (
-      <Box
-        className={className}
-        sx={{
-          p: 2,
-          ...sx,
-        }}
-        id={id}
-      >
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {errorMessage}
-        </Alert>
-        <Button
-          variant="outlined"
-          onClick={onLoadMorePast}
-          disabled={isLoading}
-        >
-          Try Again
-        </Button>
-      </Box>
-    );
-  }
-
   // Render empty state
   if (messages.length === 0) {
     return (
@@ -347,7 +240,118 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
     );
   }
 
-  // Render message list
+  // Prepare message items for rendering with grouping and date separators
+  const getMessageItems = (): React.ReactNode[] => {
+    if (showDateSeparators && messagesByDate) {
+      // Render with date separators using the pre-grouped messages by date
+      const items: React.ReactNode[] = [];
+
+      Array.from(messagesByDate.entries()).forEach(
+        ([dateStr, dateMessages]) => {
+          // Add date separator
+          items.push(
+            <Box
+              key={`date-${dateStr}`}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                my: 2,
+              }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  px: 2,
+                  py: 0.5,
+                  borderRadius: 1,
+                  backgroundColor: "background.paper",
+                  boxShadow: 1,
+                }}
+              >
+                {dateStr}
+              </Typography>
+            </Box>,
+          );
+
+          // Add messages for this date with grouping
+          dateMessages.forEach((message, i) => {
+            const prevMessage = i > 0 ? dateMessages[i - 1] : null;
+            const shouldGroup = shouldGroupWithPrevious(message, prevMessage);
+
+            // Wrap each message in a container that includes grouping information
+            items.push(
+              <Box
+                key={message.id}
+                sx={{
+                  mt: shouldGroup ? 0.5 : 2,
+                }}
+                data-grouped={shouldGroup}
+                data-message-id={message.id}
+              >
+                {renderMessage(message)}
+              </Box>,
+            );
+          });
+        },
+      );
+
+      return items;
+    } else {
+      // Simple list without date separators
+      return messages.map((message, index) => {
+        const prevMessage = index > 0 ? messages[index - 1] : null;
+        const shouldGroup = shouldGroupWithPrevious(message, prevMessage);
+
+        return (
+          <Box
+            key={message.id}
+            sx={{
+              mt: shouldGroup ? 0.5 : 2,
+            }}
+            data-grouped={shouldGroup}
+            data-message-id={message.id}
+          >
+            {renderMessage(message)}
+          </Box>
+        );
+      });
+    }
+  };
+
+  // Virtualized message list for performance with many messages
+  const renderVirtualizedList = () => {
+    const messageItems = getMessageItems();
+
+    return (
+      <AutoSizer>
+        {({ height, width }) => (
+          <VariableSizeList
+            height={height}
+            width={width}
+            itemCount={messageItems.length}
+            itemSize={(index) => {
+              // Estimate height based on content type
+              // This would need to be more sophisticated in a real implementation
+              const item = messageItems[index];
+              if (React.isValidElement(item) && item.props["data-message-id"]) {
+                return item.props["data-grouped"] ? 50 : 84;
+              }
+              return 40; // Date separator height
+            }}
+            overscanCount={5}
+            initialScrollOffset={0}
+          >
+            {({ index, style }) => (
+              <div style={style}>{messageItems[index]}</div>
+            )}
+          </VariableSizeList>
+        )}
+      </AutoSizer>
+    );
+  };
+
   return (
     <Box
       className={className}
@@ -360,13 +364,13 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
       }}
       id={id}
     >
-      {/* Load more past messages button */}
-      {hasMorePastMessages && (
+      {/* Load more button */}
+      {onLoadMore && (
         <Box sx={{ p: 1, textAlign: "center" }}>
           <Button
             size="small"
             startIcon={<LoadMoreIcon />}
-            onClick={onLoadMorePast}
+            onClick={onLoadMore}
             disabled={isLoading}
           >
             {isLoading ? "Loading..." : "Load Earlier Messages"}
@@ -383,7 +387,7 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
 
       {/* Message container */}
       <Box
-        ref={containerRef}
+        ref={effectiveScrollRef}
         sx={{
           flex: 1,
           overflow: "auto",
@@ -391,87 +395,8 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
         }}
         onScroll={handleScroll}
       >
-        {messages.map((message, index) => {
-          // Check if we should show date separator
-          let showDateSeparator = false;
-          let dateSeparatorValue = "";
-
-          if (index === 0) {
-            // Always show date for first message
-            showDateSeparator = true;
-            dateSeparatorValue = formatDateForSeparator(
-              new Date(message.create_at),
-            );
-          } else {
-            // Check if date changed from previous message
-            const prevDate = new Date(messages[index - 1].create_at);
-            const currDate = new Date(message.create_at);
-
-            if (!isSameDay(prevDate, currDate)) {
-              showDateSeparator = true;
-              dateSeparatorValue = formatDateForSeparator(currDate);
-            }
-          }
-
-          // Get user information
-          const userDisplayName =
-            userDisplayNames[message.user_id] || "Unknown User";
-          const userImageUrl = userImageUrls[message.user_id];
-          const userStatus = userStatuses[message.user_id];
-          const isPinned = pinnedMessageIds.has(message.id);
-
-          // Determine if compact view
-          // This is a simplified approach - typically you'd use more factors
-          const isCompact =
-            index > 0 &&
-            message.user_id === messages[index - 1].user_id &&
-            new Date(message.create_at).getTime() -
-              new Date(messages[index - 1].create_at).getTime() <
-              5 * 60 * 1000; // 5 minutes
-
-          return (
-            <MessageItemUI
-              key={message.id}
-              id={`message-${message.id}`}
-              item={message}
-              isActive={false}
-              showActions={true}
-              isLoading={false}
-              userDisplayName={userDisplayName}
-              userImageUrl={userImageUrl}
-              userStatus={userStatus}
-              isEditing={message.id === editingMessageId}
-              isHighlighted={message.id === highlightedMessageId}
-              isPinned={isPinned}
-              showDateSeparator={showDateSeparator}
-              dateSeparatorValue={dateSeparatorValue}
-              showReactions={true}
-              currentUserId={currentUserId}
-              compact={isCompact}
-              editFormComponent={
-                renderEditForm ? renderEditForm(message) : undefined
-              }
-              onClick={() => handleMessageClick(message)}
-              onEdit={() => handleEditMessage(message)}
-              onReply={() => handleReplyToMessage(message)}
-              onDelete={() => handleDeleteMessage(message)}
-              onTogglePin={() => handleTogglePin(message)}
-              onAddReaction={() => handleAddReaction(message)}
-              onReactionClick={(emoji) => handleReactionClick(message, emoji)}
-            />
-          );
-        })}
+        {virtualized ? renderVirtualizedList() : getMessageItems()}
       </Box>
-
-      {/* Typing indicator */}
-      {typingUserIds.length > 0 && (
-        <Box sx={{ p: 1, borderTop: "1px solid", borderColor: "divider" }}>
-          <TypingIndicator
-            userIds={typingUserIds}
-            userNames={userDisplayNames}
-          />
-        </Box>
-      )}
 
       {/* Scroll to bottom button */}
       <Fade in={showScrollToBottom}>
@@ -499,4 +424,4 @@ const MessageListUI: React.FC<MessageListUIProps> = ({
   );
 };
 
-export default MessageListUI;
+export default React.memo(MessageListUI);

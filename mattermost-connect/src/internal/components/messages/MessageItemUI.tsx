@@ -29,7 +29,7 @@ import {
   ContentCopy as CopyIcon,
   Flag as ReportIcon,
 } from "@mui/icons-material";
-import { Message } from "../../../index";
+import { Message, ReactionCount } from "../../../types";
 import { ItemComponentProps } from "../../types/componentTypes";
 import { RelativeTime, Markdown } from "../common";
 import MessageReactionsUI from "./MessageReactionsUI";
@@ -64,11 +64,7 @@ export interface MessageItemUIProps extends ItemComponentProps<Message> {
   /** Whether to show full date/time */
   showFullDateTime?: boolean;
   /** Message reactions */
-  reactions?: Array<{
-    emoji: string;
-    count: number;
-    userIds: string[];
-  }>;
+  reactions?: Array<ReactionCount>;
   /** Edit form component */
   editFormComponent?: React.ReactNode;
   /** Callback when edit is started */

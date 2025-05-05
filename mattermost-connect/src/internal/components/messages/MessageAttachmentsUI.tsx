@@ -16,7 +16,7 @@ import {
   Description as TextIcon,
   Archive as ArchiveIcon,
 } from "@mui/icons-material";
-import { MessageAttachment } from "../../../index";
+import { MessageAttachment } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
 
 export interface MessageAttachmentsUIProps extends BaseComponentProps {

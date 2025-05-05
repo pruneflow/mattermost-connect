@@ -1,6 +1,6 @@
 // src/internal/components/messages/FileUploadUI.tsx
 /**
- * Component for uploading files
+ * Component for uploading files with drag-and-drop
  */
 import React, { useRef, useState } from "react";
 import {
@@ -13,143 +13,133 @@ import {
   IconButton,
   Alert,
   Divider,
+  List,
+  useTheme,
+  alpha,
 } from "@mui/material";
 import {
   CloudUpload as UploadIcon,
   Delete as DeleteIcon,
   AttachFile as AttachIcon,
+  Check as CheckIcon,
 } from "@mui/icons-material";
-import { FileUploadProps } from "../../types/componentTypes";
+import { BaseComponentProps } from "../../types/componentTypes";
+import FilePreviewUI from "./FilePreviewUI";
+import { formatFileSize } from "../../../utils/mattermostUtils";
 
+export interface FileUploadProps extends BaseComponentProps {
+  /** Currently selected files */
+  selectedFiles: File[];
+  /** Maximum number of files allowed */
+  maxFiles?: number;
+  /** Maximum file size in bytes */
+  maxSize?: number;
+  /** MIME types to accept */
+  accept?: string;
+  /** Whether upload is in progress */
+  isUploading?: boolean;
+  /** Progress of each file upload (by file name) */
+  uploadProgress?: Record<string, number>;
+  /** File input reference */
+  fileInputRef?: React.RefObject<HTMLInputElement>;
+  /** Whether the uploader is disabled */
+  disabled?: boolean;
+  /** Callback when upload area is clicked */
+  onUploadClick?: () => void;
+  /** Callback when files are dropped */
+  onFileDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+  /** Callback for drag over event */
+  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
+  /** Callback when input changes */
+  onInputChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Callback to remove a file */
+  onRemoveFile?: (index: number) => void;
+  /** Callback to start upload */
+  onUpload?: () => void;
+  /** Validation errors, if any */
+  validationErrors?: string[];
+}
+
+/**
+ * File Upload UI Component
+ *
+ * Provides drag-and-drop file upload functionality
+ */
 const FileUploadUI: React.FC<FileUploadProps> = ({
+  selectedFiles = [],
   maxFiles = 10,
   maxSize = 50 * 1024 * 1024, // 50MB
   accept = "*",
-  isLoading = false,
-  onFilesSelected,
-  onUploadStart,
+  isUploading = false,
+  uploadProgress = {},
+  fileInputRef: propFileInputRef,
+  disabled = false,
+  onUploadClick,
+  onFileDrop,
+  onDragOver,
+  onInputChange,
+  onRemoveFile,
   onUpload,
-  onUploadComplete,
-  onUploadError,
+  validationErrors = [],
   className,
   sx,
   id,
 }) => {
-  // File input ref
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
+  const theme = useTheme();
   // State for drag over
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // State for selected files
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // Local file input ref if none provided
+  const localFileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = propFileInputRef || localFileInputRef;
 
-  // State for error message
-  const [error, setError] = useState<string | null>(null);
-
-  // Handle file input click
-  const handleFileInputClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  // Handle file selection via input
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    handleFiles(Array.from(files));
-
-    // Reset the input so the same file can be selected again
-    e.target.value = "";
-  };
-
-  // Handle files (both from input and drop)
-  const handleFiles = (files: File[]) => {
-    setError(null);
-
-    // Check number of files
-    if (files.length > maxFiles) {
-      setError(`You can only upload up to ${maxFiles} files at once.`);
-      return;
-    }
-
-    // Check file sizes
-    const oversizedFiles = files.filter((file) => file.size > maxSize);
-    if (oversizedFiles.length > 0) {
-      setError(
-        `Some files exceed the maximum size of ${formatFileSize(maxSize)}.`,
-      );
-      return;
-    }
-
-    // Update selected files
-    setSelectedFiles([...selectedFiles, ...files]);
-
-    // Call the callback
-    if (onFilesSelected) {
-      onFilesSelected(files);
-    }
-  };
-
-  // Handle drag events
+  // Handle drag enter
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
+    if (!disabled) {
+      setIsDragOver(true);
+    }
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  };
-
+  // Handle drag leave
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
   };
 
+  // Handle drop
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
 
-    if (e.dataTransfer.files) {
-      handleFiles(Array.from(e.dataTransfer.files));
+    if (!disabled && onFileDrop) {
+      onFileDrop(e);
+    }
+  };
+
+  // Handle click on upload area
+  const handleUploadClick = () => {
+    if (!disabled && onUploadClick) {
+      onUploadClick();
+    } else if (!disabled && fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
   // Handle file removal
   const handleRemoveFile = (index: number) => {
-    const newFiles = [...selectedFiles];
-    newFiles.splice(index, 1);
-    setSelectedFiles(newFiles);
-  };
-
-  // Handle upload start
-  const handleUpload = () => {
-    if (!selectedFiles.length) return;
-
-    if (onUpload) {
-      onUpload(selectedFiles);
-    } else if (onUploadStart) {
-      onUploadStart();
+    if (!disabled && onRemoveFile) {
+      onRemoveFile(index);
     }
   };
 
-  // Format file size
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) {
-      return `${bytes} B`;
-    } else if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    } else if (bytes < 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    } else {
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  // Handle upload button click
+  const handleUpload = () => {
+    if (!disabled && onUpload) {
+      onUpload();
     }
   };
 
@@ -167,41 +157,68 @@ const FileUploadUI: React.FC<FileUploadProps> = ({
         sx={{
           p: 3,
           border: "2px dashed",
-          borderColor: isDragOver ? "primary.main" : "divider",
+          borderColor: isDragOver
+            ? "primary.main"
+            : disabled
+              ? "action.disabled"
+              : "divider",
           borderRadius: 2,
           textAlign: "center",
-          backgroundColor: isDragOver ? "action.hover" : "background.paper",
+          backgroundColor: isDragOver
+            ? alpha(theme.palette.primary.main, 0.05)
+            : disabled
+              ? "action.disabledBackground"
+              : "background.paper",
           transition: "all 0.2s",
+          opacity: disabled ? 0.7 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
         onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
+        onDragOver={onDragOver || handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={handleUploadClick}
       >
         <UploadIcon
           sx={{
             fontSize: 48,
-            color: isDragOver ? "primary.main" : "text.secondary",
+            color: isDragOver
+              ? "primary.main"
+              : disabled
+                ? "action.disabled"
+                : "text.secondary",
             mb: 2,
           }}
         />
 
-        <Typography variant="h6" gutterBottom>
-          Drop files here or click to upload
+        <Typography
+          variant="h6"
+          gutterBottom
+          color={disabled ? "text.disabled" : "text.primary"}
+        >
+          {isDragOver
+            ? "Drop files here"
+            : "Drop files here or click to upload"}
         </Typography>
 
-        <Typography variant="body2" color="text.secondary" paragraph>
+        <Typography
+          variant="body2"
+          color={disabled ? "text.disabled" : "text.secondary"}
+          paragraph
+        >
           Maximum {maxFiles} files, up to {formatFileSize(maxSize)} each
         </Typography>
 
-        <Button
-          variant="contained"
-          startIcon={<AttachIcon />}
-          onClick={handleFileInputClick}
-          disabled={isLoading}
-        >
-          Select Files
-        </Button>
+        {!disabled && (
+          <Button
+            variant="contained"
+            startIcon={<AttachIcon />}
+            onClick={handleUploadClick}
+            disabled={disabled || isUploading}
+          >
+            Select Files
+          </Button>
+        )}
 
         <input
           type="file"
@@ -209,15 +226,20 @@ const FileUploadUI: React.FC<FileUploadProps> = ({
           style={{ display: "none" }}
           multiple
           accept={accept}
-          onChange={handleFileChange}
+          onChange={onInputChange}
+          disabled={disabled || isUploading}
         />
       </Paper>
 
-      {/* Error message */}
-      {error && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
-        </Alert>
+      {/* Validation errors */}
+      {validationErrors.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          {validationErrors.map((error, index) => (
+            <Alert key={index} severity="error" sx={{ mb: 1 }}>
+              {error}
+            </Alert>
+          ))}
+        </Box>
       )}
 
       {/* Selected files list */}
@@ -228,35 +250,22 @@ const FileUploadUI: React.FC<FileUploadProps> = ({
           </Typography>
 
           <Paper variant="outlined" sx={{ mt: 1 }}>
-            {selectedFiles.map((file, index) => (
-              <React.Fragment key={index}>
-                {index > 0 && <Divider />}
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    p: 1.5,
-                  }}
-                >
-                  <AttachIcon sx={{ mr: 1, color: "text.secondary" }} />
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="body2" noWrap>
-                      {file.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatFileSize(file.size)}
-                    </Typography>
+            <List sx={{ p: 0 }}>
+              {selectedFiles.map((file, index) => (
+                <React.Fragment key={index}>
+                  {index > 0 && <Divider />}
+                  <Box sx={{ p: 1 }}>
+                    <FilePreviewUI
+                      file={file}
+                      isUploading={isUploading}
+                      progress={uploadProgress[file.name] || 0}
+                      onRemove={() => handleRemoveFile(index)}
+                      disabled={disabled || isUploading}
+                    />
                   </Box>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleRemoveFile(index)}
-                    disabled={isLoading}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              ))}
+            </List>
           </Paper>
 
           <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
@@ -264,29 +273,53 @@ const FileUploadUI: React.FC<FileUploadProps> = ({
               variant="contained"
               color="primary"
               startIcon={
-                isLoading ? (
+                isUploading ? (
                   <CircularProgress size={20} color="inherit" />
                 ) : (
                   <UploadIcon />
                 )
               }
               onClick={handleUpload}
-              disabled={isLoading || selectedFiles.length === 0}
+              disabled={disabled || isUploading || selectedFiles.length === 0}
             >
-              {isLoading ? "Uploading..." : "Upload Files"}
+              {isUploading ? "Uploading..." : "Upload Files"}
             </Button>
           </Box>
         </Box>
       )}
 
-      {/* Loading indicator */}
-      {isLoading && (
+      {/* Overall upload progress */}
+      {isUploading && (
         <Box sx={{ width: "100%", mt: 2 }}>
-          <LinearProgress />
+          <LinearProgress
+            variant="determinate"
+            value={
+              Object.values(uploadProgress).length > 0
+                ? (Object.values(uploadProgress).reduce((a, b) => a + b, 0) /
+                    (Object.values(uploadProgress).length * 100)) *
+                  100
+                : 0
+            }
+          />
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", textAlign: "right", mt: 0.5 }}
+          >
+            {`${
+              Object.values(uploadProgress).length > 0
+                ? Math.round(
+                    (Object.values(uploadProgress).reduce((a, b) => a + b, 0) /
+                      (Object.values(uploadProgress).length * 100)) *
+                      100,
+                  )
+                : 0
+            }%`}
+          </Typography>
         </Box>
       )}
     </Box>
   );
 };
 
-export default FileUploadUI;
+export default React.memo(FileUploadUI);

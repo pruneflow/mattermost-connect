@@ -5,14 +5,11 @@
 import React from "react";
 import { Box, Chip, Tooltip } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
+import { ReactionCount } from "../../../types";
 
 export interface MessageReactionsUIProps extends BaseComponentProps {
   /** Reactions data */
-  reactions: Array<{
-    emoji: string;
-    count: number;
-    userIds: string[];
-  }>;
+  reactions: Array<ReactionCount>;
   /** Current user ID to highlight reactions from current user */
   currentUserId?: string;
   /** Callback when a reaction is clicked */
@@ -63,16 +60,16 @@ const MessageReactionsUI: React.FC<MessageReactionsUIProps> = ({
 
         return (
           <Tooltip
-            key={reaction.emoji}
+            key={reaction.emoji_name}
             title={getTooltipContent(reaction.userIds)}
             arrow
           >
             <Chip
-              label={`${reaction.emoji} ${reaction.count}`}
+              label={`${reaction.emoji_name} ${reaction.count}`}
               size="small"
               variant={isUserReacted ? "filled" : "outlined"}
               color={isUserReacted ? "primary" : "default"}
-              onClick={() => handleReactionClick(reaction.emoji)}
+              onClick={() => handleReactionClick(reaction.emoji_name)}
               sx={{
                 height: 24,
                 cursor: "pointer",

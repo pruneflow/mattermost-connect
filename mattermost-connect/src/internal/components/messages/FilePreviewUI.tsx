@@ -22,8 +22,27 @@ import {
   Description as TextIcon,
   Archive as ArchiveIcon,
 } from "@mui/icons-material";
-import { FilePreviewProps } from "../../types/componentTypes";
-import { MessageAttachment } from "../../../index";
+import { BaseComponentProps } from "../../types/componentTypes";
+import { MessageAttachment } from "../../../types";
+
+export interface FilePreviewProps extends BaseComponentProps {
+  /** File to preview (can be File object or MessageAttachment) */
+  file: any;
+  /** Whether the file is uploading */
+  isUploading?: boolean;
+  /** Upload progress (0-100) */
+  progress?: number;
+  /** Whether there was an error during upload/processing */
+  hasError?: boolean;
+  /** Error message if any */
+  errorMessage?: string;
+  /** Callback for file removal */
+  onRemove?: () => void;
+  /** Callback when file is clicked */
+  onClick?: () => void;
+  /** Whether the file is disabled for interaction */
+  disabled?: boolean;
+}
 
 const FilePreviewUI: React.FC<FilePreviewProps> = ({
   file,
