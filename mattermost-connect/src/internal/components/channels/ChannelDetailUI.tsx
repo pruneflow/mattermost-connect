@@ -1,24 +1,21 @@
 // src/internal/components/channels/ChannelDetailUI.tsx
 /**
- * Component that displays detailed information about a channel
+ * UI component for channel details
+ * Displays detailed information about a channel with tabs for different views
  */
 import React from "react";
 import {
   Box,
-  Card,
-  CardContent,
+  Paper,
   Typography,
+  Tabs,
+  Tab,
+  Button,
   Divider,
   Chip,
-  Button,
-  Link,
   Grid,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
-  ListItemIcon,
-  Avatar,
+  Skeleton,
+  CircularProgress,
   IconButton,
 } from "@mui/material";
 import {
@@ -28,75 +25,105 @@ import {
   Group as GroupIcon,
   Star as StarIcon,
   StarBorder as StarBorderIcon,
-  People as PeopleIcon,
-  PersonAdd as InviteIcon,
-  ExitToApp as LeaveIcon,
+  NotificationsOff as MuteIcon,
+  Notifications as UnmuteIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Link as LinkIcon,
-  ContentCopy as CopyIcon,
+  ExitToApp as LeaveIcon,
+  Info as InfoIcon,
 } from "@mui/icons-material";
-import { Channel } from "../../../index";
+import { Channel } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
-import UserAvatar from "../../../components/users/UserAvatar";
+import { ContentLoader, ErrorState, Card } from "../common";
 
 export interface ChannelDetailUIProps extends BaseComponentProps {
-  /** Channel data */
-  channel: Channel;
-  /** Whether the channel is a favorite */
+  /** Channel object */
+  channel: Channel | null;
+  /** Formatted channel data */
+  formattedChannel?: any;
+  /** Channel members */
+  members?: any[];
+  /** Whether data is loading */
+  isLoading?: boolean;
+  /** Whether there was an error */
+  hasError?: boolean;
+  /** Error object */
+  error?: Error | null;
+  /** Whether in edit mode */
+  isEditMode?: boolean;
+  /** Whether channel is a favorite */
   isFavorite?: boolean;
-  /** Whether the channel is muted */
+  /** Whether channel is muted */
   isMuted?: boolean;
-  /** Member count */
-  memberCount?: number;
-  /** List of member data to show (preview) */
-  memberPreview?: Array<{
+  /** Whether channel is a direct message */
+  isDirect?: boolean;
+  /** Whether channel is a group message */
+  isGroup?: boolean;
+  /** Display variant */
+  variant?: "standard" | "compact" | "card";
+  /** Tabs for the detail view */
+  tabs?: Array<{
     id: string;
-    displayName: string;
-    imageUrl?: string;
-    status?: "online" | "away" | "dnd" | "offline";
+    label: string;
+    content?: React.ReactNode;
+    disabled?: boolean;
   }>;
-  /** Whether to show channel actions */
+  /** Active tab ID */
+  activeTab?: string;
+  /** Whether to show action buttons */
   showActions?: boolean;
-  /** Whether the current user can manage this channel */
-  canManage?: boolean;
-  /** Callback when favorite button is clicked */
-  onToggleFavorite?: () => void;
-  /** Callback when view members button is clicked */
-  onViewMembers?: () => void;
-  /** Callback when invite button is clicked */
-  onInvite?: () => void;
-  /** Callback when edit button is clicked */
-  onEdit?: () => void;
-  /** Callback when copy link button is clicked */
-  onCopyLink?: () => void;
-  /** Callback when leave button is clicked */
-  onLeave?: () => void;
-  /** Callback when delete button is clicked */
-  onDelete?: () => void;
+  /** Available actions map */
+  availableActions?: Record<string, boolean>;
+  /** Callback when an action is performed */
+  onAction?: (action: string) => void;
+  /** Callback when active tab changes */
+  onTabChange?: (tabId: string) => void;
 }
 
+/**
+ * UI component for displaying detailed channel information with tabs
+ */
 const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
   channel,
+  formattedChannel,
+  members,
+  isLoading = false,
+  hasError = false,
+  error = null,
+  isEditMode = false,
   isFavorite = false,
   isMuted = false,
-  memberCount = 0,
-  memberPreview = [],
+  isDirect = false,
+  isGroup = false,
+  variant = "standard",
+  tabs = [],
+  activeTab = "info",
   showActions = true,
-  canManage = false,
-  onToggleFavorite,
-  onViewMembers,
-  onInvite,
-  onEdit,
-  onCopyLink,
-  onLeave,
-  onDelete,
+  availableActions = {},
+  onAction,
+  onTabChange,
   className,
   sx,
   id,
 }) => {
+  // Handle tab change
+  const handleTabChange = (event: React.SyntheticEvent, newValue: string) => {
+    if (onTabChange) {
+      onTabChange(newValue);
+    }
+  };
+
+  // Handle action button clicks
+  const handleAction = (action: string) => {
+    if (onAction) {
+      onAction(action);
+    }
+  };
+
   // Get channel icon based on type
   const getChannelIcon = () => {
+    if (!channel) return <InfoIcon />;
+
     switch (channel.type) {
       case "O":
         return <PublicIcon fontSize="medium" />;
@@ -113,6 +140,8 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
 
   // Get channel type label
   const getChannelTypeLabel = (): string => {
+    if (!channel) return "Channel";
+
     switch (channel.type) {
       case "O":
         return "Public Channel";
@@ -127,242 +156,343 @@ const ChannelDetailUI: React.FC<ChannelDetailUIProps> = ({
     }
   };
 
-  // Get channel created date
-  const getCreatedDate = (): string => {
-    return new Date(channel.create_at).toLocaleDateString();
+  // Loading state
+  if (isLoading && !channel) {
+    return (
+      <Paper
+        className={className}
+        sx={{
+          width: "100%",
+          p: 2,
+          ...sx,
+        }}
+        id={id}
+      >
+        <Box sx={{ mb: 2, display: "flex", alignItems: "center" }}>
+          <Skeleton variant="circular" width={40} height={40} sx={{ mr: 1 }} />
+          <Skeleton variant="text" width={200} height={40} />
+        </Box>
+        <Divider sx={{ mb: 2 }} />
+        <Skeleton variant="rectangular" width="100%" height={200} />
+      </Paper>
+    );
+  }
+
+  // Error state
+  if (hasError) {
+    return (
+      <Paper
+        className={className}
+        sx={{
+          width: "100%",
+          ...sx,
+        }}
+        id={id}
+      >
+        <ErrorState
+          title="Failed to load channel details"
+          error={error}
+          onRetry={() => onAction && onAction("refresh")}
+        />
+      </Paper>
+    );
+  }
+
+  // No channel state
+  if (!channel) {
+    return (
+      <Paper
+        className={className}
+        sx={{
+          width: "100%",
+          p: 3,
+          textAlign: "center",
+          ...sx,
+        }}
+        id={id}
+      >
+        <Typography variant="h6">No channel selected</Typography>
+        <Typography variant="body2" color="textSecondary">
+          Select a channel to view its details
+        </Typography>
+      </Paper>
+    );
+  }
+
+  // Get active tab content
+  const getActiveTabContent = () => {
+    const activeTabObj = tabs.find((tab) => tab.id === activeTab);
+    if (activeTabObj && activeTabObj.content) {
+      return activeTabObj.content;
+    }
+
+    // Default content for "info" tab
+    if (activeTab === "info") {
+      return (
+        <Box sx={{ p: 2 }}>
+          <Grid container spacing={3}>
+            {channel.purpose && (
+              <Grid size={{ xs: 12 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="textSecondary"
+                  gutterBottom
+                >
+                  Purpose
+                </Typography>
+                <Typography variant="body2">{channel.purpose}</Typography>
+              </Grid>
+            )}
+
+            {channel.header && (
+              <Grid size={{ xs: 12 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="textSecondary"
+                  gutterBottom
+                >
+                  Header
+                </Typography>
+                <Typography variant="body2">{channel.header}</Typography>
+              </Grid>
+            )}
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography
+                variant="subtitle2"
+                color="textSecondary"
+                gutterBottom
+              >
+                Channel Type
+              </Typography>
+              <Chip
+                label={getChannelTypeLabel()}
+                size="small"
+                icon={getChannelIcon()}
+                variant="outlined"
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography
+                variant="subtitle2"
+                color="textSecondary"
+                gutterBottom
+              >
+                Created On
+              </Typography>
+              <Typography variant="body2">
+                {new Date(channel.create_at).toLocaleDateString()}
+              </Typography>
+            </Grid>
+
+            {channel.total_msg_count !== undefined && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="textSecondary"
+                  gutterBottom
+                >
+                  Total Messages
+                </Typography>
+                <Typography variant="body2">
+                  {channel.total_msg_count.toLocaleString()}
+                </Typography>
+              </Grid>
+            )}
+
+            {members && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="textSecondary"
+                  gutterBottom
+                >
+                  Members
+                </Typography>
+                <Typography variant="body2">
+                  {members.length.toLocaleString()}
+                </Typography>
+              </Grid>
+            )}
+          </Grid>
+        </Box>
+      );
+    }
+
+    return null;
   };
 
-  // Format total message count
-  const formatMessageCount = (): string => {
-    if (!channel.total_msg_count) return "0 messages";
-
-    return `${channel.total_msg_count.toLocaleString()} messages`;
-  };
-
-  return (
-    <Card
-      className={className}
-      elevation={2}
-      sx={{
-        width: "100%",
-        ...sx,
-      }}
-      id={id}
-    >
-      <CardContent>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            mb: 2,
-          }}
-        >
+  // Channel detail content
+  const detailContent = (
+    <>
+      {/* Channel header with icon and title */}
+      <Box
+        sx={{
+          p: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center" }}>
           {getChannelIcon()}
-          <Typography variant="h5" sx={{ ml: 1 }}>
+          <Typography variant="h5" sx={{ ml: 1, fontWeight: 500 }}>
             {channel.display_name}
           </Typography>
           {isFavorite && <StarIcon color="primary" sx={{ ml: 1 }} />}
+          {isMuted && <MuteIcon color="action" sx={{ ml: 1, opacity: 0.6 }} />}
         </Box>
 
-        <Divider sx={{ mb: 2 }} />
-
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Channel Type
-            </Typography>
-            <Chip
-              label={getChannelTypeLabel()}
-              size="small"
-              color={channel.type === "P" ? "secondary" : "primary"}
-              variant="outlined"
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Channel Name
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="body2">@{channel.name}</Typography>
-              {onCopyLink && (
-                <IconButton size="small" onClick={onCopyLink} sx={{ ml: 0.5 }}>
-                  <CopyIcon fontSize="small" />
-                </IconButton>
-              )}
-            </Box>
-          </Grid>
-
-          {(channel.purpose || channel.header) && (
-            <Grid size={{ xs: 12 }}>
-              {channel.purpose && (
-                <>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    gutterBottom
-                  >
-                    Purpose
-                  </Typography>
-                  <Typography variant="body2" paragraph>
-                    {channel.purpose}
-                  </Typography>
-                </>
-              )}
-
-              {channel.header && (
-                <>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    gutterBottom
-                  >
-                    Header
-                  </Typography>
-                  <Typography variant="body2" paragraph>
-                    {channel.header}
-                  </Typography>
-                </>
-              )}
-            </Grid>
-          )}
-
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Created
-            </Typography>
-            <Typography variant="body2">{getCreatedDate()}</Typography>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Messages
-            </Typography>
-            <Typography variant="body2">{formatMessageCount()}</Typography>
-          </Grid>
-
-          {memberCount > 0 && (
-            <Grid size={{ xs: 12 }}>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 1,
-                }}
-              >
-                <Typography variant="subtitle2" color="text.secondary">
-                  Members ({memberCount})
-                </Typography>
-                {onViewMembers && (
-                  <Button
-                    size="small"
-                    onClick={onViewMembers}
-                    endIcon={<PeopleIcon />}
-                  >
-                    View All
-                  </Button>
-                )}
-              </Box>
-
-              {memberPreview.length > 0 && (
-                <List disablePadding>
-                  {memberPreview.map((member) => (
-                    <ListItem key={member.id} disableGutters>
-                      <ListItemAvatar sx={{ minWidth: 40 }}>
-                        <UserAvatar
-                          displayName={member.displayName}
-                          imageUrl={member.imageUrl}
-                          status={member.status}
-                          size="small"
-                        />
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={member.displayName}
-                        primaryTypographyProps={{ variant: "body2" }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-            </Grid>
-          )}
-        </Grid>
-
+        {/* Action buttons */}
         {showActions && (
-          <>
-            <Divider sx={{ my: 2 }} />
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {availableActions.favorite && (
+              <IconButton
+                color={isFavorite ? "primary" : "default"}
+                onClick={() => handleAction("favorite")}
+                size="small"
+                title={
+                  isFavorite ? "Remove from favorites" : "Add to favorites"
+                }
+              >
+                {isFavorite ? <StarIcon /> : <StarBorderIcon />}
+              </IconButton>
+            )}
 
-            <Box
-              sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 1,
-              }}
-            >
-              {onToggleFavorite && (
-                <Button
-                  size="small"
-                  startIcon={isFavorite ? <StarIcon /> : <StarBorderIcon />}
-                  variant="outlined"
-                  color={isFavorite ? "primary" : "inherit"}
-                  onClick={onToggleFavorite}
-                >
-                  {isFavorite ? "Remove Favorite" : "Favorite"}
-                </Button>
-              )}
+            {availableActions.mute && (
+              <IconButton
+                onClick={() => handleAction("mute")}
+                size="small"
+                title={isMuted ? "Unmute channel" : "Mute channel"}
+              >
+                {isMuted ? <UnmuteIcon /> : <MuteIcon />}
+              </IconButton>
+            )}
 
-              {onInvite && (
-                <Button
-                  size="small"
-                  startIcon={<InviteIcon />}
-                  variant="outlined"
-                  onClick={onInvite}
-                >
-                  Invite
-                </Button>
-              )}
+            {availableActions.edit && !isEditMode && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<EditIcon />}
+                onClick={() => handleAction("edit")}
+              >
+                Edit
+              </Button>
+            )}
 
-              {canManage && onEdit && (
-                <Button
-                  size="small"
-                  startIcon={<EditIcon />}
-                  variant="outlined"
-                  onClick={onEdit}
-                >
-                  Edit
-                </Button>
-              )}
+            {availableActions.leave && (
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                startIcon={<LeaveIcon />}
+                onClick={() => handleAction("leave")}
+              >
+                Leave
+              </Button>
+            )}
 
-              {onLeave && (
-                <Button
-                  size="small"
-                  startIcon={<LeaveIcon />}
-                  variant="outlined"
-                  color="error"
-                  onClick={onLeave}
-                >
-                  Leave
-                </Button>
-              )}
-
-              {canManage && onDelete && (
-                <Button
-                  size="small"
-                  startIcon={<DeleteIcon />}
-                  variant="outlined"
-                  color="error"
-                  onClick={onDelete}
-                >
-                  Delete
-                </Button>
-              )}
-            </Box>
-          </>
+            {availableActions.delete && (
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                startIcon={<DeleteIcon />}
+                onClick={() => handleAction("delete")}
+              >
+                Delete
+              </Button>
+            )}
+          </Box>
         )}
-      </CardContent>
-    </Card>
+      </Box>
+
+      <Divider />
+
+      {/* Tabs */}
+      {tabs.length > 0 && (
+        <>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            indicatorColor="primary"
+            textColor="primary"
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ px: 2 }}
+          >
+            {tabs.map((tab) => (
+              <Tab
+                key={tab.id}
+                value={tab.id}
+                label={tab.label}
+                disabled={tab.disabled}
+              />
+            ))}
+          </Tabs>
+
+          <Divider />
+
+          {/* Tab content */}
+          <ContentLoader
+            isLoading={isLoading}
+            error={error}
+            onRetry={() => onAction && onAction("refresh")}
+          >
+            {getActiveTabContent()}
+          </ContentLoader>
+        </>
+      )}
+    </>
   );
+
+  // Render based on variant
+  switch (variant) {
+    case "card":
+      return (
+        <Card
+          className={className}
+          sx={{
+            width: "100%",
+            ...sx,
+          }}
+          id={id}
+          elevation={2}
+        >
+          {detailContent}
+        </Card>
+      );
+    case "compact":
+      return (
+        <Paper
+          className={className}
+          sx={{
+            width: "100%",
+            ...sx,
+          }}
+          id={id}
+          variant="outlined"
+        >
+          {detailContent}
+        </Paper>
+      );
+    case "standard":
+    default:
+      return (
+        <Paper
+          className={className}
+          sx={{
+            width: "100%",
+            ...sx,
+          }}
+          id={id}
+          elevation={1}
+        >
+          {detailContent}
+        </Paper>
+      );
+  }
 };
 
 export default ChannelDetailUI;

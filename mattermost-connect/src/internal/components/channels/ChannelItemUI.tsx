@@ -8,13 +8,9 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   Typography,
   Box,
-  Tooltip,
-  Avatar,
-  Badge,
   Card,
   CardActionArea,
   CardContent,
@@ -30,7 +26,7 @@ import {
   MoreVert as MoreIcon,
   VolumeOff as MutedIcon,
 } from "@mui/icons-material";
-import { Channel } from "../../../index";
+import { Channel } from "../../../types";
 import { ItemComponentProps } from "../../types/componentTypes";
 import { UnreadBadge } from "../common";
 
@@ -202,8 +198,8 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
             />
             {(unreadCount > 0 || mention_count > 0) && (
               <UnreadBadge
-                count={unreadCount}
-                mention_count={mention_count}
+                messageCount={unreadCount}
+                mentionCount={mention_count}
                 showZero={false}
                 mentionPriority={true}
                 size="small"
@@ -222,8 +218,8 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                 {getChannelIcon()}
               </Box>
               <UnreadBadge
-                count={unreadCount}
-                mention_count={mention_count}
+                messageCount={unreadCount}
+                mentionCount={mention_count}
                 showZero={false}
                 mentionPriority={true}
               >
@@ -329,8 +325,8 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
               {(unreadCount > 0 || mention_count > 0) && (
                 <Box sx={{ mt: 1 }}>
                   <UnreadBadge
-                    count={unreadCount}
-                    mention_count={mention_count}
+                    messageCount={unreadCount}
+                    mentionCount={mention_count}
                     showZero={false}
                     mentionPriority={true}
                   />
@@ -389,8 +385,8 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
           >
             <ListItemIcon>
               <UnreadBadge
-                count={unreadCount}
-                mention_count={mention_count}
+                messageCount={unreadCount}
+                mentionCount={mention_count}
                 showZero={false}
                 mentionPriority={true}
               >

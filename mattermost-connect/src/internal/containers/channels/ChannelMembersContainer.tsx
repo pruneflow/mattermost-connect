@@ -8,8 +8,8 @@ import { useListContainer } from "../base/ListContainer";
 import { useChannel } from "../../../hooks";
 import { useAuthStore } from "../../../core/store/authStore";
 import { Channel, ChannelMember, User } from "../../../types";
-import ChannelMembersUI from "../../components/channels/ChannelMembersUI";
 import { useDialog } from "../../hooks/useDialog";
+import ChannelMembersUI from "../../components/channels/ChannelMembersUI";
 
 export interface ChannelMembersContainerProps {
   /** Channel ID */

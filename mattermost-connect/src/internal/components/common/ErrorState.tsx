@@ -13,7 +13,7 @@ export interface ErrorStateProps extends BaseComponentProps {
   /** Error message */
   message?: string;
   /** Error object */
-  error?: Error;
+  error?: Error | null;
   /** Retry button text */
   retryText?: string;
   /** Callback for retry button click */

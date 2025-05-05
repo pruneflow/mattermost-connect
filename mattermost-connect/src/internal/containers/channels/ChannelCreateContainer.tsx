@@ -5,11 +5,10 @@
  */
 import React, { useCallback } from "react";
 import { useFormContainer } from "../base/FormContainer";
-import { useTeams } from "../../../hooks";
 import { apiClient } from "../../../core/api/client";
 import { Channel, CreateChannelParams } from "../../../types";
-import ChannelCreateUI from "../../components/channels/ChannelCreateUI";
 import { useDialog } from "../../hooks/useDialog";
+import ChannelCreateUI from "../../components/channels/ChannelCreateUI";
 
 export interface ChannelCreateContainerProps {
   /** Team ID for the new channel */
@@ -27,13 +26,6 @@ export interface ChannelCreateContainerProps {
   /** ID for the component */
   id?: string;
 }
-
-export type ChannelCreateField =
-  | "name"
-  | "display_name"
-  | "purpose"
-  | "header"
-  | "type";
 
 /**
  * Container for channel creation
@@ -152,7 +144,7 @@ const ChannelCreateContainer: React.FC<ChannelCreateContainerProps> = (
 
   // Handle field change
   const handleFieldChange = useCallback(
-    (field: ChannelCreateField, value: any) => {
+    (field: any, value: any) => {
       formAPI.setFieldValue(field, value);
 
       // If display name changes, auto-generate URL name

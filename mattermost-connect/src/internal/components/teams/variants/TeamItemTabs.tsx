@@ -4,11 +4,11 @@
  */
 import React from "react";
 import { Tab, Box, Typography, useMediaQuery, useTheme } from "@mui/material";
-import { Team } from "../../../../index";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import { UnreadBadge } from "../../../components/common";
 import TeamAvatar from "../components/TeamAvatar";
-import { formatTeamName, hasUnreadMentions } from "../utils/";
+import { formatTeamName } from "../utils/";
+import { Team } from "../../../../types";
 
 export interface TeamItemTabsProps extends BaseComponentProps {
   value: string;
@@ -68,8 +68,8 @@ const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
       {showIcon && <TeamAvatar team={team} size={24} />}
 
       <UnreadBadge
-        count={unreadState.msg_count}
-        mention_count={unreadState.mention_count}
+        messageCount={unreadState.msg_count}
+        mentionCount={unreadState.mention_count}
         showZero={false}
         mentionPriority={true}
       >

@@ -36,11 +36,7 @@ import {
   Search as SearchIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
-import { Channel } from "../../../index";
-import {
-  BaseComponentProps,
-  ChannelHeaderData,
-} from "../../types/componentTypes";
+import { ChannelHeaderData } from "../../types/componentTypes";
 
 export interface ChannelHeaderUIProps extends ChannelHeaderData {
   /** Whether the channel is muted */

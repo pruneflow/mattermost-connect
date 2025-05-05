@@ -7,8 +7,8 @@ import React, { useCallback, useEffect, useMemo } from "react";
 import { useFormContainer } from "../base/FormContainer";
 import { useChannel, useDirectChannel } from "../../../hooks";
 import { Channel, UpdateChannelParams } from "../../../types";
-import ChannelSettingsUI from "../../components/channels/ChannelSettingsUI";
 import { useDialog } from "../../hooks/useDialog";
+import ChannelSettingsUI from "../../components/channels/ChannelSettingsUI";
 
 export interface ChannelSettingsContainerProps {
   /** Channel ID */
@@ -220,7 +220,6 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
 
   // Prepare UI props
   const uiProps = {
-    channel,
     formData: formState.formData,
     errors: formState.errors,
     isLoading: formState.isSubmitting || isUpdating || isLoading,

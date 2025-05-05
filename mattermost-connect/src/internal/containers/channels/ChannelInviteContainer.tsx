@@ -7,9 +7,9 @@ import React, { useCallback, useState } from "react";
 import { useChannel, useUserSearch } from "../../../hooks";
 import { apiClient } from "../../../core/api/client";
 import { Channel, User } from "../../../types";
-import ChannelInviteUI from "../../components/channels/ChannelInviteUI";
 import { useDialog } from "../../hooks/useDialog";
 import { useDebouncedCallback } from "../../utils/performanceUtils";
+import ChannelInviteUI from "../../components/channels/ChannelInviteUI";
 
 export interface ChannelInviteContainerProps {
   /** Channel ID */

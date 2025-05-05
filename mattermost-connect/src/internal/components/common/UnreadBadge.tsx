@@ -5,7 +5,7 @@
 import React from "react";
 import { Badge, Box, Typography } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { formatUnreadBadgeData } from "../../../utils/unreadCountUtils";
+import { formatUnreadCount } from "../../../utils/formatters";
 
 export interface UnreadBadgeProps extends BaseComponentProps {
   /** Number of unread messages */
@@ -26,6 +26,60 @@ export interface UnreadBadgeProps extends BaseComponentProps {
   maxDisplayCount?: number;
   /** Size of the badge */
   size?: "small" | "medium" | "large";
+  /** Whether to prioritize showing mentions over message count */
+  mentionPriority?: boolean;
+  /** Whether to show zero counts */
+  showZero?: boolean;
+}
+
+/**
+ * Internal function to format badge data
+ *
+ * @param messageCount - Number of unread messages
+ * @param mentionCount - Number of mentions
+ * @param isMuted - Whether the channel is muted
+ * @param maxDisplayCount - Maximum count to display before showing +
+ * @param mentionPriority - Whether to prioritize mentions over messages
+ * @param showZero - Whether to show zero counts
+ * @returns Formatted badge data with text and color
+ */
+function formatBadgeData(
+  messageCount: number,
+  mentionCount: number,
+  isMuted: boolean = false,
+  maxDisplayCount: number = 99,
+  mentionPriority: boolean = true,
+  showZero: boolean = false,
+): { text: string; color: "primary" | "error" | "default" } {
+  // If both counts are 0 or channel is muted and no mentions, show nothing
+  if (
+    (messageCount === 0 && mentionCount === 0) ||
+    (isMuted && mentionCount === 0 && !showZero)
+  ) {
+    return { text: "", color: "default" };
+  }
+
+  // If muted but has mentions, show mentions with default color
+  if (isMuted && mentionCount > 0) {
+    return {
+      text: formatUnreadCount(mentionCount, maxDisplayCount),
+      color: "default",
+    };
+  }
+
+  // If has mentions and mention priority is enabled
+  if (mentionCount > 0 && mentionPriority) {
+    return {
+      text: formatUnreadCount(mentionCount, maxDisplayCount),
+      color: "error",
+    };
+  }
+
+  // Default case: show message count
+  return {
+    text: formatUnreadCount(messageCount, maxDisplayCount),
+    color: messageCount > 0 ? "primary" : "default",
+  };
 }
 
 /**
@@ -43,12 +97,21 @@ const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   children,
   maxDisplayCount = 99,
   size = "medium",
+  mentionPriority = true,
+  showZero = false,
   className,
   sx,
   id,
 }) => {
   // Format badge data for display
-  const badgeData = formatUnreadBadgeData(messageCount, mentionCount, isMuted);
+  const badgeData = formatBadgeData(
+    messageCount,
+    mentionCount,
+    isMuted,
+    maxDisplayCount,
+    mentionPriority,
+    showZero,
+  );
 
   // Handle case where we want to show a dot for unreads
   let badgeContent: React.ReactNode = badgeData.text;

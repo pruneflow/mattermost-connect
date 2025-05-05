@@ -371,7 +371,7 @@ export interface ItemComponentProps<T = any> extends BaseComponentProps {
 /**
  * Channel header data props
  */
-export interface ChannelHeaderData {
+export interface ChannelHeaderData extends BaseComponentProps {
   /** Channel object */
   channel: Channel;
   /** Number of channel members */

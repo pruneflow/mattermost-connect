@@ -12,12 +12,12 @@ import {
   styled,
 } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { Channel } from "../../../index";
+import { Channel } from "../../../types";
 import {
   isDirectChannel,
   isGroupChannel,
   getChannelInitials,
-} from "../../../utils/directChannelUtils";
+} from "../../../utils/channelUtils";
 import { stringToColor } from "../../../utils/mattermostUtils";
 
 // Styled Badge for online status
