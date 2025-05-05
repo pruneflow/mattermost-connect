@@ -1,76 +1,26 @@
 // src/internal/containers/users/UserAvatarContainer.tsx
-/**
- * User Avatar Container
- * Container component for user avatars
- * Delegates business logic to useUser hook
- */
 import React, { useCallback } from "react";
+import { useBaseContainer } from "../base/BaseContainer";
 import UserAvatarUI from "../../components/users/UserAvatarUI";
 import { User } from "../../../types";
 import { useUser } from "../../../hooks";
 
-/**
- * User avatar container props
- */
 export interface UserAvatarContainerProps {
-  /**
-   * User ID to display
-   */
   userId: string;
-  /**
-   * User object (optional, will be fetched if not provided)
-   */
   user?: User;
-  /**
-   * Size of the avatar
-   */
   size?: "small" | "medium" | "large" | number;
-  /**
-   * Whether to show the user's status indicator
-   */
   showStatus?: boolean;
-  /**
-   * Whether to show the user's name
-   */
   showName?: boolean;
-  /**
-   * Position of the name relative to the avatar
-   */
   namePosition?: "right" | "bottom";
-  /**
-   * Whether to show a tooltip with user information
-   */
   showTooltip?: boolean;
-  /**
-   * Whether to prefer username over full name
-   */
   preferUsername?: boolean;
-  /**
-   * Whether the avatar is clickable
-   */
   clickable?: boolean;
-  /**
-   * Callback when avatar is clicked
-   */
   onClick?: (user: User) => void;
-  /**
-   * CSS className
-   */
   className?: string;
-  /**
-   * MUI sx prop for styling
-   */
   sx?: React.CSSProperties;
-  /**
-   * Component ID
-   */
   id?: string;
 }
 
-/**
- * User Avatar Container
- * Renders a user avatar with optional status indicator and name
- */
 const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (props) => {
   const {
     userId,
@@ -88,7 +38,12 @@ const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (props) => {
     id,
   } = props;
 
-  // Use user hook for user data
+  const [baseState, baseAPI] = useBaseContainer({
+    id,
+    className,
+    sx,
+  });
+
   const {
     user: fetchedUser,
     status,
@@ -98,29 +53,24 @@ const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (props) => {
     isLoading,
   } = useUser(userId);
 
-  // If user prop is provided, prefer it over fetched user
   const user = propUser || fetchedUser;
 
-  // Handle avatar click
   const handleClick = useCallback(() => {
     if (clickable && onClick && user) {
       onClick(user);
     }
   }, [clickable, onClick, user]);
 
-  // Calculate display name based on preferences
-  const userDisplayName = useCallback(() => {
+  const getUserDisplayName = useCallback(() => {
     if (user) {
       if (preferUsername) {
         return user.username;
       }
 
-      // Use the display name from the hook if available
       if (displayName) {
         return displayName;
       }
 
-      // Calculate display name from user object
       const firstName = user.first_name || "";
       const lastName = user.last_name || "";
       const nickname = user.nickname || "";
@@ -139,13 +89,12 @@ const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (props) => {
     return "";
   }, [user, displayName, preferUsername]);
 
-  // Calculate initials if not provided by the hook
-  const userInitials = useCallback(() => {
+  const getUserInitials = useCallback(() => {
     if (initials) {
       return initials;
     }
 
-    const name = userDisplayName();
+    const name = getUserDisplayName();
     if (!name) return "?";
 
     const parts = name.split(" ").filter(Boolean);
@@ -158,26 +107,22 @@ const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (props) => {
     return (
       parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
     ).toUpperCase();
-  }, [initials, userDisplayName]);
+  }, [initials, getUserDisplayName]);
 
-  // Render the avatar UI component
-  return (
-    <UserAvatarUI
-      displayName={userDisplayName()}
-      imageUrl={profileImageUrl || undefined}
-      initials={userInitials()}
-      status={showStatus ? status : undefined}
-      size={size}
-      showName={showName}
-      namePosition={namePosition}
-      tooltipDisabled={!showTooltip}
-      clickable={clickable}
-      onClick={handleClick}
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
+  const uiProps = baseAPI.createUIProps({
+    displayName: getUserDisplayName(),
+    imageUrl: profileImageUrl || undefined,
+    initials: getUserInitials(),
+    status: showStatus ? status : undefined,
+    size,
+    showName,
+    namePosition,
+    tooltipDisabled: !showTooltip,
+    clickable,
+    onClick: handleClick,
+  });
+
+  return <UserAvatarUI {...uiProps} />;
 };
 
 export default UserAvatarContainer;

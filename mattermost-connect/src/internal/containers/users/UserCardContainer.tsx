@@ -1,94 +1,32 @@
 // src/internal/containers/users/UserCardContainer.tsx
-/**
- * User Card Container
- * Container component for user cards/info display
- * Delegates business logic to useUser hook
- */
 import React, { useCallback } from "react";
-import UserCardUI from "../../components/users/UserCardUI";
+import { useBaseContainer } from "../base/BaseContainer";
+import UserCardUI, { UserCardUIProps } from "../../components/users/UserCardUI";
 import { User, UserStatus } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
 import { useAuth } from "../../../hooks/useAuth";
 import { useUser } from "../../../hooks";
 
-/**
- * User card container props
- */
 export interface UserCardContainerProps {
-  /**
-   * User ID to display
-   */
   userId: string;
-  /**
-   * User object (optional, will be fetched if not provided)
-   */
   user?: User;
-  /**
-   * Card variant
-   */
   variant?: "default" | "compact" | "expanded";
-  /**
-   * Size of the avatar
-   */
   avatarSize?: number;
-  /**
-   * Whether to show the user's status indicator
-   */
   showStatus?: boolean;
-  /**
-   * Whether to show detailed information
-   */
   showDetails?: boolean;
-  /**
-   * Whether to show actions menu
-   */
   showActions?: boolean;
-  /**
-   * Available actions
-   */
   availableActions?: string[];
-  /**
-   * Whether card is outlined
-   */
   outlined?: boolean;
-  /**
-   * Card elevation
-   */
   elevation?: number;
-  /**
-   * Whether card is selected
-   */
   selected?: boolean;
-  /**
-   * Callback when action is performed
-   */
   onAction?: (action: string, user: User) => void;
-  /**
-   * Callback when user card is clicked
-   */
   onClick?: (user: User) => void;
-  /**
-   * Callback when status is changed
-   */
   onStatusChange?: (user: User, newStatus: UserStatus) => void;
-  /**
-   * CSS className
-   */
   className?: string;
-  /**
-   * MUI sx prop for styling
-   */
   sx?: React.CSSProperties;
-  /**
-   * Component ID
-   */
   id?: string;
 }
 
-/**
- * User Card Container
- * Displays user information in a card format
- */
 const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
   const {
     userId,
@@ -110,7 +48,12 @@ const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
     id,
   } = props;
 
-  // Use user hook for user data
+  const [baseState, baseAPI] = useBaseContainer({
+    id,
+    className,
+    sx,
+  });
+
   const {
     user: fetchedUser,
     status,
@@ -122,56 +65,61 @@ const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
     updateStatus,
   } = useUser(userId);
 
-  // Use current user info
   const { currentUser } = useAuth();
-
-  // Use dialog for confirmations
   const dialog = useDialog();
 
-  // If user prop is provided, prefer it over fetched user
   const user = propUser || fetchedUser;
 
-  // Handle card click
   const handleClick = useCallback(() => {
     if (onClick && user) {
       onClick(user);
     }
   }, [onClick, user]);
 
-  // Handle action click
   const handleActionClick = useCallback(
     async (action: string) => {
       if (!user) return;
 
-      // Handle action
-      if (action === "message" && onAction) {
-        onAction("message", user);
-      } else if (action === "profile" && onAction) {
-        onAction("profile", user);
-      } else if (action === "refresh") {
-        await refreshUser();
-      } else if (action === "more" && onAction) {
-        onAction("more", user);
-      } else {
-        // Pass any other action to the parent
-        if (onAction) {
-          onAction(action, user);
+      baseAPI.withLoading(async () => {
+        if (action === "message" && onAction) {
+          onAction("message", user);
+        } else if (action === "profile" && onAction) {
+          onAction("profile", user);
+        } else if (action === "refresh") {
+          await refreshUser();
+        } else if (action === "more" && onAction) {
+          onAction("more", user);
+        } else if (action === "changeStatus" && isCurrentUser) {
+          // Handle status change - this would require additional UI
+          // that's not in the current implementation
+          if (onStatusChange && user) {
+            onStatusChange(user, status);
+          }
+        } else {
+          if (onAction) {
+            onAction(action, user);
+          }
         }
-      }
+      });
     },
-    [user, onAction, refreshUser],
+    [
+      user,
+      onAction,
+      refreshUser,
+      isCurrentUser,
+      onStatusChange,
+      status,
+      baseAPI,
+    ],
   );
 
-  // Get available actions based on current user
   const getActions = useCallback(() => {
     const actions = [...availableActions];
 
-    // Add refresh action if not already present
     if (!actions.includes("refresh")) {
       actions.push("refresh");
     }
 
-    // If this is the current user, add status change action
     if (isCurrentUser && !actions.includes("changeStatus")) {
       actions.push("changeStatus");
     }
@@ -179,7 +127,6 @@ const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
     return actions;
   }, [availableActions, isCurrentUser]);
 
-  // Calculate avatar size based on variant
   const getAvatarSize = useCallback(() => {
     if (avatarSize) return avatarSize;
 
@@ -193,45 +140,41 @@ const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
     }
   }, [variant, avatarSize]);
 
-  // Check if we should show the card is loading
   const isCardLoading = isLoading && !user;
-
-  // Check if we have an error and no user
   const hasError = !!error && !user;
 
-  // Render the user card UI component
-  return (
-    <UserCardUI
-      // Card data
-      user={user}
-      displayName={displayName || user?.username || ""}
-      status={status}
-      // Card state
-      variant={variant}
-      isLoading={isCardLoading}
-      hasError={hasError}
-      error={error}
-      isCurrentUser={isCurrentUser}
-      // Card configuration
-      showStatus={showStatus}
-      showActions={showActions}
-      availableActions={getActions()}
-      showRole={variant === "expanded"}
-      showEmail={showDetails}
-      elevation={elevation}
-      outlined={outlined}
-      selected={selected}
-      avatarSize={getAvatarSize()}
-      // Callbacks
-      onActionClick={handleActionClick}
-      onClick={handleClick}
-      onRefresh={refreshUser}
-      // Styling
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
+  const uiProps: UserCardUIProps = {
+    // Propriétés requises
+    user,
+    displayName: displayName || user?.username || "",
+    status,
+
+    // Autres propriétés
+    variant,
+    isLoading: isCardLoading || baseState.isLoading,
+    hasError,
+    error,
+    isCurrentUser,
+    showStatus,
+    showActions,
+    availableActions: getActions(),
+    showRole: variant === "expanded",
+    showEmail: showDetails,
+    elevation,
+    outlined,
+    selected,
+    avatarSize: getAvatarSize(),
+    onActionClick: handleActionClick,
+    onClick: handleClick,
+    onRefresh: refreshUser,
+
+    // Propriétés de style
+    className,
+    sx,
+    id,
+  };
+
+  return <UserCardUI {...uiProps} />;
 };
 
 export default UserCardContainer;
