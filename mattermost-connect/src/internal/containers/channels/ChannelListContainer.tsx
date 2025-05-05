@@ -5,11 +5,10 @@
  */
 import React, { useCallback, useEffect, useMemo } from "react";
 import { useListContainer } from "../base/ListContainer";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
+import { useChannels, useTeamUnreadCount } from "../../../hooks";
 import { Channel, ChannelGroupType } from "../../../types";
 import ChannelListUI from "../../components/channels/ChannelListUI";
 import { useDialog } from "../../hooks/useDialog";
-import { useUnreadCounts } from "../../../hooks";
 
 export interface ChannelListContainerProps {
   /** Team ID to filter channels */
@@ -75,7 +74,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
 
   const dialog = useDialog();
 
-  // Use channel container hook
+  // Use channels hook for channel data - no need for actions here
   const {
     channels: fetchedChannels,
     publicChannels,
@@ -83,27 +82,60 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     directChannels,
     groupChannels,
     favoriteChannels,
-    isFavorite,
-    isChannelMuted,
+    selectChannel,
     hasUnreads,
     hasMentions,
-    selectChannel,
-    toggleFavorite,
-    toggleMuted,
-    filterChannels,
-  } = useContainerChannel();
+    isLoading: channelsLoading,
+  } = useChannels(teamId);
 
-  // Get unread counts
-  const { unreadChannels, getUnreadCount, getFormattedUnreadCount } =
-    useUnreadCounts(teamId);
+  // Filter channels based on props
+  const filteredChannels = useMemo(() => {
+    let channels = propChannels || fetchedChannels;
 
-  // Use list container hook
+    if (!channels.length) return [];
+
+    // Filter by channel type if specified
+    if (channelType !== "all") {
+      if (channelType === "public") {
+        channels = publicChannels;
+      } else if (channelType === "private") {
+        channels = privateChannels;
+      } else if (channelType === "direct") {
+        channels = directChannels;
+      } else if (channelType === "group") {
+        channels = groupChannels;
+      } else if (channelType === "favorite") {
+        channels = favoriteChannels;
+      }
+    }
+
+    // Filter by unread status if requested
+    if (unreadOnly) {
+      channels = channels.filter((channel) => hasUnreads(channel.id));
+    }
+
+    return channels;
+  }, [
+    propChannels,
+    fetchedChannels,
+    channelType,
+    unreadOnly,
+    publicChannels,
+    privateChannels,
+    directChannels,
+    groupChannels,
+    favoriteChannels,
+    hasUnreads,
+  ]);
+
+  // Use ListContainer base for list management
   const [listState, listAPI] = useListContainer({
-    items: propChannels || fetchedChannels,
+    items: filteredChannels,
     idField: "id",
     displayField: "display_name",
     searchFields: ["display_name", "name", "header", "purpose"],
     emptyMessage: "No channels available",
+    initialLoading: channelsLoading,
     onItemSelect: (channel) => {
       selectChannel(channel);
       if (onSelectChannel) {
@@ -112,80 +144,10 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     },
   });
 
-  // Filter channels based on props
-  const filteredChannels = useMemo(() => {
-    // Use provided channels or apply filters to fetched channels
-    const baseChannels =
-      propChannels ||
-      filterChannels({
-        includePublic: channelType === "all" || channelType === "public",
-        includePrivate: channelType === "all" || channelType === "private",
-        includeDirect: channelType === "all" || channelType === "direct",
-        includeGroup: channelType === "all" || channelType === "group",
-        onlyFavorites: channelType === "favorite",
-        onlyUnreads: unreadOnly,
-      });
-
-    return baseChannels;
-  }, [propChannels, filterChannels, channelType, unreadOnly]);
-
-  // Map of unread counts by channel ID
-  const unreadCountsMap = useMemo(() => {
-    const map: Record<string, { msg_count: number; mention_count: number }> =
-      {};
-
-    filteredChannels.forEach((channel) => {
-      const count = getUnreadCount(channel.id);
-      if (count) {
-        map[channel.id] = {
-          msg_count: count.msg_count,
-          mention_count: count.mention_count,
-        };
-      } else {
-        map[channel.id] = { msg_count: 0, mention_count: 0 };
-      }
-    });
-
-    return map;
-  }, [filteredChannels, getUnreadCount]);
-
-  // Set initial items in the list container
+  // Update list items when filtered channels change
   useEffect(() => {
     listAPI.setItems(filteredChannels);
   }, [filteredChannels, listAPI]);
-
-  // Handle channel actions
-  const handleChannelAction = useCallback(
-    (action: string, channel: Channel) => {
-      if (action === "more" && onChannelAction) {
-        onChannelAction(action, channel);
-        return;
-      }
-
-      if (action === "favorite") {
-        toggleFavorite();
-        return;
-      }
-
-      if (action === "mute") {
-        toggleMuted();
-        return;
-      }
-
-      if (onChannelAction) {
-        onChannelAction(action, channel);
-      }
-    },
-    [onChannelAction, toggleFavorite, toggleMuted],
-  );
-
-  // Handle toggle favorite
-  const handleToggleFavorite = useCallback(
-    (channel: Channel) => {
-      toggleFavorite();
-    },
-    [toggleFavorite],
-  );
 
   // Handle search
   const handleSearch = useCallback(
@@ -202,59 +164,39 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     }
   }, [onCreateChannel]);
 
-  // Prepare data needed for channel avatars
-  const channelAvatars = useMemo(() => {
-    const avatars: Record<string, any> = {};
-
-    filteredChannels.forEach((channel) => {
-      if (!channel) return;
-
-      // For direct and group channels
-      if (channel.type === "D" || channel.type === "G") {
-        // This would normally be filled with data from directInfo
-        avatars[channel.id] = {
-          isLoading: false, // Set based on actual loading state
-        };
+  // Handle channel action (delegated from ChannelItemContainer)
+  const handleChannelAction = useCallback(
+    (action: string, channel: Channel) => {
+      if (onChannelAction) {
+        onChannelAction(action, channel);
       }
-    });
+    },
+    [onChannelAction],
+  );
 
-    return avatars;
-  }, [filteredChannels]);
+  // Handle channel selection
+  const handleChannelClick = useCallback(
+    (channel: Channel) => {
+      listAPI.selectItem(channel);
+    },
+    [listAPI],
+  );
 
-  // Create favorite channels set
-  const favoriteChannelsSet = useMemo(() => {
-    const set = new Set<string>();
-    if (favoriteChannels) {
-      favoriteChannels.forEach((channel) => set.add(channel.id));
-    }
-    return set;
-  }, [favoriteChannels]);
-
-  // Create muted channels set
-  const mutedChannelsSet = useMemo(() => {
-    const set = new Set<string>();
-    filteredChannels.forEach((channel) => {
-      if (isChannelMuted(channel.id)) {
-        set.add(channel.id);
-      }
-    });
-    return set;
-  }, [filteredChannels, isChannelMuted]);
-
-  // Get display names for direct/group channels
+  // Get display names for direct/group channels - would be populated from a real hook in production
   const displayNamesByChannel = useMemo(() => {
     const result: Record<string, string[]> = {};
 
-    filteredChannels.forEach((channel) => {
+    listState.items.forEach((channel) => {
       if (channel.type === "D" || channel.type === "G") {
-        // This would be filled with actual display names
+        // Display existing name, would be filled with real data in production
         result[channel.id] = [channel.display_name];
       }
     });
 
     return result;
-  }, [filteredChannels]);
+  }, [listState.items]);
 
+  // Prepare UI props
   const uiProps = {
     items: listState.items,
     activeId: listState.selectedIds[0],
@@ -262,22 +204,17 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     density,
     isLoading: listState.isLoading,
     emptyMessage: listState.isEmpty
-      ? "No channels found"
+      ? "No channels match your criteria"
       : "No channels available",
-    unreadCounts: unreadCountsMap,
     allowCreate,
     showSearch,
     searchTerm: listState.searchTerm,
     groupByType,
     showFavorites,
     displayNamesByChannel,
-    favoriteChannels: favoriteChannelsSet,
-    mutedChannels: mutedChannelsSet,
-    channelAvatars,
-    onItemClick: listAPI.selectItem,
+    onItemClick: handleChannelClick,
     onCreateChannel: handleCreateChannel,
     onChannelAction: handleChannelAction,
-    onToggleFavorite: handleToggleFavorite,
     onSearchChange: handleSearch,
     className,
     sx,

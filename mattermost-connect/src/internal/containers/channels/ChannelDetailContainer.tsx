@@ -5,12 +5,13 @@
  */
 import React, { useCallback, useMemo, useState } from "react";
 import { useDetailContainer } from "../base/DetailContainer";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
+import { useChannel, useDirectChannel } from "../../../hooks";
 import { Channel } from "../../../types";
 import ChannelDetailUI from "../../components/channels/ChannelDetailUI";
 import ChannelMembersContainer from "./ChannelMembersContainer";
 import ChannelSettingsContainer from "./ChannelSettingsContainer";
 import { useDialog } from "../../hooks/useDialog";
+import { isChannelMuted } from "../../../core/store/userSettingsStore";
 
 export interface ChannelDetailContainerProps {
   /** Channel ID */
@@ -68,49 +69,114 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
 
   const dialog = useDialog();
 
-  // Use channel container hook
-  const {
-    channel: fetchedChannel,
-    members,
-    formattedChannel,
-    updateChannelWithConfirm,
-    deleteChannelWithConfirm,
-    leaveChannelWithConfirm,
-    toggleFavorite,
-    toggleMuted,
-    formatChannelData,
-    isFavorite,
-    isChannelMuted,
-    isDirect,
-    isGroup,
-  } = useContainerChannel(channelId);
-
-  const channel = propChannel || fetchedChannel;
-
   // State for settings edit mode
   const [isSettingsEditMode, setIsSettingsEditMode] = useState(false);
 
-  // Use detail container hook
+  // Use hooks for channel data and operations
+  const {
+    channel: fetchedChannel,
+    members,
+    update: updateChannel,
+    deleteChannel,
+    leaveChannel,
+    toggleFavoriteStatus,
+    toggleMutedStatus,
+    isFavorite,
+    isLoading,
+    isUpdating,
+    isDeleting,
+  } = useChannel(channelId);
+
+  // Get direct channel specific info
+  const { isDirect, isGroup } = useDirectChannel(channelId);
+
+  const channel = propChannel || fetchedChannel;
+
+  // Confirmation dialog for updates
+  const updateChannelWithConfirm = useCallback(
+    async (updateData: Partial<Channel>) => {
+      if (!channel) return null;
+
+      const confirmed = await dialog.confirmAsync({
+        title: "Update Channel",
+        message: `Are you sure you want to update "${channel.display_name}"?`,
+        confirmText: "Update",
+      });
+
+      if (!confirmed) return null;
+
+      return await updateChannel(updateData);
+    },
+    [channel, dialog, updateChannel],
+  );
+
+  // Confirmation dialog for deletion
+  const deleteChannelWithConfirm = useCallback(async () => {
+    if (!channel) return false;
+
+    const confirmed = await dialog.confirmAsync({
+      title: "Delete Channel",
+      message: `Are you sure you want to delete "${channel.display_name}"? This action cannot be undone.`,
+      confirmText: "Delete",
+      isDestructive: true,
+    });
+
+    if (!confirmed) return false;
+
+    await deleteChannel();
+    return true;
+  }, [channel, dialog, deleteChannel]);
+
+  // Confirmation dialog for leaving
+  const leaveChannelWithConfirm = useCallback(async () => {
+    if (!channel) return false;
+
+    const confirmed = await dialog.confirmAsync({
+      title: "Leave Channel",
+      message: `Are you sure you want to leave "${channel.display_name}"?`,
+      confirmText: "Leave",
+      isDestructive: true,
+    });
+
+    if (!confirmed) return false;
+
+    await leaveChannel();
+    return true;
+  }, [channel, dialog, leaveChannel]);
+
+  // Use DetailContainer for base functionality
   const [detailState, detailAPI] = useDetailContainer({
     itemId: channelId,
     item: channel,
-    editMode: false,
+    editMode: isSettingsEditMode,
+    initialLoading: isLoading,
     onLoadItem: async (id) => {
-      // Just return the channel, loading is handled by the useChannel hook
+      // Item loading is handled by the useChannel hook
       return channel;
     },
     onUpdateItem: async (id, data) => {
       return await updateChannelWithConfirm(data);
     },
     onDeleteItem: async (id) => {
-      const confirmed = await deleteChannelWithConfirm();
-      if (!confirmed) {
-        throw new Error("Operation cancelled by user");
+      const success = await deleteChannelWithConfirm();
+      if (!success) {
+        throw new Error("Operation cancelled");
       }
     },
     showActions,
     availableActions,
   });
+
+  // Format channel data for display
+  const formattedChannel = useMemo(() => {
+    if (!channel) return null;
+
+    // Basic formatting that would be expanded in production
+    return {
+      ...channel,
+      // Format other fields as needed
+    };
+  }, [channel]);
 
   // Handle tab change
   const handleTabChange = useCallback(
@@ -156,41 +222,50 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
     async (action: string) => {
       if (!channel) return;
 
-      // Handle built-in actions
-      switch (action) {
-        case "edit":
-          if (detailState.activeTab === "settings") {
-            setIsSettingsEditMode(true);
-            return;
-          }
-          break;
-        case "favorite":
-          await toggleFavorite();
-          break;
-        case "mute":
-          await toggleMuted();
-          break;
-        case "leave":
-          await leaveChannelWithConfirm();
-          break;
-        default:
-          // Use detail container's performAction for standard actions
-          await detailAPI.performAction(action);
-      }
+      try {
+        // Handle built-in actions
+        switch (action) {
+          case "edit":
+            if (detailState.activeTab === "settings") {
+              setIsSettingsEditMode(true);
+              if (onAction) onAction(action, channel);
+              return;
+            }
+            break;
+          case "favorite":
+            await toggleFavoriteStatus();
+            break;
+          case "mute":
+            await toggleMutedStatus();
+            break;
+          case "leave":
+            await leaveChannelWithConfirm();
+            break;
+          default:
+            // Use detail container's performAction for standard actions
+            await detailAPI.performAction(action);
+        }
 
-      // Call the onAction callback if provided
-      if (onAction) {
-        onAction(action, channel);
+        // Call the onAction callback if provided
+        if (onAction) {
+          onAction(action, channel);
+        }
+      } catch (error) {
+        dialog.showError(
+          "Action Failed",
+          error instanceof Error ? error.message : "Failed to perform action",
+        );
       }
     },
     [
       channel,
       detailAPI,
       detailState.activeTab,
-      toggleFavorite,
-      toggleMuted,
+      toggleFavoriteStatus,
+      toggleMutedStatus,
       leaveChannelWithConfirm,
       onAction,
+      dialog,
     ],
   );
 
@@ -198,7 +273,10 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
   const handleMemberAction = useCallback(
     (action: string, userId: string) => {
       if (onAction && channel) {
-        onAction(`member_${action}`, { ...channel, memberId: userId });
+        onAction(`member_${action}`, {
+          ...channel,
+          memberId: userId,
+        } as Channel);
       }
     },
     [onAction, channel],
@@ -244,6 +322,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
           />
         );
       default:
+        // For custom tabs or info tab, return null to let the UI handle it
         return null;
     }
   }, [
@@ -295,7 +374,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
     channel: detailState.item as Channel | null,
     formattedChannel,
     members,
-    isLoading: detailState.isLoading,
+    isLoading: detailState.isLoading || isLoading,
     hasError: detailState.hasError,
     error: detailState.error,
     isEditMode: isSettingsEditMode || detailState.isEditMode,

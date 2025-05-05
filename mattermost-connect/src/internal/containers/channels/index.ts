@@ -9,6 +9,7 @@ export { default as ChannelSettingsContainer } from "./ChannelSettingsContainer"
 export { default as ChannelMembersContainer } from "./ChannelMembersContainer";
 export { default as ChannelCreateContainer } from "./ChannelCreateContainer";
 export { default as ChannelInviteContainer } from "./ChannelInviteContainer";
+export { default as ChannelItemContainer } from "./ChannelItemContainer";
 
 export type { ChannelListContainerProps } from "./ChannelListContainer";
 export type { ChannelDetailContainerProps } from "./ChannelDetailContainer";
@@ -17,3 +18,4 @@ export type { ChannelSettingsContainerProps } from "./ChannelSettingsContainer";
 export type { ChannelMembersContainerProps } from "./ChannelMembersContainer";
 export type { ChannelCreateContainerProps } from "./ChannelCreateContainer";
 export type { ChannelInviteContainerProps } from "./ChannelInviteContainer";
+export type { ChannelItemContainerProps } from "./ChannelItemContainer";

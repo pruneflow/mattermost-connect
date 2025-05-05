@@ -5,7 +5,8 @@
  */
 import React, { useCallback } from "react";
 import { useFormContainer } from "../base/FormContainer";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
+import { useTeams } from "../../../hooks";
+import { apiClient } from "../../../core/api/client";
 import { Channel, CreateChannelParams } from "../../../types";
 import ChannelCreateUI from "../../components/channels/ChannelCreateUI";
 import { useDialog } from "../../hooks/useDialog";
@@ -46,10 +47,25 @@ const ChannelCreateContainer: React.FC<ChannelCreateContainerProps> = (
 
   const dialog = useDialog();
 
-  // Use channel container hook
-  const { createChannel } = useContainerChannel();
+  // Direct API call for channel creation
+  const createChannel = useCallback(
+    async (params: CreateChannelParams): Promise<Channel> => {
+      try {
+        const response = await apiClient.post<Channel>(
+          `/teams/${teamId}/channels`,
+          params,
+        );
+        return response.data;
+      } catch (error) {
+        throw error instanceof Error
+          ? error
+          : new Error("Failed to create channel");
+      }
+    },
+    [teamId],
+  );
 
-  // Use form container hook
+  // Use FormContainer for form management
   const [formState, formAPI] = useFormContainer({
     initialData: initialData || {
       team_id: teamId,
@@ -152,7 +168,7 @@ const ChannelCreateContainer: React.FC<ChannelCreateContainerProps> = (
     formAPI.submitForm();
   }, [formAPI]);
 
-  // Handle cancel
+  // Handle cancel with confirmation
   const handleCancel = useCallback(() => {
     if (formState.isDirty) {
       dialog

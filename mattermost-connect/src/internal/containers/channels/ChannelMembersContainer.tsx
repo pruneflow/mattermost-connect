@@ -3,13 +3,13 @@
  * Container for channel members
  * Handles members list, roles, and member management
  */
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useListContainer } from "../base/ListContainer";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
-import { Channel, User } from "../../../types";
+import { useChannel } from "../../../hooks";
+import { useAuthStore } from "../../../core/store/authStore";
+import { Channel, ChannelMember, User } from "../../../types";
 import ChannelMembersUI from "../../components/channels/ChannelMembersUI";
 import { useDialog } from "../../hooks/useDialog";
-import { useAuth } from "../../../hooks";
 
 export interface ChannelMembersContainerProps {
   /** Channel ID */
@@ -43,14 +43,15 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
   } = props;
 
   const dialog = useDialog();
-  const { currentUser } = useAuth();
+  const { currentUser } = useAuthStore();
 
-  // Use channel container hook
+  // Use channel hook for data and operations
   const {
     channel: fetchedChannel,
     members,
     isUpdating,
-  } = useContainerChannel(channelId);
+    isLoading,
+  } = useChannel(channelId);
 
   const channel = propChannel || fetchedChannel;
 
@@ -71,18 +72,18 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
 
     return members.map((member) => ({
       ...member,
-      // Additional fields would be added here from UserStore
-      display_name: "User Name", // Placeholder, would come from UserStore
-      username: "username", // Placeholder, would come from UserStore
+      // Add display properties that would be populated from user store in production
+      display_name: member.user_id, // Placeholder
+      username: member.user_id, // Placeholder
     }));
   }, [members]);
 
-  // Use list container hook
+  // Use ListContainer for list management
   const [listState, listAPI] = useListContainer({
     items: formattedMembers,
     idField: "user_id",
     displayField: "username",
-    searchFields: ["username", "display_name", "email"],
+    searchFields: ["username", "display_name"],
     emptyMessage: "No members found in this channel.",
     onItemSelect: (member) => {
       if (onAction) {
@@ -122,13 +123,16 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
     }
   }, [onAction, channelId]);
 
-  // Handle remove member
+  // Handle remove member with confirmation
   const handleRemoveMember = useCallback(
     async (userId: string) => {
+      if (!channel) return;
+
       if (currentUser?.id === userId) {
+        // Leaving the channel
         const confirmed = await dialog.confirmAsync({
           title: "Leave Channel",
-          message: `Are you sure you want to leave the channel "${channel?.display_name}"?`,
+          message: `Are you sure you want to leave the channel "${channel.display_name}"?`,
           confirmText: "Leave Channel",
           isDestructive: true,
         });
@@ -139,6 +143,7 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
           onAction("leave_channel", userId);
         }
       } else {
+        // Removing another member
         const confirmed = await dialog.confirmAsync({
           title: "Remove Member",
           message: `Are you sure you want to remove this member from the channel?`,
@@ -156,7 +161,7 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
     [dialog, channel, currentUser, onAction],
   );
 
-  // Handle change member role
+  // Handle change member role with confirmation
   const handleChangeMemberRole = useCallback(
     async (userId: string, makeAdmin: boolean) => {
       const action = makeAdmin ? "make_admin" : "remove_admin";
@@ -183,11 +188,11 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
   const uiProps = {
     channel: channel!,
     members: listState.items,
-    isLoading: listState.isLoading || isUpdating,
+    isLoading: listState.isLoading || isLoading || isUpdating,
     isAdmin: isChannelAdmin,
     page: listState.page,
     perPage: listState.perPage,
-    totalMembers: formattedMembers?.length || 0,
+    totalMembers: formattedMembers.length,
     searchTerm: listState.searchTerm,
     onSearchChange: handleSearchChange,
     onPageChange: handlePageChange,

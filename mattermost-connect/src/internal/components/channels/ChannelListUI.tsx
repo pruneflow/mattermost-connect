@@ -6,38 +6,22 @@ import React, { useState } from "react";
 import {
   List,
   ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Typography,
-  IconButton,
   Box,
   Collapse,
-  Badge,
-  CircularProgress,
+  Divider,
+  Typography,
   Paper,
-  Tooltip,
+  CircularProgress,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import StarIcon from "@mui/icons-material/Star";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
-import VolumeOffIcon from "@mui/icons-material/VolumeOff";
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import { Channel } from "../../../index";
-import ChannelAvatarUI from "./ChannelAvatarUI";
+import { Channel } from "../../../types";
 import { ListComponentProps } from "../../types/componentTypes";
 import SearchInput from "../common/SearchInput";
-import {
-  isDirectChannel,
-  isGroupChannel,
-} from "../../../utils/directChannelUtils";
+import ChannelItemContainer from "../../containers/channels/ChannelItemContainer";
 
 export interface ChannelListUIProps extends ListComponentProps<Channel> {
-  /** Unread counts by channel ID */
-  unreadCounts?: Record<string, { msg_count: number; mention_count: number }>;
   /** Whether to allow creating new channels */
   allowCreate?: boolean;
   /** Whether to show a search input */
@@ -48,32 +32,10 @@ export interface ChannelListUIProps extends ListComponentProps<Channel> {
   showFavorites?: boolean;
   /** Display names by channel ID (for direct messages) */
   displayNamesByChannel?: Record<string, string[]>;
-  /** Set of favorite channel IDs */
-  favoriteChannels?: Set<string>;
-  /** Set of muted channel IDs */
-  mutedChannels?: Set<string>;
-  /** Channel avatars data */
-  channelAvatars?: Record<
-    string,
-    {
-      userImageUrl?: string;
-      userStatus?: "online" | "away" | "dnd" | "offline";
-      groupAvatarUrls?: string[];
-      isLoading?: boolean;
-    }
-  >;
-  /** Whether users are currently being loaded */
-  isLoadingUsers?: boolean;
-  /** Number of user IDs being loaded */
-  loadingUserIds?: number;
   /** Callback when create channel button is clicked */
   onCreateChannel?: () => void;
   /** Callback when a channel action is performed */
   onChannelAction?: (action: string, channel: Channel) => void;
-  /** Callback when favorite status is toggled */
-  onToggleFavorite?: (channel: Channel) => void;
-  /** Callback when search term changes */
-  onSearchChange?: (term: string) => void;
 }
 
 /**
@@ -86,22 +48,15 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
   density = "comfortable",
   isLoading = false,
   emptyMessage = "No channels available",
-  unreadCounts = {},
   allowCreate = false,
   showSearch = false,
   searchTerm = "",
   groupByType = true,
   showFavorites = true,
   displayNamesByChannel = {},
-  favoriteChannels = new Set<string>(),
-  mutedChannels = new Set<string>(),
-  channelAvatars = {},
-  isLoadingUsers = false,
-  loadingUserIds = 0,
   onItemClick,
   onCreateChannel,
   onChannelAction,
-  onToggleFavorite,
   onSearchChange,
   className,
   sx,
@@ -135,25 +90,22 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
     };
 
     items.forEach((channel) => {
-      // Add to favorites if applicable
-      if (showFavorites && favoriteChannels.has(channel.id)) {
-        grouped.favorites.push(channel);
-      }
-
       // Add to appropriate type group
-      if (isDirectChannel(channel)) {
+      if (channel.type === "D") {
         grouped.direct.push(channel);
-      } else if (isGroupChannel(channel)) {
+      } else if (channel.type === "G") {
         grouped.group.push(channel);
       } else if (channel.type === "O") {
         grouped.public.push(channel);
       } else if (channel.type === "P") {
         grouped.private.push(channel);
       }
+
+      // Favorites would be determined by the container now
     });
 
     return grouped;
-  }, [items, favoriteChannels, showFavorites]);
+  }, [items]);
 
   // Get padding based on density
   const getPadding = () => {
@@ -185,159 +137,31 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
         }}
         onClick={() => toggleExpanded(section)}
       >
-        <ListItemText
-          primary={
-            <Typography variant="body2" color="text.secondary">
-              {title} ({count})
-            </Typography>
-          }
-        />
+        <Typography variant="body2" color="text.secondary">
+          {title} ({count})
+        </Typography>
         {expanded[section] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
       </ListItem>
     );
   };
 
-  // Render a channel item
+  // Render a channel item using ChannelItemContainer
   const renderChannelItem = (channel: Channel) => {
     const isActive = channel.id === activeId;
-    const isFavorite = favoriteChannels.has(channel.id);
-    const isMuted = mutedChannels.has(channel.id);
-
-    // Get unread counts
-    const unread = unreadCounts[channel.id] || {
-      msg_count: 0,
-      mention_count: 0,
-    };
-    const hasUnread = unread.msg_count > 0;
-    const hasMention = unread.mention_count > 0;
-
-    // Get display name (especially for direct messages)
     const displayNames = displayNamesByChannel[channel.id];
-    const channelDisplayName =
-      displayNames && displayNames.length > 0
-        ? displayNames[0]
-        : channel.display_name;
-
-    // Get avatar data
-    const avatarData = channelAvatars[channel.id] || {};
 
     return (
-      <ListItem
+      <ChannelItemContainer
         key={channel.id}
-        disablePadding
-        sx={{
-          borderRadius: 1,
-          mb: 0.5,
-          backgroundColor: isActive ? "action.selected" : "transparent",
-          "&:hover": {
-            backgroundColor: "action.hover",
-          },
-        }}
-      >
-        <ListItemButton
-          sx={{
-            p: getPadding(),
-            borderRadius: 1,
-          }}
-          onClick={() => onItemClick && onItemClick(channel)}
-        >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <ChannelAvatarUI
-              channel={channel}
-              size="small"
-              displayName={channelDisplayName}
-              userImageUrl={avatarData.userImageUrl}
-              userStatus={avatarData.userStatus}
-              groupAvatarUrls={avatarData.groupAvatarUrls}
-              showStatus={true}
-              isLoading={avatarData.isLoading}
-            />
-          </ListItemIcon>
-
-          <ListItemText
-            primary={
-              avatarData.isLoading &&
-              (isDirectChannel(channel) || isGroupChannel(channel)) ? (
-                <Typography
-                  variant="body2"
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    color: "text.secondary",
-                  }}
-                >
-                  {channelDisplayName}
-                </Typography>
-              ) : (
-                <Typography
-                  variant="body2"
-                  fontWeight={hasUnread ? 600 : 400}
-                  sx={{
-                    color: hasMention ? "error.main" : "text.primary",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    opacity: isMuted ? 0.6 : 1,
-                  }}
-                >
-                  {channelDisplayName}
-                </Typography>
-              )
-            }
-          />
-
-          {/* Badge for unread mentions */}
-          {hasMention && (
-            <Badge
-              badgeContent={unread.mention_count}
-              color="error"
-              sx={{ mr: 1 }}
-            />
-          )}
-
-          {/* Muted icon */}
-          {isMuted && (
-            <Tooltip title="Muted">
-              <VolumeOffIcon fontSize="small" color="action" sx={{ mr: 1 }} />
-            </Tooltip>
-          )}
-
-          {/* Favorite toggle */}
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite && onToggleFavorite(channel);
-            }}
-            sx={{
-              opacity: isFavorite ? 1 : 0,
-              "&:hover": { opacity: 1 },
-              mr: 0.5,
-            }}
-          >
-            {isFavorite ? (
-              <StarIcon fontSize="small" color="warning" />
-            ) : (
-              <StarBorderIcon fontSize="small" />
-            )}
-          </IconButton>
-
-          {/* More actions */}
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChannelAction && onChannelAction("more", channel);
-            }}
-            sx={{
-              opacity: 0,
-              "&:hover": { opacity: 1 },
-            }}
-          >
-            <MoreHorizIcon fontSize="small" />
-          </IconButton>
-        </ListItemButton>
-      </ListItem>
+        channel={channel}
+        variant={variant}
+        isActive={isActive}
+        showActions={true}
+        compact={density === "compact"}
+        displayNames={displayNames}
+        onClick={onItemClick}
+        onAction={onChannelAction}
+      />
     );
   };
 
@@ -352,29 +176,25 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
           mb: 0.5,
         }}
       >
-        <ListItemButton
+        <Box
           sx={{
             p: getPadding(),
             borderRadius: 1,
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
           }}
-          disabled
         >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <CircularProgress size={24} />
-          </ListItemIcon>
-          <ListItemText
-            primary={
-              <Box
-                sx={{
-                  width: `${Math.random() * 30 + 50}%`,
-                  height: 20,
-                  bgcolor: "rgba(0, 0, 0, 0.1)",
-                  borderRadius: 1,
-                }}
-              />
-            }
+          <CircularProgress size={24} sx={{ mr: 2 }} />
+          <Box
+            sx={{
+              width: `${Math.random() * 30 + 50}%`,
+              height: 20,
+              bgcolor: "rgba(0, 0, 0, 0.1)",
+              borderRadius: 1,
+            }}
           />
-        </ListItemButton>
+        </Box>
       </ListItem>
     );
   };
@@ -410,17 +230,21 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
             borderColor: "divider",
           }}
         >
-          <ListItemButton
+          <Box
             sx={{
               p: getPadding(),
               borderRadius: 1,
+              display: "flex",
               justifyContent: "center",
+              alignItems: "center",
+              width: "100%",
+              cursor: "pointer",
             }}
             onClick={onCreateChannel}
           >
             <AddIcon fontSize="small" sx={{ mr: 1 }} />
             <Typography variant="body2">Create Channel</Typography>
-          </ListItemButton>
+          </Box>
         </ListItem>
       </Box>
     );
@@ -432,25 +256,6 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
       <>
         {renderSearch()}
         {renderCreateButton()}
-
-        {/* User loading indicator */}
-        {isLoadingUsers && loadingUserIds > 0 && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              p: 1,
-              mb: 1,
-            }}
-          >
-            <CircularProgress size={16} sx={{ mr: 1 }} />
-            <Typography variant="caption" color="text.secondary">
-              Loading {loadingUserIds} user{loadingUserIds !== 1 ? "s" : ""}
-              ...
-            </Typography>
-          </Box>
-        )}
       </>
     );
   };
@@ -461,21 +266,6 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
       <List disablePadding>
         {groupByType ? (
           <>
-            {/* Favorites section */}
-            {showFavorites && groupedChannels.favorites.length > 0 && (
-              <>
-                {renderSectionHeader(
-                  "Favorites",
-                  groupedChannels.favorites.length,
-                  "favorites",
-                )}
-                <Collapse in={expanded.favorites}>
-                  {groupedChannels.favorites.map(renderChannelItem)}
-                </Collapse>
-                <Divider sx={{ my: 1 }} />
-              </>
-            )}
-
             {/* Public channels section */}
             {groupedChannels.public.length > 0 && (
               <>
@@ -564,13 +354,6 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
         >
           {emptyMessage}
         </Typography>
-        {allowCreate && !renderCreateButton() && (
-          <Tooltip title="Create Channel">
-            <IconButton onClick={onCreateChannel} color="primary">
-              <AddIcon />
-            </IconButton>
-          </Tooltip>
-        )}
       </Box>
     );
   };

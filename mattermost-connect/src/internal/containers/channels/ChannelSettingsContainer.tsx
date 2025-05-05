@@ -3,13 +3,12 @@
  * Container for channel settings
  * Handles form state and validation for updating channel settings
  */
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useFormContainer } from "../base/FormContainer";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
+import { useChannel, useDirectChannel } from "../../../hooks";
 import { Channel, UpdateChannelParams } from "../../../types";
 import ChannelSettingsUI from "../../components/channels/ChannelSettingsUI";
 import { useDialog } from "../../hooks/useDialog";
-import { isDirectChannel, isGroupChannel } from "../../../utils/channelUtils";
 
 export interface ChannelSettingsContainerProps {
   /** Channel ID */
@@ -53,14 +52,16 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
 
   const dialog = useDialog();
 
-  // Use channel container hook
+  // Use channel hook for data and operations
   const {
     channel: fetchedChannel,
-    updateChannel,
+    update: updateChannel,
     isUpdating,
-    isDirect,
-    isGroup,
-  } = useContainerChannel(channelId);
+    isLoading,
+  } = useChannel(channelId);
+
+  // Get direct channel specific info
+  const { isDirect, isGroup } = useDirectChannel(channelId);
 
   const channel = propChannel || fetchedChannel;
 
@@ -76,7 +77,7 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
     };
   }, [channel]);
 
-  // Use form container hook
+  // Use FormContainer for form management
   const [formState, formAPI] = useFormContainer({
     initialData: getInitialData(),
     validator: (data: {
@@ -140,6 +141,14 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
         updateData.purpose = data.purpose;
       }
 
+      // Only submit if there are changes
+      if (Object.keys(updateData).length === 0) {
+        if (onUpdate) {
+          onUpdate(channel);
+        }
+        return channel;
+      }
+
       try {
         const updatedChannel = await updateChannel(updateData);
 
@@ -151,6 +160,12 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
       } catch (error) {
         throw error;
       }
+    },
+    onError: (error) => {
+      dialog.showError(
+        "Update Failed",
+        error.message || "Failed to update channel settings",
+      );
     },
   });
 
@@ -208,7 +223,7 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
     channel,
     formData: formState.formData,
     errors: formState.errors,
-    isLoading: formState.isSubmitting || isUpdating,
+    isLoading: formState.isSubmitting || isUpdating || isLoading,
     isValid: formState.isValid,
     isDirty: formState.isDirty,
     editMode,

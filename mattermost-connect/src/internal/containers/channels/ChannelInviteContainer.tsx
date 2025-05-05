@@ -4,9 +4,8 @@
  * Handles user search and invitation process
  */
 import React, { useCallback, useState } from "react";
-import { useListContainer } from "../base/ListContainer";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
-import { useUserSearch } from "../../../hooks";
+import { useChannel, useUserSearch } from "../../../hooks";
+import { apiClient } from "../../../core/api/client";
 import { Channel, User } from "../../../types";
 import ChannelInviteUI from "../../components/channels/ChannelInviteUI";
 import { useDialog } from "../../hooks/useDialog";
@@ -48,12 +47,16 @@ const ChannelInviteContainer: React.FC<ChannelInviteContainerProps> = (
 
   const dialog = useDialog();
 
-  // Use channel container hook
-  const { channel: fetchedChannel, members } = useContainerChannel(channelId);
+  // Use channel hook for data
+  const {
+    channel: fetchedChannel,
+    members,
+    isLoading: isChannelLoading,
+  } = useChannel(channelId);
 
   const channel = propChannel || fetchedChannel;
 
-  // State for selected users
+  // State for selected users and operations
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [inviteLink, setInviteLink] = useState<string | undefined>(undefined);
@@ -113,11 +116,8 @@ const ChannelInviteContainer: React.FC<ChannelInviteContainerProps> = (
       try {
         setIsSendingInvites(true);
 
-        // This would call the actual API to send email invites
-        // const result = await channelService.sendEmailInvites(channelId, emails);
-
-        // For now, simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // API call for sending email invites
+        await apiClient.post(`/channels/${channelId}/invite/email`, { emails });
 
         await dialog.showSuccess(
           "Invitations Sent",
@@ -148,11 +148,10 @@ const ChannelInviteContainer: React.FC<ChannelInviteContainerProps> = (
     try {
       setIsSendingInvites(true);
 
-      // This would call the actual API to invite users
-      // const result = await channelService.inviteUsers(channelId, selectedUsers.map(u => u.id));
-
-      // For now, simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // API call for inviting users
+      await apiClient.post(`/channels/${channelId}/members`, {
+        user_ids: selectedUsers.map((u) => u.id),
+      });
 
       await dialog.showSuccess(
         "Invitations Sent",
@@ -181,17 +180,12 @@ const ChannelInviteContainer: React.FC<ChannelInviteContainerProps> = (
     try {
       setIsGeneratingLink(true);
 
-      // This would call the actual API to generate an invite link
-      // const result = await channelService.generateInviteLink(channelId);
-
-      // For now, simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Generate a fake invite link for demonstration
-      const baseUrl = window.location.origin;
-      setInviteLink(
-        `${baseUrl}/signup/channel/${channelId}/${Math.random().toString(36).substring(2, 10)}`,
+      // API call to generate an invite link
+      const response = await apiClient.post<{ invite_link: string }>(
+        `/channels/${channelId}/invite-link`,
       );
+
+      setInviteLink(response.data.invite_link);
     } catch (error) {
       await dialog.showError(
         "Failed to Generate Link",
@@ -217,7 +211,8 @@ const ChannelInviteContainer: React.FC<ChannelInviteContainerProps> = (
     users: filteredResults,
     selectedUsers,
     inviteLink,
-    isLoading: isSearching || isSendingInvites || isGeneratingLink,
+    isLoading:
+      isSearching || isSendingInvites || isGeneratingLink || isChannelLoading,
     searchTerm,
     searchResults: filteredResults,
     isSearching,

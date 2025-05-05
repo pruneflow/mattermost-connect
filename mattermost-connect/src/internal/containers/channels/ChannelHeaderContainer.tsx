@@ -4,11 +4,12 @@
  * Handles minimized channel information and quick actions
  */
 import React, { useCallback, useMemo } from "react";
-import { useContainerChannel } from "../../hooks/useContainerChannel";
 import { useBaseContainer } from "../base/BaseContainer";
+import { useChannel } from "../../../hooks";
 import ChannelHeaderUI from "../../components/channels/ChannelHeaderUI";
-import { Channel, ChannelHeaderData } from "../../../types";
+import { Channel } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
+import { isChannelMuted } from "../../../core/store/userSettingsStore";
 
 export interface ChannelHeaderContainerProps {
   /** Channel ID */
@@ -67,18 +68,17 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
 
   const dialog = useDialog();
 
-  // Use channel container hook
+  // Use channel hook for data and operations
   const {
     channel: fetchedChannel,
     members,
-    formattedChannel,
-    toggleFavorite,
-    toggleMuted,
-    leaveChannelWithConfirm,
-    deleteChannelWithConfirm,
+    toggleFavoriteStatus,
+    toggleMutedStatus,
+    leaveChannel,
+    deleteChannel,
     isFavorite,
-    isChannelMuted,
-  } = useContainerChannel(channelId);
+    isLoading,
+  } = useChannel(channelId);
 
   const channel = propChannel || fetchedChannel;
 
@@ -87,6 +87,7 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     id,
     className,
     sx,
+    initialLoading: isLoading,
   });
 
   // Handle toggle favorite
@@ -94,7 +95,7 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     if (!channel) return;
 
     try {
-      await toggleFavorite();
+      await toggleFavoriteStatus();
 
       if (onAction) {
         onAction("favorite", channel);
@@ -102,14 +103,14 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     } catch (error) {
       baseAPI.setError(error as Error);
     }
-  }, [channel, toggleFavorite, onAction, baseAPI]);
+  }, [channel, toggleFavoriteStatus, onAction, baseAPI]);
 
   // Handle toggle mute
   const handleToggleMute = useCallback(async () => {
     if (!channel) return;
 
     try {
-      await toggleMuted();
+      await toggleMutedStatus();
 
       if (onAction) {
         onAction("mute", channel);
@@ -117,7 +118,7 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     } catch (error) {
       baseAPI.setError(error as Error);
     }
-  }, [channel, toggleMuted, onAction, baseAPI]);
+  }, [channel, toggleMutedStatus, onAction, baseAPI]);
 
   // Handle view members
   const handleViewMembers = useCallback(() => {
@@ -164,35 +165,53 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     }
   }, [onAction, channel]);
 
-  // Handle leave channel
+  // Handle leave channel with confirmation
   const handleLeave = useCallback(async () => {
     if (!channel) return;
 
     try {
-      const success = await leaveChannelWithConfirm();
+      const confirmed = await dialog.confirmAsync({
+        title: "Leave Channel",
+        message: `Are you sure you want to leave "${channel.display_name}"?`,
+        confirmText: "Leave",
+        isDestructive: true,
+      });
 
-      if (success && onAction) {
+      if (!confirmed) return;
+
+      await leaveChannel();
+
+      if (onAction) {
         onAction("leave", channel);
       }
     } catch (error) {
       baseAPI.setError(error as Error);
     }
-  }, [channel, leaveChannelWithConfirm, onAction, baseAPI]);
+  }, [channel, dialog, leaveChannel, onAction, baseAPI]);
 
-  // Handle delete channel
+  // Handle delete channel with confirmation
   const handleDelete = useCallback(async () => {
     if (!channel) return;
 
     try {
-      const success = await deleteChannelWithConfirm();
+      const confirmed = await dialog.confirmAsync({
+        title: "Delete Channel",
+        message: `Are you sure you want to delete "${channel.display_name}"? This action cannot be undone.`,
+        confirmText: "Delete",
+        isDestructive: true,
+      });
 
-      if (success && onAction) {
+      if (!confirmed) return;
+
+      await deleteChannel();
+
+      if (onAction) {
         onAction("delete", channel);
       }
     } catch (error) {
       baseAPI.setError(error as Error);
     }
-  }, [channel, deleteChannelWithConfirm, onAction, baseAPI]);
+  }, [channel, dialog, deleteChannel, onAction, baseAPI]);
 
   // Create header data for UI
   const headerData: ChannelHeaderData = useMemo(() => {
