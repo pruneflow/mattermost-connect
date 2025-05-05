@@ -15,6 +15,14 @@ export interface TeamCreateContainerProps {
   id?: string;
 }
 
+export type TeamCreateField =
+  | "name"
+  | "display_name"
+  | "description"
+  | "type"
+  | "company_name"
+  | "allowed_domains";
+
 /**
  * Container for team creation
  * Handles form state, validation, and submission for creating new teams
@@ -90,7 +98,7 @@ const TeamCreateContainer: React.FC<TeamCreateContainerProps> = (props) => {
   });
 
   const handleFieldChange = useCallback(
-    (field: string, value: any) => {
+    (field: TeamCreateField, value: any) => {
       formAPI.setFieldValue(field, value);
 
       // If display name changes, auto-generate URL name

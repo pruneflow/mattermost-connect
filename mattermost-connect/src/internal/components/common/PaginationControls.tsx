@@ -23,9 +23,9 @@ export interface PaginationControlsProps extends BaseComponentProps {
   /** Available page size options */
   perPageOptions: number[];
   /** Page change callback */
-  onPageChange: (page: number) => void;
+  onPageChange?: (page: number) => void;
   /** Per page change callback */
-  onPerPageChange: (perPage: number) => void;
+  onPerPageChange?: (perPage: number) => void;
   /** Whether pagination is disabled */
   disabled?: boolean;
   /** Whether to show the per page selector */
@@ -65,7 +65,7 @@ const PaginationControls: React.FC<PaginationControlsProps> = ({
       id={id}
     >
       {/* Pagination controls */}
-      {totalPages > 1 && (
+      {totalPages > 1 && onPageChange && (
         <Pagination
           page={page}
           count={totalPages}
@@ -74,13 +74,13 @@ const PaginationControls: React.FC<PaginationControlsProps> = ({
           size="medium"
           showFirstButton
           showLastButton
-          onChange={(_, value) => onPageChange(value)}
+          onChange={(_, value) => onPageChange && onPageChange(value)}
           sx={{ flexGrow: 1, display: "flex", justifyContent: "center" }}
         />
       )}
 
       {/* Items per page selector */}
-      {showPerPageSelect && (
+      {showPerPageSelect && onPerPageChange && (
         <FormControl
           sx={{ minWidth: 120, ml: totalPages > 1 ? 2 : 0 }}
           size="small"
@@ -91,7 +91,9 @@ const PaginationControls: React.FC<PaginationControlsProps> = ({
             value={perPage}
             label="Per Page"
             disabled={disabled}
-            onChange={(e) => onPerPageChange(Number(e.target.value))}
+            onChange={(e) =>
+              onPerPageChange && onPerPageChange(Number(e.target.value))
+            }
           >
             {perPageOptions.map((option) => (
               <MenuItem key={option} value={option}>

@@ -18,12 +18,12 @@ import {
   Button,
   Chip,
   TextField,
-  InputAdornment,
   Tooltip,
   Menu,
   MenuItem,
   ListItemIcon,
   ListItemText,
+  CircularProgress,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -33,20 +33,10 @@ import {
   ArrowDownward as DemoteIcon,
   Delete as RemoveIcon,
 } from "@mui/icons-material";
-import { Team } from "../../../types";
+import { Team, TeamMember } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { UserStatus, PaginationControls } from "../common";
+import { PaginationControls } from "../common";
 import { UserAvatarContainer } from "../../containers/users";
-
-export interface TeamMember {
-  user_id: string;
-  username: string;
-  display_name?: string;
-  email?: string;
-  roles: string;
-  scheme_admin?: boolean;
-  scheme_user?: boolean;
-}
 
 export interface TeamMembersUIProps extends BaseComponentProps {
   // Data props
@@ -70,6 +60,10 @@ export interface TeamMembersUIProps extends BaseComponentProps {
   onChangeMemberRole?: (userId: string, makeAdmin: boolean) => void;
 }
 
+/**
+ * Component for displaying and managing team members
+ * Provides search, pagination, and member actions
+ */
 const TeamMembersUI: React.FC<TeamMembersUIProps> = ({
   team,
   members,
@@ -138,6 +132,7 @@ const TeamMembersUI: React.FC<TeamMembersUIProps> = ({
 
   return (
     <Box className={className} sx={sx} id={id}>
+      {/* Header with team name and member count */}
       <Box
         display="flex"
         justifyContent="space-between"
@@ -145,7 +140,8 @@ const TeamMembersUI: React.FC<TeamMembersUIProps> = ({
         mb={3}
       >
         <Typography variant="h5" component="h2">
-          Team Members {totalMembers > 0 && `(${totalMembers})`}
+          {team.display_name} - Team Members{" "}
+          {totalMembers > 0 && `(${totalMembers})`}
         </Typography>
 
         {isAdmin && (
@@ -154,6 +150,7 @@ const TeamMembersUI: React.FC<TeamMembersUIProps> = ({
             color="primary"
             startIcon={<PersonAddIcon />}
             onClick={onInviteMembers}
+            disabled={isLoading}
           >
             Invite Members
           </Button>
@@ -168,85 +165,98 @@ const TeamMembersUI: React.FC<TeamMembersUIProps> = ({
           fullWidth
           value={searchTerm}
           onChange={handleSearchChange}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
+          disabled={isLoading}
           size="small"
+          slotProps={{
+            input: {
+              startAdornment: (
+                <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
+              ),
+            },
+          }}
         />
       </Box>
 
+      {/* Loading indicator */}
+      {isLoading && (
+        <Box display="flex" justifyContent="center" my={3}>
+          <CircularProgress size={40} />
+        </Box>
+      )}
+
       {/* Members Table */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Member</TableCell>
-              <TableCell>Role</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {members.length === 0 ? (
+      {!isLoading && (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={3} align="center">
-                  <Typography py={3} color="text.secondary">
-                    {searchTerm
-                      ? "No members match your search criteria."
-                      : "No members found in this team."}
-                  </Typography>
-                </TableCell>
+                <TableCell>Member</TableCell>
+                <TableCell>Role</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ) : (
-              members.map((member) => (
-                <TableRow key={member.user_id}>
-                  <TableCell>
-                    <Box display="flex" alignItems="center">
-                      <UserAvatarContainer
-                        userId={member.user_id}
-                        size="small"
-                        showStatus
-                      />
-                      <Box ml={2}>
-                        <Typography variant="body1">
-                          {member.display_name || member.username || "Unknown"}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          @{member.username}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={member.scheme_admin ? "Admin" : "Member"}
-                      color={member.scheme_admin ? "primary" : "default"}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    {isAdmin && (
-                      <IconButton
-                        edge="end"
-                        onClick={(e) => handleMenuOpen(e, member.user_id)}
-                        size="small"
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    )}
+            </TableHead>
+            <TableBody>
+              {members.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} align="center">
+                    <Typography py={3} color="text.secondary">
+                      {searchTerm
+                        ? "No members match your search criteria."
+                        : "No members found in this team."}
+                    </Typography>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ) : (
+                members.map((member) => (
+                  <TableRow key={member.user_id}>
+                    <TableCell>
+                      <Box display="flex" alignItems="center">
+                        <UserAvatarContainer
+                          userId={member.user_id}
+                          size="small"
+                          showStatus
+                        />
+                        <Box ml={2}>
+                          <Typography variant="body1">
+                            {member.display_name ||
+                              member.username ||
+                              "Unknown"}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            @{member.username}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={member.scheme_admin ? "Admin" : "Member"}
+                        color={member.scheme_admin ? "primary" : "default"}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      {isAdmin && (
+                        <IconButton
+                          edge="end"
+                          onClick={(e) => handleMenuOpen(e, member.user_id)}
+                          size="small"
+                          disabled={isLoading}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!isLoading && totalPages > 1 && (
         <Box mt={2}>
           <PaginationControls
             page={page}
@@ -255,6 +265,7 @@ const TeamMembersUI: React.FC<TeamMembersUIProps> = ({
             perPageOptions={[10, 20, 50, 100]}
             onPageChange={onPageChange}
             onPerPageChange={onPerPageChange}
+            disabled={isLoading}
           />
         </Box>
       )}

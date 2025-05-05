@@ -32,22 +32,13 @@ import {
   Link as LinkIcon,
   ContentCopy as CopyIcon,
 } from "@mui/icons-material";
-import { Team } from "../../../types";
+import { Team, User } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
 import { UserAvatarContainer } from "../../containers/users";
-
-export interface User {
-  id: string;
-  username: string;
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-}
 
 export interface TeamInviteUIProps extends BaseComponentProps {
   // Data props
   team: Team;
-  users: User[];
   selectedUsers: User[];
   inviteLink?: string;
   // State props
@@ -67,7 +58,6 @@ export interface TeamInviteUIProps extends BaseComponentProps {
 
 const TeamInviteUI: React.FC<TeamInviteUIProps> = ({
   team,
-  users,
   selectedUsers,
   inviteLink,
   isLoading = false,

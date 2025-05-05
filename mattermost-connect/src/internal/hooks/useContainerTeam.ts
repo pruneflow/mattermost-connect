@@ -74,7 +74,9 @@ export function useContainerTeam(teamId?: string) {
    * Updates a team with partial data
    */
   const updateTeam = useCallback(
-    async (updateData: Partial<Team> & { id?: string }): Promise<Team> => {
+    async (
+      updateData: Partial<Team> & { id?: string },
+    ): Promise<Team | null> => {
       if (!teamId && !updateData.id) {
         throw new Error("Team ID is required for update");
       }

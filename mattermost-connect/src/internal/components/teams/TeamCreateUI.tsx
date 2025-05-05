@@ -25,6 +25,7 @@ import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
 import { Team } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
 import { stringToColor } from "../../../utils/mattermostUtils";
+import { TeamCreateField } from "../../containers/teams/TeamCreateContainer";
 
 export interface TeamCreateUIProps extends BaseComponentProps {
   // Form data and validation
@@ -41,7 +42,7 @@ export interface TeamCreateUIProps extends BaseComponentProps {
   isLoading?: boolean;
   isValid?: boolean;
   // Callback props
-  onFieldChange: (field: string, value: any) => void;
+  onFieldChange: (field: TeamCreateField, value: any) => void;
   onSubmit: () => void;
   onCancel: () => void;
   // Optional props

@@ -28,6 +28,7 @@ export interface Team extends Entity {
   scheme_id?: string;
   group_constrained?: boolean;
   email?: string;
+  memberId?: string;
 }
 
 /**
@@ -59,11 +60,14 @@ export interface TeamStats {
 export interface TeamMember {
   team_id: string;
   user_id: string;
+  username?: string;
   roles: string;
   scheme_admin?: boolean;
   scheme_user?: boolean;
   mention_count?: number;
   msg_count?: number;
+  display_name?: string;
+  email?: string;
 }
 
 /**
