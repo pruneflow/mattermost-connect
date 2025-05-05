@@ -22,10 +22,9 @@ import {
   Avatar,
 } from "@mui/material";
 import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
-import { Team } from "../../../types";
-import { BaseComponentProps } from "../../types/componentTypes";
+import { BaseComponentProps, TeamField } from "../../types/componentTypes";
 import { stringToColor } from "../../../utils/mattermostUtils";
-import { TeamCreateField } from "../../containers/teams/TeamCreateContainer";
+import { isValidField } from "../../../utils/teamUtils";
 
 export interface TeamCreateUIProps extends BaseComponentProps {
   // Form data and validation
@@ -42,7 +41,7 @@ export interface TeamCreateUIProps extends BaseComponentProps {
   isLoading?: boolean;
   isValid?: boolean;
   // Callback props
-  onFieldChange: (field: TeamCreateField, value: any) => void;
+  onFieldChange: (field: TeamField, value: any) => void;
   onSubmit: () => void;
   onCancel: () => void;
   // Optional props
@@ -78,13 +77,21 @@ const TeamCreateUI: React.FC<TeamCreateUIProps> = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
-    onFieldChange(name, value);
+    if (isValidField(name)) {
+      onFieldChange(name, value);
+    } else {
+      console.warn(`Invalid field name: ${name}`);
+    }
   };
 
   // Handle radio change
   const handleRadioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    onFieldChange(name, value);
+    if (isValidField(name)) {
+      onFieldChange(name, value);
+    } else {
+      console.warn(`Invalid field name: ${name}`);
+    }
   };
 
   // Toggle advanced options

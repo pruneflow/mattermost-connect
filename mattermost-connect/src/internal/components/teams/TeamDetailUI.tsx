@@ -3,9 +3,8 @@
  * Team Detail UI Component
  * Displays comprehensive information about a team with tabs, stats, and actions
  */
-import React, { useState } from "react";
+import React from "react";
 import {
-  Card,
   Box,
   Typography,
   Tabs,
@@ -15,10 +14,8 @@ import {
   Chip,
   Divider,
   Grid,
-  Paper,
   Avatar,
   Tooltip,
-  CircularProgress,
 } from "@mui/material";
 import {
   Edit as EditIcon,

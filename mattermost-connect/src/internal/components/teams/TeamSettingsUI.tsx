@@ -22,14 +22,8 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { Team } from "../../../types";
-import { BaseComponentProps } from "../../types/componentTypes";
-
-export type TeamField =
-  | "display_name"
-  | "description"
-  | "company_name"
-  | "allowed_domains"
-  | "allow_open_invite";
+import { BaseComponentProps, TeamField } from "../../types/componentTypes";
+import { isValidField } from "../../../utils/teamUtils";
 
 export interface TeamSettingsUIProps extends BaseComponentProps {
   // Data props
@@ -79,22 +73,21 @@ const TeamSettingsUI: React.FC<TeamSettingsUIProps> = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
-    onFieldChange(name, value);
+    if (isValidField(name)) {
+      onFieldChange(name, value);
+    } else {
+      console.warn(`Invalid field name: ${name}`);
+    }
   };
 
   // Handle switch change
   const handleSwitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    onFieldChange(name, checked);
-  };
-
-  // Handle select change
-  const handleSelectChange = (
-    e: React.ChangeEvent<{ name?: string; value: unknown }>,
-  ) => {
-    const name = e.target.name as string;
-    const value = e.target.value;
-    onFieldChange(name, value);
+    if (isValidField(name)) {
+      onFieldChange(name, checked);
+    } else {
+      console.warn(`Invalid field name: ${name}`);
+    }
   };
 
   // Helper to get the error message for a field
@@ -113,7 +106,7 @@ const TeamSettingsUI: React.FC<TeamSettingsUIProps> = ({
         <Typography variant="h5" component="h2" gutterBottom>
           Team Settings
         </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
+        <Typography variant="body2" color="text.secondary" component={"p"}>
           Update your team settings below. Fields marked with an asterisk (*)
           are required.
         </Typography>

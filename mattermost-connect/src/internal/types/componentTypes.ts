@@ -314,3 +314,12 @@ export interface VirtualizationProps {
   /** Number of items to render beyond visible area */
   overscanCount?: number;
 }
+
+export type TeamField =
+  | "name"
+  | "display_name"
+  | "description"
+  | "type"
+  | "company_name"
+  | "allowed_domains"
+  | "allow_open_invite";

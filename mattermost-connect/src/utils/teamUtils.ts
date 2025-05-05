@@ -6,6 +6,7 @@
 import { Team, TeamType } from "../types";
 import { formatUnreadCount } from "./formatters";
 import { stringToColor } from "./mattermostUtils";
+import { TeamField } from "../internal/types/componentTypes";
 
 /**
  * Formats a team name, optionally truncating to a maximum length
@@ -196,3 +197,15 @@ export function formatTeamForDisplay(
     color: stringToColor(team.name),
   };
 }
+
+export const isValidField = (name: string): name is TeamField => {
+  return [
+    "name",
+    "display_name",
+    "description",
+    "type",
+    "company_name",
+    "allowed_domains",
+    "allow_open_invite",
+  ].includes(name);
+};
