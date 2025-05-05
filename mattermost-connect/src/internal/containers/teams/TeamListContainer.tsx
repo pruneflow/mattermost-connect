@@ -3,40 +3,46 @@ import React, { useCallback, useMemo } from "react";
 import { useListContainer } from "../base/ListContainer";
 import { useContainerTeam } from "../../hooks/useContainerTeam";
 import { Team } from "../../../types";
-import TeamListUI from "../../components/teams/TeamListUI";
+import TeamSelector from "../../components/teams/components/TeamSelector";
+import { useDialog } from "../../hooks/useDialog";
 
 export interface TeamListContainerProps {
   teams?: Team[];
-  variant?: "grid" | "list" | "compact";
+  variant?: "list" | "grid" | "tabs" | "sidebar";
   showFilters?: boolean;
   showSearch?: boolean;
   showPagination?: boolean;
-  showEmptyState?: boolean;
-  emptyStateMessage?: string;
+  allowCreate?: boolean;
   onSelectTeam?: (team: Team) => void;
   onTeamAction?: (action: string, team: Team) => void;
+  onCreateTeam?: () => void;
   className?: string;
   sx?: React.CSSProperties;
   id?: string;
 }
 
+/**
+ * Container for displaying and managing team lists
+ * Supports different view variants, search, and team actions
+ */
 const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
   const {
     teams: propTeams,
-    variant = "grid",
+    variant = "list",
     showFilters = true,
     showSearch = true,
     showPagination = true,
-    showEmptyState = true,
-    emptyStateMessage = "No teams found",
+    allowCreate = false,
     onSelectTeam,
     onTeamAction,
+    onCreateTeam,
     className,
     sx,
     id,
   } = props;
 
-  const { teams: fetchedTeams, selectTeam } = useContainerTeam();
+  const dialog = useDialog();
+  const { teams: fetchedTeams, selectTeam, isLoading } = useContainerTeam();
   const teams = propTeams || fetchedTeams;
 
   const [listState, listAPI] = useListContainer({
@@ -50,7 +56,6 @@ const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
       { field: "type", label: "Type" },
     ],
     initialSortField: "display_name",
-    emptyMessage: emptyStateMessage,
     onItemSelect: (team) => {
       selectTeam(team);
       if (onSelectTeam) {
@@ -79,37 +84,41 @@ const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
     [selectTeam, onSelectTeam, onTeamAction],
   );
 
-  const filteredTeams = useMemo(() => {
-    return listState.items;
-  }, [listState.items]);
+  const handleSearch = useCallback(
+    (term: string) => {
+      listAPI.setSearchTerm(term);
+    },
+    [listAPI],
+  );
 
-  const uiProps = {
-    teams: filteredTeams,
-    variant,
-    isLoading: listState.isLoading,
-    isEmpty: listState.isEmpty,
-    error: listState.error,
-    searchTerm: listState.searchTerm,
-    sortField: listState.sortField,
-    sortDirection: listState.sortDirection,
-    page: listState.page,
-    perPage: listState.perPage,
-    totalPages: listState.totalPages,
-    showFilters,
-    showSearch,
-    showPagination,
-    showEmptyState,
-    onTeamAction: handleTeamAction,
-    onSearchChange: listAPI.setSearchTerm,
-    onSortChange: listAPI.setSorting,
-    onPageChange: listAPI.setPage,
-    onPerPageChange: listAPI.setPerPage,
-    className,
-    sx,
-    id,
-  };
+  // Calculate if we need to show each type of indicator
+  const showDescription = useMemo(() => {
+    return variant !== "tabs" && variant !== "sidebar";
+  }, [variant]);
 
-  return <TeamListUI {...uiProps} />;
+  const showMemberCount = useMemo(() => {
+    return variant !== "tabs" && variant !== "sidebar";
+  }, [variant]);
+
+  return (
+    <TeamSelector
+      teams={listState.items}
+      selectedTeamId={listState.selectedIds[0]}
+      onSelectTeam={listAPI.selectItem}
+      variant={variant}
+      showIcons={true}
+      showDescription={showDescription}
+      showMemberCount={showMemberCount}
+      allowCreate={allowCreate}
+      showSearch={showSearch}
+      searchTerm={listState.searchTerm}
+      onSearch={handleSearch}
+      onCreateTeam={onCreateTeam}
+      className={className}
+      sx={sx}
+      id={id}
+    />
+  );
 };
 
 export default TeamListContainer;

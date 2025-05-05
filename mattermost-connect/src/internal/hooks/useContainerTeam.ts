@@ -1,7 +1,9 @@
 // src/internal/hooks/useContainerTeam.ts
 import { useCallback, useMemo } from "react";
 import { useTeams, useTeam } from "../../hooks";
-import { Team, TeamType } from "../../types";
+import { Team, TeamType, UpdateTeamParams } from "../../types";
+import { useDelayedLoading } from "../utils/performanceUtils";
+import { stringToColor } from "../../utils/mattermostUtils";
 
 export interface TeamDisplayData {
   id: string;
@@ -21,8 +23,13 @@ interface Action {
   destructive?: boolean;
 }
 
+/**
+ * Hook for team containers
+ * Provides standardized access to team data and operations
+ */
 export function useContainerTeam(teamId?: string) {
-  const { teams, formattedTeams, activeTeam, selectTeam } = useTeams();
+  const { teams, formattedTeams, activeTeam, selectTeam, refreshTeams } =
+    useTeams();
   const {
     team,
     stats,
@@ -30,10 +37,20 @@ export function useContainerTeam(teamId?: string) {
     formattedMembers,
     update,
     deleteTeam,
+    isLoading: teamIsLoading,
     isUpdating,
     isDeleting,
+    refreshTeam,
+    refreshStats,
+    refreshMembers,
   } = useTeam(teamId);
 
+  // Use delayed loading to prevent UI flash
+  const isLoading = useDelayedLoading(teamIsLoading);
+
+  /**
+   * Formats a team object into a standardized display format
+   */
   const formatTeamData = useCallback(
     (teamData: Team): TeamDisplayData => {
       const formattedTeam = formattedTeams.find((t) => t.id === teamData.id);
@@ -53,25 +70,63 @@ export function useContainerTeam(teamId?: string) {
     [formattedTeams, stats],
   );
 
-  const getTeamActions = useCallback((team: Team, isAdmin: boolean = false) => {
-    const actions: Action[] = [
-      { id: "view", label: "View Team" },
-      { id: "channels", label: "Browse Channels" },
-    ];
+  /**
+   * Updates a team with partial data
+   */
+  const updateTeam = useCallback(
+    async (updateData: Partial<Team> & { id?: string }): Promise<Team> => {
+      if (!teamId && !updateData.id) {
+        throw new Error("Team ID is required for update");
+      }
 
-    if (isAdmin) {
-      actions.push(
-        { id: "edit", label: "Edit Team" },
-        { id: "manage-members", label: "Manage Members" },
-        { id: "delete", label: "Delete Team", destructive: true },
-      );
-    } else {
-      actions.push({ id: "leave", label: "Leave Team", destructive: true });
-    }
+      const id = teamId || updateData.id!;
+      const teamUpdateData: UpdateTeamParams = {};
 
-    return actions;
-  }, []);
+      // Copy only valid update fields
+      if (updateData.display_name !== undefined)
+        teamUpdateData.display_name = updateData.display_name;
+      if (updateData.description !== undefined)
+        teamUpdateData.description = updateData.description;
+      if (updateData.company_name !== undefined)
+        teamUpdateData.company_name = updateData.company_name;
+      if (updateData.allowed_domains !== undefined)
+        teamUpdateData.allowed_domains = updateData.allowed_domains;
+      if (updateData.allow_open_invite !== undefined)
+        teamUpdateData.allow_open_invite = updateData.allow_open_invite;
 
+      return await update(teamUpdateData);
+    },
+    [teamId, update],
+  );
+
+  /**
+   * Gets available team actions based on user permissions
+   */
+  const getTeamActions = useCallback(
+    (team: Team, isAdmin: boolean = false): Action[] => {
+      const actions: Action[] = [
+        { id: "view", label: "View Team" },
+        { id: "channels", label: "Browse Channels" },
+      ];
+
+      if (isAdmin) {
+        actions.push(
+          { id: "edit", label: "Edit Team" },
+          { id: "manage-members", label: "Manage Members" },
+          { id: "delete", label: "Delete Team", destructive: true },
+        );
+      } else {
+        actions.push({ id: "leave", label: "Leave Team", destructive: true });
+      }
+
+      return actions;
+    },
+    [],
+  );
+
+  /**
+   * Checks if an action is allowed for the current user
+   */
   const isActionAllowed = useCallback(
     (actionId: string, team: Team, isAdmin: boolean = false): boolean => {
       switch (actionId) {
@@ -91,19 +146,16 @@ export function useContainerTeam(teamId?: string) {
     [],
   );
 
-  // Helper function to convert string to color
-  const stringToColor = (str: string): string => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  /**
+   * Refreshes all team data
+   */
+  const refreshAll = useCallback(async () => {
+    if (teamId) {
+      await Promise.all([refreshTeam(), refreshStats(), refreshMembers()]);
+    } else {
+      await refreshTeams();
     }
-    let color = "#";
-    for (let i = 0; i < 3; i++) {
-      const value = (hash >> (i * 8)) & 0xff;
-      color += ("00" + value.toString(16)).substr(-2);
-    }
-    return color;
-  };
+  }, [teamId, refreshTeam, refreshStats, refreshMembers, refreshTeams]);
 
   return {
     // Team data
@@ -116,8 +168,11 @@ export function useContainerTeam(teamId?: string) {
 
     // Team operations
     selectTeam,
-    updateTeam: update,
+    updateTeam,
     deleteTeam,
+    refreshTeam,
+    refreshMembers,
+    refreshAll,
 
     // Helper functions
     formatTeamData,
@@ -125,6 +180,7 @@ export function useContainerTeam(teamId?: string) {
     isActionAllowed,
 
     // State
+    isLoading,
     isUpdating,
     isDeleting,
   };
