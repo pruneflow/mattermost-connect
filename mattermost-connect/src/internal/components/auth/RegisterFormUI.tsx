@@ -20,26 +20,33 @@ import { BaseComponentProps } from "../../types/componentTypes";
  * Registration form UI props
  */
 export interface RegisterFormUIProps extends BaseComponentProps {
-  // Form state
+  /** Error message to display */
   error?: string | null;
+  /** Whether form is in loading state */
   isLoading?: boolean;
+  /** Whether form is disabled */
   disabled?: boolean;
-
-  // Form configuration
+  /** Whether to show server URL field */
   showServerUrl?: boolean;
+  /** Initial username value */
   initialUsername?: string;
+  /** Initial email value */
   initialEmail?: string;
+  /** Initial server URL value */
   initialServerUrl?: string;
+  /** Password strength info */
   passwordStrength?: { score: number; message: string };
+  /** Whether to show password strength indicator */
   showPasswordStrength?: boolean;
-
-  // UI configuration
+  /** Custom form title */
   title?: string;
+  /** Custom submit button text */
   submitText?: string;
+  /** Whether to show login link */
   showLogin?: boolean;
+  /** Custom login link text */
   loginText?: string;
-
-  // Callbacks
+  /** Callback when form is submitted */
   onSubmit?: (
     username: string,
     email: string,
@@ -49,7 +56,9 @@ export interface RegisterFormUIProps extends BaseComponentProps {
     lastName?: string,
     serverUrl?: string,
   ) => void;
+  /** Callback when login link is clicked */
   onLoginClick?: () => void;
+  /** Callback when password changes for strength calculation */
   onPasswordChange?: (password: string) => void;
 }
 
@@ -57,7 +66,7 @@ export interface RegisterFormUIProps extends BaseComponentProps {
  * Registration Form UI component
  * Handles rendering of registration form with validation feedback
  */
-export const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
+const RegisterFormUI: React.FC<RegisterFormUIProps> = (props) => {
   const {
     error,
     isLoading = false,

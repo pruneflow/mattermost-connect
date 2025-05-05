@@ -11,7 +11,11 @@ import {
   Typography,
   Alert,
   CircularProgress,
-  Link,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from "@mui/material";
 import { BaseComponentProps } from "../../types/componentTypes";
 
@@ -19,38 +23,49 @@ import { BaseComponentProps } from "../../types/componentTypes";
  * MFA UI props
  */
 export interface MFAUIProps extends BaseComponentProps {
-  // Form state
+  /** Error message to display */
   error?: string | null;
+  /** Whether form is in loading state */
   isLoading?: boolean;
+  /** Whether form is disabled */
   disabled?: boolean;
-
-  // Form configuration
-  method?: "totp" | "email";
+  /** MFA method */
+  method?: "totp" | "email" | "sms" | "recovery";
+  /** Available MFA methods */
+  availableMethods?: ("totp" | "email" | "sms" | "recovery")[];
+  /** Code length */
   codeLength?: number;
+  /** Whether to auto focus the code input */
   autoFocus?: boolean;
-
-  // UI configuration
+  /** Custom form title */
   title?: string;
+  /** Custom description text */
   description?: string;
+  /** Custom submit button text */
   submitText?: string;
+  /** Custom resend code text */
   resendText?: string;
-
-  // Callbacks
+  /** Callback when form is submitted */
   onSubmit?: (data: { code: string }) => void;
+  /** Callback to resend verification code */
   onResendCode?: () => void;
+  /** Callback when cancelled */
   onCancel?: () => void;
+  /** Callback when method is changed */
+  onMethodChange?: (method: "totp" | "email" | "sms" | "recovery") => void;
 }
 
 /**
  * MFA UI component
  * Handles rendering of multi-factor authentication form
  */
-export const MFAUI: React.FC<MFAUIProps> = (props) => {
+const MFAUI: React.FC<MFAUIProps> = (props) => {
   const {
     error,
     isLoading = false,
     disabled = false,
     method = "totp",
+    availableMethods = [],
     codeLength = 6,
     autoFocus = true,
     title = method === "totp" ? "Authentication Code" : "Email Verification",
@@ -62,6 +77,7 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
     onSubmit,
     onResendCode,
     onCancel,
+    onMethodChange,
     className,
     sx,
     id,
@@ -69,9 +85,41 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
 
   // Local form state
   const [code, setCode] = useState("");
-
-  // Validation state
   const [codeError, setCodeError] = useState("");
+
+  // Determine if we should show method selector
+  const showMethodSelector = availableMethods.length > 1 && onMethodChange;
+
+  // Handle code input change
+  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    // Only allow digits or letters for recovery codes
+    if (method === "recovery") {
+      if (value === "" || /^[a-zA-Z0-9-]+$/.test(value)) {
+        setCode(value);
+        if (codeError) setCodeError("");
+      }
+    } else {
+      // Only allow digits for TOTP, SMS, and email codes
+      if (value === "" || /^\d+$/.test(value)) {
+        setCode(value);
+        if (codeError) setCodeError("");
+      }
+    }
+  };
+
+  // Handle method change
+  const handleMethodChange = (event: SelectChangeEvent<string>) => {
+    const newMethod = event.target.value as
+      | "totp"
+      | "email"
+      | "sms"
+      | "recovery";
+    if (onMethodChange) {
+      onMethodChange(newMethod);
+    }
+  };
 
   // Basic validation
   const validateForm = (): boolean => {
@@ -80,8 +128,11 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
     if (!code) {
       setCodeError("Verification code is required");
       isValid = false;
-    } else if (code.length !== codeLength) {
+    } else if (method !== "recovery" && code.length !== codeLength) {
       setCodeError(`Code must be ${codeLength} digits`);
+      isValid = false;
+    } else if (method === "recovery" && code.length < 8) {
+      setCodeError("Recovery code is too short");
       isValid = false;
     } else {
       setCodeError("");
@@ -99,19 +150,19 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
     }
   };
 
-  // Handle code input change
-  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+  // Get input mode based on method
+  const getInputMode = () => {
+    return method === "recovery" ? "text" : "numeric";
+  };
 
-    // Only allow digits
-    if (value === "" || /^\d+$/.test(value)) {
-      setCode(value);
+  // Get input pattern based on method
+  const getInputPattern = () => {
+    return method === "recovery" ? "[a-zA-Z0-9-]*" : "[0-9]*";
+  };
 
-      // Clear error when user types
-      if (codeError) {
-        setCodeError("");
-      }
-    }
+  // Get maximum length based on method
+  const getMaxLength = () => {
+    return method === "recovery" ? 20 : codeLength;
   };
 
   // Handle resend code
@@ -154,14 +205,43 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
         </Alert>
       )}
 
+      {showMethodSelector && (
+        <FormControl fullWidth margin="normal">
+          <InputLabel id="mfa-method-select-label">
+            Verification Method
+          </InputLabel>
+          <Select
+            labelId="mfa-method-select-label"
+            id="mfa-method-select"
+            value={method}
+            label="Verification Method"
+            onChange={handleMethodChange}
+            disabled={isLoading || disabled}
+          >
+            {availableMethods.includes("totp") && (
+              <MenuItem value="totp">Authenticator App</MenuItem>
+            )}
+            {availableMethods.includes("email") && (
+              <MenuItem value="email">Email</MenuItem>
+            )}
+            {availableMethods.includes("sms") && (
+              <MenuItem value="sms">SMS</MenuItem>
+            )}
+            {availableMethods.includes("recovery") && (
+              <MenuItem value="recovery">Recovery Code</MenuItem>
+            )}
+          </Select>
+        </FormControl>
+      )}
+
       <TextField
         margin="normal"
         required
         fullWidth
         id="code"
-        label="Verification Code"
+        label={method === "recovery" ? "Recovery Code" : "Verification Code"}
         name="code"
-        autoComplete="one-time-code"
+        autoComplete={method === "recovery" ? "off" : "one-time-code"}
         autoFocus={autoFocus}
         value={code}
         onChange={handleCodeChange}
@@ -169,9 +249,9 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
         helperText={codeError}
         disabled={isLoading || disabled}
         inputProps={{
-          maxLength: codeLength,
-          inputMode: "numeric",
-          pattern: "[0-9]*",
+          maxLength: getMaxLength(),
+          inputMode: getInputMode() as any,
+          pattern: getInputPattern(),
         }}
       />
 
@@ -200,7 +280,7 @@ export const MFAUI: React.FC<MFAUIProps> = (props) => {
           </Button>
         )}
 
-        {onResendCode && (
+        {onResendCode && method !== "totp" && method !== "recovery" && (
           <Button
             variant="text"
             onClick={handleResendCode}

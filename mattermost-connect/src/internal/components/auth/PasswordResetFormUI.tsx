@@ -24,23 +24,27 @@ export type PasswordResetMode = "forgot" | "reset" | "update";
  * Password reset form UI props
  */
 export interface PasswordResetFormUIProps extends BaseComponentProps {
-  // Form state
+  /** Error message to display */
   error?: string | null;
+  /** Whether form is in loading state */
   isLoading?: boolean;
+  /** Whether form is disabled */
   disabled?: boolean;
-
-  // Form configuration
+  /** Form mode */
   mode?: PasswordResetMode;
+  /** Reset token (if in reset mode) */
   token?: string;
+  /** Initial email value */
   initialEmail?: string;
-
-  // UI configuration
+  /** Custom submit button text */
   submitText?: string;
-  showLogin?: boolean;
+  /** Whether to show login link */
+  showLoginLink?: boolean;
+  /** Custom login link text */
   loginText?: string;
-
-  // Callbacks
+  /** Callback when form is submitted */
   onSubmit?: (data: any) => void;
+  /** Callback when login link is clicked */
   onLoginClick?: () => void;
 }
 
@@ -48,9 +52,7 @@ export interface PasswordResetFormUIProps extends BaseComponentProps {
  * Password Reset Form UI component
  * Handles rendering of password reset forms with different modes
  */
-export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (
-  props,
-) => {
+const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (props) => {
   const {
     error,
     isLoading = false,
@@ -63,7 +65,7 @@ export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (
       : mode === "reset"
         ? "Reset Password"
         : "Update Password",
-    showLogin = true,
+    showLoginLink = true,
     loginText = "Back to Login",
     onSubmit,
     onLoginClick,
@@ -313,7 +315,6 @@ export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (
     }
   };
 
-  // Component is fully controlled by its props
   return (
     <Box
       component="form"
@@ -363,7 +364,7 @@ export const PasswordResetFormUI: React.FC<PasswordResetFormUIProps> = (
         {submitText}
       </Button>
 
-      {showLogin && onLoginClick && (
+      {showLoginLink && onLoginClick && (
         <Box sx={{ textAlign: "center" }}>
           <Link
             component="button"

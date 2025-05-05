@@ -4,19 +4,22 @@
  * Handles authentication login functionality
  * Delegates business logic to useAuth hook
  */
-import React, { useCallback, useMemo } from "react";
-import { FormContainerProps, useFormContainer } from "../base/FormContainer";
+import React, { useCallback, useMemo, useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
 import { User, LoginParams } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
-import { useMemoizedProps } from "../../utils/performanceUtils";
+import LoginFormUI from "../../components/auth/LoginFormUI";
 
 // Login container props
-export interface LoginContainerProps extends FormContainerProps<LoginParams> {
+export interface LoginContainerProps {
   /**
    * Initial username value
    */
   initialUsername?: string;
+  /**
+   * Initial server URL value
+   */
+  initialServerUrl?: string;
   /**
    * Whether to display remember me option
    */
@@ -24,7 +27,15 @@ export interface LoginContainerProps extends FormContainerProps<LoginParams> {
   /**
    * Whether to display server URL field
    */
-  showServerUrlField?: boolean;
+  showServerUrl?: boolean;
+  /**
+   * Custom title for the login form
+   */
+  title?: string;
+  /**
+   * Custom submit button text
+   */
+  submitText?: string;
   /**
    * Whether to display register link
    */
@@ -45,26 +56,48 @@ export interface LoginContainerProps extends FormContainerProps<LoginParams> {
    * Callback on successful login
    */
   onLoginSuccess?: (user: User) => void;
+  /**
+   * CSS className
+   */
+  className?: string;
+  /**
+   * MUI sx prop for styling
+   */
+  sx?: React.CSSProperties;
+  /**
+   * Component ID
+   */
+  id?: string;
 }
 
 /**
  * Login container
  * Handles login form state and submission
  */
-export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
+const LoginContainer: React.FC<LoginContainerProps> = (props) => {
   const {
     initialUsername = "",
+    initialServerUrl = "",
     showRememberMe = true,
-    showServerUrlField = false,
+    showServerUrl = false,
+    title = "Sign In",
+    submitText = "Sign In",
     showRegisterLink = true,
     showForgotPasswordLink = true,
     onRegisterClick,
     onForgotPasswordClick,
     onLoginSuccess,
-    children,
-    render,
-    ...formProps
+    className,
+    sx,
+    id,
   } = props;
+
+  // Form state
+  const [username, setUsername] = useState(initialUsername);
+  const [password, setPassword] = useState("");
+  const [serverUrl, setServerUrl] = useState(initialServerUrl);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Use auth hook for login functionality
   const { login, isLoggingIn, loginError, validateCredentials } = useAuth();
@@ -72,54 +105,66 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
   // Use dialog for error handling
   const dialog = useDialog();
 
-  // Set initial form data
-  const initialData = useMemo(
-    () => ({
-      username: initialUsername,
-      password: "",
-      serverUrl: "",
-      rememberMe: false,
-    }),
-    [initialUsername],
-  );
-
-  // Custom validator for login form
-  const validateForm = useCallback(
-    (data: LoginParams) => {
-      const validationResult = validateCredentials(
-        data.username,
-        data.password,
-      );
-
-      return validationResult.isValid ? true : validationResult.errors;
-    },
-    [validateCredentials],
-  );
-
   // Handle form submission
   const handleSubmit = useCallback(
-    async (data: LoginParams) => {
+    async (
+      submittedUsername: string,
+      submittedPassword: string,
+      submittedServerUrl?: string,
+      submittedRememberMe?: boolean,
+    ) => {
       try {
-        const result = await login(data);
+        // Clear previous errors
+        setFormError(null);
+
+        // Validate credentials
+        const validationResult = validateCredentials(
+          submittedUsername,
+          submittedPassword,
+        );
+
+        if (!validationResult.isValid) {
+          // Show first validation error
+          const firstError = Object.values(validationResult.errors)[0];
+          setFormError(firstError);
+          return;
+        }
+
+        // Prepare login parameters
+        const loginParams: LoginParams = {
+          username: submittedUsername,
+          password: submittedPassword,
+        };
+
+        // Add server URL if needed
+        if (showServerUrl && submittedServerUrl) {
+          loginParams.serverUrl = submittedServerUrl;
+        }
+
+        // Attempt login
+        const result = await login(loginParams);
 
         if (result.success && result.data) {
           if (onLoginSuccess) {
             onLoginSuccess(result.data);
           }
-          return result.data;
         } else if (result.validationErrors) {
-          return { _errors: result.validationErrors };
+          // Show first validation error
+          const firstError = Object.values(result.validationErrors)[0];
+          setFormError(firstError);
         } else if (result.error) {
-          throw result.error;
+          setFormError(result.error.message);
         }
-
-        return null;
       } catch (error) {
-        // Let the form container handle the error
-        throw error instanceof Error ? error : new Error("Login failed");
+        // Handle unexpected errors
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred during login";
+        setFormError(errorMessage);
       }
     },
-    [login, onLoginSuccess],
+    [login, onLoginSuccess, showServerUrl, validateCredentials],
   );
 
   // Handle register link click
@@ -136,64 +181,43 @@ export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
     }
   }, [onForgotPasswordClick]);
 
-  // Use form container for form handling
-  const [formState, formAPI] = useFormContainer(
-    {
-      ...formProps,
-      initialData,
-      validator: validateForm,
-      onSubmit: handleSubmit,
-    },
-    {
-      validateOnBlur: true,
-      validateOnSubmit: true,
-      showValidationImmediately: false,
-      preventInvalidSubmit: true,
-    },
+  // Create additional UI-specific props
+  const additionalProps = useMemo(() => {
+    return {
+      registerText: "Don't have an account? Sign up",
+      forgotPasswordText: "Forgot password?",
+    };
+  }, []);
+
+  // Render the login form UI component
+  return (
+    <LoginFormUI
+      // Form data
+      initialUsername={username}
+      initialServerUrl={serverUrl}
+      // Form state
+      error={formError || loginError?.message || null}
+      isLoading={isLoggingIn}
+      // Form configuration
+      showRememberMe={showRememberMe}
+      showServerUrl={showServerUrl}
+      title={title}
+      submitText={submitText}
+      // UI configuration
+      registerText={additionalProps.registerText}
+      forgotPasswordText={additionalProps.forgotPasswordText}
+      showRegisterLink={showRegisterLink}
+      showForgotPasswordLink={showForgotPasswordLink}
+      // Callbacks
+      onSubmit={handleSubmit}
+      onRegisterClick={handleRegisterClick}
+      onForgotPasswordClick={handleForgotPasswordClick}
+      // Styling
+      className={className}
+      sx={sx}
+      id={id}
+    />
   );
-
-  // Create memoized UI props
-  const uiProps = useMemoizedProps({
-    // Form state
-    formData: formState.formData,
-    errors: formState.errors,
-    isValid: formState.isValid,
-    isDirty: formState.isDirty,
-    isSubmitting: formState.isSubmitting || isLoggingIn,
-    isSubmitted: formState.isSubmitted,
-
-    // Form actions
-    submitForm: formAPI.submitForm,
-    resetForm: formAPI.resetForm,
-    setFieldValue: formAPI.setFieldValue,
-    getFieldProps: formAPI.getFieldProps,
-
-    // UI configuration
-    showRememberMe,
-    showServerUrlField,
-    showRegisterLink,
-    showForgotPasswordLink,
-
-    // UI actions
-    onRegisterClick: handleRegisterClick,
-    onForgotPasswordClick: handleForgotPasswordClick,
-
-    // Error handling
-    loginError,
-  });
-
-  // Use render prop pattern
-  if (render) {
-    return <>{render(uiProps)}</>;
-  }
-
-  // Use children render function
-  if (typeof children === "function") {
-    return <>{children(uiProps)}</>;
-  }
-
-  // Return children wrapped with context if needed
-  return <>{children}</>;
 };
 
 export default LoginContainer;

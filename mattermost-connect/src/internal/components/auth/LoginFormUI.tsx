@@ -1,6 +1,7 @@
 // src/internal/components/auth/LoginFormUI.tsx
 /**
- * Base login form component
+ * Base login form component with enhanced functionality
+ * Pure presentational component for authentication
  */
 import React, { useState } from "react";
 import {
@@ -14,6 +15,7 @@ import {
   InputAdornment,
   IconButton,
   CircularProgress,
+  Link,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { BaseComponentProps } from "../../types/componentTypes";
@@ -27,6 +29,10 @@ export interface LoginFormUIProps extends BaseComponentProps {
   showRememberMe?: boolean;
   /** Whether to show server URL field */
   showServerUrl?: boolean;
+  /** Whether to show register link */
+  showRegisterLink?: boolean;
+  /** Whether to show forgot password link */
+  showForgotPasswordLink?: boolean;
   /** Callback when form is submitted */
   onSubmit?: (
     username: string,
@@ -34,24 +40,42 @@ export interface LoginFormUIProps extends BaseComponentProps {
     serverUrl?: string,
     rememberMe?: boolean,
   ) => void;
+  /** Callback when register link is clicked */
+  onRegisterClick?: () => void;
+  /** Callback when forgot password link is clicked */
+  onForgotPasswordClick?: () => void;
   /** Custom form title */
   title?: string;
   /** Custom submit button text */
   submitText?: string;
+  /** Custom register link text */
+  registerText?: string;
+  /** Custom forgot password link text */
+  forgotPasswordText?: string;
   /** Initial username value */
   initialUsername?: string;
   /** Initial server URL value */
   initialServerUrl?: string;
 }
 
+/**
+ * Login Form UI component
+ * Handles rendering and basic validation of login form
+ */
 const LoginFormUI: React.FC<LoginFormUIProps> = ({
   error,
   isLoading = false,
   showRememberMe = true,
   showServerUrl = false,
+  showRegisterLink = true,
+  showForgotPasswordLink = true,
   onSubmit,
+  onRegisterClick,
+  onForgotPasswordClick,
   title = "Sign In",
   submitText = "Sign In",
+  registerText = "Don't have an account? Sign up",
+  forgotPasswordText = "Forgot password?",
   initialUsername = "",
   initialServerUrl = "",
   className,
@@ -254,6 +278,38 @@ const LoginFormUI: React.FC<LoginFormUIProps> = ({
         ) : null}
         {submitText}
       </Button>
+
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+        }}
+      >
+        {showForgotPasswordLink && onForgotPasswordClick && (
+          <Link
+            component="button"
+            variant="body2"
+            onClick={onForgotPasswordClick}
+            disabled={isLoading}
+            sx={{ cursor: "pointer" }}
+          >
+            {forgotPasswordText}
+          </Link>
+        )}
+
+        {showRegisterLink && onRegisterClick && (
+          <Link
+            component="button"
+            variant="body2"
+            onClick={onRegisterClick}
+            disabled={isLoading}
+            sx={{ cursor: "pointer", ml: "auto" }}
+          >
+            {registerText}
+          </Link>
+        )}
+      </Box>
     </Box>
   );
 };

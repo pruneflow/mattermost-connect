@@ -2,21 +2,19 @@
 /**
  * User Card Container
  * Container component for user cards/info display
- * Delegates business logic to useContainerUser hook
- * Composes with UserAvatarContainer for avatar display
+ * Delegates business logic to useUser hook
  */
-import React, { useCallback, useMemo } from "react";
-import { BaseContainerProps, useBaseContainer } from "../base/BaseContainer";
-import { useContainerUser } from "../../hooks/useContainerUser";
+import React, { useCallback } from "react";
+import UserCardUI from "../../components/users/UserCardUI";
 import { User, UserStatus } from "../../../types";
-import { useMemoizedProps } from "../../utils/performanceUtils";
 import { useDialog } from "../../hooks/useDialog";
-import StatusSelector from "../../components/common/StatusSelector";
+import { useAuth } from "../../../hooks/useAuth";
+import { useUser } from "../../../hooks";
 
 /**
  * User card container props
  */
-export interface UserCardContainerProps extends BaseContainerProps {
+export interface UserCardContainerProps {
   /**
    * User ID to display
    */
@@ -26,7 +24,11 @@ export interface UserCardContainerProps extends BaseContainerProps {
    */
   user?: User;
   /**
-   * Size of the avatar in pixels
+   * Card variant
+   */
+  variant?: "default" | "compact" | "expanded";
+  /**
+   * Size of the avatar
    */
   avatarSize?: number;
   /**
@@ -46,13 +48,17 @@ export interface UserCardContainerProps extends BaseContainerProps {
    */
   availableActions?: string[];
   /**
-   * Whether to enable editing of user profile (for current user)
+   * Whether card is outlined
    */
-  allowEdit?: boolean;
+  outlined?: boolean;
   /**
-   * Whether card is in compact mode
+   * Card elevation
    */
-  compact?: boolean;
+  elevation?: number;
+  /**
+   * Whether card is selected
+   */
+  selected?: boolean;
   /**
    * Callback when action is performed
    */
@@ -65,56 +71,65 @@ export interface UserCardContainerProps extends BaseContainerProps {
    * Callback when status is changed
    */
   onStatusChange?: (user: User, newStatus: UserStatus) => void;
+  /**
+   * CSS className
+   */
+  className?: string;
+  /**
+   * MUI sx prop for styling
+   */
+  sx?: React.CSSProperties;
+  /**
+   * Component ID
+   */
+  id?: string;
 }
 
 /**
  * User Card Container
  * Displays user information in a card format
  */
-export const UserCardContainer: React.FC<
-  UserCardContainerProps & {
-    children?: React.ReactNode | ((props: any) => React.ReactNode);
-    render?: (props: any) => React.ReactNode;
-  }
-> = (props) => {
+const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
   const {
     userId,
     user: propUser,
-    avatarSize = 48,
+    variant = "default",
+    avatarSize,
     showStatus = true,
     showDetails = true,
     showActions = true,
-    availableActions = [],
-    allowEdit = true,
-    compact = false,
+    availableActions = ["message", "profile"],
+    outlined = false,
+    elevation = 1,
+    selected = false,
     onAction,
     onClick,
     onStatusChange,
-    children,
-    render,
-    ...restProps
+    className,
+    sx,
+    id,
   } = props;
 
-  // Use base container for common functionality
-  const [baseState, baseAPI] = useBaseContainer(restProps);
+  // Use user hook for user data
+  const {
+    user: fetchedUser,
+    status,
+    displayName,
+    isCurrentUser,
+    isLoading,
+    error,
+    refreshUser,
+    updateStatus,
+  } = useUser(userId);
 
-  // Use dialog for confirmation dialogs
+  // Use current user info
+  const { currentUser } = useAuth();
+
+  // Use dialog for confirmations
   const dialog = useDialog();
 
-  // Use user container hook
-  const { userState, userActions, uiProps } = useContainerUser(userId, {
-    avatarSize,
-    showStatus,
-    autoFetch: !propUser,
-    showActions,
-    availableActions: [
-      ...availableActions,
-      ...(allowEdit ? ["edit", "uploadImage"] : []),
-    ],
-  });
-
   // If user prop is provided, prefer it over fetched user
-  const user = propUser || userState.user;
+  const user = propUser || fetchedUser;
 
   // Handle card click
   const handleClick = useCallback(() => {
@@ -123,76 +138,100 @@ export const UserCardContainer: React.FC<
     }
   }, [onClick, user]);
 
-  // Handle action
-  const handleAction = useCallback(
+  // Handle action click
+  const handleActionClick = useCallback(
     async (action: string) => {
       if (!user) return;
 
-      // Handle custom actions through callback
-      if (onAction) {
-        onAction(action, user);
-      }
-
-      // Handle built-in actions
-      if (action === "message" && user) {
-        // Example of a built-in action that delegates to caller
+      // Handle action
+      if (action === "message" && onAction) {
+        onAction("message", user);
+      } else if (action === "profile" && onAction) {
+        onAction("profile", user);
+      } else if (action === "refresh") {
+        await refreshUser();
+      } else if (action === "more" && onAction) {
+        onAction("more", user);
+      } else {
+        // Pass any other action to the parent
         if (onAction) {
-          onAction("message", user);
-        }
-      } else if (action === "changeStatus" && user && onStatusChange) {
-        const newStatus = await dialog.formAsync<{ status: UserStatus }>({
-          title: "Change Status",
-          component: <StatusSelector initialStatus={userState.status} />,
-          initialData: { status: userState.status },
-          confirmText: "Update Status",
-          cancelText: "Cancel",
-        });
-
-        if (newStatus.confirmed && newStatus.data) {
-          await userActions.updateStatus(newStatus.data.status);
-          if (onStatusChange) {
-            onStatusChange(user, newStatus.data.status);
-          }
+          onAction(action, user);
         }
       }
     },
-    [user, onAction, userState.status, userActions, dialog, onStatusChange],
+    [user, onAction, refreshUser],
   );
 
-  // Get standard card props from hook
-  const baseCardProps = useMemo(() => uiProps.getCardProps(), [uiProps]);
+  // Get available actions based on current user
+  const getActions = useCallback(() => {
+    const actions = [...availableActions];
 
-  // Create memoized props for UI component
-  const cardUIProps = useMemo(() => {
-    return useMemoizedProps({
-      ...baseCardProps,
-      onClick: handleClick,
-      onAction: handleAction,
-      showDetails,
-      compact,
-      allowEdit,
-    });
-  }, [
-    baseCardProps,
-    handleClick,
-    handleAction,
-    showDetails,
-    compact,
-    allowEdit,
-  ]);
+    // Add refresh action if not already present
+    if (!actions.includes("refresh")) {
+      actions.push("refresh");
+    }
 
-  // Use render prop pattern if provided
-  if (render) {
-    return <>{render(cardUIProps)}</>;
-  }
+    // If this is the current user, add status change action
+    if (isCurrentUser && !actions.includes("changeStatus")) {
+      actions.push("changeStatus");
+    }
 
-  // Use children render function if provided
-  if (typeof children === "function") {
-    return <>{children(cardUIProps)}</>;
-  }
+    return actions;
+  }, [availableActions, isCurrentUser]);
 
-  // Return children wrapped with context if needed
-  return <>{children}</>;
+  // Calculate avatar size based on variant
+  const getAvatarSize = useCallback(() => {
+    if (avatarSize) return avatarSize;
+
+    switch (variant) {
+      case "compact":
+        return 40;
+      case "expanded":
+        return 80;
+      default:
+        return 56;
+    }
+  }, [variant, avatarSize]);
+
+  // Check if we should show the card is loading
+  const isCardLoading = isLoading && !user;
+
+  // Check if we have an error and no user
+  const hasError = !!error && !user;
+
+  // Render the user card UI component
+  return (
+    <UserCardUI
+      // Card data
+      user={user}
+      displayName={displayName || user?.username || ""}
+      status={status}
+      // Card state
+      variant={variant}
+      isLoading={isCardLoading}
+      hasError={hasError}
+      error={error}
+      isCurrentUser={isCurrentUser}
+      // Card configuration
+      showStatus={showStatus}
+      showActions={showActions}
+      availableActions={getActions()}
+      showRole={variant === "expanded"}
+      showEmail={showDetails}
+      elevation={elevation}
+      outlined={outlined}
+      selected={selected}
+      avatarSize={getAvatarSize()}
+      // Callbacks
+      onActionClick={handleActionClick}
+      onClick={handleClick}
+      onRefresh={refreshUser}
+      // Styling
+      className={className}
+      sx={sx}
+      id={id}
+    />
+  );
 };
 
 export default UserCardContainer;

@@ -494,3 +494,88 @@ export function validateUsername(username: string): ValidationResult {
 export function validateEmail(email: string): ValidationResult {
   return authValidator.validateEmail(email);
 }
+
+// src/utils/authValidation.ts
+// Ajouter la fonction suivante à ce fichier
+
+/**
+ * Check password strength and return score and feedback
+ * @param password Password to check
+ * @returns Object with score (0-4) and message
+ */
+export function passwordStrengthCheck(password: string): {
+  score: number;
+  message: string;
+} {
+  // If no password or very short, return lowest score
+  if (!password || password.length < 4) {
+    return {
+      score: 0,
+      message: "Password is very weak",
+    };
+  }
+
+  let score = 0;
+
+  // Length check
+  if (password.length >= 8) {
+    score += 1;
+  }
+  if (password.length >= 12) {
+    score += 1;
+  }
+
+  // Complexity checks
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  // Add points for complexity
+  if (hasLower && hasUpper) {
+    score += 1;
+  }
+  if (hasDigit) {
+    score += 0.5;
+  }
+  if (hasSpecial) {
+    score += 0.5;
+  }
+
+  // Cap score at 4
+  score = Math.min(4, Math.floor(score));
+
+  // Return score and message
+  switch (score) {
+    case 0:
+      return {
+        score,
+        message: "Password is very weak",
+      };
+    case 1:
+      return {
+        score,
+        message: "Password is weak",
+      };
+    case 2:
+      return {
+        score,
+        message: "Password is fair",
+      };
+    case 3:
+      return {
+        score,
+        message: "Password is good",
+      };
+    case 4:
+      return {
+        score,
+        message: "Password is strong",
+      };
+    default:
+      return {
+        score: 0,
+        message: "Password is very weak",
+      };
+  }
+}

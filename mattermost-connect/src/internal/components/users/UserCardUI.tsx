@@ -82,7 +82,7 @@ export interface UserCardUIProps extends BaseComponentProps {
  * User Card UI Component
  * Displays user information in a card format with various layouts
  */
-export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
+const UserCardUI: React.FC<UserCardUIProps> = (props) => {
   const {
     user,
     displayName,
@@ -122,6 +122,14 @@ export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
         return 80;
       default:
         return 56;
+    }
+  };
+
+  // Handle action click with action ID
+  const handleAction = (actionId: string) => (event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent card click
+    if (onActionClick) {
+      onActionClick(actionId);
     }
   };
 
@@ -204,7 +212,9 @@ export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
     );
   }
 
+  // Show more options if available in actions
   const showMoreOptions = showActions && availableActions.includes("more");
+
   // Create card content
   const content = (
     <CardContent>
@@ -259,10 +269,7 @@ export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
             {showActions && showMoreOptions && (
               <IconButton
                 size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onActionClick) onActionClick("more");
-                }}
+                onClick={handleAction("more")}
                 aria-label="more options"
               >
                 <MoreIcon />
@@ -320,10 +327,15 @@ export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
     availableActions.includes("profile") &&
     variant === "expanded";
 
+  const showRefreshButton = showActions && availableActions.includes("refresh");
+
   // Render actions if needed
   const actions =
     showActions &&
-    (showMessageButton || showProfileButton || actionsRenderer) ? (
+    (showMessageButton ||
+      showProfileButton ||
+      showRefreshButton ||
+      actionsRenderer) ? (
       <CardActions>
         {actionsRenderer ? (
           actionsRenderer(user)
@@ -333,10 +345,7 @@ export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
               <Button
                 size="small"
                 startIcon={<PersonIcon />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onActionClick) onActionClick("profile");
-                }}
+                onClick={handleAction("profile")}
               >
                 Profile
               </Button>
@@ -346,12 +355,19 @@ export const UserCardUI: React.FC<UserCardUIProps> = (props) => {
               <Button
                 size="small"
                 startIcon={<MessageIcon />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onActionClick) onActionClick("message");
-                }}
+                onClick={handleAction("message")}
               >
                 Message
+              </Button>
+            )}
+
+            {showRefreshButton && (
+              <Button
+                size="small"
+                startIcon={<RefreshIcon />}
+                onClick={handleAction("refresh")}
+              >
+                Refresh
               </Button>
             )}
           </>

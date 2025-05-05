@@ -4,14 +4,13 @@
  * Handles MFA validation during authentication
  * Delegates business logic to useAuth hook
  */
-import React, { useCallback, useMemo, useState } from "react";
-import { FormContainerProps, useFormContainer } from "../base/FormContainer";
+import React, { useCallback, useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
 import { useDialog } from "../../hooks/useDialog";
-import { useMemoizedProps } from "../../utils/performanceUtils";
+import MFAUI from "../../components/auth/MFAUI";
 
 // MFA container props
-export interface MFAContainerProps extends FormContainerProps<any> {
+export interface MFAContainerProps {
   /**
    * User ID for the authenticating user
    */
@@ -21,17 +20,37 @@ export interface MFAContainerProps extends FormContainerProps<any> {
    */
   sessionToken?: string;
   /**
+   * MFA method to use
+   */
+  method?: "totp" | "email";
+  /**
+   * Length of verification code
+   */
+  codeLength?: number;
+  /**
+   * Whether to auto focus the code input
+   */
+  autoFocus?: boolean;
+  /**
+   * Custom form title
+   */
+  title?: string;
+  /**
+   * Custom description text
+   */
+  description?: string;
+  /**
+   * Custom submit button text
+   */
+  submitText?: string;
+  /**
+   * Custom resend code text
+   */
+  resendText?: string;
+  /**
    * Callback on successful MFA validation
    */
   onMFASuccess?: (token: string) => void;
-  /**
-   * Available MFA methods
-   */
-  availableMethods?: ("totp" | "sms" | "email" | "recovery")[];
-  /**
-   * Default MFA method
-   */
-  defaultMethod?: "totp" | "sms" | "email" | "recovery";
   /**
    * Whether to show a back button
    */
@@ -40,76 +59,75 @@ export interface MFAContainerProps extends FormContainerProps<any> {
    * Callback when back button is clicked
    */
   onBackClick?: () => void;
+  /**
+   * Callback to resend verification code
+   */
+  onResendCode?: () => void;
+  /**
+   * CSS className
+   */
+  className?: string;
+  /**
+   * MUI sx prop for styling
+   */
+  sx?: React.CSSProperties;
+  /**
+   * Component ID
+   */
+  id?: string;
 }
 
 /**
  * MFA container
  * Handles multi-factor authentication verification
  */
-export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
+const MFAContainer: React.FC<MFAContainerProps> = (props) => {
   const {
     userId,
     sessionToken,
+    method = "totp",
+    codeLength = 6,
+    autoFocus = true,
+    title,
+    description,
+    submitText = "Verify",
+    resendText = "Resend Code",
     onMFASuccess,
-    availableMethods = ["totp"],
-    defaultMethod = "totp",
     showBackButton = true,
     onBackClick,
-    children,
-    render,
-    ...formProps
+    onResendCode,
+    className,
+    sx,
+    id,
   } = props;
 
-  // Current MFA method state
-  const [currentMethod, setCurrentMethod] = useState<string>(defaultMethod);
+  // Form error state
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Use auth hook for MFA functionality
-  // Note: This is assuming the useAuth hook would have MFA methods
-  // You would need to add these to your actual useAuth hook
+  // Note: This is a placeholder assuming these methods are in useAuth
+  // Add these methods to your actual useAuth hook if needed
   const {
-    verifyMFA = async () => ({ success: false }),
+    verifyMFA = async () => ({ success: false, token: "" }),
     isVerifyingMFA = false,
-    mfaError = null,
+    resendMFACode = async () => ({ success: false }),
   } = useAuth() as any;
 
   // Use dialog for error handling
   const dialog = useDialog();
 
-  // Set initial form data based on method
-  const initialData = useMemo(
-    () => ({
-      code: "",
-      method: currentMethod,
-    }),
-    [currentMethod],
-  );
-
-  // Custom validator for the form
-  const validateForm = useCallback((data: any) => {
-    // Validate MFA code
-    if (!data.code) {
-      return { code: "Verification code is required" };
-    }
-
-    if (data.method === "totp" && !/^\d{6}$/.test(data.code)) {
-      return { code: "Code must be 6 digits" };
-    }
-
-    if (data.method === "recovery" && data.code.length < 8) {
-      return { code: "Recovery code is too short" };
-    }
-
-    return true;
-  }, []);
-
   // Handle form submission
   const handleSubmit = useCallback(
-    async (data: any) => {
+    async (data: { code: string }) => {
       try {
+        // Clear previous errors
+        setFormError(null);
+
+        // Verify MFA code
         const result = await verifyMFA({
           userId,
           code: data.code,
-          method: data.method,
+          method,
           sessionToken,
         });
 
@@ -117,28 +135,56 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
           if (onMFASuccess) {
             onMFASuccess(result.token);
           }
-          return result;
-        } else if (result.validationErrors) {
-          return { _errors: result.validationErrors };
         } else if (result.error) {
-          throw result.error;
+          setFormError(result.error.message);
+        } else {
+          setFormError("Invalid verification code");
         }
-
-        return null;
       } catch (error) {
-        // Let form container handle the error
-        throw error instanceof Error
-          ? error
-          : new Error("MFA verification failed");
+        // Handle unexpected errors
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred";
+        setFormError(errorMessage);
       }
     },
-    [userId, sessionToken, verifyMFA, onMFASuccess],
+    [userId, sessionToken, method, verifyMFA, onMFASuccess],
   );
 
-  // Handle method change
-  const handleMethodChange = useCallback((method: string) => {
-    setCurrentMethod(method);
-  }, []);
+  // Handle resend code
+  const handleResendCode = useCallback(async () => {
+    try {
+      // If provided by props, use that
+      if (onResendCode) {
+        onResendCode();
+        return;
+      }
+
+      // Otherwise use the auth hook method
+      const result = await resendMFACode({
+        userId,
+        method,
+        sessionToken,
+      });
+
+      if (result.success) {
+        await dialog.showSuccess(
+          "Code Sent",
+          `A new verification code has been sent to your ${
+            method === "email" ? "email" : "authenticator app"
+          }.`,
+        );
+      } else if (result.error) {
+        setFormError(result.error.message);
+      }
+    } catch (error) {
+      // Handle unexpected errors
+      const errorMessage =
+        error instanceof Error ? error.message : "An unexpected error occurred";
+      setFormError(errorMessage);
+    }
+  }, [userId, sessionToken, method, resendMFACode, onResendCode, dialog]);
 
   // Handle back button click
   const handleBackClick = useCallback(() => {
@@ -147,70 +193,45 @@ export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
     }
   }, [onBackClick]);
 
-  // Use form container for form handling
-  const [formState, formAPI] = useFormContainer(
-    {
-      ...formProps,
-      initialData,
-      validator: validateForm,
-      onSubmit: handleSubmit,
-    },
-    {
-      validateOnBlur: true,
-      validateOnSubmit: true,
-      preventInvalidSubmit: true,
-    },
+  // Get title based on method
+  const getTitle = () => {
+    if (title) return title;
+    return method === "totp" ? "Authentication Code" : "Email Verification";
+  };
+
+  // Get description based on method
+  const getDescription = () => {
+    if (description) return description;
+    return method === "totp"
+      ? "Enter the code from your authenticator app"
+      : "Enter the verification code sent to your email";
+  };
+
+  // Render the MFA UI component
+  return (
+    <MFAUI
+      // Form state
+      error={formError}
+      isLoading={isVerifyingMFA}
+      // Form configuration
+      method={method}
+      codeLength={codeLength}
+      autoFocus={autoFocus}
+      // UI configuration
+      title={getTitle()}
+      description={getDescription()}
+      submitText={submitText}
+      resendText={resendText}
+      // Callbacks
+      onSubmit={handleSubmit}
+      onResendCode={handleResendCode}
+      onCancel={showBackButton ? handleBackClick : undefined}
+      // Styling
+      className={className}
+      sx={sx}
+      id={id}
+    />
   );
-
-  // Update form when method changes
-  React.useEffect(() => {
-    formAPI.setFieldValue("method", currentMethod);
-  }, [currentMethod, formAPI]);
-
-  // Create memoized UI props
-  const uiProps = useMemoizedProps({
-    // Form state
-    formData: formState.formData,
-    errors: formState.errors,
-    isValid: formState.isValid,
-    isDirty: formState.isDirty,
-    isSubmitting: formState.isSubmitting || isVerifyingMFA,
-    isSubmitted: formState.isSubmitted,
-
-    // Form actions
-    submitForm: formAPI.submitForm,
-    resetForm: formAPI.resetForm,
-    setFieldValue: formAPI.setFieldValue,
-    getFieldProps: formAPI.getFieldProps,
-
-    // MFA specific props
-    userId,
-    availableMethods,
-    currentMethod,
-    onMethodChange: handleMethodChange,
-
-    // UI configuration
-    showBackButton,
-
-    // UI actions
-    onBackClick: handleBackClick,
-
-    // Error handling
-    mfaError,
-  });
-
-  // Use render prop pattern
-  if (render) {
-    return <>{render(uiProps)}</>;
-  }
-
-  // Use children render function
-  if (typeof children === "function") {
-    return <>{children(uiProps)}</>;
-  }
-
-  // Return children wrapped with context if needed
-  return <>{children}</>;
 };
 
 export default MFAContainer;
