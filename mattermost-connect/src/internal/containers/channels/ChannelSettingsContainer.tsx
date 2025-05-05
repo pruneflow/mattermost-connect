@@ -220,7 +220,12 @@ const ChannelSettingsContainer: React.FC<ChannelSettingsContainerProps> = (
 
   // Prepare UI props
   const uiProps = {
-    formData: formState.formData,
+    formData: {
+      display_name: formState.formData.display_name || "",
+      name: formState.formData.name || "",
+      header: formState.formData.header || "",
+      purpose: formState.formData.purpose || "",
+    },
     errors: formState.errors,
     isLoading: formState.isSubmitting || isUpdating || isLoading,
     isValid: formState.isValid,
