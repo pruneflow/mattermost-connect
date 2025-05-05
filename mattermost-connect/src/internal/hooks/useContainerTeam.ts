@@ -15,6 +15,12 @@ export interface TeamDisplayData {
   color: string;
 }
 
+interface Action {
+  id: string;
+  label: string;
+  destructive?: boolean;
+}
+
 export function useContainerTeam(teamId?: string) {
   const { teams, formattedTeams, activeTeam, selectTeam } = useTeams();
   const {
@@ -48,7 +54,7 @@ export function useContainerTeam(teamId?: string) {
   );
 
   const getTeamActions = useCallback((team: Team, isAdmin: boolean = false) => {
-    const actions = [
+    const actions: Action[] = [
       { id: "view", label: "View Team" },
       { id: "channels", label: "Browse Channels" },
     ];
