@@ -1,174 +1,115 @@
 // src/internal/containers/teams/TeamListContainer.tsx
-/**
- * Container component for team list that manages data fetching and state
- */
-import React, { useCallback, useState, useMemo, useEffect } from "react";
-import { useTeams } from "../../../hooks/useTeams";
-import { BaseComponentProps } from "../../types/componentTypes";
+import React, { useCallback, useMemo } from "react";
+import { useListContainer } from "../base/ListContainer";
+import { useContainerTeam } from "../../hooks/useContainerTeam";
+import { Team } from "../../../types";
 import TeamListUI from "../../components/teams/TeamListUI";
-import { Team } from "../../../index";
-import { useTeamCreation } from "../../../hooks/useTeams";
-import { DisplayVariant, DensityVariant } from "../../types/componentTypes";
-import {
-  useUnreadCounts,
-  useUnreadCountsListener,
-} from "../../../hooks/useUnreadCounts";
-import { useWebSocket } from "../../../hooks/useWebSocket";
 
-export interface TeamListContainerProps extends BaseComponentProps {
-  /** How to display the teams */
-  variant?: DisplayVariant;
-  /** Density of items */
-  density?: DensityVariant;
-  /** Whether to allow creating new teams */
-  allowCreate?: boolean;
-  /** Whether to show a search input */
+export interface TeamListContainerProps {
+  teams?: Team[];
+  variant?: "grid" | "list" | "compact";
+  showFilters?: boolean;
   showSearch?: boolean;
-  /** Custom empty message */
-  emptyMessage?: string;
-  /** Callback when a team is selected */
-  onTeamSelect?: (team: Team) => void;
-  /** Callback when create team is successful */
-  onCreateSuccess?: (team: Team) => void;
+  showPagination?: boolean;
+  showEmptyState?: boolean;
+  emptyStateMessage?: string;
+  onSelectTeam?: (team: Team) => void;
+  onTeamAction?: (action: string, team: Team) => void;
+  className?: string;
+  sx?: React.CSSProperties;
+  id?: string;
 }
 
-const TeamListContainer: React.FC<TeamListContainerProps> = ({
-  variant = "list",
-  density = "comfortable",
-  allowCreate = false,
-  showSearch = false,
-  emptyMessage,
-  onTeamSelect,
-  onCreateSuccess,
-  className,
-  sx,
-  id,
-}) => {
-  // State for search
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // State for unread counts to ensure UI updates
-  const [unreadCounts, setUnreadCounts] = useState<
-    Record<string, { msg_count: number; mention_count: number }>
-  >({});
-
-  // Get teams data from hook
-  const { teams, activeTeam, isLoading, error, setActiveTeam, refreshTeams } =
-    useTeams();
-
-  // Team creation mutation
-  const { createTeam, isCreating } = useTeamCreation();
-
-  // Get unread counts from optimized hook
+const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
   const {
-    teamUnreadCounts,
-    loadInitialUnreadCounts,
-    initialLoadCompleted,
-    prefetchAllTeamUnreadCounts,
-  } = useUnreadCounts();
+    teams: propTeams,
+    variant = "grid",
+    showFilters = true,
+    showSearch = true,
+    showPagination = true,
+    showEmptyState = true,
+    emptyStateMessage = "No teams found",
+    onSelectTeam,
+    onTeamAction,
+    className,
+    sx,
+    id,
+  } = props;
 
-  // Monitor WebSocket connection
-  const { isConnected, connectionStatus } = useWebSocket();
+  const { teams: fetchedTeams, selectTeam } = useContainerTeam();
+  const teams = propTeams || fetchedTeams;
 
-  // Listen for unread count updates
-  useUnreadCountsListener(setUnreadCounts);
-
-  // If WebSocket reconnects after disconnection, refresh data
-  useEffect(() => {
-    if (isConnected && connectionStatus.hasDisconnected) {
-      // Refresh teams to get updated data
-      refreshTeams();
-
-      // Also ensure unread counts are reloaded
-      if (!initialLoadCompleted) {
-        void loadInitialUnreadCounts();
-      }
-    }
-  }, [
-    isConnected,
-    connectionStatus,
-    refreshTeams,
-    loadInitialUnreadCounts,
-    initialLoadCompleted,
-  ]);
-
-  // Load unread counts when teams are loaded
-  useEffect(() => {
-    if (teams.length > 0 && !initialLoadCompleted) {
-      void prefetchAllTeamUnreadCounts(teams);
-    }
-  }, [teams, initialLoadCompleted, prefetchAllTeamUnreadCounts]);
-
-  // Initialize unread counts state from teamUnreadCounts
-  useEffect(() => {
-    if (Object.keys(teamUnreadCounts).length > 0) {
-      setUnreadCounts(teamUnreadCounts);
-    }
-  }, [teamUnreadCounts]);
-
-  // Filter teams based on search term
-  const filteredTeams = useMemo(() => {
-    if (!searchTerm) return teams;
-
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return teams.filter(
-      (team) =>
-        team.display_name.toLowerCase().includes(lowerSearchTerm) ||
-        team.name.toLowerCase().includes(lowerSearchTerm) ||
-        (team.description &&
-          team.description.toLowerCase().includes(lowerSearchTerm)),
-    );
-  }, [teams, searchTerm]);
-
-  // Handle team selection
-  const handleTeamSelect = useCallback(
-    (team: Team) => {
-      setActiveTeam(team);
-
-      if (onTeamSelect) {
-        onTeamSelect(team);
+  const [listState, listAPI] = useListContainer({
+    items: teams,
+    idField: "id",
+    displayField: "display_name",
+    searchFields: ["display_name", "name", "description"],
+    sortFields: [
+      { field: "display_name", label: "Name" },
+      { field: "member_count", label: "Members" },
+      { field: "type", label: "Type" },
+    ],
+    initialSortField: "display_name",
+    emptyMessage: emptyStateMessage,
+    onItemSelect: (team) => {
+      selectTeam(team);
+      if (onSelectTeam) {
+        onSelectTeam(team);
       }
     },
-    [setActiveTeam, onTeamSelect],
+    className,
+    sx,
+    id,
+  });
+
+  const handleTeamAction = useCallback(
+    (action: string, team: Team) => {
+      if (action === "select") {
+        selectTeam(team);
+        if (onSelectTeam) {
+          onSelectTeam(team);
+        }
+        return;
+      }
+
+      if (onTeamAction) {
+        onTeamAction(action, team);
+      }
+    },
+    [selectTeam, onSelectTeam, onTeamAction],
   );
 
-  // Handle team action
-  const handleTeamAction = useCallback((action: string, team: Team) => {
-    // Actions can be implemented as needed
-    console.log("Team action:", action, team);
-  }, []);
+  const filteredTeams = useMemo(() => {
+    return listState.items;
+  }, [listState.items]);
 
-  // Handle search term change
-  const handleSearch = useCallback((term: string) => {
-    setSearchTerm(term);
-  }, []);
+  const uiProps = {
+    teams: filteredTeams,
+    variant,
+    isLoading: listState.isLoading,
+    isEmpty: listState.isEmpty,
+    error: listState.error,
+    searchTerm: listState.searchTerm,
+    sortField: listState.sortField,
+    sortDirection: listState.sortDirection,
+    page: listState.page,
+    perPage: listState.perPage,
+    totalPages: listState.totalPages,
+    showFilters,
+    showSearch,
+    showPagination,
+    showEmptyState,
+    onTeamAction: handleTeamAction,
+    onSearchChange: listAPI.setSearchTerm,
+    onSortChange: listAPI.setSorting,
+    onPageChange: listAPI.setPage,
+    onPerPageChange: listAPI.setPerPage,
+    className,
+    sx,
+    id,
+  };
 
-  // Handle create team (would typically open a dialog)
-  const handleCreateTeam = useCallback(() => {
-    console.log("Open create team dialog");
-  }, []);
-
-  return (
-    <TeamListUI
-      items={filteredTeams}
-      activeId={activeTeam?.id}
-      variant={variant as "list" | "grid" | "sidebar" | "tabs"}
-      density={density as "compact" | "comfortable" | "spacious"}
-      isLoading={isLoading || isCreating}
-      emptyMessage={emptyMessage}
-      unreadCounts={unreadCounts}
-      allowCreate={allowCreate}
-      showSearch={showSearch}
-      searchTerm={searchTerm}
-      onItemClick={handleTeamSelect}
-      onCreateTeam={handleCreateTeam}
-      onTeamAction={handleTeamAction}
-      onSearch={handleSearch}
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
+  return <TeamListUI {...uiProps} />;
 };
 
-export default React.memo(TeamListContainer);
+export default TeamListContainer;

@@ -1,150 +1,150 @@
 // src/internal/containers/teams/TeamDetailContainer.tsx
-/**
- * Container component for team details that manages data fetching and state
- */
-import React, { useCallback } from "react";
-import { useTeam } from "../../../hooks/useTeams";
-import { BaseComponentProps } from "../../types/componentTypes";
+import React, { useCallback, useMemo } from "react";
+import { useDetailContainer } from "../base/DetailContainer";
+import { useContainerTeam } from "../../hooks/useContainerTeam";
+import { Team } from "../../../types";
 import TeamDetailUI from "../../components/teams/TeamDetailUI";
-import { ConfirmDialog } from "../../components/common";
 
-export interface TeamDetailContainerProps extends BaseComponentProps {
-  /** Team ID to display */
+export interface TeamDetailContainerProps {
   teamId: string;
-  /** Whether to show team actions */
+  team?: Team;
+  variant?: "standard" | "compact" | "card";
+  tabs?: Array<{
+    id: string;
+    label: string;
+    content?: React.ReactNode;
+    disabled?: boolean;
+  }>;
+  activeTab?: string;
   showActions?: boolean;
-  /** Size variant */
-  variant?: "compact" | "normal" | "expanded";
-  /** Callback when team is deleted */
-  onDelete?: () => void;
-  /** Callback when team is left */
-  onLeave?: () => void;
-  /** Callback when team is updated */
-  onUpdate?: () => void;
+  availableActions?: string[];
+  onAction?: (action: string, team: Team) => void;
+  onTabChange?: (tabId: string) => void;
+  className?: string;
+  sx?: React.CSSProperties;
+  id?: string;
 }
 
-const TeamDetailContainer: React.FC<TeamDetailContainerProps> = ({
-  teamId,
-  showActions = true,
-  variant = "normal",
-  onDelete,
-  onLeave,
-  onUpdate,
-  className,
-  sx,
-  id,
-}) => {
-  // State for dialogs
-  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
-  const [leaveDialogOpen, setLeaveDialogOpen] = React.useState(false);
+const TeamDetailContainer: React.FC<TeamDetailContainerProps> = (props) => {
+  const {
+    teamId,
+    team: propTeam,
+    variant = "standard",
+    tabs = [],
+    activeTab: initialActiveTab = "info",
+    showActions = true,
+    availableActions = ["edit", "delete", "manage-members"],
+    onAction,
+    onTabChange,
+    className,
+    sx,
+    id,
+  } = props;
 
-  // Get team data from hook
-  const { team, stats, isLoading, error, deleteTeam, leaveTeam, updateTeam } =
-    useTeam(teamId);
+  const {
+    team: fetchedTeam,
+    stats,
+    members,
+    formattedMembers,
+    updateTeam,
+    deleteTeam,
+    formatTeamData,
+  } = useContainerTeam(teamId);
 
-  // Get member count from stats
-  const memberCount = stats?.total_member_count || 0;
+  const team = propTeam || fetchedTeam;
 
-  // Determine if user is admin (simplified approach - would need user role data)
-  // This is a placeholder implementation
-  const isAdmin = true; // Replace with actual logic based on user roles
-
-  // Handle edit team
-  const handleEdit = useCallback(() => {
-    // Typically would open an edit dialog
-    console.log("Edit team");
-  }, []);
-
-  // Handle delete team confirmation
-  const handleDeleteConfirm = useCallback(async () => {
-    setDeleteDialogOpen(false);
-
-    try {
+  const [detailState, detailAPI] = useDetailContainer({
+    itemId: teamId,
+    item: team,
+    editMode: false,
+    onLoadItem: async (id) => {
+      // This would normally call a refresh function
+      return fetchedTeam;
+    },
+    onUpdateItem: async (id, data) => {
+      return await updateTeam(data);
+    },
+    onDeleteItem: async (id) => {
       await deleteTeam();
+    },
+    showActions,
+    availableActions,
+  });
 
-      if (onDelete) {
-        onDelete();
+  const handleTabChange = useCallback(
+    (newTabId: string) => {
+      detailAPI.setActiveTab(newTabId);
+
+      if (onTabChange) {
+        onTabChange(newTabId);
       }
-    } catch (error) {
-      console.error("Error deleting team:", error);
-    }
-  }, [deleteTeam, onDelete]);
-
-  // Handle leave team confirmation
-  const handleLeaveConfirm = useCallback(async () => {
-    setLeaveDialogOpen(false);
-
-    try {
-      await leaveTeam();
-
-      if (onLeave) {
-        onLeave();
-      }
-    } catch (error) {
-      console.error("Error leaving team:", error);
-    }
-  }, [leaveTeam, onLeave]);
-
-  // Handle view members
-  const handleViewMembers = useCallback(() => {
-    // Typically would navigate to members view or open dialog
-    console.log("View members");
-  }, []);
-
-  // Handle settings
-  const handleSettings = useCallback(() => {
-    // Typically would navigate to settings view or open dialog
-    console.log("Open settings");
-  }, []);
-
-  // Don't render if no team data
-  if (!team && !isLoading) {
-    return null;
-  }
-
-  return (
-    <>
-      {team && (
-        <TeamDetailUI
-          team={team}
-          memberCount={memberCount}
-          isAdmin={isAdmin}
-          showActions={showActions}
-          variant={variant}
-          onEdit={handleEdit}
-          onDelete={() => setDeleteDialogOpen(true)}
-          onLeave={() => setLeaveDialogOpen(true)}
-          onViewMembers={handleViewMembers}
-          onSettings={handleSettings}
-          className={className}
-          sx={sx}
-          id={id}
-        />
-      )}
-
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        title="Delete Team"
-        message={`Are you sure you want to delete the team "${team?.display_name}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteDialogOpen(false)}
-      />
-
-      <ConfirmDialog
-        open={leaveDialogOpen}
-        title="Leave Team"
-        message={`Are you sure you want to leave the team "${team?.display_name}"?`}
-        confirmText="Leave"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={handleLeaveConfirm}
-        onCancel={() => setLeaveDialogOpen(false)}
-      />
-    </>
+    },
+    [detailAPI, onTabChange],
   );
+
+  const handleAction = useCallback(
+    async (action: string) => {
+      if (!team) return;
+
+      await detailAPI.performAction(action);
+
+      if (onAction) {
+        onAction(action, team);
+      }
+    },
+    [team, detailAPI, onAction],
+  );
+
+  const formattedTeamData = useMemo(() => {
+    if (!team) return null;
+    return formatTeamData(team);
+  }, [team, formatTeamData]);
+
+  const getDefaultTabs = useCallback(() => {
+    if (tabs && tabs.length > 0) {
+      return tabs;
+    }
+
+    return [
+      {
+        id: "info",
+        label: "Info",
+      },
+      {
+        id: "members",
+        label: "Members",
+      },
+      {
+        id: "channels",
+        label: "Channels",
+      },
+    ];
+  }, [tabs]);
+
+  const uiProps = {
+    team: detailState.item as Team | null,
+    formattedTeam: formattedTeamData,
+    stats,
+    members: formattedMembers,
+    isLoading: detailState.isLoading,
+    hasError: detailState.hasError,
+    error: detailState.error,
+    isEditMode: detailState.isEditMode,
+    variant,
+    tabs: getDefaultTabs(),
+    activeTab: detailState.activeTab || initialActiveTab,
+    showActions,
+    availableActions: detailAPI.getAvailableActions(),
+    onAction: handleAction,
+    onTabChange: handleTabChange,
+    onEditModeToggle: detailAPI.startEdit,
+    onCancelEdit: detailAPI.cancelEdit,
+    className,
+    sx,
+    id,
+  };
+
+  return <TeamDetailUI {...uiProps} />;
 };
 
 export default TeamDetailContainer;
