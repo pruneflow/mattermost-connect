@@ -1,283 +1,257 @@
 // src/internal/containers/users/UserProfileContainer.tsx
 /**
  * User Profile Container
- * Container component that handles user profile logic and state
- * Implements the container pattern with clear separation between logic and UI
+ * Container component for user profile display and editing
+ * Extends DetailContainer pattern for standardized behavior
  */
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
-  DetailContainer,
   DetailContainerProps,
-  DetailContainerState,
-  DetailContainerAPI,
+  useDetailContainer,
 } from "../base/DetailContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import { UserProfileUI } from "../../components/users/UserProfileUI";
-import { useUser } from "../../../hooks";
-import { User, UserStatus } from "../../../types";
-import { userService } from "../../../core/services/userService";
+import { User, UserProfileUpdate, UserStatus } from "../../../types";
+import { useMemoizedProps } from "../../utils/performanceUtils";
+import { useDialog } from "../../hooks/useDialog";
+import StatusSelector from "../../components/common/StatusSelector";
+import ImageUploader from "../../components/common/ImageUploader";
 
 /**
  * User profile container props
  */
-export interface UserProfileContainerProps extends DetailContainerProps {
-  /** User ID */
-  userId?: string;
-  /** Whether to show edit button for current user */
-  showEditButton?: boolean;
-  /** Tab configuration */
-  tabs?: Array<{
-    id: string;
-    label: string;
-    content?: React.ReactNode;
-    renderer?: (userId: string, user: User | null) => React.ReactNode;
-    disabled?: boolean;
-  }>;
-  /** Initial active tab */
-  initialActiveTab?: string;
-  /** Whether user is editable */
-  editable?: boolean;
-  /** Available fields for editing */
-  editableFields?: Array<
-    "username" | "email" | "firstName" | "lastName" | "nickname"
-  >;
-  /** Callback when user is updated */
-  onUpdate?: (user: User) => void;
-  /** Callback when tab is selected */
-  onTabSelect?: (tabId: string) => void;
-  /** Whether to show status */
+export interface UserProfileContainerProps extends DetailContainerProps<User> {
+  /**
+   * User ID to display
+   */
+  userId: string;
+  /**
+   * User object (optional, will be fetched if not provided)
+   */
+  user?: User;
+  /**
+   * Whether to show the user's status indicator
+   */
   showStatus?: boolean;
-  /** Avatar size */
-  avatarSize?: number;
-  /** Layout variant */
-  variant?: "standard" | "compact" | "card";
-  /** Custom header renderer */
-  headerRenderer?: (userId: string, user: User | null) => React.ReactNode;
-  /** Custom content renderer */
-  contentRenderer?: (
-    userId: string,
-    user: User | null,
-    activeTab: string,
-  ) => React.ReactNode;
+  /**
+   * Available tabs to display
+   */
+  availableTabs?: string[];
+  /**
+   * Active tab
+   */
+  activeTab?: string;
+  /**
+   * Available actions
+   */
+  availableActions?: string[];
+  /**
+   * Whether profile is editable
+   */
+  editable?: boolean;
+  /**
+   * Callback when action is performed
+   */
+  onAction?: (action: string, user: User) => void;
+  /**
+   * Callback when tab is changed
+   */
+  onTabChange?: (tabId: string) => void;
+  /**
+   * Callback when status is changed
+   */
+  onStatusChange?: (user: User, newStatus: UserStatus) => void;
+  /**
+   * Callback when profile is updated
+   */
+  onProfileUpdate?: (user: User) => void;
 }
 
 /**
- * Container component for user profiles
- * Handles user data fetching, state, and edit operations
+ * User Profile Container
+ * Displays and manages user profile information
  */
-export const UserProfileContainer: React.FC<UserProfileContainerProps> = (
-  props,
-) => {
+export const UserProfileContainer: React.FC<
+  UserProfileContainerProps & {
+    children?: React.ReactNode | ((props: any) => React.ReactNode);
+    render?: (props: any) => React.ReactNode;
+  }
+> = (props) => {
   const {
     userId,
-    showEditButton = true,
-    tabs = [],
-    initialActiveTab,
-    editable = false,
-    editableFields = ["firstName", "lastName", "nickname"],
-    onUpdate,
-    onTabSelect,
+    user: propUser,
     showStatus = true,
-    avatarSize = 80,
-    variant = "standard",
-    headerRenderer,
-    contentRenderer,
+    availableTabs = ["info", "activity", "settings"],
+    activeTab: propActiveTab = "info",
+    availableActions = [],
+    editable = true,
+    onAction,
+    onTabChange,
+    onStatusChange,
+    onProfileUpdate,
+    children,
+    render,
     ...restProps
   } = props;
 
-  // Use container user hook for data and state management
-  const {
-    user,
-    displayName,
-    status,
-    isLoading,
-    error,
-    hasError,
-    isCurrentUser,
-    refreshUser,
-    dialog,
-    loading,
-  } = useContainerUser(userId, {
-    avatarSize,
+  // Use dialog for complex interactions
+  const dialog = useDialog();
+
+  // Use user container hook
+  const { userState, userActions, uiProps } = useContainerUser(userId, {
     showStatus,
+    autoFetch: !propUser,
+    availableActions: [
+      ...availableActions,
+      ...(editable ? ["edit", "uploadImage"] : []),
+    ],
   });
 
-  // Use user hook for API operations
-  const userHook = useUser(userId);
+  // If user prop is provided, prefer it over fetched user
+  const user = propUser || userState.user;
 
-  // Local state for active tab, edit mode, and form data
-  const [activeTab, setActiveTab] = useState<string>(
-    initialActiveTab || (tabs.length > 0 ? tabs[0].id : "info"),
-  );
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
-  const [formData, setFormData] = useState<Partial<User>>({});
+  // Use detail container for standardized behavior
+  const [detailState, detailAPI] = useDetailContainer<User>({
+    ...restProps,
+    itemId: userId,
+    item: user,
+    initialLoading: userState.isLoading,
+    initialError: userState.error,
+    editMode: userState.isEditMode,
+    onLoadItem: async (id) => {
+      return await userActions.refreshUser();
+    },
+    onUpdateItem: async (id, data) => {
+      const result = await userActions.updateProfile(data as UserProfileUpdate);
 
-  // Initialize form data when user data changes
-  useEffect(() => {
-    if (user) {
-      setFormData({
-        username: user.username,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        nickname: user.nickname,
-      });
-    }
-  }, [user]);
+      if (result && onProfileUpdate) {
+        onProfileUpdate(result);
+      }
+
+      return result || null;
+    },
+    onEditRequest: userActions.startEdit,
+    onEditCancel: userActions.cancelEdit,
+  });
+
+  // Current active tab state
+  const [activeTab, setActiveTab] = React.useState<string>(propActiveTab);
 
   // Handle tab change
   const handleTabChange = useCallback(
     (tabId: string) => {
       setActiveTab(tabId);
-      if (onTabSelect) {
-        onTabSelect(tabId);
+
+      if (onTabChange) {
+        onTabChange(tabId);
       }
     },
-    [onTabSelect],
+    [onTabChange],
   );
 
-  // Toggle edit mode
-  const toggleEditMode = useCallback(() => {
-    setIsEditMode((prev) => !prev);
+  // Handle action
+  const handleAction = useCallback(
+    async (action: string) => {
+      if (!user) return;
 
-    // Reset form data when canceling edit
-    if (isEditMode && user) {
-      setFormData({
-        username: user.username,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        nickname: user.nickname,
-      });
-    }
-  }, [isEditMode, user]);
+      // Handle custom actions through callback
+      if (onAction) {
+        onAction(action, user);
+      }
 
-  // Handle field change
-  const handleFieldChange = useCallback((field: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  }, []);
+      // Handle built-in actions via detail container
+      if (action === "edit") {
+        detailAPI.performAction("edit");
+      } else if (action === "refresh") {
+        await detailAPI.performAction("refresh");
+      } else if (action === "uploadImage" && userState.isCurrentUser) {
+        const result = await dialog.formAsync<{ file: File | null }>({
+          title: "Upload Profile Picture",
+          component: <ImageUploader />,
+          initialData: { file: null },
+          confirmText: "Upload",
+          cancelText: "Cancel",
+        });
 
-  // Create UI component factory function
-  const createUI = useCallback(
-    (
-      api: DetailContainerAPI,
-      state: DetailContainerState,
-    ): React.ReactElement => {
-      // Utiliser api et state quand c'est pertinent
-      const handleUpdateProfile = async () => {
-        if (!user) return;
-
-        try {
-          // Validate form data
-          const validationResult = userService.validateUserProfile(formData);
-          if (!validationResult.isValid) {
-            const errorMessages = Object.values(validationResult.errors).join(
-              ", ",
-            );
-            dialog.showError("Validation Error", errorMessages);
-            return;
-          }
-
-          // Create profile update object
-          const profileUpdate = userService.createProfileUpdate(formData);
-
-          // Utiliser l'API du DetailContainer pour mettre à jour
-          if (state.itemId) {
-            await api.updateItem(profileUpdate);
-
-            dialog.showSuccess(
-              "Profile Updated",
-              "Your profile has been updated successfully.",
-            );
-            setIsEditMode(false);
-          }
-        } catch (error) {
-          dialog.setError(
-            error instanceof Error
-              ? error
-              : new Error("Failed to update profile"),
-          );
+        if (result.confirmed && result.data && result.data.file) {
+          await userActions.uploadProfileImage(result.data.file);
         }
-      };
+      } else if (action === "changeStatus" && userState.isCurrentUser) {
+        const newStatus = await dialog.formAsync<{ status: UserStatus }>({
+          title: "Change Status",
+          component: <StatusSelector initialStatus={userState.status} />,
+          initialData: { status: userState.status },
+          confirmText: "Update Status",
+          cancelText: "Cancel",
+        });
 
-      // Create UI props en utilisant state et api
-      const profileUIProps = {
-        user: state.item as User | null,
-        displayName,
-        status,
-        isLoading: state.isLoading || isLoading,
-        hasError: state.hasError || hasError,
-        error: state.error || error,
-        isEditMode: state.isEditMode,
-        variant,
-        avatarSize,
-        showStatus,
-        tabs,
-        activeTab,
-        editableFields,
-        formData,
-        showEditButton,
-        isCurrentUser,
-        onTabChange: handleTabChange,
-        onFieldChange: handleFieldChange,
-        onToggleEditMode: api.startEdit,
-        onUpdateProfile: handleUpdateProfile,
-        onRefresh: () => api.refresh(),
-        customHeaderRenderer: headerRenderer
-          ? (userObj: User | null) => headerRenderer(userId || "", userObj)
-          : undefined,
-        customContentRenderer: contentRenderer
-          ? (userObj: User | null, activeTabId: string) =>
-              contentRenderer(userId || "", userObj, activeTabId)
-          : undefined,
-      };
-
-      return <UserProfileUI {...profileUIProps} />;
+        if (newStatus.confirmed && newStatus.data) {
+          await userActions.updateStatus(newStatus.data.status);
+          if (onStatusChange) {
+            onStatusChange(user, newStatus.data.status);
+          }
+        }
+      }
     },
-    [
-      user,
-      displayName,
-      status,
-      isLoading,
-      hasError,
-      error,
-      variant,
-      avatarSize,
-      showStatus,
-      tabs,
-      activeTab,
-      editableFields,
-      formData,
-      showEditButton,
-      isCurrentUser,
-      handleTabChange,
-      handleFieldChange,
-      dialog,
-      userId,
-      headerRenderer,
-      contentRenderer,
-    ],
+    [user, onAction, userState, userActions, detailAPI, dialog, onStatusChange],
   );
 
-  // Render the UI component with prepared props through the factory function
-  return (
-    <DetailContainer
-      {...restProps}
-      itemId={userId}
-      item={user}
-      editMode={isEditMode}
-      onEditRequest={() => setIsEditMode(true)}
-      onEditCancel={() => setIsEditMode(false)}
-      onUpdateItem={async (id, data) => {
-        return await userHook.updateProfile(data);
-      }}
-      onUpdateComplete={onUpdate}
-      render={createUI}
-    />
-  );
+  // Create memoized props for UI component
+  const profileUIProps = useMemo(() => {
+    // Get base profile props from hook
+    const baseProfileProps = uiProps.getProfileProps();
+
+    return useMemoizedProps({
+      ...baseProfileProps,
+
+      // Detail container state
+      isLoading: detailState.isLoading,
+      isEditMode: detailState.isEditMode,
+      error: detailState.error,
+
+      // Tab state
+      activeTab,
+      availableTabs,
+      onTabChange: handleTabChange,
+
+      // Actions
+      onAction: handleAction,
+      onStartEdit: detailAPI.startEdit,
+      onCancelEdit: detailAPI.cancelEdit,
+      onSubmitEdit: detailAPI.updateItem,
+      onRefresh: detailAPI.refresh,
+
+      // Editing capability
+      editable: editable && userState.isCurrentUser,
+    });
+  }, [
+    uiProps,
+    detailState.isLoading,
+    detailState.isEditMode,
+    detailState.error,
+    activeTab,
+    availableTabs,
+    handleTabChange,
+    handleAction,
+    detailAPI.startEdit,
+    detailAPI.cancelEdit,
+    detailAPI.updateItem,
+    detailAPI.refresh,
+    editable,
+    userState.isCurrentUser,
+  ]);
+
+  // Use render prop pattern if provided
+  if (render) {
+    return <>{render(profileUIProps)}</>;
+  }
+
+  // Use children render function if provided
+  if (typeof children === "function") {
+    return <>{children(profileUIProps)}</>;
+  }
+
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default UserProfileContainer;

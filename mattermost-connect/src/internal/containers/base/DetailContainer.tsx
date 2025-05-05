@@ -53,13 +53,13 @@ export interface DetailContainerProps<T = any> extends BaseContainerProps {
   /** Item ID to load and display */
   itemId?: string;
   /** Item data (if already available) */
-  item?: T;
+  item?: T | null;
   /** Whether the container is in view mode or edit mode */
   editMode?: boolean;
   /** Function to load item by ID */
-  onLoadItem?: (id: string) => Promise<T>;
+  onLoadItem?: (id: string) => Promise<T | null>;
   /** Function to update item */
-  onUpdateItem?: (id: string, data: Partial<T>) => Promise<T>;
+  onUpdateItem?: (id: string, data: Partial<T>) => Promise<T | null>;
   /** Function to delete item */
   onDeleteItem?: (id: string) => Promise<void>;
   /** Callback on action complete */
@@ -380,7 +380,7 @@ export function useDetailContainer<T = any>(
         }
 
         // Call callback if provided
-        if (onUpdateComplete) {
+        if (onUpdateComplete && updatedItem) {
           onUpdateComplete(updatedItem);
         }
 

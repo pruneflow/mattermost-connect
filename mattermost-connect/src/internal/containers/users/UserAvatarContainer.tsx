@@ -1,152 +1,143 @@
 // src/internal/containers/users/UserAvatarContainer.tsx
 /**
  * User Avatar Container
- * Container component that handles user avatar logic and state
- * Implements the container pattern with clear separation between logic and UI
+ * Container component for user avatars
+ * Delegates business logic to useContainerUser hook
  */
-import React, { useCallback } from "react";
-import {
-  BaseContainer,
-  BaseContainerProps,
-  BaseContainerState,
-  BaseContainerAPI,
-} from "../base/BaseContainer";
+import React, { useMemo } from "react";
+import { BaseContainerProps, useBaseContainer } from "../base/BaseContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import { default as UserAvatarUI } from "../../components/users/UserAvatarUI";
-import { UserStatus } from "../../../types";
+import { User } from "../../../types";
+import { useMemoizedProps } from "../../utils/performanceUtils";
 
 /**
  * User avatar container props
  */
 export interface UserAvatarContainerProps extends BaseContainerProps {
-  /** User ID */
-  userId?: string;
-  /** Avatar size (default: 40) */
-  size?: "small" | "medium" | "large" | number;
-  /** Whether to show status indicator (default: true) */
+  /**
+   * User ID to display
+   */
+  userId: string;
+  /**
+   * User object (optional, will be fetched if not provided)
+   */
+  user?: User;
+  /**
+   * Size of the avatar in pixels
+   */
+  size?: number;
+  /**
+   * Whether to show the user's status indicator
+   */
   showStatus?: boolean;
-  /** Whether to show user name (default: false) */
+  /**
+   * Whether to show the user's name
+   */
   showName?: boolean;
-  /** Whether to show tooltip (default: true) */
+  /**
+   * Whether to show a tooltip with user information
+   */
   showTooltip?: boolean;
-  /** Prefer username over full name (default: false) */
+  /**
+   * Whether to prefer username over full name
+   */
   preferUsername?: boolean;
-  /** Override status */
-  status?: UserStatus;
-  /** Override display name */
-  displayName?: string;
-  /** Override initials */
-  initials?: string;
-  /** Override image src */
-  src?: string;
-  /** Text variant for name */
-  textVariant?: "body1" | "body2" | "subtitle1" | "subtitle2";
-  /** Name position relative to avatar (default: "right") */
-  namePosition?: "right" | "bottom";
-  /** Callback on avatar click */
-  onClick?: (userId: string) => void;
-  /** Whether avatar is clickable */
-  clickable?: boolean;
-  /** CSS class for avatar */
-  avatarClassName?: string;
-  /** CSS class for name */
-  nameClassName?: string;
-  /** CSS class for status badge */
-  badgeClassName?: string;
+  /**
+   * Callback when avatar is clicked
+   */
+  onClick?: (user: User) => void;
+  /**
+   * Callback when status is clicked
+   */
+  onStatusClick?: (user: User, currentStatus: string) => void;
 }
 
 /**
- * Container component for user avatars
- * Handles user data fetching and state, while delegating rendering to UserAvatarUI
+ * User Avatar Container
+ * Renders a user avatar with optional status indicator and name
  */
-export const UserAvatarContainer: React.FC<UserAvatarContainerProps> = (
-  props,
-) => {
+export const UserAvatarContainer: React.FC<
+  UserAvatarContainerProps & {
+    children?: React.ReactNode | ((props: any) => React.ReactNode);
+    render?: (props: any) => React.ReactNode;
+  }
+> = (props) => {
   const {
     userId,
+    user: propUser,
     size = 40,
     showStatus = true,
     showName = false,
     showTooltip = true,
     preferUsername = false,
-    status: statusOverride,
-    displayName: displayNameOverride,
-    initials: initialsOverride,
-    src: srcOverride,
-    textVariant = "body2",
-    namePosition = "right",
     onClick,
-    clickable = !!onClick,
-    avatarClassName,
-    nameClassName,
-    badgeClassName,
+    onStatusClick,
+    children,
+    render,
     ...restProps
   } = props;
 
-  // Use container user hook for data and state management
-  const { displayName, initials, imageUrl, status, isLoading, error } =
-    useContainerUser(userId, {
-      avatarSize: typeof size === "number" ? size : undefined,
-      showStatus,
-      showName,
-      showTooltip,
-      preferUsername,
-    });
+  // Use base container for common functionality
+  const [baseState, baseAPI] = useBaseContainer(restProps);
 
-  // Use overrides if provided
-  const finalDisplayName = displayNameOverride || displayName;
-  const finalInitials = initialsOverride || initials;
-  const finalSrc = srcOverride || imageUrl;
-  const finalStatus = statusOverride || status;
+  // Use user container hook
+  const { userState, userActions, uiProps } = useContainerUser(userId, {
+    avatarSize: size,
+    showStatus,
+    showName,
+    showTooltip,
+    preferUsername,
+    autoFetch: !propUser,
+  });
 
-  // Handle click event
-  const handleClick = useCallback(() => {
-    if (onClick && userId) {
-      onClick(userId);
+  // If user prop is provided, prefer it over fetched user
+  const user = propUser || userState.user;
+
+  // Handle avatar click
+  const handleClick = React.useCallback(() => {
+    if (onClick && user) {
+      onClick(user);
     }
-  }, [onClick, userId]);
+  }, [onClick, user]);
 
-  // Create UI component factory function
-  const createUI = useCallback(
-    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
-      // Utiliser l'état du container et l'API quand c'est pertinent
-      const isComponentLoading = state.isLoading || isLoading;
-      const componentError = state.error || error;
+  // Handle status click
+  const handleStatusClick = React.useCallback(
+    (event: React.MouseEvent) => {
+      // Stop propagation to prevent avatar click handler from firing
+      event.stopPropagation();
 
-      // Créer les props UI en utilisant aussi les états du container
-      const avatarUIProps = {
-        displayName: finalDisplayName,
-        imageUrl: finalSrc,
-        status: finalStatus,
-        size,
-        showStatus,
-        clickable,
-        onClick: clickable ? handleClick : undefined,
-        className: avatarClassName,
-        sx: {},
-        // Utiliser l'état de chargement et d'erreur du container
-        isLoading: isComponentLoading,
-        error: componentError,
-      };
-
-      return <UserAvatarUI {...avatarUIProps} />;
+      if (onStatusClick && user) {
+        onStatusClick(user, userState.status);
+      }
     },
-    [
-      finalDisplayName,
-      finalSrc,
-      finalStatus,
-      size,
-      showStatus,
-      clickable,
-      handleClick,
-      avatarClassName,
-      isLoading,
-      error,
-    ],
+    [onStatusClick, user, userState.status],
   );
 
-  // Render the UI component with prepared props through the factory function
-  return <BaseContainer {...restProps} render={createUI} />;
+  // Create memoized props for UI component
+  const avatarUIProps = useMemo(() => {
+    // Get base avatar props from hook
+    const baseAvatarProps = uiProps.getAvatarProps();
+
+    // Add click handlers
+    return useMemoizedProps({
+      ...baseAvatarProps,
+      onClick: handleClick,
+      onStatusClick: handleStatusClick,
+    });
+  }, [uiProps, handleClick, handleStatusClick]);
+
+  // Use render prop pattern if provided
+  if (render) {
+    return <>{render(avatarUIProps)}</>;
+  }
+
+  // Use children render function if provided
+  if (typeof children === "function") {
+    return <>{children(avatarUIProps)}</>;
+  }
+
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default UserAvatarContainer;

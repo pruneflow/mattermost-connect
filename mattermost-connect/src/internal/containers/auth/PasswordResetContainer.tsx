@@ -1,306 +1,248 @@
 // src/internal/containers/auth/PasswordResetContainer.tsx
 /**
  * Password Reset Container
- * Handles password reset functionality with standardized patterns
- * Implements the container pattern with clear separation between logic and UI
+ * Handles both password reset request and password reset with token
+ * Delegates business logic to useAuth hook
  */
-import React, { useCallback } from "react";
-import {
-  BaseContainer,
-  BaseContainerProps,
-  BaseContainerState,
-  BaseContainerAPI,
-} from "../base/BaseContainer";
-import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
+import React, { useCallback, useMemo } from "react";
+import { FormContainerProps, useFormContainer } from "../base/FormContainer";
+import { useAuth } from "../../../hooks/useAuth";
+import { PasswordResetParams } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
-import { PasswordResetFormUI } from "../../components/auth/PasswordResetFormUI";
-import { AuthMode, User } from "../../../types";
-import { useAuth } from "../../../hooks";
+import { useMemoizedProps } from "../../utils/performanceUtils";
+import { validateEmail } from "../../../utils/authValidation";
 
-/**
- * Mode for the password reset container
- */
-export type PasswordResetMode = "forgot" | "reset" | "update";
-
-/**
- * Password reset container props
- */
-export interface PasswordResetContainerProps extends BaseContainerProps {
-  /** Mode of the password reset container */
-  mode?: PasswordResetMode;
-  /** Reset token (required for reset mode) */
+// Password reset container props
+export interface PasswordResetContainerProps extends FormContainerProps<any> {
+  /**
+   * Initial email value
+   */
+  initialEmail?: string;
+  /**
+   * Reset token (if in reset password mode)
+   */
   token?: string;
-  /** Which auth mode to use */
-  authMode?: AuthMode;
-  /** Custom text for submit button */
-  submitButtonText?: string;
-  /** Callback after successful password reset */
-  onResetSuccess?: () => void;
-  /** Callback after password reset failure */
-  onResetError?: (error: Error) => void;
-  /** URL to redirect to after successful reset */
-  redirectUrl?: string;
-  /** Whether to show login link */
-  showLogin?: boolean;
-  /** Callback when login is clicked */
+  /**
+   * Whether to show login link
+   */
+  showLoginLink?: boolean;
+  /**
+   * Callback when login link is clicked
+   */
   onLoginClick?: () => void;
-  /** Email for forgot password (pre-filled) */
-  email?: string;
+  /**
+   * Callback on successful password reset request
+   */
+  onResetRequestSuccess?: () => void;
+  /**
+   * Callback on successful password reset
+   */
+  onResetSuccess?: () => void;
 }
 
 /**
- * Password Reset container component
- * Provides standardized password reset functionality
+ * Password Reset container
+ * Handles both requesting a password reset and setting a new password
  */
 export const PasswordResetContainer: React.FC<PasswordResetContainerProps> = (
   props,
 ) => {
   const {
-    className,
-    sx,
-    mode = "forgot",
+    initialEmail = "",
     token,
-    authMode,
-    submitButtonText,
-    onResetSuccess,
-    onResetError,
-    redirectUrl,
-    showLogin = true,
+    showLoginLink = true,
     onLoginClick,
-    email = "",
-    id,
-    initialLoading,
-    initialError,
-    disabled,
-    ...restProps
+    onResetRequestSuccess,
+    onResetSuccess,
+    children,
+    render,
+    ...formProps
   } = props;
 
-  // Use Auth hook for password reset operations
-  const { forgotPassword, resetPassword, updatePassword, setAuthMode } =
-    useAuth();
+  // Determine if we're in request mode or reset mode
+  const isResetMode = !!token;
 
-  // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions } = useContainerLoadingState({
-    initialLoading,
-    initialError,
-    minLoadingTime: 500,
-  });
+  // Use auth hook for password reset functionality
+  const {
+    forgotPassword,
+    resetPassword,
+    isSendingResetEmail,
+    isResettingPassword,
+    passwordResetError,
+    validatePasswordFormat,
+  } = useAuth();
 
-  // Use dialog hook for error and success messages
+  // Use dialog for confirmation/error handling
   const dialog = useDialog();
 
-  // Set authentication mode if provided
-  React.useEffect(() => {
-    if (authMode) {
-      setAuthMode(authMode);
-    }
-  }, [authMode, setAuthMode]);
+  // Set initial form data based on mode
+  const initialData = useMemo(
+    () =>
+      isResetMode
+        ? { newPassword: "", confirmPassword: "", token }
+        : { email: initialEmail },
+    [isResetMode, initialEmail, token],
+  );
 
-  // Check if token is provided for reset mode
-  React.useEffect(() => {
-    if (mode === "reset" && !token) {
-      console.error("Token is required for reset mode");
-      dialog.showError(
-        "Invalid Reset Link",
-        "The password reset link is invalid or has expired.",
-      );
-    }
-  }, [mode, token, dialog]);
+  // Custom validator for the form
+  const validateForm = useCallback(
+    (data: any) => {
+      if (isResetMode) {
+        // Validate new password
+        const passwordValidation = validatePasswordFormat(data.newPassword);
+        if (!passwordValidation.isValid) {
+          return passwordValidation.errors;
+        }
 
-  // Handle form submission
+        // Confirm passwords match
+        if (data.newPassword !== data.confirmPassword) {
+          return { confirmPassword: "Passwords do not match" };
+        }
+
+        return true;
+      } else {
+        // Validate email
+        const emailValidation = validateEmail(data.email);
+        return emailValidation.isValid ? true : emailValidation.errors;
+      }
+    },
+    [isResetMode, validatePasswordFormat],
+  );
+
+  // Handle form submission based on mode
   const handleSubmit = useCallback(
     async (data: any) => {
       try {
-        loadingActions.setLoading(true);
-        let result;
+        if (isResetMode) {
+          // Reset password with token
+          const resetData: PasswordResetParams = {
+            token: data.token || token || "",
+            newPassword: data.newPassword,
+          };
 
-        switch (mode) {
-          case "forgot":
-            // Handle forgot password
-            result = await forgotPassword(data.email || "");
-            if (result.success) {
-              dialog.showSuccess(
-                "Reset Email Sent",
-                "We've sent a password reset link to your email address. Please check your inbox.",
-              );
-            } else if (result.error) {
-              throw result.error;
-            } else if (result.validationErrors) {
-              const errorMessage = Object.values(result.validationErrors).join(
-                ", ",
-              );
-              throw new Error(errorMessage);
-            }
-            break;
+          const result = await resetPassword(resetData);
 
-          case "reset":
-            // Handle password reset with token
-            if (!token) {
-              throw new Error("Reset token is missing");
-            }
-
-            if (data.newPassword !== data.confirmPassword) {
-              throw new Error("Passwords do not match");
-            }
-
-            result = await resetPassword({
-              token,
-              newPassword: data.newPassword || "",
-            });
-
-            if (result.success) {
-              dialog.showSuccess(
-                "Password Reset Successfully",
-                "Your password has been reset. You can now login with your new password.",
-              );
-            } else if (result.error) {
-              throw result.error;
-            } else if (result.validationErrors) {
-              const errorMessage = Object.values(result.validationErrors).join(
-                ", ",
-              );
-              throw new Error(errorMessage);
-            }
-            break;
-
-          case "update":
-            // Handle password update
-            if (data.newPassword !== data.confirmPassword) {
-              throw new Error("Passwords do not match");
-            }
-
-            result = await updatePassword(
-              data.currentPassword || "",
-              data.newPassword || "",
+          if (result.success) {
+            await dialog.showSuccess(
+              "Password Reset",
+              "Your password has been reset successfully.",
             );
 
-            if (result.success) {
-              dialog.showSuccess(
-                "Password Updated",
-                "Your password has been updated successfully.",
-              );
-            } else if (result.error) {
-              throw result.error;
-            } else if (result.validationErrors) {
-              const errorMessage = Object.values(result.validationErrors).join(
-                ", ",
-              );
-              throw new Error(errorMessage);
+            if (onResetSuccess) {
+              onResetSuccess();
             }
-            break;
 
-          default:
-            throw new Error(`Unsupported mode: ${mode}`);
+            return true;
+          } else if (result.validationErrors) {
+            return { _errors: result.validationErrors };
+          } else if (result.error) {
+            throw result.error;
+          }
+        } else {
+          // Request password reset email
+          const result = await forgotPassword(data.email);
+
+          if (result.success) {
+            await dialog.showSuccess(
+              "Password Reset Requested",
+              "If an account exists with this email, you will receive reset instructions shortly.",
+            );
+
+            if (onResetRequestSuccess) {
+              onResetRequestSuccess();
+            }
+
+            return true;
+          } else if (result.validationErrors) {
+            return { _errors: result.validationErrors };
+          } else if (result.error) {
+            throw result.error;
+          }
         }
 
-        // Call success callback if provided
-        if (onResetSuccess) {
-          onResetSuccess();
-        }
-
-        // Redirect if URL is provided
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        }
-
-        loadingActions.setLoading(false);
-        return result;
+        return null;
       } catch (error) {
-        loadingActions.setLoading(false);
-
-        // Handle error with dialog
-        dialog.showError(
-          "Password Reset Failed",
-          (error as Error).message || "An error occurred during password reset",
-        );
-
-        // Call error callback if provided
-        if (onResetError) {
-          onResetError(error as Error);
-        }
-
-        // Re-throw error for UI to handle
-        throw error;
+        // Let form container handle the error
+        throw error instanceof Error
+          ? error
+          : new Error("Password reset failed");
       }
     },
     [
-      loadingActions,
-      mode,
+      isResetMode,
       token,
-      forgotPassword,
       resetPassword,
-      updatePassword,
+      forgotPassword,
       dialog,
       onResetSuccess,
-      onResetError,
-      redirectUrl,
+      onResetRequestSuccess,
     ],
   );
 
-  // Create UI component factory function
-  const createUI = useCallback(
-    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
-      // Utiliser l'API et l'état du container quand c'est pertinent
-      const componentError = state.error || loadingState.error;
-      const isComponentLoading = state.isLoading || loadingState.isLoading;
+  // Handle login link click
+  const handleLoginClick = useCallback(() => {
+    if (onLoginClick) {
+      onLoginClick();
+    }
+  }, [onLoginClick]);
 
-      // Tirer parti de l'API du container pour la gestion des erreurs et du chargement
-      const handleFormSubmit = async (data: any) => {
-        return api.withLoading(() => handleSubmit(data));
-      };
-
-      // Default button text based on mode
-      const defaultButtonText = (() => {
-        switch (mode) {
-          case "forgot":
-            return "Send Reset Link";
-          case "reset":
-            return "Reset Password";
-          case "update":
-            return "Update Password";
-          default:
-            return "Submit";
-        }
-      })();
-
-      // Prepare UI props
-      const resetFormProps = {
-        mode,
-        token,
-        initialEmail: email,
-        error: componentError?.message || null,
-        isLoading: isComponentLoading,
-        onSubmit: handleFormSubmit,
-        submitText: submitButtonText || defaultButtonText,
-        showLogin,
-        onLoginClick,
-        className,
-        sx,
-        id,
-        disabled: disabled || isComponentLoading,
-      };
-
-      return <PasswordResetFormUI {...resetFormProps} />;
+  // Use form container for form handling
+  const [formState, formAPI] = useFormContainer(
+    {
+      ...formProps,
+      initialData,
+      validator: validateForm,
+      onSubmit: handleSubmit,
     },
-    [
-      loadingState.error,
-      loadingState.isLoading,
-      handleSubmit,
-      mode,
-      token,
-      email,
-      submitButtonText,
-      showLogin,
-      onLoginClick,
-      className,
-      sx,
-      id,
-      disabled,
-    ],
+    {
+      validateOnBlur: true,
+      validateOnSubmit: true,
+      showValidationImmediately: false,
+      preventInvalidSubmit: true,
+    },
   );
 
-  // Render the UI component with prepared props through the factory function
-  return <BaseContainer {...restProps} render={createUI} />;
+  // Create memoized UI props
+  const uiProps = useMemoizedProps({
+    // Form state
+    formData: formState.formData,
+    errors: formState.errors,
+    isValid: formState.isValid,
+    isDirty: formState.isDirty,
+    isSubmitting:
+      formState.isSubmitting ||
+      (isResetMode ? isResettingPassword : isSendingResetEmail),
+    isSubmitted: formState.isSubmitted,
+
+    // Form actions
+    submitForm: formAPI.submitForm,
+    resetForm: formAPI.resetForm,
+    setFieldValue: formAPI.setFieldValue,
+    getFieldProps: formAPI.getFieldProps,
+
+    // UI configuration
+    isResetMode,
+    showLoginLink,
+
+    // UI actions
+    onLoginClick: handleLoginClick,
+
+    // Error handling
+    passwordResetError,
+  });
+
+  // Use render prop pattern
+  if (render) {
+    return <>{render(uiProps)}</>;
+  }
+
+  // Use children render function
+  if (typeof children === "function") {
+    return <>{children(uiProps)}</>;
+  }
+
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default PasswordResetContainer;

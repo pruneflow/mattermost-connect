@@ -1,274 +1,199 @@
 // src/internal/containers/auth/LoginContainer.tsx
 /**
  * Login Container
- * Container component that handles login logic and state
- * Implements the container pattern with clear separation between logic and UI
+ * Handles authentication login functionality
+ * Delegates business logic to useAuth hook
  */
-import React, { useCallback } from "react";
-import {
-  BaseContainer,
-  BaseContainerProps,
-  BaseContainerState,
-  BaseContainerAPI,
-} from "../base/BaseContainer";
-import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
+import React, { useCallback, useMemo } from "react";
+import { FormContainerProps, useFormContainer } from "../base/FormContainer";
+import { useAuth } from "../../../hooks/useAuth";
+import { User, LoginParams } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
-import { default as DirectLoginFormUI } from "../../components/auth/DirectLoginFormUI";
-import { default as ProxyLoginFormUI } from "../../components/auth/ProxyLoginFormUI";
-import { User, LoginParams, AuthMode } from "../../../types";
-import { useAuth } from "../../../hooks";
+import { useMemoizedProps } from "../../utils/performanceUtils";
 
-/**
- * Login container props
- */
-export interface LoginContainerProps extends BaseContainerProps {
-  /** Server URL for direct mode */
-  serverUrl?: string;
-  /** Whether to display server URL field */
-  showServerUrl?: boolean;
-  /** Which auth mode to use */
-  authMode?: AuthMode;
-  /** Whether to remember the username */
-  rememberUsername?: boolean;
-  /** Custom text for login button */
-  loginButtonText?: string;
-  /** Callback after successful login */
-  onLoginSuccess?: (user: User) => void;
-  /** Callback after login failure */
-  onLoginError?: (error: Error) => void;
-  /** URL to redirect to after successful login */
-  redirectUrl?: string;
-  /** Whether to auto-focus the username field */
-  autoFocusUsername?: boolean;
-  /** Whether to show forgot password link */
-  showForgotPassword?: boolean;
-  /** Callback when forgot password is clicked */
-  onForgotPasswordClick?: () => void;
-  /** Whether to show registration link */
-  showRegister?: boolean;
-  /** Callback when register is clicked */
+// Login container props
+export interface LoginContainerProps extends FormContainerProps<LoginParams> {
+  /**
+   * Initial username value
+   */
+  initialUsername?: string;
+  /**
+   * Whether to display remember me option
+   */
+  showRememberMe?: boolean;
+  /**
+   * Whether to display server URL field
+   */
+  showServerUrlField?: boolean;
+  /**
+   * Whether to display register link
+   */
+  showRegisterLink?: boolean;
+  /**
+   * Whether to display forgot password link
+   */
+  showForgotPasswordLink?: boolean;
+  /**
+   * Callback when register link is clicked
+   */
   onRegisterClick?: () => void;
+  /**
+   * Callback when forgot password link is clicked
+   */
+  onForgotPasswordClick?: () => void;
+  /**
+   * Callback on successful login
+   */
+  onLoginSuccess?: (user: User) => void;
 }
 
 /**
- * Container component for user login
- * Handles authentication logic while delegating rendering to appropriate login form UI
+ * Login container
+ * Handles login form state and submission
  */
 export const LoginContainer: React.FC<LoginContainerProps> = (props) => {
   const {
-    className,
-    sx,
-    serverUrl,
-    showServerUrl = false,
-    authMode,
-    rememberUsername = true,
-    loginButtonText = "Login",
-    onLoginSuccess,
-    onLoginError,
-    redirectUrl,
-    autoFocusUsername = true,
-    showForgotPassword = true,
-    onForgotPasswordClick,
-    showRegister = true,
+    initialUsername = "",
+    showRememberMe = true,
+    showServerUrlField = false,
+    showRegisterLink = true,
+    showForgotPasswordLink = true,
     onRegisterClick,
-    id,
-    initialLoading,
-    initialError,
-    disabled,
-    ...restProps
+    onForgotPasswordClick,
+    onLoginSuccess,
+    children,
+    render,
+    ...formProps
   } = props;
 
-  // Use Auth hook for authentication operations
-  const { login, setAuthMode } = useAuth();
+  // Use auth hook for login functionality
+  const { login, isLoggingIn, loginError, validateCredentials } = useAuth();
 
-  // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions } = useContainerLoadingState({
-    initialLoading,
-    initialError,
-    minLoadingTime: 500,
-  });
-
-  // Use dialog hook for error handling
+  // Use dialog for error handling
   const dialog = useDialog();
 
-  // Set authentication mode if provided
-  React.useEffect(() => {
-    if (authMode) {
-      setAuthMode(authMode);
-    }
-  }, [authMode, setAuthMode]);
+  // Set initial form data
+  const initialData = useMemo(
+    () => ({
+      username: initialUsername,
+      password: "",
+      serverUrl: "",
+      rememberMe: false,
+    }),
+    [initialUsername],
+  );
+
+  // Custom validator for login form
+  const validateForm = useCallback(
+    (data: LoginParams) => {
+      const validationResult = validateCredentials(
+        data.username,
+        data.password,
+      );
+
+      return validationResult.isValid ? true : validationResult.errors;
+    },
+    [validateCredentials],
+  );
 
   // Handle form submission
   const handleSubmit = useCallback(
-    async (
-      username: string,
-      password: string,
-      serverUrl?: string,
-      rememberMe?: boolean,
-    ) => {
+    async (data: LoginParams) => {
       try {
-        loadingActions.setLoading(true);
+        const result = await login(data);
 
-        // Prepare login parameters
-        const loginParams: LoginParams = {
-          username,
-          password,
-          serverUrl: showServerUrl ? serverUrl : undefined,
-        };
-
-        // Save username if remember is enabled
-        if (rememberUsername && username) {
-          try {
-            localStorage.setItem("mattermost_username", username);
-          } catch (error) {
-            // Silently fail if localStorage is not available
+        if (result.success && result.data) {
+          if (onLoginSuccess) {
+            onLoginSuccess(result.data);
           }
+          return result.data;
+        } else if (result.validationErrors) {
+          return { _errors: result.validationErrors };
+        } else if (result.error) {
+          throw result.error;
         }
 
-        // Perform login
-        const result = await login(loginParams);
-
-        if (!result.success) {
-          if (result.validationErrors) {
-            const errorMessage = Object.values(result.validationErrors).join(
-              ", ",
-            );
-            throw new Error(errorMessage);
-          }
-          if (result.error) {
-            throw result.error;
-          }
-          throw new Error("Login failed");
-        }
-
-        const user = result.data!;
-
-        // Call success callback if provided
-        if (onLoginSuccess) {
-          onLoginSuccess(user);
-        }
-
-        // Redirect if URL is provided
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        }
-
-        loadingActions.setLoading(false);
-        return user;
+        return null;
       } catch (error) {
-        loadingActions.setLoading(false);
-
-        // Handle error with dialog
-        dialog.showError(
-          "Login Failed",
-          (error as Error).message || "An error occurred during login",
-        );
-
-        // Call error callback if provided
-        if (onLoginError) {
-          onLoginError(error as Error);
-        }
-
-        throw error;
+        // Let the form container handle the error
+        throw error instanceof Error ? error : new Error("Login failed");
       }
     },
-    [
-      loadingActions,
-      login,
-      showServerUrl,
-      rememberUsername,
-      onLoginSuccess,
-      redirectUrl,
-      dialog,
-      onLoginError,
-    ],
+    [login, onLoginSuccess],
   );
 
-  // Get saved username from localStorage
-  const savedUsername = React.useMemo(() => {
-    if (!rememberUsername) return "";
-
-    try {
-      return localStorage.getItem("mattermost_username") || "";
-    } catch (error) {
-      return "";
+  // Handle register link click
+  const handleRegisterClick = useCallback(() => {
+    if (onRegisterClick) {
+      onRegisterClick();
     }
-  }, [rememberUsername]);
+  }, [onRegisterClick]);
 
-  // Create UI component factory function
-  const createUI = useCallback(
-    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
-      // Utiliser l'API et l'état du container quand c'est pertinent
-      const componentError = state.error || loadingState.error;
-      const isComponentLoading = state.isLoading || loadingState.isLoading;
+  // Handle forgot password link click
+  const handleForgotPasswordClick = useCallback(() => {
+    if (onForgotPasswordClick) {
+      onForgotPasswordClick();
+    }
+  }, [onForgotPasswordClick]);
 
-      // Tirer parti de l'API du container pour la gestion des erreurs
-      const handleFormSubmit = async (
-        username: string,
-        password: string,
-        serverUrl?: string,
-        rememberMe?: boolean,
-      ) => {
-        return api.withLoading(() =>
-          handleSubmit(username, password, serverUrl, rememberMe),
-        );
-      };
-
-      // Create common props for login UI components
-      const commonLoginProps = {
-        error: componentError?.message || null,
-        isLoading: isComponentLoading,
-        showRememberMe: rememberUsername,
-        onSubmit: handleFormSubmit,
-        title: "Sign In",
-        submitText: loginButtonText,
-        initialUsername: savedUsername,
-        className,
-        sx,
-        id,
-        showForgotPassword,
-        onForgotPasswordClick,
-        showRegister,
-        onRegisterClick,
-        autoFocus: autoFocusUsername,
-        disabled: disabled || isComponentLoading,
-      };
-
-      // Choose the appropriate UI component based on whether server URL is needed
-      if (showServerUrl) {
-        return (
-          <DirectLoginFormUI
-            {...commonLoginProps}
-            initialServerUrl={serverUrl}
-          />
-        );
-      } else {
-        return <ProxyLoginFormUI {...commonLoginProps} />;
-      }
+  // Use form container for form handling
+  const [formState, formAPI] = useFormContainer(
+    {
+      ...formProps,
+      initialData,
+      validator: validateForm,
+      onSubmit: handleSubmit,
     },
-    [
-      loadingState.error,
-      loadingState.isLoading,
-      rememberUsername,
-      handleSubmit,
-      loginButtonText,
-      savedUsername,
-      className,
-      sx,
-      id,
-      showForgotPassword,
-      onForgotPasswordClick,
-      showRegister,
-      onRegisterClick,
-      autoFocusUsername,
-      disabled,
-      showServerUrl,
-      serverUrl,
-    ],
+    {
+      validateOnBlur: true,
+      validateOnSubmit: true,
+      showValidationImmediately: false,
+      preventInvalidSubmit: true,
+    },
   );
 
-  // Render the UI component with prepared props through the factory function
-  return <BaseContainer {...restProps} render={createUI} />;
+  // Create memoized UI props
+  const uiProps = useMemoizedProps({
+    // Form state
+    formData: formState.formData,
+    errors: formState.errors,
+    isValid: formState.isValid,
+    isDirty: formState.isDirty,
+    isSubmitting: formState.isSubmitting || isLoggingIn,
+    isSubmitted: formState.isSubmitted,
+
+    // Form actions
+    submitForm: formAPI.submitForm,
+    resetForm: formAPI.resetForm,
+    setFieldValue: formAPI.setFieldValue,
+    getFieldProps: formAPI.getFieldProps,
+
+    // UI configuration
+    showRememberMe,
+    showServerUrlField,
+    showRegisterLink,
+    showForgotPasswordLink,
+
+    // UI actions
+    onRegisterClick: handleRegisterClick,
+    onForgotPasswordClick: handleForgotPasswordClick,
+
+    // Error handling
+    loginError,
+  });
+
+  // Use render prop pattern
+  if (render) {
+    return <>{render(uiProps)}</>;
+  }
+
+  // Use children render function
+  if (typeof children === "function") {
+    return <>{children(uiProps)}</>;
+  }
+
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default LoginContainer;

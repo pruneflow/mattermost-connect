@@ -1,266 +1,192 @@
 // src/internal/containers/auth/RegisterContainer.tsx
 /**
  * Register Container
- * Container component that handles user registration logic and state
- * Implements the container pattern with clear separation between logic and UI
+ * Handles user registration functionality
+ * Delegates business logic to useAuth hook
  */
-import React, { useCallback, useState } from "react";
-import { BaseContainer } from "../base/BaseContainer";
-import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
+import React, { useCallback, useMemo } from "react";
+import { FormContainerProps, useFormContainer } from "../base/FormContainer";
+import { useAuth } from "../../../hooks/useAuth";
+import { User, RegistrationParams } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
-import { RegisterFormUI } from "../../components/auth/RegisterFormUI";
-import { User, RegistrationParams, AuthMode } from "../../../types";
-import { useAuth } from "../../../hooks";
-import { getPasswordStrength } from "../../../utils/authValidation";
+import { useMemoizedProps } from "../../utils/performanceUtils";
 
-/**
- * Registration container props
- */
-export interface RegisterContainerProps {
-  /** CSS class name */
-  className?: string;
-  /** Additional style properties */
-  sx?: any;
-  /** Server URL for direct mode */
-  serverUrl?: string;
-  /** Whether to display server URL field */
-  showServerUrl?: boolean;
-  /** Which auth mode to use */
-  authMode?: AuthMode;
-  /** Custom text for register button */
-  registerButtonText?: string;
-  /** Callback after successful registration */
-  onRegisterSuccess?: (user: User) => void;
-  /** Callback after registration failure */
-  onRegisterError?: (error: Error) => void;
-  /** URL to redirect to after successful registration */
-  redirectUrl?: string;
-  /** Whether to auto-login after registration */
-  autoLogin?: boolean;
-  /** Whether to show login link */
-  showLogin?: boolean;
-  /** Callback when login is clicked */
+// Register container props
+export interface RegisterContainerProps
+  extends FormContainerProps<RegistrationParams> {
+  /**
+   * Initial email value
+   */
+  initialEmail?: string;
+  /**
+   * Whether to display server URL field
+   */
+  showServerUrlField?: boolean;
+  /**
+   * Whether to show a link to login
+   */
+  showLoginLink?: boolean;
+  /**
+   * Callback when login link is clicked
+   */
   onLoginClick?: () => void;
-  /** Whether to show password strength indicator */
-  showPasswordStrength?: boolean;
-  /** Whether to require email verification */
+  /**
+   * Callback on successful registration
+   */
+  onRegisterSuccess?: (user: User) => void;
+  /**
+   * Whether email verification is required
+   */
   requireEmailVerification?: boolean;
-  /** ID for the container */
-  id?: string;
-  /** Initial loading state */
-  initialLoading?: boolean;
-  /** Initial error */
-  initialError?: Error | null;
-  /** Whether the component is disabled */
-  disabled?: boolean;
 }
 
 /**
- * Container component for user registration
- * Handles registration logic while delegating rendering to RegisterFormUI
+ * Register container
+ * Handles registration form state and submission
  */
 export const RegisterContainer: React.FC<RegisterContainerProps> = (props) => {
   const {
-    className,
-    sx,
-    serverUrl,
-    showServerUrl = false,
-    authMode,
-    registerButtonText = "Register",
-    onRegisterSuccess,
-    onRegisterError,
-    redirectUrl,
-    autoLogin = false,
-    showLogin = true,
+    initialEmail = "",
+    showServerUrlField = false,
+    showLoginLink = true,
     onLoginClick,
-    showPasswordStrength = true,
-    requireEmailVerification = true,
-    id,
-    initialLoading,
-    initialError,
-    disabled,
+    onRegisterSuccess,
+    requireEmailVerification = false,
+    children,
+    render,
+    ...formProps
   } = props;
 
-  // Use Auth hook for registration operations
-  const { register, login, setAuthMode } = useAuth();
+  // Use auth hook for registration functionality
+  const {
+    register,
+    isRegistering,
+    registrationError,
+    validateRegistrationData,
+  } = useAuth();
 
-  // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions } = useContainerLoadingState({
-    initialLoading,
-    initialError,
-    minLoadingTime: 500,
-  });
-
-  // Use dialog hook for error and success messages
+  // Use dialog for confirmation/error handling
   const dialog = useDialog();
 
-  // Track password strength
-  const [passwordStrength, setPasswordStrength] = useState({
-    score: 0,
-    message: "",
-  });
-
-  // Set authentication mode if provided
-  React.useEffect(() => {
-    if (authMode) {
-      setAuthMode(authMode);
-    }
-  }, [authMode, setAuthMode]);
-
-  // Handle password field change to update strength
-  const handlePasswordChange = useCallback(
-    (password: string) => {
-      if (!showPasswordStrength) return;
-
-      const strength = getPasswordStrength(password);
-      setPasswordStrength({
-        score: strength.id,
-        message: strength.message,
-      });
-    },
-    [showPasswordStrength],
+  // Set initial form data
+  const initialData = useMemo(
+    () => ({
+      email: initialEmail,
+      username: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      serverUrl: "",
+    }),
+    [initialEmail],
   );
 
-  // Handle registration form submission
+  // Custom validator for registration form
+  const validateForm = useCallback(
+    (data: RegistrationParams) => {
+      const validationResult = validateRegistrationData(data);
+      return validationResult.isValid ? true : validationResult.errors;
+    },
+    [validateRegistrationData],
+  );
+
+  // Handle form submission
   const handleSubmit = useCallback(
-    async (
-      username: string,
-      email: string,
-      password: string,
-      confirmPassword: string,
-      firstName?: string,
-      lastName?: string,
-      serverUrlValue?: string,
-    ) => {
+    async (data: RegistrationParams) => {
       try {
-        loadingActions.setLoading(true);
+        const result = await register(data);
 
-        // Verify passwords match
-        if (password !== confirmPassword) {
-          throw new Error("Passwords do not match");
-        }
-
-        // Prepare registration parameters
-        const registrationParams: RegistrationParams = {
-          username,
-          password,
-          email,
-          firstName,
-          lastName,
-          serverUrl: showServerUrl ? serverUrlValue : serverUrl,
-        };
-
-        // Perform registration
-        const result = await register(registrationParams);
-
-        if (!result.success) {
-          if (result.validationErrors) {
-            const errorMessage = Object.values(result.validationErrors).join(
-              ", ",
+        if (result.success && result.data) {
+          if (requireEmailVerification) {
+            await dialog.showSuccess(
+              "Registration Successful",
+              "Please check your email to verify your account.",
             );
-            throw new Error(errorMessage);
           }
-          if (result.error) {
-            throw result.error;
+
+          if (onRegisterSuccess) {
+            onRegisterSuccess(result.data);
           }
-          throw new Error("Registration failed");
+
+          return result.data;
+        } else if (result.validationErrors) {
+          return { _errors: result.validationErrors };
+        } else if (result.error) {
+          throw result.error;
         }
 
-        const user = result.data!;
-
-        // Show success message
-        dialog.showSuccess(
-          "Registration Successful",
-          requireEmailVerification
-            ? "Your account has been created. Please check your email to verify your account."
-            : "Your account has been created successfully.",
-        );
-
-        // Auto-login if enabled
-        if (autoLogin && !requireEmailVerification) {
-          try {
-            await login({
-              username: registrationParams.username,
-              password: registrationParams.password,
-              serverUrl: registrationParams.serverUrl,
-            });
-          } catch (loginError) {
-            console.error("Auto-login failed:", loginError);
-            // Continue with registration success flow even if auto-login fails
-          }
-        }
-
-        // Call success callback if provided
-        if (onRegisterSuccess) {
-          onRegisterSuccess(user);
-        }
-
-        // Redirect if URL is provided and auto-login is enabled
-        if (redirectUrl && autoLogin && !requireEmailVerification) {
-          window.location.href = redirectUrl;
-        }
-
-        loadingActions.setLoading(false);
-        return user;
+        return null;
       } catch (error) {
-        loadingActions.setLoading(false);
-
-        // Handle error with dialog
-        dialog.showError(
-          "Registration Failed",
-          (error as Error).message || "An error occurred during registration",
-        );
-
-        // Call error callback if provided
-        if (onRegisterError) {
-          onRegisterError(error as Error);
-        }
-
-        throw error;
+        // Let form container handle the error
+        throw error instanceof Error ? error : new Error("Registration failed");
       }
     },
-    [
-      loadingActions,
-      register,
-      login,
-      showServerUrl,
-      serverUrl,
-      requireEmailVerification,
-      autoLogin,
-      dialog,
-      onRegisterSuccess,
-      onRegisterError,
-      redirectUrl,
-    ],
+    [register, dialog, requireEmailVerification, onRegisterSuccess],
   );
 
-  // Prepare UI props for the registration form
-  const registerFormProps = {
-    error: loadingState.error?.message || null,
-    isLoading: loadingState.isLoading,
-    showServerUrl,
-    initialServerUrl: serverUrl,
-    passwordStrength: showPasswordStrength ? passwordStrength : undefined,
-    showPasswordStrength,
-    title: "Create Account",
-    submitText: registerButtonText,
-    showLogin,
-    onSubmit: handleSubmit,
-    onLoginClick,
-    onPasswordChange: handlePasswordChange,
-    className,
-    sx,
-    id,
-    disabled: disabled || loadingState.isLoading,
-  };
+  // Handle login link click
+  const handleLoginClick = useCallback(() => {
+    if (onLoginClick) {
+      onLoginClick();
+    }
+  }, [onLoginClick]);
 
-  // Render the RegisterFormUI with prepared props
-  return (
-    <BaseContainer
-      {...props}
-      render={(api, state) => <RegisterFormUI {...registerFormProps} />}
-    />
+  // Use form container for form handling
+  const [formState, formAPI] = useFormContainer(
+    {
+      ...formProps,
+      initialData,
+      validator: validateForm,
+      onSubmit: handleSubmit,
+    },
+    {
+      validateOnBlur: true,
+      validateOnSubmit: true,
+      showValidationImmediately: false,
+      preventInvalidSubmit: true,
+    },
   );
+
+  // Create memoized UI props
+  const uiProps = useMemoizedProps({
+    // Form state
+    formData: formState.formData,
+    errors: formState.errors,
+    isValid: formState.isValid,
+    isDirty: formState.isDirty,
+    isSubmitting: formState.isSubmitting || isRegistering,
+    isSubmitted: formState.isSubmitted,
+
+    // Form actions
+    submitForm: formAPI.submitForm,
+    resetForm: formAPI.resetForm,
+    setFieldValue: formAPI.setFieldValue,
+    getFieldProps: formAPI.getFieldProps,
+
+    // UI configuration
+    showServerUrlField,
+    showLoginLink,
+    requireEmailVerification,
+
+    // UI actions
+    onLoginClick: handleLoginClick,
+
+    // Error handling
+    registrationError,
+  });
+
+  // Use render prop pattern
+  if (render) {
+    return <>{render(uiProps)}</>;
+  }
+
+  // Use children render function
+  if (typeof children === "function") {
+    return <>{children(uiProps)}</>;
+  }
+
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default RegisterContainer;

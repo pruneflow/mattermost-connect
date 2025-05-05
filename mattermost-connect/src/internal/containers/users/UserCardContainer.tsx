@@ -1,222 +1,198 @@
 // src/internal/containers/users/UserCardContainer.tsx
 /**
  * User Card Container
- * Standardized container for displaying user cards
- * Implements the container pattern with clear separation between logic and UI
+ * Container component for user cards/info display
+ * Delegates business logic to useContainerUser hook
+ * Composes with UserAvatarContainer for avatar display
  */
 import React, { useCallback, useMemo } from "react";
-import {
-  BaseContainer,
-  BaseContainerProps,
-  BaseContainerState,
-  BaseContainerAPI,
-} from "../base/BaseContainer";
+import { BaseContainerProps, useBaseContainer } from "../base/BaseContainer";
 import { useContainerUser } from "../../hooks/useContainerUser";
-import { default as UserCardUI } from "../../components/users/UserCardUI";
 import { User, UserStatus } from "../../../types";
+import { useMemoizedProps } from "../../utils/performanceUtils";
+import { useDialog } from "../../hooks/useDialog";
+import StatusSelector from "../../components/common/StatusSelector";
 
 /**
  * User card container props
  */
 export interface UserCardContainerProps extends BaseContainerProps {
-  /** User ID */
-  userId?: string;
-  /** Card variant */
-  variant?: "default" | "compact" | "expanded";
-  /** Whether to show actions */
-  showActions?: boolean;
-  /** Available actions */
-  availableActions?: string[];
-  /** Custom actions renderer */
-  actionsRenderer?: (userId: string, user: User | null) => React.ReactNode;
-  /** Callback when action is clicked */
-  onAction?: (actionId: string, userId: string) => void;
-  /** Callback when card is clicked */
-  onClick?: (userId: string) => void;
-  /** Card elevation */
-  elevation?: number;
-  /** Whether card is outlined */
-  outlined?: boolean;
-  /** Whether to show user status */
+  /**
+   * User ID to display
+   */
+  userId: string;
+  /**
+   * User object (optional, will be fetched if not provided)
+   */
+  user?: User;
+  /**
+   * Size of the avatar in pixels
+   */
+  avatarSize?: number;
+  /**
+   * Whether to show the user's status indicator
+   */
   showStatus?: boolean;
-  /** Override display name */
-  displayName?: string;
-  /** Override status */
-  status?: UserStatus;
-  /** Whether to show user role */
-  showRole?: boolean;
-  /** Whether to show user email */
-  showEmail?: boolean;
-  /** Avatar size */
-  avatarSize?: "small" | "medium" | "large" | number;
-  /** Custom content renderer */
-  contentRenderer?: (userId: string, user: User | null) => React.ReactNode;
-  /** Whether card is selectable */
-  selectable?: boolean;
-  /** Whether card is selected */
-  selected?: boolean;
-  /** On selection change callback */
-  onSelectionChange?: (userId: string, selected: boolean) => void;
+  /**
+   * Whether to show detailed information
+   */
+  showDetails?: boolean;
+  /**
+   * Whether to show actions menu
+   */
+  showActions?: boolean;
+  /**
+   * Available actions
+   */
+  availableActions?: string[];
+  /**
+   * Whether to enable editing of user profile (for current user)
+   */
+  allowEdit?: boolean;
+  /**
+   * Whether card is in compact mode
+   */
+  compact?: boolean;
+  /**
+   * Callback when action is performed
+   */
+  onAction?: (action: string, user: User) => void;
+  /**
+   * Callback when user card is clicked
+   */
+  onClick?: (user: User) => void;
+  /**
+   * Callback when status is changed
+   */
+  onStatusChange?: (user: User, newStatus: UserStatus) => void;
 }
 
 /**
  * User Card Container
- * Displays a card with user information and actions
+ * Displays user information in a card format
  */
-export const UserCardContainer: React.FC<UserCardContainerProps> = (props) => {
+export const UserCardContainer: React.FC<
+  UserCardContainerProps & {
+    children?: React.ReactNode | ((props: any) => React.ReactNode);
+    render?: (props: any) => React.ReactNode;
+  }
+> = (props) => {
   const {
     userId,
-    variant,
+    user: propUser,
+    avatarSize = 48,
+    showStatus = true,
+    showDetails = true,
     showActions = true,
-    availableActions = ["message", "profile"],
-    actionsRenderer,
+    availableActions = [],
+    allowEdit = true,
+    compact = false,
     onAction,
     onClick,
-    elevation = 1,
-    outlined = false,
-    showStatus = true,
-    displayName: displayNameOverride,
-    status: statusOverride,
-    showRole = true,
-    showEmail = true,
-    avatarSize,
-    contentRenderer,
-    selectable = false,
-    selected = false,
-    onSelectionChange,
+    onStatusChange,
+    children,
+    render,
     ...restProps
   } = props;
 
-  // Determine avatar size based on variant
-  const getAvatarSize = () => {
-    if (avatarSize)
-      return typeof avatarSize === "string" ? avatarSize : avatarSize;
+  // Use base container for common functionality
+  const [baseState, baseAPI] = useBaseContainer(restProps);
 
-    switch (variant) {
-      case "compact":
-        return "small";
-      case "expanded":
-        return "large";
-      default:
-        return "medium";
-    }
-  };
+  // Use dialog for confirmation dialogs
+  const dialog = useDialog();
 
-  // Use container user hook for data and state management
-  const {
-    user,
-    displayName,
-    status,
-    isLoading,
-    error,
-    hasError,
-    isCurrentUser,
-    refreshUser,
-  } = useContainerUser(userId, {
-    avatarSize:
-      typeof getAvatarSize() === "number"
-        ? (getAvatarSize() as number)
-        : undefined,
+  // Use user container hook
+  const { userState, userActions, uiProps } = useContainerUser(userId, {
+    avatarSize,
     showStatus,
+    autoFetch: !propUser,
+    showActions,
+    availableActions: [
+      ...availableActions,
+      ...(allowEdit ? ["edit", "uploadImage"] : []),
+    ],
   });
 
-  // Use overrides if provided
-  const finalDisplayName = displayNameOverride || displayName;
-  const finalStatus = statusOverride || status;
+  // If user prop is provided, prefer it over fetched user
+  const user = propUser || userState.user;
 
   // Handle card click
-  const handleCardClick = useCallback(() => {
-    if (selectable && onSelectionChange) {
-      onSelectionChange(userId || "", !selected);
-    } else if (onClick) {
-      onClick(userId || "");
+  const handleClick = useCallback(() => {
+    if (onClick && user) {
+      onClick(user);
     }
-  }, [selectable, onSelectionChange, onClick, userId, selected]);
+  }, [onClick, user]);
 
-  // Handle action click
-  const handleActionClick = useCallback(
-    (actionId: string) => {
+  // Handle action
+  const handleAction = useCallback(
+    async (action: string) => {
+      if (!user) return;
+
+      // Handle custom actions through callback
       if (onAction) {
-        onAction(actionId, userId || "");
+        onAction(action, user);
+      }
+
+      // Handle built-in actions
+      if (action === "message" && user) {
+        // Example of a built-in action that delegates to caller
+        if (onAction) {
+          onAction("message", user);
+        }
+      } else if (action === "changeStatus" && user && onStatusChange) {
+        const newStatus = await dialog.formAsync<{ status: UserStatus }>({
+          title: "Change Status",
+          component: <StatusSelector initialStatus={userState.status} />,
+          initialData: { status: userState.status },
+          confirmText: "Update Status",
+          cancelText: "Cancel",
+        });
+
+        if (newStatus.confirmed && newStatus.data) {
+          await userActions.updateStatus(newStatus.data.status);
+          if (onStatusChange) {
+            onStatusChange(user, newStatus.data.status);
+          }
+        }
       }
     },
-    [onAction, userId],
+    [user, onAction, userState.status, userActions, dialog, onStatusChange],
   );
 
-  // Create UI component factory function
-  const createUI = useCallback(
-    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
-      // Utiliser l'état du container et l'API quand c'est pertinent
-      const isComponentLoading = state.isLoading || isLoading;
-      const componentError = state.error || error;
-      const hasComponentError = state.hasError || hasError;
+  // Get standard card props from hook
+  const baseCardProps = useMemo(() => uiProps.getCardProps(), [uiProps]);
 
-      // Fonction de rafraîchissement qui utilise l'API du container
-      const refreshData = () => {
-        api.withLoading(async () => {
-          await refreshUser();
-        });
-      };
+  // Create memoized props for UI component
+  const cardUIProps = useMemo(() => {
+    return useMemoizedProps({
+      ...baseCardProps,
+      onClick: handleClick,
+      onAction: handleAction,
+      showDetails,
+      compact,
+      allowEdit,
+    });
+  }, [
+    baseCardProps,
+    handleClick,
+    handleAction,
+    showDetails,
+    compact,
+    allowEdit,
+  ]);
 
-      // Créer les props UI en utilisant aussi les états du container
-      const cardUIProps = {
-        user,
-        displayName: finalDisplayName,
-        status: finalStatus,
-        variant,
-        showActions,
-        availableActions,
-        showRole,
-        showEmail,
-        onActionClick: handleActionClick,
-        onClick: handleCardClick,
-        selected,
-        isLoading: isComponentLoading,
-        hasError: hasComponentError,
-        error: componentError,
-        onRefresh: refreshData,
-        actionsRenderer: actionsRenderer
-          ? (user: User) => actionsRenderer(userId || "", user)
-          : undefined,
-        contentRenderer: contentRenderer
-          ? (user: User) => contentRenderer(userId || "", user)
-          : undefined,
-        elevation,
-        outlined,
-        isCurrentUser,
-        avatarSize: getAvatarSize(),
-      };
+  // Use render prop pattern if provided
+  if (render) {
+    return <>{render(cardUIProps)}</>;
+  }
 
-      return <UserCardUI {...cardUIProps} />;
-    },
-    [
-      user,
-      finalDisplayName,
-      finalStatus,
-      variant,
-      showActions,
-      availableActions,
-      showRole,
-      showEmail,
-      handleActionClick,
-      handleCardClick,
-      selected,
-      isLoading,
-      hasError,
-      error,
-      refreshUser,
-      actionsRenderer,
-      contentRenderer,
-      userId,
-      elevation,
-      outlined,
-      isCurrentUser,
-      getAvatarSize,
-    ],
-  );
+  // Use children render function if provided
+  if (typeof children === "function") {
+    return <>{children(cardUIProps)}</>;
+  }
 
-  // Render the UI component with prepared props through the factory function
-  return <BaseContainer {...restProps} render={createUI} />;
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default UserCardContainer;

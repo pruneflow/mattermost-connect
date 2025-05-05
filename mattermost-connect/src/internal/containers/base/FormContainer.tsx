@@ -129,6 +129,14 @@ export interface FormContainerProps<T = any> extends BaseContainerProps {
   readOnly?: boolean;
   /** Whether to validate on mount */
   validateOnMount?: boolean;
+  /**
+   * Render function for custom rendering
+   */
+  render?: (props: any) => React.ReactNode;
+  /**
+   * Children can be React nodes or a render function
+   */
+  children?: React.ReactNode | ((props: any) => React.ReactNode);
 }
 
 /**

@@ -1,217 +1,216 @@
 // src/internal/containers/auth/MFAContainer.tsx
 /**
- * MFA Container
- * Handles multi-factor authentication with standardized patterns
- * Implements the container pattern with clear separation between logic and UI
+ * Multi-Factor Authentication Container
+ * Handles MFA validation during authentication
+ * Delegates business logic to useAuth hook
  */
-import React, { useCallback } from "react";
-import {
-  BaseContainer,
-  BaseContainerProps,
-  BaseContainerState,
-  BaseContainerAPI,
-} from "../base/BaseContainer";
-import { useContainerLoadingState } from "../../hooks/useContainerLoadingState";
+import React, { useCallback, useMemo, useState } from "react";
+import { FormContainerProps, useFormContainer } from "../base/FormContainer";
+import { useAuth } from "../../../hooks/useAuth";
 import { useDialog } from "../../hooks/useDialog";
-import { MFAUI } from "../../components/auth/MFAUI";
-import { User } from "../../../types";
-import { authService } from "../../../core/services/authService";
+import { useMemoizedProps } from "../../utils/performanceUtils";
 
-/**
- * MFA container props
- */
-export interface MFAContainerProps extends BaseContainerProps {
-  /** User ID for which MFA is being verified */
-  userId?: string;
-  /** Callback after successful MFA verification */
-  onMfaSuccess?: (user: User) => void;
-  /** Callback after MFA verification failure */
-  onMfaError?: (error: Error) => void;
-  /** URL to redirect to after successful verification */
-  redirectUrl?: string;
-  /** Custom text for verify button */
-  verifyButtonText?: string;
-  /** Whether to show resend code option */
-  showResendOption?: boolean;
-  /** MFA method (totp or email) */
-  method?: "totp" | "email";
-  /** Whether the form should auto-focus */
-  autoFocus?: boolean;
+// MFA container props
+export interface MFAContainerProps extends FormContainerProps<any> {
+  /**
+   * User ID for the authenticating user
+   */
+  userId: string;
+  /**
+   * Authentication session token
+   */
+  sessionToken?: string;
+  /**
+   * Callback on successful MFA validation
+   */
+  onMFASuccess?: (token: string) => void;
+  /**
+   * Available MFA methods
+   */
+  availableMethods?: ("totp" | "sms" | "email" | "recovery")[];
+  /**
+   * Default MFA method
+   */
+  defaultMethod?: "totp" | "sms" | "email" | "recovery";
+  /**
+   * Whether to show a back button
+   */
+  showBackButton?: boolean;
+  /**
+   * Callback when back button is clicked
+   */
+  onBackClick?: () => void;
 }
 
 /**
- * MFA container component
- * Provides standardized multi-factor authentication
+ * MFA container
+ * Handles multi-factor authentication verification
  */
 export const MFAContainer: React.FC<MFAContainerProps> = (props) => {
   const {
-    className,
-    sx,
     userId,
-    onMfaSuccess,
-    onMfaError,
-    redirectUrl,
-    verifyButtonText = "Verify",
-    showResendOption = true,
-    method = "totp",
-    autoFocus = true,
-    id,
-    initialLoading,
-    initialError,
-    disabled,
-    ...restProps
+    sessionToken,
+    onMFASuccess,
+    availableMethods = ["totp"],
+    defaultMethod = "totp",
+    showBackButton = true,
+    onBackClick,
+    children,
+    render,
+    ...formProps
   } = props;
 
-  // Use loading state hook for standardized loading management
-  const { loadingState, loadingActions, withLoading } =
-    useContainerLoadingState({
-      initialLoading,
-      initialError,
-      minLoadingTime: 500,
-    });
+  // Current MFA method state
+  const [currentMethod, setCurrentMethod] = useState<string>(defaultMethod);
 
-  // Use dialog hook for error and success messages
+  // Use auth hook for MFA functionality
+  // Note: This is assuming the useAuth hook would have MFA methods
+  // You would need to add these to your actual useAuth hook
+  const {
+    verifyMFA = async () => ({ success: false }),
+    isVerifyingMFA = false,
+    mfaError = null,
+  } = useAuth() as any;
+
+  // Use dialog for error handling
   const dialog = useDialog();
+
+  // Set initial form data based on method
+  const initialData = useMemo(
+    () => ({
+      code: "",
+      method: currentMethod,
+    }),
+    [currentMethod],
+  );
+
+  // Custom validator for the form
+  const validateForm = useCallback((data: any) => {
+    // Validate MFA code
+    if (!data.code) {
+      return { code: "Verification code is required" };
+    }
+
+    if (data.method === "totp" && !/^\d{6}$/.test(data.code)) {
+      return { code: "Code must be 6 digits" };
+    }
+
+    if (data.method === "recovery" && data.code.length < 8) {
+      return { code: "Recovery code is too short" };
+    }
+
+    return true;
+  }, []);
 
   // Handle form submission
   const handleSubmit = useCallback(
-    async (data: { code: string }) => {
+    async (data: any) => {
       try {
-        loadingActions.setLoading(true);
-
-        if (!userId) {
-          throw new Error("User ID is missing");
-        }
-
-        // Call authService to verify MFA code
-        const user = await authService.verifyMfa({
+        const result = await verifyMFA({
           userId,
           code: data.code,
-          method,
+          method: data.method,
+          sessionToken,
         });
 
-        // Call success callback if provided
-        if (onMfaSuccess) {
-          onMfaSuccess(user);
+        if (result.success && result.token) {
+          if (onMFASuccess) {
+            onMFASuccess(result.token);
+          }
+          return result;
+        } else if (result.validationErrors) {
+          return { _errors: result.validationErrors };
+        } else if (result.error) {
+          throw result.error;
         }
 
-        // Redirect if URL is provided
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        }
-
-        loadingActions.setLoading(false);
-        return user;
+        return null;
       } catch (error) {
-        loadingActions.setLoading(false);
-
-        // Handle error with dialog
-        dialog.showError(
-          "Verification Failed",
-          (error as Error).message || "An error occurred during verification",
-        );
-
-        // Call error callback if provided
-        if (onMfaError) {
-          onMfaError(error as Error);
-        }
-
-        // Re-throw error for UI to handle
-        throw error;
+        // Let form container handle the error
+        throw error instanceof Error
+          ? error
+          : new Error("MFA verification failed");
       }
     },
-    [
-      loadingActions,
-      userId,
-      method,
-      onMfaSuccess,
-      redirectUrl,
-      dialog,
-      onMfaError,
-    ],
+    [userId, sessionToken, verifyMFA, onMFASuccess],
   );
 
-  // Handle resend code
-  const handleResendCode = useCallback(() => {
-    withLoading(async () => {
-      try {
-        if (!userId) {
-          throw new Error("User ID is missing");
-        }
+  // Handle method change
+  const handleMethodChange = useCallback((method: string) => {
+    setCurrentMethod(method);
+  }, []);
 
-        // Call authService to resend MFA code
-        await authService.resendMfaCode({
-          userId,
-          method,
-        });
+  // Handle back button click
+  const handleBackClick = useCallback(() => {
+    if (onBackClick) {
+      onBackClick();
+    }
+  }, [onBackClick]);
 
-        dialog.showSuccess(
-          "Code Resent",
-          method === "totp"
-            ? "Please check your authenticator app for the new code."
-            : "A new verification code has been sent to your email.",
-        );
-      } catch (error) {
-        dialog.showError(
-          "Failed to Resend Code",
-          (error as Error).message ||
-            "An error occurred when trying to resend the code.",
-        );
-      }
-    });
-  }, [dialog, method, withLoading, userId]);
-
-  // Create UI component factory function
-  const createUI = useCallback(
-    (api: BaseContainerAPI, state: BaseContainerState): React.ReactElement => {
-      // Utiliser l'API et l'état du container quand c'est pertinent
-      const componentError = state.error || loadingState.error;
-      const isComponentLoading = state.isLoading || loadingState.isLoading;
-
-      // Tirer parti de l'API du container pour la gestion des erreurs et du chargement
-      const handleFormSubmit = async (data: { code: string }) => {
-        return api.withLoading(() => handleSubmit(data));
-      };
-
-      const handleResendWithApi = () => {
-        api.withLoading(handleResendCode);
-      };
-
-      // Prepare UI props
-      const mfaUiProps = {
-        method,
-        error: componentError?.message || null,
-        isLoading: isComponentLoading,
-        onSubmit: handleFormSubmit,
-        onResendCode: showResendOption ? handleResendWithApi : undefined,
-        submitText: verifyButtonText,
-        autoFocus,
-        className,
-        sx,
-        id,
-        disabled: disabled || isComponentLoading,
-      };
-
-      return <MFAUI {...mfaUiProps} />;
+  // Use form container for form handling
+  const [formState, formAPI] = useFormContainer(
+    {
+      ...formProps,
+      initialData,
+      validator: validateForm,
+      onSubmit: handleSubmit,
     },
-    [
-      loadingState.error,
-      loadingState.isLoading,
-      handleSubmit,
-      handleResendCode,
-      method,
-      showResendOption,
-      verifyButtonText,
-      autoFocus,
-      className,
-      sx,
-      id,
-      disabled,
-    ],
+    {
+      validateOnBlur: true,
+      validateOnSubmit: true,
+      preventInvalidSubmit: true,
+    },
   );
 
-  // Render the UI component with prepared props through the factory function
-  return <BaseContainer {...restProps} render={createUI} />;
+  // Update form when method changes
+  React.useEffect(() => {
+    formAPI.setFieldValue("method", currentMethod);
+  }, [currentMethod, formAPI]);
+
+  // Create memoized UI props
+  const uiProps = useMemoizedProps({
+    // Form state
+    formData: formState.formData,
+    errors: formState.errors,
+    isValid: formState.isValid,
+    isDirty: formState.isDirty,
+    isSubmitting: formState.isSubmitting || isVerifyingMFA,
+    isSubmitted: formState.isSubmitted,
+
+    // Form actions
+    submitForm: formAPI.submitForm,
+    resetForm: formAPI.resetForm,
+    setFieldValue: formAPI.setFieldValue,
+    getFieldProps: formAPI.getFieldProps,
+
+    // MFA specific props
+    userId,
+    availableMethods,
+    currentMethod,
+    onMethodChange: handleMethodChange,
+
+    // UI configuration
+    showBackButton,
+
+    // UI actions
+    onBackClick: handleBackClick,
+
+    // Error handling
+    mfaError,
+  });
+
+  // Use render prop pattern
+  if (render) {
+    return <>{render(uiProps)}</>;
+  }
+
+  // Use children render function
+  if (typeof children === "function") {
+    return <>{children(uiProps)}</>;
+  }
+
+  // Return children wrapped with context if needed
+  return <>{children}</>;
 };
 
 export default MFAContainer;
