@@ -4,6 +4,7 @@ import { useFormContainer } from "../base/FormContainer";
 import { useContainerTeam } from "../../hooks/useContainerTeam";
 import { Team, UpdateTeamParams } from "../../../types";
 import TeamSettingsUI from "../../components/teams/TeamSettingsUI";
+import { useDialog } from "../../hooks";
 
 export interface TeamSettingsContainerProps {
   teamId: string;
@@ -40,6 +41,8 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
     id,
   } = props;
 
+  const dialog = useDialog();
+
   const {
     team: fetchedTeam,
     updateTeam,
@@ -62,7 +65,13 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
 
   const [formState, formAPI] = useFormContainer({
     initialData: getInitialData(),
-    validator: (data) => {
+    validator: (data: {
+      display_name: string;
+      description: string;
+      company_name: string;
+      allowed_domains: string;
+      allow_open_invite: boolean;
+    }) => {
       const errors: Record<string, string> = {};
 
       if (!data.display_name) {
@@ -82,23 +91,23 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
 
       // Only include fields that changed
       if (data.display_name !== team.display_name) {
-        updateData.display_name = data.display_name as string;
+        updateData.display_name = data.display_name;
       }
 
       if (data.description !== team.description) {
-        updateData.description = data.description as string;
+        updateData.description = data.description;
       }
 
       if (data.company_name !== team.company_name) {
-        updateData.company_name = data.company_name as string;
+        updateData.company_name = data.company_name;
       }
 
       if (data.allowed_domains !== team.allowed_domains) {
-        updateData.allowed_domains = data.allowed_domains as string;
+        updateData.allowed_domains = data.allowed_domains;
       }
 
       if (data.allow_open_invite !== team.allow_open_invite) {
-        updateData.allow_open_invite = data.allow_open_invite as boolean;
+        updateData.allow_open_invite = data.allow_open_invite;
       }
 
       try {
@@ -122,15 +131,33 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
     }
   }, [team, formState.isDirty, getInitialData, formAPI]);
 
-  const handleCancel = useCallback(() => {
-    formAPI.resetForm();
-    if (onCancel) {
-      onCancel();
+  const handleCancel = useCallback(async () => {
+    if (formState.isDirty) {
+      const confirmed = await dialog.confirmAsync({
+        title: "Discard Changes",
+        message:
+          "You have unsaved changes. Are you sure you want to discard them?",
+        confirmText: "Discard Changes",
+        cancelText: "Continue Editing",
+      });
+
+      if (!confirmed) return;
     }
-  }, [formAPI, onCancel]);
+
+    formAPI.resetForm();
+    if (onCancel) onCancel();
+  }, [formState.isDirty, dialog, formAPI, onCancel]);
 
   const handleFieldChange = useCallback(
-    (field: string, value: any) => {
+    (
+      field:
+        | "display_name"
+        | "description"
+        | "company_name"
+        | "allowed_domains"
+        | "allow_open_invite",
+      value: any,
+    ) => {
       formAPI.setFieldValue(field, value);
     },
     [formAPI],

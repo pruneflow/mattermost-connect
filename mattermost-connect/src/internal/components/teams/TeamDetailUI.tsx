@@ -1,19 +1,24 @@
 // src/internal/components/teams/TeamDetailUI.tsx
 /**
- * Component that displays detailed information about a team
+ * Team Detail UI Component
+ * Displays comprehensive information about a team with tabs, stats, and actions
  */
-import React from "react";
+import React, { useState } from "react";
 import {
+  Card,
   Box,
   Typography,
-  Divider,
-  Chip,
+  Tabs,
+  Tab,
   Button,
-  Card,
-  CardContent,
-  CardActions,
-  Avatar,
+  IconButton,
+  Chip,
+  Divider,
   Grid,
+  Paper,
+  Avatar,
+  Tooltip,
+  CircularProgress,
 } from "@mui/material";
 import {
   Edit as EditIcon,
@@ -21,221 +26,381 @@ import {
   ExitToApp as LeaveIcon,
   People as PeopleIcon,
   Settings as SettingsIcon,
+  Refresh as RefreshIcon,
+  Forum as ForumIcon,
 } from "@mui/icons-material";
-import { stringToColor, Team } from "../../../index";
+import { Team, TeamStats } from "../../../types";
 import { BaseComponentProps } from "../../types/componentTypes";
-import { getInitials } from "../../utils/helper";
+import { ErrorState, LoadingSpinner, ContentLoader } from "../common";
+import TeamAvatar from "./components/TeamAvatar";
 
 export interface TeamDetailUIProps extends BaseComponentProps {
-  /** Team data */
-  team: Team;
-  /** Team member count */
-  memberCount?: number;
-  /** Whether the current user is an admin in this team */
-  isAdmin?: boolean;
-  /** Whether to show team actions */
+  // Data props
+  team: Team | null;
+  formattedTeam?: any;
+  stats?: TeamStats;
+  members?: any[];
+  // State props
+  isLoading?: boolean;
+  hasError?: boolean;
+  error?: Error | null;
+  isEditMode?: boolean;
+  // Display props
+  variant?: "standard" | "compact" | "card";
+  tabs?: Array<{
+    id: string;
+    label: string;
+    content?: React.ReactNode;
+    disabled?: boolean;
+  }>;
+  activeTab?: string;
   showActions?: boolean;
-  /** Size variant */
-  variant?: "compact" | "normal" | "expanded";
-  /** Callback when edit button is clicked */
-  onEdit?: () => void;
-  /** Callback when delete button is clicked */
-  onDelete?: () => void;
-  /** Callback when leave button is clicked */
-  onLeave?: () => void;
-  /** Callback when members button is clicked */
-  onViewMembers?: () => void;
-  /** Callback when settings button is clicked */
-  onSettings?: () => void;
+  availableActions?: Record<string, boolean>;
+  // Callback props
+  onAction?: (action: string) => void;
+  onTabChange?: (tabId: string) => void;
+  onEditModeToggle?: () => void;
+  onCancelEdit?: () => void;
+  onRefresh?: () => void;
 }
 
 const TeamDetailUI: React.FC<TeamDetailUIProps> = ({
   team,
-  memberCount = 0,
-  isAdmin = false,
+  formattedTeam,
+  stats,
+  members,
+  isLoading = false,
+  hasError = false,
+  error = null,
+  isEditMode = false,
+  variant = "standard",
+  tabs = [],
+  activeTab = "info",
   showActions = true,
-  variant = "normal",
-  onEdit,
-  onDelete,
-  onLeave,
-  onViewMembers,
-  onSettings,
+  availableActions = {},
+  onAction,
+  onTabChange,
+  onEditModeToggle,
+  onCancelEdit,
+  onRefresh,
   className,
   sx,
   id,
 }) => {
-  // Generate background color from team name
-  const bgColor = stringToColor(team.name);
-  const initials = getInitials(team.display_name);
+  // Handle component loading state
+  if (isLoading && !team) {
+    return <LoadingSpinner message="Loading team details..." centered />;
+  }
 
-  // Determine if we should show expanded content
-  const isExpanded = variant === "expanded";
-  const isCompact = variant === "compact";
+  // Handle error state
+  if (hasError && error) {
+    return <ErrorState message={error.message} onRetry={onRefresh} />;
+  }
 
+  // Handle empty state
+  if (!team) {
+    return (
+      <ErrorState
+        title="Team Not Found"
+        message="The requested team could not be found."
+        onRetry={onRefresh}
+      />
+    );
+  }
+
+  // Handle tab change
+  const handleTabChange = (_: React.SyntheticEvent, newValue: string) => {
+    if (onTabChange) onTabChange(newValue);
+  };
+
+  // Handle actions
+  const handleAction = (action: string) => {
+    if (onAction) onAction(action);
+  };
+
+  // Determine if action is available
+  const isActionAvailable = (action: string): boolean => {
+    return availableActions?.[action] || false;
+  };
+
+  // Render team basic information
+  const renderTeamInfo = () => (
+    <Box>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Team Name
+          </Typography>
+          <Typography variant="body1" paragraph>
+            {team.display_name}
+          </Typography>
+
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Description
+          </Typography>
+          <Typography variant="body1" paragraph>
+            {team.description || "No description provided."}
+          </Typography>
+
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Type
+          </Typography>
+          <Chip
+            label={team.type === "O" ? "Open" : "Invite Only"}
+            color={team.type === "O" ? "success" : "primary"}
+            size="small"
+          />
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Team URL
+          </Typography>
+          <Typography variant="body1" paragraph>
+            {formattedTeam?.url || `/${team.name}`}
+          </Typography>
+
+          {stats && (
+            <>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                gutterBottom
+              >
+                Member Count
+              </Typography>
+              <Typography variant="body1" paragraph>
+                {stats.total_member_count || 0} members (
+                {stats.active_member_count || 0} active)
+              </Typography>
+            </>
+          )}
+
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Created
+          </Typography>
+          <Typography variant="body1" paragraph>
+            {new Date(team.create_at).toLocaleDateString()}
+          </Typography>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+
+  // Render member preview section (limited view - full view in Members tab)
+  const renderMemberPreview = () => (
+    <Box mt={3}>
+      <Box display="flex" justifyContent="space-between" mb={2}>
+        <Typography variant="h6">Members</Typography>
+        {members && members.length > 0 && (
+          <Button
+            size="small"
+            startIcon={<PeopleIcon />}
+            onClick={() => handleTabChange(null, "members")}
+          >
+            View All ({members.length})
+          </Button>
+        )}
+      </Box>
+
+      {members && members.length > 0 ? (
+        <Box display="flex" flexWrap="wrap" gap={1}>
+          {members.slice(0, 10).map((member) => (
+            <Tooltip key={member.user_id} title={member.username || "Unknown"}>
+              <Avatar
+                alt={member.username || "Unknown"}
+                src={member.profile_picture}
+              />
+            </Tooltip>
+          ))}
+          {members.length > 10 && (
+            <Tooltip title={`${members.length - 10} more members`}>
+              <Avatar>+{members.length - 10}</Avatar>
+            </Tooltip>
+          )}
+        </Box>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          No members found.
+        </Typography>
+      )}
+    </Box>
+  );
+
+  // Render action buttons
+  const renderActions = () => {
+    if (!showActions) return null;
+
+    return (
+      <Box
+        mt={3}
+        display="flex"
+        flexWrap="wrap"
+        gap={1}
+        justifyContent="flex-end"
+      >
+        {isActionAvailable("refresh") && (
+          <IconButton
+            onClick={() => handleAction("refresh")}
+            size="small"
+            color="default"
+          >
+            <RefreshIcon />
+          </IconButton>
+        )}
+
+        {isActionAvailable("edit") && !isEditMode && (
+          <Button
+            startIcon={<EditIcon />}
+            onClick={() => handleAction("edit")}
+            size="small"
+            variant="outlined"
+          >
+            Edit
+          </Button>
+        )}
+
+        {isActionAvailable("manage-members") && (
+          <Button
+            startIcon={<PeopleIcon />}
+            onClick={() => handleAction("manage-members")}
+            size="small"
+            variant="outlined"
+          >
+            Manage Members
+          </Button>
+        )}
+
+        {isActionAvailable("settings") && (
+          <Button
+            startIcon={<SettingsIcon />}
+            onClick={() => handleAction("settings")}
+            size="small"
+            variant="outlined"
+          >
+            Settings
+          </Button>
+        )}
+
+        {isActionAvailable("channels") && (
+          <Button
+            startIcon={<ForumIcon />}
+            onClick={() => handleAction("channels")}
+            size="small"
+            variant="outlined"
+          >
+            Channels
+          </Button>
+        )}
+
+        {isActionAvailable("leave") && (
+          <Button
+            startIcon={<LeaveIcon />}
+            onClick={() => handleAction("leave")}
+            size="small"
+            variant="outlined"
+            color="error"
+          >
+            Leave
+          </Button>
+        )}
+
+        {isActionAvailable("delete") && (
+          <Button
+            startIcon={<DeleteIcon />}
+            onClick={() => handleAction("delete")}
+            size="small"
+            variant="outlined"
+            color="error"
+          >
+            Delete
+          </Button>
+        )}
+      </Box>
+    );
+  };
+
+  // Render selected tab content
+  const renderTabContent = () => {
+    const activeTabData = tabs.find((tab) => tab.id === activeTab);
+
+    // If tab has content, render it
+    if (activeTabData?.content) {
+      return activeTabData.content;
+    }
+
+    // Otherwise, render default content based on tab id
+    switch (activeTab) {
+      case "info":
+        return renderTeamInfo();
+      case "members":
+        // This would show the full members list - placeholder until we implement TeamMembersUI
+        return <Box p={2}>Full members list will be displayed here.</Box>;
+      case "channels":
+        return <Box p={2}>Channels list will be displayed here.</Box>;
+      default:
+        return (
+          <Box p={2}>
+            <Typography>Tab content not available.</Typography>
+          </Box>
+        );
+    }
+  };
+
+  // Main render
   return (
-    <Card
+    <ContentLoader
+      isLoading={isLoading}
+      error={error}
+      onRetry={onRefresh}
       className={className}
-      elevation={2}
-      sx={{
-        width: "100%",
-        ...sx,
-      }}
+      sx={sx}
       id={id}
     >
-      <CardContent>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            mb: isExpanded ? 2 : 0,
-          }}
-        >
-          <Avatar
-            sx={{
-              bgcolor: bgColor,
-              width: isExpanded ? 80 : 56,
-              height: isExpanded ? 80 : 56,
-              fontSize: isExpanded ? "2rem" : "1.5rem",
-              mr: 2,
-            }}
-          >
-            {initials}
-          </Avatar>
-
-          <Box>
-            <Typography
-              variant={isExpanded ? "h4" : "h6"}
-              gutterBottom={isExpanded}
-            >
+      <Box>
+        {/* Team Header */}
+        <Box display="flex" alignItems="center" mb={3}>
+          <TeamAvatar team={team} size="large" sx={{ mr: 2 }} />
+          <Box flexGrow={1}>
+            <Typography variant="h4" component="h1">
               {team.display_name}
             </Typography>
-
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ display: "flex", alignItems: "center" }}
-            >
+            <Typography variant="subtitle1" color="text.secondary">
               @{team.name}
-              {memberCount > 0 && (
-                <Chip
-                  icon={<PeopleIcon fontSize="small" />}
-                  label={memberCount}
-                  size="small"
-                  variant="outlined"
-                  sx={{ ml: 1 }}
-                />
-              )}
             </Typography>
           </Box>
         </Box>
 
-        {(isExpanded || (!isCompact && team.description)) && (
+        {/* Tabs */}
+        {tabs.length > 0 && (
           <>
-            <Divider sx={{ my: 2 }} />
-
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Description
-            </Typography>
-
-            <Typography variant="body1" paragraph>
-              {team.description || "No description provided."}
-            </Typography>
-          </>
-        )}
-
-        {isExpanded && (
-          <>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography
-                  variant="subtitle2"
-                  color="text.secondary"
-                  gutterBottom
-                >
-                  Team Type
-                </Typography>
-                <Chip
-                  label={team.type === "O" ? "Open" : "Invite Only"}
-                  size="small"
-                  color={team.type === "O" ? "success" : "primary"}
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography
-                  variant="subtitle2"
-                  color="text.secondary"
-                  gutterBottom
-                >
-                  Created
-                </Typography>
-                <Typography variant="body2">
-                  {new Date(team.create_at).toLocaleDateString()}
-                </Typography>
-              </Grid>
-            </Grid>
-          </>
-        )}
-      </CardContent>
-
-      {showActions && (
-        <CardActions
-          sx={{
-            justifyContent: "flex-end",
-            flexWrap: "wrap",
-            gap: 1,
-            px: 2,
-            pb: 2,
-          }}
-        >
-          <Button
-            size="small"
-            startIcon={<PeopleIcon />}
-            onClick={onViewMembers}
-          >
-            Members
-          </Button>
-
-          {isAdmin && (
-            <>
-              <Button size="small" startIcon={<EditIcon />} onClick={onEdit}>
-                Edit
-              </Button>
-
-              <Button
-                size="small"
-                startIcon={<SettingsIcon />}
-                onClick={onSettings}
-              >
-                Settings
-              </Button>
-            </>
-          )}
-
-          <Button
-            size="small"
-            startIcon={<LeaveIcon />}
-            color="error"
-            variant="outlined"
-            onClick={onLeave}
-          >
-            Leave
-          </Button>
-
-          {isAdmin && (
-            <Button
-              size="small"
-              startIcon={<DeleteIcon />}
-              color="error"
-              variant="outlined"
-              onClick={onDelete}
+            <Tabs
+              value={activeTab}
+              onChange={handleTabChange}
+              indicatorColor="primary"
+              textColor="primary"
+              sx={{ mb: 3 }}
             >
-              Delete
-            </Button>
-          )}
-        </CardActions>
-      )}
-    </Card>
+              {tabs.map((tab) => (
+                <Tab
+                  key={tab.id}
+                  label={tab.label}
+                  value={tab.id}
+                  disabled={tab.disabled}
+                />
+              ))}
+            </Tabs>
+            <Divider sx={{ mb: 3 }} />
+          </>
+        )}
+
+        {/* Tab Content */}
+        <Box mb={3}>{renderTabContent()}</Box>
+
+        {/* Action Buttons */}
+        {renderActions()}
+      </Box>
+    </ContentLoader>
   );
 };
 
