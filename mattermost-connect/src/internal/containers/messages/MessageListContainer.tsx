@@ -1,435 +1,252 @@
 // src/internal/containers/messages/MessageListContainer.tsx
 /**
- * Container component for message list that manages data fetching and state
+ * Container for message lists
+ * Handles loading, virtualization, and message display for a channel
  */
-import React, { useCallback, useState, useEffect, useRef } from "react";
-import { Box } from "@mui/material";
-import { useMessages } from "../../../hooks/useMessages";
-import {
-  useWebSocketMessageEvents,
-  useWebSocketTypingEvents,
-  useTypingIndicator,
-} from "../../../hooks/useWebSocket";
-import { BaseComponentProps } from "../../types/componentTypes";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useListContainer } from "../base/ListContainer";
+import { useMessages } from "../../../hooks";
+import { Channel, Message } from "../../../types";
+import { useDialog } from "../../hooks/useDialog";
+import { useWebSocketMessageEvents } from "../../../hooks/useWebSocket";
 import MessageListUI from "../../components/messages/MessageListUI";
-import MessageInputUI from "../../components/messages/MessageInputUI";
-import { Message } from "../../../index";
-import { getUserStatus, useUserStore } from "../../../core/store/userStore";
-import { useMessageStore } from "../../../core/store/messageStore";
-import { useAuthStore } from "../../../core/store/authStore";
-import { useChannelUnreadCount } from "../../../hooks/useUnreadCounts";
+import MessageItemContainer from "./MessageItemContainer";
+import { useDebouncedCallback } from "../../utils/performanceUtils";
 
-export interface MessageListContainerProps extends BaseComponentProps {
-  /** Channel ID to display messages for */
+export interface MessageListContainerProps {
+  /** Channel ID */
   channelId: string;
-  /** Whether to show message input */
-  showInput?: boolean;
-  /** Whether to allow file uploads */
-  allowFileUploads?: boolean;
-  /** Whether to allow emoji reactions */
-  allowEmojis?: boolean;
-  /** Maximum number of files that can be attached */
-  maxAttachments?: number;
-  /** Maximum file size in bytes */
-  maxFileSize?: number;
-  /** Custom emoji picker component */
-  emojiPickerComponent?: React.ReactNode;
-  /** Callback when message is sent */
-  onMessageSent?: (message: Message) => void;
-  /** Callback when message is edited */
-  onMessageEdited?: (message: Message) => void;
-  /** Callback when message is deleted */
-  onMessageDeleted?: (messageId: string) => void;
+  /** Channel object (if already available) */
+  channel?: Channel;
+  /** Whether to enable virtualization for performance */
+  virtualized?: boolean;
+  /** Whether to show date separators */
+  showDateSeparators?: boolean;
+  /** Whether to group messages by user */
+  groupByUser?: boolean;
+  /** Whether to enable message actions */
+  enableActions?: boolean;
+  /** Whether to show user avatars */
+  showAvatars?: boolean;
+  /** Whether the view is compact */
+  compact?: boolean;
+  /** Whether to highlight mentions */
+  highlightMentions?: boolean;
+  /** Callback when a message is selected */
+  onMessageSelect?: (message: Message) => void;
+  /** Callback when a message action is performed */
+  onMessageAction?: (action: string, message: Message) => void;
+  /** Callback when scroll position changes */
+  onScroll?: (position: { scrollTop: number; scrollHeight: number }) => void;
+  /** Callback when unread marker is visible */
+  onUnreadMarkerVisible?: () => void;
+  /** CSS class name */
+  className?: string;
+  /** Material UI's sx prop for styling */
+  sx?: any;
+  /** ID for the component */
+  id?: string;
 }
 
-const MessageListContainer: React.FC<MessageListContainerProps> = ({
-  channelId,
-  showInput = true,
-  allowFileUploads = true,
-  allowEmojis = true,
-  maxAttachments = 10,
-  maxFileSize = 50 * 1024 * 1024, // 50MB
-  emojiPickerComponent,
-  onMessageSent,
-  onMessageEdited,
-  onMessageDeleted,
-  className,
-  sx,
-  id,
-}) => {
-  // Get message data from hooks
+/**
+ * Container for message lists
+ * Manages message loading, virtualization, and interactions
+ */
+const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
+  const {
+    channelId,
+    channel,
+    virtualized = true,
+    showDateSeparators = true,
+    groupByUser = true,
+    enableActions = true,
+    showAvatars = true,
+    compact = false,
+    highlightMentions = true,
+    onMessageSelect,
+    onMessageAction,
+    onScroll,
+    onUnreadMarkerVisible,
+    className,
+    sx,
+    id,
+  } = props;
+
+  const dialog = useDialog();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollPositionRef = useRef(0);
+  const isScrolledToBottomRef = useRef(true);
+
+  // Use messages hook for data and operations
   const {
     messages,
-    pinnedMessages,
-    highlightedMessageId,
+    messagesByDate,
     replyToMessage,
     editingMessageId,
     isLoading,
-    isEditing,
+    isFetching,
     error,
+    hasUserReacted,
+    deleteMessage,
+    togglePin,
+    toggleReaction,
+    replyTo,
+    startEditing,
     refreshMessages,
     sendMessage,
-    editMessage,
-    deleteMessage,
-    pinMessage,
-    unpinMessage,
-    uploadFiles,
-    setReplyToMessage,
-    setEditingMessage,
   } = useMessages(channelId);
 
-  // Get unread counts from specialized hook
-  const { markAsRead } = useChannelUnreadCount(channelId);
-
-  // Get user store for display names and status
-  const { getUserById, getUserDisplayName } = useUserStore();
-
-  // Get current user
-  const { currentUser } = useAuthStore();
-
-  // Get typing users safely using a local state
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
-
-  // State for whether message is being sent
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-
-  // State for edit form message
-  const [editFormMessage, setEditFormMessage] = useState("");
-
-  // Reference to the message being edited
-  const editingMessageRef = useRef<Message | null>(null);
-
-  // Mark channel as read when viewing messages
-  useEffect(() => {
-    if (channelId) {
-      // Small delay to allow UI to render first
-      const timer = setTimeout(() => {
-        markAsRead();
-      }, 500);
-
-      return () => clearTimeout(timer);
-    }
-  }, [channelId, markAsRead]);
-
-  // Listening for WebSocket message events
+  // Use WebSocket events for real-time updates
   useWebSocketMessageEvents(
-    (data) => {
-      if (data.channel_id === channelId) {
-        refreshMessages();
-      }
-    },
-    [channelId, refreshMessages],
-  );
-
-  // Listening for typing events
-  useWebSocketTypingEvents(
     channelId,
-    (data) => {
-      setTypingUsers((prevUsers) => {
-        // Add user if not already there
-        if (!prevUsers.includes(data.user_id)) {
-          const newUsers = [...prevUsers, data.user_id];
-
-          // Auto-remove after 5 seconds (typical typing indicator lifetime)
-          setTimeout(() => {
-            setTypingUsers((users) =>
-              users.filter((id) => id !== data.user_id),
-            );
-          }, 5000);
-
-          return newUsers;
-        }
-        return prevUsers;
-      });
-    },
-    [channelId],
+    useCallback((data, eventType) => {
+      // Messages will be updated through the hook automatically
+      // This is just to handle any UI-specific reactions to events
+      if (isScrolledToBottomRef.current) {
+        // Schedule a scroll to bottom on next render
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 0);
+      }
+    }, []),
   );
 
-  // Update editing form when message changes
+  // Use ListContainer for list management
+  const [listState, listAPI] = useListContainer({
+    items: messages,
+    idField: "id",
+    displayField: "message",
+    searchFields: ["message"],
+    emptyMessage: "No messages yet. Start a conversation!",
+    initialLoading: isLoading,
+    onItemSelect: (message) => {
+      if (onMessageSelect) {
+        onMessageSelect(message);
+      }
+    },
+  });
+
+  // Update list items when messages change
   useEffect(() => {
-    if (editingMessageId) {
-      const message = messages.find((m) => m.id === editingMessageId);
-      if (message) {
-        setEditFormMessage(message.message);
-        editingMessageRef.current = message;
-      }
-    } else {
-      setEditFormMessage("");
-      editingMessageRef.current = null;
+    listAPI.setItems(messages);
+  }, [messages, listAPI]);
+
+  // Scroll to bottom on initial load or new messages
+  useEffect(() => {
+    if (!isLoading && !isFetching && isScrolledToBottomRef.current) {
+      // Use setTimeout to ensure the DOM has updated
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 0);
     }
-  }, [editingMessageId, messages]);
+  }, [messages.length, isLoading, isFetching]);
 
-  // Map pinned message IDs to a set for easy lookup
-  const pinnedMessageIdsSet = React.useMemo(() => {
-    return new Set<string>((pinnedMessages || []).map((m: any) => m.id));
-  }, [pinnedMessages]);
+  // Debounced scroll handler
+  const handleScroll = useDebouncedCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+      const isScrolledToBottom = scrollHeight - scrollTop - clientHeight < 20;
 
-  // Build user display names map
-  const userDisplayNames = React.useMemo(() => {
-    const displayNames: Record<string, string> = {};
+      isScrolledToBottomRef.current = isScrolledToBottom;
+      lastScrollPositionRef.current = scrollTop;
 
-    messages.forEach((message) => {
-      if (!displayNames[message.user_id]) {
-        displayNames[message.user_id] = getUserDisplayName(message.user_id);
-      }
-    });
-
-    // Also add typing users to ensure their names are available
-    typingUsers.forEach((userId) => {
-      if (!displayNames[userId]) {
-        displayNames[userId] = getUserDisplayName(userId);
-      }
-    });
-
-    return displayNames;
-  }, [messages, typingUsers, getUserDisplayName]);
-
-  // Build user image URLs map
-  const userImageUrls = React.useMemo(() => {
-    const imageUrls: Record<string, string> = {};
-
-    messages.forEach((message) => {
-      const user = getUserById(message.user_id);
-      if (user && user.last_picture_update && !imageUrls[message.user_id]) {
-        imageUrls[message.user_id] =
-          `/api/v4/users/${user.id}/image?_=${user.last_picture_update}`;
-      }
-    });
-
-    return imageUrls;
-  }, [messages, getUserById]);
-
-  // Build user statuses map
-  const userStatuses = React.useMemo(() => {
-    const statuses: Record<string, "online" | "away" | "dnd" | "offline"> = {};
-
-    messages.forEach((message) => {
-      if (!statuses[message.user_id]) {
-        statuses[message.user_id] = getUserStatus(message.user_id);
-      }
-    });
-
-    return statuses;
-  }, [messages]);
-
-  // Handle loading more past messages
-  const handleLoadMorePast = useCallback(() => {
-    // This would implement pagination
-    console.log("Load more past messages");
-  }, []);
-
-  // Handle edit message
-  const handleEditMessage = useCallback(
-    (message: Message) => {
-      setEditingMessage(message.id);
-    },
-    [setEditingMessage],
-  );
-
-  // Handle reply to message
-  const handleReplyToMessage = useCallback(
-    (message: Message) => {
-      setReplyToMessage(message);
-    },
-    [setReplyToMessage],
-  );
-
-  // Handle delete message
-  const handleDeleteMessage = useCallback(
-    async (message: Message) => {
-      try {
-        await deleteMessage(message.id);
-
-        if (onMessageDeleted) {
-          onMessageDeleted(message.id);
-        }
-      } catch (error) {
-        console.error("Error deleting message:", error);
+      if (onScroll) {
+        onScroll({ scrollTop, scrollHeight });
       }
     },
-    [deleteMessage, onMessageDeleted],
+    100,
   );
 
-  // Handle toggle pin
-  const handleTogglePin = useCallback(
-    async (message: Message) => {
-      try {
-        const isPinned = pinnedMessageIdsSet.has(message.id);
-
-        if (isPinned) {
-          await unpinMessage(message.id);
-        } else {
-          await pinMessage(message.id);
-        }
-      } catch (error) {
-        console.error("Error toggling pin:", error);
+  // Handle message action
+  const handleMessageAction = useCallback(
+    (action: string, message: Message) => {
+      switch (action) {
+        case "reply":
+          replyTo(message);
+          break;
+        case "edit":
+          startEditing(message.id);
+          break;
+        case "delete":
+          dialog
+            .confirmAsync({
+              title: "Delete Message",
+              message:
+                "Are you sure you want to delete this message? This action cannot be undone.",
+              confirmText: "Delete",
+              isDestructive: true,
+            })
+            .then((confirmed) => {
+              if (confirmed) {
+                deleteMessage(message.id);
+              }
+            });
+          break;
+        case "pin":
+          togglePin(message.id, !!message.is_pinned);
+          break;
+        case "react":
+          // This would typically open an emoji picker
+          // For simplicity, we'll just toggle a default reaction
+          toggleReaction(message.id, "thumbsup");
+          break;
+        default:
+          // Pass any other actions to the parent component
+          if (onMessageAction) {
+            onMessageAction(action, message);
+          }
       }
     },
-    [pinMessage, unpinMessage, pinnedMessageIdsSet],
+    [
+      replyTo,
+      startEditing,
+      deleteMessage,
+      togglePin,
+      toggleReaction,
+      dialog,
+      onMessageAction,
+    ],
   );
 
-  // Handle add reaction
-  const handleAddReaction = useCallback((message: Message) => {
-    // This would open an emoji picker for the specific message
-    console.log("Add reaction to message:", message.id);
-  }, []);
+  // Load more messages when scrolling to top
+  const handleLoadMore = useCallback(() => {
+    refreshMessages();
+  }, [refreshMessages]);
 
-  // Handle reaction click
-  const handleReactionClick = useCallback((message: Message, emoji: string) => {
-    // This would toggle the reaction
-    console.log("Toggle reaction:", emoji, "on message:", message.id);
-  }, []);
+  // Prepare UI props
+  const uiProps = {
+    messages: listState.items,
+    messagesByDate: showDateSeparators ? messagesByDate : undefined,
+    isLoading: listState.isLoading,
+    virtualized,
+    scrollRef,
+    compact,
+    showAvatars,
+    groupByUser,
+    highlightMentions,
+    onScroll: handleScroll,
+    onLoadMore: handleLoadMore,
+    renderMessage: (message: Message) => (
+      <MessageItemContainer
+        key={message.id}
+        message={message}
+        isEditing={message.id === editingMessageId}
+        isReplying={replyToMessage?.id === message.id}
+        showActions={enableActions}
+        compact={compact}
+        onAction={(action) => handleMessageAction(action, message)}
+      />
+    ),
+    className,
+    sx,
+    id,
+  };
 
-  // Handle message sending
-  const handleSendMessage = useCallback(
-    async (text: string, files: File[]) => {
-      if ((!text && files.length === 0) || isSendingMessage) return;
-
-      setIsSendingMessage(true);
-
-      try {
-        // Upload files if any
-        let fileIds: string[] = [];
-        if (files.length > 0) {
-          fileIds = await uploadFiles(files);
-        }
-
-        // Send the message
-        const sentMessage = await sendMessage(text, fileIds);
-
-        if (onMessageSent) {
-          onMessageSent(sentMessage);
-        }
-      } catch (error) {
-        console.error("Error sending message:", error);
-      } finally {
-        setIsSendingMessage(false);
-      }
-    },
-    [sendMessage, uploadFiles, isSendingMessage, onMessageSent],
-  );
-
-  // Handle edit save
-  const handleEditSave = useCallback(
-    async (text: string) => {
-      if (!editingMessageId || !editingMessageRef.current) return;
-
-      try {
-        const updatedMessage = await editMessage(editingMessageId, text);
-        setEditingMessage(null);
-
-        if (onMessageEdited) {
-          onMessageEdited(updatedMessage);
-        }
-      } catch (error) {
-        console.error("Error editing message:", error);
-      }
-    },
-    [editingMessageId, editMessage, setEditingMessage, onMessageEdited],
-  );
-
-  // Handle edit cancel
-  const handleEditCancel = useCallback(() => {
-    setEditingMessage(null);
-  }, [setEditingMessage]);
-
-  // Handle reply cancel
-  const handleReplyCancel = useCallback(() => {
-    setReplyToMessage(null);
-  }, [setReplyToMessage]);
-
-  // Get typing indicator hook
-  const sendTypingEvent = useTypingIndicator(channelId);
-
-  // Handle user typing
-  const handleTyping = useCallback(() => {
-    if (sendTypingEvent) {
-      sendTypingEvent();
-    }
-  }, [sendTypingEvent]);
-
-  // Render edit form
-  const renderEditForm = useCallback(
-    (message: Message) => {
-      return (
-        <MessageInputUI
-          initialValue={editFormMessage}
-          isEditing={true}
-          isSending={isEditing}
-          onSubmit={(text) => handleEditSave(text)}
-          onCancel={handleEditCancel}
-        />
-      );
-    },
-    [editFormMessage, isEditing, handleEditSave, handleEditCancel],
-  );
-
-  // Get reply-to user name
-  const replyToUserName = replyToMessage
-    ? userDisplayNames[replyToMessage.user_id] || "User"
-    : "User";
-
-  return (
-    <Box
-      className={className}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        ...sx,
-      }}
-      id={id}
-    >
-      {/* Message list */}
-      <Box sx={{ flex: 1, overflow: "hidden" }}>
-        <MessageListUI
-          messages={messages}
-          isLoading={isLoading}
-          highlightedMessageId={highlightedMessageId}
-          editingMessageId={editingMessageId}
-          error={error}
-          userDisplayNames={userDisplayNames}
-          userImageUrls={userImageUrls}
-          userStatuses={userStatuses}
-          pinnedMessageIds={pinnedMessageIdsSet}
-          currentUserId={currentUser?.id}
-          onMessageClick={() => {}}
-          onLoadMorePast={handleLoadMorePast}
-          onEditMessage={handleEditMessage}
-          onReplyToMessage={handleReplyToMessage}
-          onDeleteMessage={handleDeleteMessage}
-          onTogglePin={handleTogglePin}
-          onAddReaction={handleAddReaction}
-          onReactionClick={handleReactionClick}
-          renderEditForm={renderEditForm}
-          typingUserIds={typingUsers}
-          sx={{ height: "100%" }}
-        />
-      </Box>
-
-      {/* Message input */}
-      {showInput && (
-        <Box sx={{ mt: 2 }}>
-          <MessageInputUI
-            placeholder="Type a message..."
-            allowAttachments={allowFileUploads}
-            allowEmojis={allowEmojis}
-            isReply={!!replyToMessage}
-            replyToMessage={replyToMessage}
-            isUploading={false}
-            isSending={isSendingMessage}
-            maxAttachments={maxAttachments}
-            maxFileSize={maxFileSize}
-            onSubmit={handleSendMessage}
-            onCancelReply={handleReplyCancel}
-            onTyping={handleTyping}
-            emojiPickerComponent={emojiPickerComponent}
-            replyToUserName={replyToUserName}
-          />
-        </Box>
-      )}
-    </Box>
-  );
+  return <MessageListUI {...uiProps} />;
 };
 
 export default MessageListContainer;

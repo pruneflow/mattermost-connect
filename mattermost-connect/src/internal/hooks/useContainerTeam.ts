@@ -4,6 +4,7 @@ import { useTeams, useTeam } from "../../hooks";
 import { Team, TeamType, UpdateTeamParams } from "../../types";
 import { useDelayedLoading } from "../utils/performanceUtils";
 import { stringToColor } from "../../utils/mattermostUtils";
+import { ActionOption } from "../types/componentTypes";
 
 export interface TeamDisplayData {
   id: string;
@@ -15,12 +16,6 @@ export interface TeamDisplayData {
   memberCount: number | null;
   url: string;
   color: string;
-}
-
-interface Action {
-  id: string;
-  label: string;
-  destructive?: boolean;
 }
 
 /**
@@ -105,8 +100,8 @@ export function useContainerTeam(teamId?: string) {
    * Gets available team actions based on user permissions
    */
   const getTeamActions = useCallback(
-    (team: Team, isAdmin: boolean = false): Action[] => {
-      const actions: Action[] = [
+    (team: Team, isAdmin: boolean = false): ActionOption[] => {
+      const actions: ActionOption[] = [
         { id: "view", label: "View Team" },
         { id: "channels", label: "Browse Channels" },
       ];

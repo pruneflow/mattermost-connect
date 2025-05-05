@@ -1,210 +1,304 @@
 // src/internal/containers/messages/MessageInputContainer.tsx
 /**
- * Container component for message input that manages sending and editing messages
+ * Container for message input
+ * Handles message composition, file uploads, and sending
  */
-import React, { useCallback, useState, useEffect } from "react";
-import { useMessages } from "../../../hooks/useMessages";
+import React, { useCallback, useState, useEffect, useRef } from "react";
+import { useBaseContainer } from "../base/BaseContainer";
+import { useMessages, useThread } from "../../../hooks";
 import { useTypingIndicator } from "../../../hooks/useWebSocket";
-import { BaseComponentProps } from "../../types/componentTypes";
+import { Channel, Message } from "../../../types";
+import { useDialog } from "../../hooks/useDialog";
 import MessageInputUI from "../../components/messages/MessageInputUI";
-import { useUserStore } from "../../../core/store/userStore";
-import { Message } from "../../../index";
+import FileUploadContainer from "./FileUploadContainer";
 
-export interface MessageInputContainerProps extends BaseComponentProps {
-  /** Channel ID to send messages to */
+export interface MessageInputContainerProps {
+  /** Channel ID */
   channelId: string;
-  /** Initial value for the input */
-  initialValue?: string;
-  /** Whether to allow file attachments */
-  allowAttachments?: boolean;
-  /** Whether to allow emoji reactions */
-  allowEmojis?: boolean;
-  /** Message being edited (if any) */
-  editingMessage?: Message | null;
-  /** Whether to show the reply UI */
-  showReply?: boolean;
-  /** Message being replied to (if any) */
+  /** Channel object (if already available) */
+  channel?: Channel;
+  /** Whether this input is for a thread */
+  isThreadReply?: boolean;
+  /** Root message ID if in thread */
+  rootId?: string;
+  /** Message to reply to */
   replyToMessage?: Message | null;
-  /** Maximum number of files that can be attached */
-  maxAttachments?: number;
-  /** Maximum file size in bytes */
-  maxFileSize?: number;
-  /** Custom emoji picker component */
-  emojiPickerComponent?: React.ReactNode;
-  /** Callback when a message is sent */
+  /** Message being edited */
+  editingMessage?: Message | null;
+  /** Placeholder text */
+  placeholder?: string;
+  /** Whether to show file upload button */
+  showFileUpload?: boolean;
+  /** Whether to suggest emojis */
+  suggestEmojis?: boolean;
+  /** Whether to suggest mentions */
+  suggestMentions?: boolean;
+  /** Whether to suggest channels */
+  suggestChannels?: boolean;
+  /** Whether to show formatting options */
+  showFormatting?: boolean;
+  /** Callback when message is sent */
   onMessageSent?: (message: Message) => void;
-  /** Callback when a message is edited */
-  onMessageEdited?: (message: Message) => void;
-  /** Callback when editing is cancelled */
-  onEditCancel?: () => void;
-  /** Callback when reply is cancelled */
-  onReplyCancel?: () => void;
+  /** Callback when reply is canceled */
+  onCancelReply?: () => void;
+  /** Callback when edit is canceled */
+  onCancelEdit?: () => void;
+  /** CSS class name */
+  className?: string;
+  /** Material UI's sx prop for styling */
+  sx?: any;
+  /** ID for the component */
+  id?: string;
 }
 
-const MessageInputContainer: React.FC<MessageInputContainerProps> = ({
-  channelId,
-  initialValue = "",
-  allowAttachments = true,
-  allowEmojis = true,
-  editingMessage = null,
-  showReply = false,
-  replyToMessage = null,
-  maxAttachments = 10,
-  maxFileSize = 50 * 1024 * 1024, // 50MB
-  emojiPickerComponent,
-  onMessageSent,
-  onMessageEdited,
-  onEditCancel,
-  onReplyCancel,
-  className,
-  sx,
-  id,
-}) => {
-  // Get message functions from hook
-  const { sendMessage, editMessage, uploadFiles, isSending, isUploading } =
-    useMessages(channelId);
+/**
+ * Container for message input
+ * Manages composition, file uploads, and sending messages
+ */
+const MessageInputContainer: React.FC<MessageInputContainerProps> = (props) => {
+  const {
+    channelId,
+    channel,
+    isThreadReply = false,
+    rootId,
+    replyToMessage,
+    editingMessage,
+    placeholder = "Write a message...",
+    showFileUpload = true,
+    suggestEmojis = true,
+    suggestMentions = true,
+    suggestChannels = true,
+    showFormatting = true,
+    onMessageSent,
+    onCancelReply,
+    onCancelEdit,
+    className,
+    sx,
+    id,
+  } = props;
 
-  // Get typing indicator hook
-  const sendTypingEvent = useTypingIndicator(channelId);
+  // State for input text
+  const [messageText, setMessageText] = useState("");
+  // State for uploaded files
+  const [fileIds, setFileIds] = useState<string[]>([]);
+  // State for suggestions visibility
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  // Get user store for names
-  const { getUserDisplayName } = useUserStore();
+  // Use dialog for confirmations
+  const dialog = useDialog();
 
-  // State for whether the input is sending
-  const [isSendingState, setIsSendingState] = useState(false);
-  const [isUploadingState, setIsUploadingState] = useState(false);
+  // Input ref for focusing
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Use effective props for conditional logic
-  const isEditing = !!editingMessage;
-  const isReply = !!replyToMessage || showReply;
+  // Use Typing indicator for real-time typing updates
+  const { isTyping, typingUserIds, sendTypingEvent } = useTypingIndicator(
+    channelId,
+    rootId,
+  );
 
-  // Get reply-to user name
-  const replyToUserName = replyToMessage
-    ? getUserDisplayName(replyToMessage.user_id)
-    : "User";
+  // Use messages/thread hooks based on context
+  const messagesHook =
+    isThreadReply && rootId ? useThread(rootId) : useMessages(channelId);
 
-  // Update initial value when editing message changes
+  const {
+    sendMessage,
+    sendReply,
+    uploadFiles: uploadMessageFiles,
+    isSending,
+    isUploading,
+  } = messagesHook as any; // Using any to accommodate both hook types
+
+  // Use BaseContainer for common functionality
+  const [baseState, baseAPI] = useBaseContainer({
+    initialLoading: isSending || isUploading,
+    id,
+    className,
+    sx,
+  });
+
+  // Initialize message text from editingMessage if present
   useEffect(() => {
     if (editingMessage) {
-      // initialValue is handled by the UI component
-      // but we could set a state here if needed
+      setMessageText(editingMessage.message);
+    } else {
+      setMessageText("");
     }
   }, [editingMessage]);
 
-  // Handle message submission
-  const handleSubmit = useCallback(
-    async (text: string, attachments: File[]) => {
-      if (
-        (!text && attachments.length === 0) ||
-        isSendingState ||
-        isUploadingState
-      )
-        return;
+  // Focus input on mount
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
 
-      setIsSendingState(true);
+  // Handle text input change
+  const handleTextChange = useCallback(
+    (text: string) => {
+      setMessageText(text);
 
-      try {
-        if (isEditing && editingMessage) {
-          // Edit existing message
-          const updatedMessage = await editMessage(editingMessage.id, text);
-
-          if (onMessageEdited) {
-            onMessageEdited(updatedMessage);
-          }
-        } else {
-          // Send new message
-          let fileIds: string[] = [];
-
-          // Upload files if any
-          if (attachments.length > 0) {
-            setIsUploadingState(true);
-            fileIds = await uploadFiles(attachments);
-            setIsUploadingState(false);
-          }
-
-          // Determine root ID for replies
-          const rootId =
-            isReply && replyToMessage ? replyToMessage.id : undefined;
-
-          // Send the message
-          const sentMessage = await sendMessage(text, fileIds);
-
-          if (onMessageSent) {
-            onMessageSent(sentMessage);
-          }
-        }
-      } catch (error) {
-        console.error("Error sending/editing message:", error);
-      } finally {
-        setIsSendingState(false);
+      // Send typing indicator
+      if (text.length > 0) {
+        sendTypingEvent();
       }
     },
-    [
-      isEditing,
-      isReply,
-      editingMessage,
-      replyToMessage,
-      sendMessage,
-      editMessage,
-      uploadFiles,
-      onMessageSent,
-      onMessageEdited,
-      isSendingState,
-      isUploadingState,
-    ],
+    [sendTypingEvent],
   );
 
-  // Handle editing cancel
-  const handleCancel = useCallback(() => {
-    if (onEditCancel) {
-      onEditCancel();
-    }
-  }, [onEditCancel]);
+  // Handle file upload
+  const handleFileUpload = useCallback(
+    async (files: File[]) => {
+      try {
+        const newFileIds = await uploadMessageFiles(files);
+        setFileIds((prev) => [...prev, ...newFileIds]);
+        return newFileIds;
+      } catch (error) {
+        baseAPI.setError(
+          error instanceof Error ? error : new Error("Upload failed"),
+        );
+        return [];
+      }
+    },
+    [uploadMessageFiles, baseAPI],
+  );
 
-  // Handle reply cancel
-  const handleReplyCancel = useCallback(() => {
-    if (onReplyCancel) {
-      onReplyCancel();
-    }
-  }, [onReplyCancel]);
+  // Handle file removal
+  const handleRemoveFile = useCallback((fileId: string) => {
+    setFileIds((prev) => prev.filter((id) => id !== fileId));
+  }, []);
 
-  // Handle typing notification
-  const handleTyping = useCallback(() => {
-    if (sendTypingEvent) {
-      sendTypingEvent(
-        isReply && replyToMessage ? replyToMessage.id : undefined,
+  // Handle emoji selection
+  const handleEmojiSelect = useCallback((emoji: string) => {
+    setMessageText((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+
+    // Focus back on input
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+
+  // Handle message send
+  const handleSend = useCallback(async () => {
+    if (messageText.trim().length === 0 && fileIds.length === 0) {
+      return;
+    }
+
+    try {
+      let result: Message | null = null;
+
+      if (editingMessage) {
+        // TODO: Handle message editing
+        // This would call updateMessage or similar
+        return;
+      }
+
+      if (isThreadReply && rootId) {
+        result = await sendReply(messageText, fileIds);
+      } else {
+        result = await sendMessage(messageText, fileIds);
+      }
+
+      // Clear input after sending
+      setMessageText("");
+      setFileIds([]);
+
+      // Callback
+      if (result && onMessageSent) {
+        onMessageSent(result);
+      }
+    } catch (error) {
+      baseAPI.setError(
+        error instanceof Error ? error : new Error("Failed to send message"),
       );
     }
-  }, [sendTypingEvent, isReply, replyToMessage]);
+  }, [
+    messageText,
+    fileIds,
+    isThreadReply,
+    rootId,
+    editingMessage,
+    sendReply,
+    sendMessage,
+    onMessageSent,
+    baseAPI,
+  ]);
 
-  // Get initial value for input
-  const effectiveInitialValue =
-    isEditing && editingMessage ? editingMessage.message : initialValue;
+  // Handle cancel reply
+  const handleCancelReply = useCallback(() => {
+    if (onCancelReply) {
+      onCancelReply();
+    }
+  }, [onCancelReply]);
 
-  return (
-    <MessageInputUI
-      placeholder={isReply ? "Write a reply..." : "Type a message..."}
-      initialValue={effectiveInitialValue}
-      allowAttachments={allowAttachments}
-      allowEmojis={allowEmojis}
-      isEditing={isEditing}
-      isReply={isReply}
-      replyToMessage={replyToMessage}
-      isUploading={isUploadingState || isUploading}
-      isSending={isSendingState || isSending}
-      maxAttachments={maxAttachments}
-      maxFileSize={maxFileSize}
-      onSubmit={handleSubmit}
-      onCancel={handleCancel}
-      onCancelReply={handleReplyCancel}
-      onTyping={handleTyping}
-      emojiPickerComponent={emojiPickerComponent}
-      replyToUserName={replyToUserName}
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
+  // Handle cancel edit
+  const handleCancelEdit = useCallback(() => {
+    if (
+      messageText !== (editingMessage?.message || "") &&
+      messageText.trim() !== ""
+    ) {
+      dialog
+        .confirmAsync({
+          title: "Discard Changes",
+          message: "Are you sure you want to discard your changes?",
+          confirmText: "Discard",
+          cancelText: "Keep Editing",
+        })
+        .then((confirmed) => {
+          if (confirmed && onCancelEdit) {
+            setMessageText("");
+            onCancelEdit();
+          }
+        });
+    } else if (onCancelEdit) {
+      onCancelEdit();
+    }
+  }, [messageText, editingMessage, dialog, onCancelEdit]);
+
+  // Prepare UI props
+  const uiProps = {
+    messageText,
+    fileIds,
+    replyToMessage,
+    editingMessage,
+    placeholder,
+    showFileUpload,
+    suggestEmojis,
+    suggestMentions,
+    suggestChannels,
+    showFormatting,
+    isLoading: baseState.isLoading,
+    isSending,
+    isUploading,
+    showEmojiPicker,
+    typingUsers: typingUserIds,
+    inputRef,
+    onTextChange: handleTextChange,
+    onSend: handleSend,
+    onFileUpload: handleFileUpload,
+    onRemoveFile: handleRemoveFile,
+    onEmojiSelect: handleEmojiSelect,
+    onToggleEmojiPicker: () => setShowEmojiPicker((prev) => !prev),
+    onCancelReply: handleCancelReply,
+    onCancelEdit: handleCancelEdit,
+    fileUploadRenderer: ({ onUpload }: { onUpload: any }) => (
+      <FileUploadContainer
+        channelId={channelId}
+        onUploadComplete={(ids) => {
+          setFileIds((prev) => [...prev, ...ids]);
+        }}
+        onUploadError={(error) => {
+          baseAPI.setError(error);
+        }}
+      />
+    ),
+    className,
+    sx,
+    id,
+  };
+
+  return <MessageInputUI {...uiProps} />;
 };
 
-export default MessageInputContainer;
+// Memoize to prevent unnecessary rerenders
+export default React.memo(MessageInputContainer);

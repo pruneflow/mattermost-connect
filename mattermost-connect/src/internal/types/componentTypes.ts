@@ -387,3 +387,10 @@ export interface ChannelHeaderData extends BaseComponentProps {
   /** Callback when info is clicked */
   onInfo?: () => void;
 }
+
+export interface ActionOption {
+  id: string;
+  label: string;
+  icon?: string;
+  destructive?: boolean;
+}

@@ -1,113 +1,235 @@
 // src/internal/containers/messages/FileUploadContainer.tsx
 /**
- * Container component for file upload that manages state and upload logic
+ * Container for file uploads
+ * Handles file selection, validation, and uploading
  */
-import React, { useCallback, useState } from "react";
-import { BaseComponentProps } from "../../types/componentTypes";
+import React, { useCallback, useState, useRef } from "react";
+import { useBaseContainer } from "../base/BaseContainer";
+import { useMessages } from "../../../hooks";
 import FileUploadUI from "../../components/messages/FileUploadUI";
-import { useMessages } from "../../../hooks/useMessages";
+import {
+  formatFileSize,
+  getFileExtension,
+} from "../../../utils/mattermostUtils";
 
-export interface FileUploadContainerProps extends BaseComponentProps {
-  /** Channel ID to upload files to */
+export interface FileUploadContainerProps {
+  /** Channel ID */
   channelId: string;
-  /** Maximum number of files that can be uploaded */
+  /** Maximum file size in bytes (default: 50MB) */
+  maxFileSize?: number;
+  /** Maximum number of files (default: 10) */
   maxFiles?: number;
-  /** Maximum file size in bytes */
-  maxSize?: number;
-  /** Accepted file types */
-  accept?: string;
+  /** Allowed file types */
+  allowedTypes?: string[];
+  /** Whether the uploader is disabled */
+  disabled?: boolean;
+  /** Callback when upload completes successfully */
+  onUploadComplete?: (fileIds: string[]) => void;
+  /** Callback when upload fails */
+  onUploadError?: (error: Error) => void;
   /** Callback when files are selected */
   onFilesSelected?: (files: File[]) => void;
-  /** Callback when a file upload starts */
-  onUploadStart?: () => void;
-  /** Callback when a file upload completes */
-  onUploadComplete?: (fileIds: string[]) => void;
-  /** Callback when a file upload fails */
-  onUploadError?: (error: Error) => void;
+  /** CSS class name */
+  className?: string;
+  /** Material UI's sx prop for styling */
+  sx?: any;
+  /** ID for the component */
+  id?: string;
 }
 
-const FileUploadContainer: React.FC<FileUploadContainerProps> = ({
-  channelId,
-  maxFiles = 10,
-  maxSize = 50 * 1024 * 1024, // 50MB
-  accept = "*",
-  onFilesSelected,
-  onUploadStart,
-  onUploadComplete,
-  onUploadError,
-  className,
-  sx,
-  id,
-}) => {
-  // Get upload function from messages hook
+/**
+ * Container for file uploads
+ * Manages file selection, validation, and uploading
+ */
+const FileUploadContainer: React.FC<FileUploadContainerProps> = (props) => {
+  const {
+    channelId,
+    maxFileSize = 50 * 1024 * 1024, // 50MB
+    maxFiles = 10,
+    allowedTypes,
+    disabled = false,
+    onUploadComplete,
+    onUploadError,
+    onFilesSelected,
+    className,
+    sx,
+    id,
+  } = props;
+
+  // Use messages hook for upload functionality
   const { uploadFiles, isUploading } = useMessages(channelId);
 
-  // State for tracking uploading state
-  const [isUploadingLocal, setIsUploadingLocal] = useState(false);
+  // State for selected files
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // State for upload progress
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
+    {},
+  );
+
+  // File input ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Use BaseContainer for common functionality
+  const [baseState, baseAPI] = useBaseContainer({
+    initialLoading: isUploading,
+    id,
+    className,
+    sx,
+  });
+
+  // Validate files
+  const validateFiles = useCallback(
+    (files: File[]): { valid: File[]; errors: string[] } => {
+      const validFiles: File[] = [];
+      const errors: string[] = [];
+
+      // Check if adding these files would exceed max files
+      if (selectedFiles.length + files.length > maxFiles) {
+        errors.push(`You can upload a maximum of ${maxFiles} files at once.`);
+        return { valid: validFiles, errors };
+      }
+
+      // Validate each file
+      files.forEach((file) => {
+        // Check file size
+        if (file.size > maxFileSize) {
+          errors.push(
+            `File "${file.name}" exceeds the maximum file size of ${formatFileSize(maxFileSize)}.`,
+          );
+          return;
+        }
+
+        // Check file type if restrictions are provided
+        if (allowedTypes && allowedTypes.length > 0) {
+          const ext = getFileExtension(file.name);
+          const mimeType = file.type;
+
+          const isAllowed = allowedTypes.some((type) => {
+            return mimeType.startsWith(type) || type.includes(ext);
+          });
+
+          if (!isAllowed) {
+            errors.push(`File "${file.name}" has an unsupported file type.`);
+            return;
+          }
+        }
+
+        validFiles.push(file);
+      });
+
+      return { valid: validFiles, errors };
+    },
+    [selectedFiles.length, maxFiles, maxFileSize, allowedTypes],
+  );
 
   // Handle file selection
-  const handleFilesSelected = useCallback(
-    (files: File[]) => {
-      if (onFilesSelected) {
-        onFilesSelected(files);
+  const handleFileSelect = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      const fileArray = Array.from(files);
+      const { valid, errors } = validateFiles(fileArray);
+
+      if (errors.length > 0) {
+        // Show errors
+        errors.forEach((error) => {
+          baseAPI.setError(new Error(error));
+        });
+      }
+
+      if (valid.length > 0) {
+        setSelectedFiles((prev) => [...prev, ...valid]);
+
+        if (onFilesSelected) {
+          onFilesSelected(valid);
+        }
       }
     },
-    [onFilesSelected],
+    [validateFiles, baseAPI, onFilesSelected],
   );
 
-  // Handle upload start
-  const handleUploadStart = useCallback(() => {
-    setIsUploadingLocal(true);
+  // Handle file drag and drop
+  const handleFileDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
 
-    if (onUploadStart) {
-      onUploadStart();
+      if (event.dataTransfer.files) {
+        handleFileSelect(event.dataTransfer.files);
+      }
+    },
+    [handleFileSelect],
+  );
+
+  // Handle click on the upload area
+  const handleUploadClick = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
-  }, [onUploadStart]);
+  }, []);
 
-  // Handle upload - this is the main upload function that will be passed to UI
-  const handleUpload = useCallback(
-    async (files: File[]) => {
-      if (!files.length) return;
+  // Handle file upload
+  const handleUpload = useCallback(async () => {
+    if (selectedFiles.length === 0) return;
 
-      try {
-        handleUploadStart();
+    try {
+      // Start upload
+      const fileIds = await uploadFiles(selectedFiles);
 
-        const fileIds = await uploadFiles(files);
+      // Clear selected files
+      setSelectedFiles([]);
 
-        if (onUploadComplete) {
-          onUploadComplete(fileIds);
-        }
-
-        return fileIds;
-      } catch (error) {
-        console.error("Error uploading files:", error);
-
-        if (onUploadError) {
-          onUploadError(error as Error);
-        }
-      } finally {
-        setIsUploadingLocal(false);
+      // Callback
+      if (onUploadComplete) {
+        onUploadComplete(fileIds);
       }
+    } catch (error) {
+      baseAPI.setError(
+        error instanceof Error ? error : new Error("Upload failed"),
+      );
+
+      if (onUploadError) {
+        onUploadError(
+          error instanceof Error ? error : new Error("Upload failed"),
+        );
+      }
+    }
+  }, [selectedFiles, uploadFiles, baseAPI, onUploadComplete, onUploadError]);
+
+  // Handle file removal
+  const handleRemoveFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Handle input change
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      handleFileSelect(event.target.files);
+      // Reset input value to allow selecting the same file again
+      event.target.value = "";
     },
-    [uploadFiles, handleUploadStart, onUploadComplete, onUploadError],
+    [handleFileSelect],
   );
 
-  return (
-    <FileUploadUI
-      maxFiles={maxFiles}
-      maxSize={maxSize}
-      accept={accept}
-      isLoading={isUploadingLocal || isUploading}
-      onFilesSelected={handleFilesSelected}
-      onUploadStart={handleUploadStart}
-      onUpload={handleUpload} // Pass the actual upload function to the UI
-      onUploadComplete={onUploadComplete}
-      onUploadError={onUploadError}
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
+  // Prepare UI props
+  const uiProps = {
+    selectedFiles,
+    isUploading: baseState.isLoading,
+    uploadProgress,
+    disabled,
+    fileInputRef,
+    onUploadClick: handleUploadClick,
+    onFileDrop: handleFileDrop,
+    onDragOver: (e: React.DragEvent<HTMLDivElement>) => e.preventDefault(),
+    onInputChange: handleInputChange,
+    onRemoveFile: handleRemoveFile,
+    onUpload: handleUpload,
+    className,
+    sx,
+    id,
+  };
+
+  return <FileUploadUI {...uiProps} />;
 };
 
-export default FileUploadContainer;
+// Memoize to prevent unnecessary rerenders
+export default React.memo(FileUploadContainer);
