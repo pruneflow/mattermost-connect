@@ -1,266 +1,321 @@
 // src/internal/containers/channels/ChannelDetailContainer.tsx
 /**
- * Container component for channel details that manages data fetching and state
+ * Container for channel details
+ * Handles channel information display and channel actions
  */
-import React, { useCallback, useState, useMemo } from "react";
-import { useChannel } from "../../../hooks/useChannels";
-import { BaseComponentProps } from "../../types/componentTypes";
+import React, { useCallback, useMemo, useState } from "react";
+import { useDetailContainer } from "../base/DetailContainer";
+import { useContainerChannel } from "../../hooks/useContainerChannel";
+import { Channel } from "../../../types";
 import ChannelDetailUI from "../../components/channels/ChannelDetailUI";
-import { ConfirmDialog } from "../../components/common";
-import { getUserStatus, useUserStore } from "../../../core/store/userStore";
-import { useChannelUnreadCount } from "../../../hooks/useUnreadCounts";
+import ChannelMembersContainer from "./ChannelMembersContainer";
+import ChannelSettingsContainer from "./ChannelSettingsContainer";
+import { useDialog } from "../../hooks/useDialog";
 
-export interface ChannelDetailContainerProps extends BaseComponentProps {
-  /** Channel ID to display */
+export interface ChannelDetailContainerProps {
+  /** Channel ID */
   channelId: string;
-  /** Whether to show channel actions */
+  /** Channel object (if already available) */
+  channel?: Channel;
+  /** Display variant */
+  variant?: "standard" | "compact" | "card";
+  /** Custom tabs to display */
+  tabs?: Array<{
+    id: string;
+    label: string;
+    content?: React.ReactNode;
+    disabled?: boolean;
+  }>;
+  /** Initially active tab */
+  activeTab?: string;
+  /** Whether to show action buttons */
   showActions?: boolean;
-  /** Maximum number of members to preview */
-  memberPreviewCount?: number;
-  /** Callback when channel is deleted */
-  onDelete?: () => void;
-  /** Callback when channel is left */
-  onLeave?: () => void;
-  /** Callback when channel is updated */
-  onUpdate?: () => void;
-  /** Callback when view members is clicked */
-  onViewMembers?: () => void;
+  /** Available actions for this channel */
+  availableActions?: string[];
+  /** Callback when an action is performed */
+  onAction?: (action: string, channel: Channel) => void;
+  /** Callback when tab changes */
+  onTabChange?: (tabId: string) => void;
+  /** CSS class name */
+  className?: string;
+  /** Material UI's sx prop for styling */
+  sx?: any;
+  /** ID for the component */
+  id?: string;
 }
 
-const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = ({
-  channelId,
-  showActions = true,
-  memberPreviewCount = 5,
-  onDelete,
-  onLeave,
-  onUpdate,
-  onViewMembers,
-  className,
-  sx,
-  id,
-}) => {
-  // State for dialogs
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-
-  // Get channel data from hook
+/**
+ * Container for channel details
+ * Manages tabs, actions, and detail views for a channel
+ */
+const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
+  props,
+) => {
   const {
-    channel,
+    channelId,
+    channel: propChannel,
+    variant = "standard",
+    tabs: customTabs = [],
+    activeTab: initialActiveTab = "info",
+    showActions = true,
+    availableActions = ["edit", "delete", "leave", "mute", "favorite"],
+    onAction,
+    onTabChange,
+    className,
+    sx,
+    id,
+  } = props;
+
+  const dialog = useDialog();
+
+  // Use channel container hook
+  const {
+    channel: fetchedChannel,
     members,
-    isLoading,
-    error,
-    deleteChannel,
-    leaveChannel,
-    updateChannel,
-    addToFavorites,
-    removeFromFavorites,
-  } = useChannel(channelId);
-
-  // Get channel unread count information
-  const {
-    unreadCount,
-    hasMentions,
-    hasUnreads,
-    muted,
-    markAsRead,
+    formattedChannel,
+    updateChannelWithConfirm,
+    deleteChannelWithConfirm,
+    leaveChannelWithConfirm,
+    toggleFavorite,
     toggleMuted,
-  } = useChannelUnreadCount(channelId);
+    formatChannelData,
+    isFavorite,
+    isChannelMuted,
+    isDirect,
+    isGroup,
+  } = useContainerChannel(channelId);
 
-  // Get user store for user data
-  const { getUserById, getUserDisplayName } = useUserStore();
+  const channel = propChannel || fetchedChannel;
 
-  // Get member count
-  const memberCount = members?.length || 0;
+  // State for settings edit mode
+  const [isSettingsEditMode, setIsSettingsEditMode] = useState(false);
 
-  // Determine if user can manage this channel (placeholder)
-  // In a real implementation, this would be based on user roles
-  const canManage = true;
+  // Use detail container hook
+  const [detailState, detailAPI] = useDetailContainer({
+    itemId: channelId,
+    item: channel,
+    editMode: false,
+    onLoadItem: async (id) => {
+      // Just return the channel, loading is handled by the useChannel hook
+      return channel;
+    },
+    onUpdateItem: async (id, data) => {
+      return await updateChannelWithConfirm(data);
+    },
+    onDeleteItem: async (id) => {
+      const confirmed = await deleteChannelWithConfirm();
+      if (!confirmed) {
+        throw new Error("Operation cancelled by user");
+      }
+    },
+    showActions,
+    availableActions,
+  });
 
-  // Create member preview data
-  const memberPreview = useMemo(() => {
-    if (!members || members.length === 0) return [];
+  // Handle tab change
+  const handleTabChange = useCallback(
+    (newTabId: string) => {
+      detailAPI.setActiveTab(newTabId);
 
-    const previewMembers = members.slice(0, memberPreviewCount);
-
-    return previewMembers.map((member: { user_id: string }) => {
-      const user = getUserById(member.user_id);
-      const displayName = user ? getUserDisplayName(user.id) : "Unknown User";
-      const status = user ? getUserStatus(user.id) : "offline";
-
-      return {
-        id: member.user_id,
-        displayName,
-        status: status as "online" | "away" | "dnd" | "offline",
-        imageUrl: user?.last_picture_update
-          ? `users/${user.id}/image?_=${user.last_picture_update}`
-          : undefined,
-      };
-    });
-  }, [members, memberPreviewCount, getUserById, getUserDisplayName]);
-
-  // Handle toggle favorite
-  const handleToggleFavorite = useCallback(async () => {
-    if (!channel) return;
-
-    try {
-      // Determine if the channel is currently a favorite
-      const isFavorite = channel.is_favorite || false;
-
-      if (isFavorite) {
-        await removeFromFavorites();
-      } else {
-        await addToFavorites();
+      if (onTabChange) {
+        onTabChange(newTabId);
       }
 
-      if (onUpdate) {
-        onUpdate();
+      // If changing away from settings tab and it's in edit mode, prompt to save
+      if (
+        detailState.activeTab === "settings" &&
+        isSettingsEditMode &&
+        newTabId !== "settings"
+      ) {
+        dialog
+          .confirmAsync({
+            title: "Unsaved Changes",
+            message:
+              "You have unsaved changes in settings. Are you sure you want to leave?",
+            confirmText: "Leave",
+            cancelText: "Stay",
+          })
+          .then((confirmed) => {
+            if (confirmed) {
+              setIsSettingsEditMode(false);
+            } else {
+              // Revert tab change
+              detailAPI.setActiveTab("settings");
+              if (onTabChange) {
+                onTabChange("settings");
+              }
+            }
+          });
       }
-    } catch (error) {
-      console.error("Error toggling favorite:", error);
-    }
-  }, [channel, addToFavorites, removeFromFavorites, onUpdate]);
-
-  // Handle toggle mute
-  const handleToggleMute = useCallback(async () => {
-    if (!channel) return;
-
-    try {
-      // Toggle mute status
-      await toggleMuted(!muted);
-
-      if (onUpdate) {
-        onUpdate();
-      }
-    } catch (error) {
-      console.error("Error toggling mute:", error);
-    }
-  }, [channel, muted, toggleMuted, onUpdate]);
-
-  // Handle view members
-  const handleViewMembers = useCallback(() => {
-    if (onViewMembers) {
-      onViewMembers();
-    }
-  }, [onViewMembers]);
-
-  // Handle invite
-  const handleInvite = useCallback(() => {
-    // This would typically open an invite dialog
-    console.log("Invite users to channel:", channelId);
-  }, [channelId]);
-
-  // Handle edit
-  const handleEdit = useCallback(() => {
-    // This would typically open an edit dialog
-    console.log("Edit channel:", channelId);
-  }, [channelId]);
-
-  // Handle copy link
-  const handleCopyLink = useCallback(() => {
-    // This would typically copy a link to the channel
-    console.log("Copy link for channel:", channelId);
-  }, [channelId]);
-
-  // Handle mark as read
-  const handleMarkAsRead = useCallback(async () => {
-    try {
-      await markAsRead();
-
-      if (onUpdate) {
-        onUpdate();
-      }
-    } catch (error) {
-      console.error("Error marking channel as read:", error);
-    }
-  }, [markAsRead, onUpdate]);
-
-  // Handle leave confirm
-  const handleLeaveConfirm = useCallback(async () => {
-    setLeaveDialogOpen(false);
-
-    try {
-      await leaveChannel();
-
-      if (onLeave) {
-        onLeave();
-      }
-    } catch (error) {
-      console.error("Error leaving channel:", error);
-    }
-  }, [channelId, leaveChannel, onLeave]);
-
-  // Handle delete confirm
-  const handleDeleteConfirm = useCallback(async () => {
-    setDeleteDialogOpen(false);
-
-    try {
-      await deleteChannel();
-
-      if (onDelete) {
-        onDelete();
-      }
-    } catch (error) {
-      console.error("Error deleting channel:", error);
-    }
-  }, [channelId, deleteChannel, onDelete]);
-
-  // Don't render if no channel data
-  if (!channel && !isLoading) {
-    return null;
-  }
-
-  return (
-    <>
-      {channel && (
-        <ChannelDetailUI
-          channel={channel}
-          isFavorite={channel.is_favorite || false}
-          isMuted={muted}
-          hasUnreads={hasUnreads}
-          hasMentions={hasMentions}
-          unreadCount={unreadCount}
-          memberCount={memberCount}
-          memberPreview={memberPreview}
-          showActions={showActions}
-          canManage={canManage}
-          onToggleFavorite={handleToggleFavorite}
-          onToggleMute={handleToggleMute}
-          onMarkAsRead={handleMarkAsRead}
-          onViewMembers={handleViewMembers}
-          onInvite={handleInvite}
-          onEdit={handleEdit}
-          onCopyLink={handleCopyLink}
-          onLeave={() => setLeaveDialogOpen(true)}
-          onDelete={canManage ? () => setDeleteDialogOpen(true) : undefined}
-          className={className}
-          sx={sx}
-          id={id}
-        />
-      )}
-
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        title="Delete Channel"
-        message={`Are you sure you want to delete the channel "${channel?.display_name}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteDialogOpen(false)}
-      />
-
-      <ConfirmDialog
-        open={leaveDialogOpen}
-        title="Leave Channel"
-        message={`Are you sure you want to leave the channel "${channel?.display_name}"?`}
-        confirmText="Leave"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={handleLeaveConfirm}
-        onCancel={() => setLeaveDialogOpen(false)}
-      />
-    </>
+    },
+    [detailAPI, onTabChange, detailState.activeTab, isSettingsEditMode, dialog],
   );
+
+  // Handle channel actions
+  const handleAction = useCallback(
+    async (action: string) => {
+      if (!channel) return;
+
+      // Handle built-in actions
+      switch (action) {
+        case "edit":
+          if (detailState.activeTab === "settings") {
+            setIsSettingsEditMode(true);
+            return;
+          }
+          break;
+        case "favorite":
+          await toggleFavorite();
+          break;
+        case "mute":
+          await toggleMuted();
+          break;
+        case "leave":
+          await leaveChannelWithConfirm();
+          break;
+        default:
+          // Use detail container's performAction for standard actions
+          await detailAPI.performAction(action);
+      }
+
+      // Call the onAction callback if provided
+      if (onAction) {
+        onAction(action, channel);
+      }
+    },
+    [
+      channel,
+      detailAPI,
+      detailState.activeTab,
+      toggleFavorite,
+      toggleMuted,
+      leaveChannelWithConfirm,
+      onAction,
+    ],
+  );
+
+  // Handle member actions
+  const handleMemberAction = useCallback(
+    (action: string, userId: string) => {
+      if (onAction && channel) {
+        onAction(`member_${action}`, { ...channel, memberId: userId });
+      }
+    },
+    [onAction, channel],
+  );
+
+  // Handle settings update
+  const handleSettingsUpdate = useCallback(
+    (updatedChannel: Channel) => {
+      setIsSettingsEditMode(false);
+      if (onAction) {
+        onAction("settings_updated", updatedChannel);
+      }
+    },
+    [onAction],
+  );
+
+  // Handle settings cancel
+  const handleSettingsCancel = useCallback(() => {
+    setIsSettingsEditMode(false);
+  }, []);
+
+  // Generate tab content based on active tab
+  const getTabContent = useCallback(() => {
+    if (!channel) return null;
+
+    switch (detailState.activeTab) {
+      case "members":
+        return (
+          <ChannelMembersContainer
+            channelId={channelId}
+            channel={channel}
+            onAction={handleMemberAction}
+          />
+        );
+      case "settings":
+        return (
+          <ChannelSettingsContainer
+            channelId={channelId}
+            channel={channel}
+            editMode={isSettingsEditMode}
+            onUpdate={handleSettingsUpdate}
+            onCancel={handleSettingsCancel}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [
+    channel,
+    channelId,
+    detailState.activeTab,
+    isSettingsEditMode,
+    handleMemberAction,
+    handleSettingsUpdate,
+    handleSettingsCancel,
+  ]);
+
+  // Get default tabs or use custom tabs
+  const getTabs = useCallback(() => {
+    if (customTabs && customTabs.length > 0) {
+      return customTabs;
+    }
+
+    // Default tabs based on channel type
+    const tabs = [
+      {
+        id: "info",
+        label: "Info",
+        content: null, // Default content handled by ChannelDetailUI
+      },
+    ];
+
+    // Only show members tab for non-direct channels
+    if (!isDirect) {
+      tabs.push({
+        id: "members",
+        label: "Members",
+        content: getTabContent(),
+      });
+    }
+
+    // Settings tab for all channels
+    tabs.push({
+      id: "settings",
+      label: "Settings",
+      content: getTabContent(),
+    });
+
+    return tabs;
+  }, [customTabs, isDirect, getTabContent]);
+
+  // Prepare UI props
+  const uiProps = {
+    channel: detailState.item as Channel | null,
+    formattedChannel,
+    members,
+    isLoading: detailState.isLoading,
+    hasError: detailState.hasError,
+    error: detailState.error,
+    isEditMode: isSettingsEditMode || detailState.isEditMode,
+    isFavorite: channelId ? isFavorite(channelId) : false,
+    isMuted: channelId ? isChannelMuted(channelId) : false,
+    isDirect,
+    isGroup,
+    variant,
+    tabs: getTabs(),
+    activeTab: detailState.activeTab || initialActiveTab,
+    showActions,
+    availableActions: detailAPI.getAvailableActions(),
+    onAction: handleAction,
+    onTabChange: handleTabChange,
+    className,
+    sx,
+    id,
+  };
+
+  return <ChannelDetailUI {...uiProps} />;
 };
 
 export default ChannelDetailContainer;

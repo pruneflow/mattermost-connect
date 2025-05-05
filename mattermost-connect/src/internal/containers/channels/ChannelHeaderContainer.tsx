@@ -1,263 +1,250 @@
 // src/internal/containers/channels/ChannelHeaderContainer.tsx
 /**
- * Container component for channel header that manages state and actions
+ * Container for channel header
+ * Handles minimized channel information and quick actions
  */
-import React, { useCallback, useState } from "react";
-import { useChannel } from "../../../hooks/useChannels";
-import { BaseComponentProps } from "../../types/componentTypes";
+import React, { useCallback, useMemo } from "react";
+import { useContainerChannel } from "../../hooks/useContainerChannel";
+import { useBaseContainer } from "../base/BaseContainer";
 import ChannelHeaderUI from "../../components/channels/ChannelHeaderUI";
-import { ConfirmDialog } from "../../components/common";
-import { useChannelUnreadCount } from "../../../hooks/useUnreadCounts";
+import { Channel, ChannelHeaderData } from "../../../types";
+import { useDialog } from "../../hooks/useDialog";
 
-export interface ChannelHeaderContainerProps extends BaseComponentProps {
+export interface ChannelHeaderContainerProps {
   /** Channel ID */
   channelId: string;
+  /** Channel object (if already available) */
+  channel?: Channel;
   /** Size variant */
   size?: "small" | "medium" | "large";
-  /** Whether to show search option */
+  /** Whether to show search button */
   showSearch?: boolean;
-  /** Whether to show settings option */
+  /** Whether to show channel settings option */
   showSettings?: boolean;
-  /** Whether to show leave option */
+  /** Whether to show leave channel option */
   showLeave?: boolean;
-  /** Callback when search is clicked */
-  onSearch?: () => void;
-  /** Callback when channel is deleted */
-  onDelete?: () => void;
-  /** Callback when channel is left */
-  onLeave?: () => void;
+  /** Callback when action is performed */
+  onAction?: (action: string, channel: Channel) => void;
   /** Callback when view members is clicked */
   onViewMembers?: () => void;
+  /** Callback when info button is clicked */
+  onInfo?: () => void;
+  /** Callback when settings is clicked */
+  onSettings?: () => void;
+  /** Callback when search is clicked */
+  onSearch?: () => void;
+  /** CSS class name */
+  className?: string;
+  /** Material UI's sx prop for styling */
+  sx?: any;
+  /** ID for the component */
+  id?: string;
 }
 
-const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = ({
-  channelId,
-  size = "medium",
-  showSearch = true,
-  showSettings = true,
-  showLeave = true,
-  onSearch,
-  onDelete,
-  onLeave,
-  onViewMembers,
-  className,
-  sx,
-  id,
-}) => {
-  // State for dialogs
-  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [muteDialogOpen, setMuteDialogOpen] = useState(false);
-
-  // Get channel data from hook
+/**
+ * Container for channel header
+ * Manages minimized channel information and quick actions
+ */
+const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
+  props,
+) => {
   const {
-    channel,
+    channelId,
+    channel: propChannel,
+    size = "medium",
+    showSearch = true,
+    showSettings = true,
+    showLeave = true,
+    onAction,
+    onViewMembers,
+    onInfo,
+    onSettings,
+    onSearch,
+    className,
+    sx,
+    id,
+  } = props;
+
+  const dialog = useDialog();
+
+  // Use channel container hook
+  const {
+    channel: fetchedChannel,
     members,
-    isLoading,
-    error,
-    addToFavorites,
-    removeFromFavorites,
-    updateChannel,
-    deleteChannel,
-    leaveChannel,
-    viewChannel,
-  } = useChannel(channelId);
-
-  // Get unread count information from specialized hook
-  const {
-    unreadCount,
-    muted: isMuted,
-    hasUnreads,
-    hasMentions,
-    markAsRead,
+    formattedChannel,
+    toggleFavorite,
     toggleMuted,
-  } = useChannelUnreadCount(channelId);
+    leaveChannelWithConfirm,
+    deleteChannelWithConfirm,
+    isFavorite,
+    isChannelMuted,
+  } = useContainerChannel(channelId);
 
-  // Determine favorite status
-  const isFavorite = channel?.is_favorite || false;
+  const channel = propChannel || fetchedChannel;
 
-  // Get member count from members data
-  const membersCount = members?.length || 0;
+  // Use base container for loading/error state
+  const [baseState, baseAPI] = useBaseContainer({
+    id,
+    className,
+    sx,
+  });
 
   // Handle toggle favorite
   const handleToggleFavorite = useCallback(async () => {
     if (!channel) return;
 
     try {
-      if (isFavorite) {
-        await removeFromFavorites();
-      } else {
-        await addToFavorites();
+      await toggleFavorite();
+
+      if (onAction) {
+        onAction("favorite", channel);
       }
     } catch (error) {
-      console.error("Error toggling favorite:", error);
+      baseAPI.setError(error as Error);
     }
-  }, [channel, isFavorite, addToFavorites, removeFromFavorites]);
+  }, [channel, toggleFavorite, onAction, baseAPI]);
 
   // Handle toggle mute
   const handleToggleMute = useCallback(async () => {
-    setMuteDialogOpen(false);
+    if (!channel) return;
 
     try {
-      // Toggle current mute state
-      await toggleMuted(!isMuted);
+      await toggleMuted();
+
+      if (onAction) {
+        onAction("mute", channel);
+      }
     } catch (error) {
-      console.error("Error toggling mute:", error);
+      baseAPI.setError(error as Error);
     }
-  }, [isMuted, toggleMuted]);
-
-  // Handle marking channel as read
-  const handleMarkAsRead = useCallback(async () => {
-    try {
-      await markAsRead();
-    } catch (error) {
-      console.error("Error marking channel as read:", error);
-    }
-  }, [markAsRead]);
-
-  // Handle settings
-  const handleSettings = useCallback(() => {
-    // This would typically open a settings dialog or navigate to settings
-    console.log("Channel settings for:", channelId);
-  }, [channelId]);
-
-  // Handle info
-  const handleInfo = useCallback(() => {
-    // This would typically open an info dialog or navigate to info page
-    console.log("Channel info for:", channelId);
-  }, [channelId]);
+  }, [channel, toggleMuted, onAction, baseAPI]);
 
   // Handle view members
   const handleViewMembers = useCallback(() => {
     if (onViewMembers) {
       onViewMembers();
-    } else {
-      // Fallback behavior
-      console.log("View members for channel:", channelId);
+    } else if (onAction && channel) {
+      onAction("view_members", channel);
     }
-  }, [channelId, onViewMembers]);
+  }, [onViewMembers, onAction, channel]);
 
-  // Handle invite
-  const handleInvite = useCallback(() => {
-    // This would typically open an invite dialog
-    console.log("Invite to channel:", channelId);
-  }, [channelId]);
-
-  // Handle leave confirm
-  const handleLeaveConfirm = useCallback(async () => {
-    setLeaveDialogOpen(false);
-
-    try {
-      await leaveChannel();
-
-      if (onLeave) {
-        onLeave();
-      }
-    } catch (error) {
-      console.error("Error leaving channel:", error);
+  // Handle info
+  const handleInfo = useCallback(() => {
+    if (onInfo) {
+      onInfo();
+    } else if (onAction && channel) {
+      onAction("info", channel);
     }
-  }, [channelId, leaveChannel, onLeave]);
+  }, [onInfo, onAction, channel]);
 
-  // Handle delete confirm
-  const handleDeleteConfirm = useCallback(async () => {
-    setDeleteDialogOpen(false);
-
-    try {
-      await deleteChannel();
-
-      if (onDelete) {
-        onDelete();
-      }
-    } catch (error) {
-      console.error("Error deleting channel:", error);
+  // Handle settings
+  const handleSettings = useCallback(() => {
+    if (onSettings) {
+      onSettings();
+    } else if (onAction && channel) {
+      onAction("settings", channel);
     }
-  }, [channelId, deleteChannel, onDelete]);
+  }, [onSettings, onAction, channel]);
 
   // Handle search
   const handleSearch = useCallback(() => {
     if (onSearch) {
       onSearch();
-    } else {
-      // Fallback behavior
-      console.log("Search in channel:", channelId);
+    } else if (onAction && channel) {
+      onAction("search", channel);
     }
-  }, [channelId, onSearch]);
+  }, [onSearch, onAction, channel]);
 
-  // Don't render if no channel data
-  if (!channel && !isLoading) {
+  // Handle invite
+  const handleInvite = useCallback(() => {
+    if (!channel) return;
+
+    if (onAction) {
+      onAction("invite", channel);
+    }
+  }, [onAction, channel]);
+
+  // Handle leave channel
+  const handleLeave = useCallback(async () => {
+    if (!channel) return;
+
+    try {
+      const success = await leaveChannelWithConfirm();
+
+      if (success && onAction) {
+        onAction("leave", channel);
+      }
+    } catch (error) {
+      baseAPI.setError(error as Error);
+    }
+  }, [channel, leaveChannelWithConfirm, onAction, baseAPI]);
+
+  // Handle delete channel
+  const handleDelete = useCallback(async () => {
+    if (!channel) return;
+
+    try {
+      const success = await deleteChannelWithConfirm();
+
+      if (success && onAction) {
+        onAction("delete", channel);
+      }
+    } catch (error) {
+      baseAPI.setError(error as Error);
+    }
+  }, [channel, deleteChannelWithConfirm, onAction, baseAPI]);
+
+  // Create header data for UI
+  const headerData: ChannelHeaderData = useMemo(() => {
+    if (!channel) {
+      return {
+        channel: {} as Channel,
+        isFavorite: false,
+      };
+    }
+
+    return {
+      channel,
+      membersCount: members?.length,
+      isFavorite: isFavorite(channel.id),
+      onToggleFavorite: handleToggleFavorite,
+      onViewMembers: handleViewMembers,
+      onSettings: handleSettings,
+      onInfo: handleInfo,
+    };
+  }, [
+    channel,
+    members?.length,
+    isFavorite,
+    handleToggleFavorite,
+    handleViewMembers,
+    handleSettings,
+    handleInfo,
+  ]);
+
+  // Prepare UI props
+  const uiProps = {
+    ...headerData,
+    isMuted: channel ? isChannelMuted(channel.id) : false,
+    hasSearch: showSearch,
+    showSettings,
+    showLeave,
+    size,
+    onToggleMute: handleToggleMute,
+    onSearch: handleSearch,
+    onInvite: handleInvite,
+    onLeave: handleLeave,
+    onDelete: handleDelete,
+    className,
+    sx,
+    id,
+  };
+
+  if (!channel) {
     return null;
   }
 
-  return (
-    <>
-      {channel && (
-        <ChannelHeaderUI
-          channel={channel}
-          membersCount={membersCount}
-          isFavorite={isFavorite}
-          isMuted={isMuted}
-          hasUnreads={hasUnreads}
-          hasMentions={hasMentions}
-          unreadCount={unreadCount}
-          hasSearch={showSearch}
-          showSettings={showSettings}
-          showLeave={showLeave}
-          size={size}
-          onToggleFavorite={handleToggleFavorite}
-          onToggleMute={() => setMuteDialogOpen(true)}
-          onMarkAsRead={handleMarkAsRead}
-          onViewMembers={handleViewMembers}
-          onSettings={handleSettings}
-          onInfo={handleInfo}
-          onInvite={handleInvite}
-          onLeave={() => setLeaveDialogOpen(true)}
-          onDelete={() => setDeleteDialogOpen(true)}
-          onSearch={handleSearch}
-          className={className}
-          sx={sx}
-          id={id}
-        />
-      )}
-
-      {/* Confirmation Dialogs */}
-      <ConfirmDialog
-        open={leaveDialogOpen}
-        title="Leave Channel"
-        message={`Are you sure you want to leave the channel "${channel?.display_name}"?`}
-        confirmText="Leave"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={handleLeaveConfirm}
-        onCancel={() => setLeaveDialogOpen(false)}
-      />
-
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        title="Delete Channel"
-        message={`Are you sure you want to delete the channel "${channel?.display_name}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteDialogOpen(false)}
-      />
-
-      <ConfirmDialog
-        open={muteDialogOpen}
-        title={isMuted ? "Unmute Channel" : "Mute Channel"}
-        message={
-          isMuted
-            ? `Are you sure you want to unmute the channel "${channel?.display_name}"? You will receive notifications for this channel.`
-            : `Are you sure you want to mute the channel "${channel?.display_name}"? You will not receive notifications for this channel.`
-        }
-        confirmText={isMuted ? "Unmute" : "Mute"}
-        cancelText="Cancel"
-        isDestructive={false}
-        onConfirm={handleToggleMute}
-        onCancel={() => setMuteDialogOpen(false)}
-      />
-    </>
-  );
+  return <ChannelHeaderUI {...uiProps} />;
 };
 
 export default ChannelHeaderContainer;
