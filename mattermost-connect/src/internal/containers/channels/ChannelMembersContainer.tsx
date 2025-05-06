@@ -13,7 +13,7 @@ import ChannelMembersUI from "../../components/channels/ChannelMembersUI";
 
 export interface ChannelMembersContainerProps {
   /** Channel ID */
-  channelId: string;
+  channelId?: string;
   /** Channel object (if already available) */
   channel?: Channel;
   /** Callback when an action is performed on a member */
@@ -118,7 +118,7 @@ const ChannelMembersContainer: React.FC<ChannelMembersContainerProps> = (
 
   // Handle invite members
   const handleInviteMembers = useCallback(() => {
-    if (onAction) {
+    if (onAction && channelId) {
       onAction("invite_members", channelId);
     }
   }, [onAction, channelId]);

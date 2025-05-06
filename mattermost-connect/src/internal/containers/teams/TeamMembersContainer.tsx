@@ -1,18 +1,46 @@
 // src/internal/containers/teams/TeamMembersContainer.tsx
+/**
+ * Container for team members management
+ * Handles loading, pagination, searching, and member actions
+ */
 import React, { useCallback, useEffect, useState } from "react";
-import { useListContainer } from "../base/ListContainer";
-import { useContainerTeam } from "../../hooks/useContainerTeam";
-import { Team, User } from "../../../types";
-import TeamMembersUI from "../../components/teams/TeamMembersUI";
-import { useDialog } from "../../hooks/useDialog";
+import { useTeam } from "../../../hooks/useTeams";
 import { useAuth } from "../../../hooks";
+import { Team, User } from "../../../types";
+import { useDialog } from "../../hooks/useDialog";
+import { useListContainer } from "../base/ListContainer";
+import TeamMembersUI from "../../components/teams/TeamMembersUI";
+import { SxProps, Theme } from "@mui/material";
 
 export interface TeamMembersContainerProps {
+  /** Team ID for connected mode */
   teamId: string;
+  /** Team object (optional if teamId is provided) */
   team?: Team;
-  onAction?: (action: string, userId: string) => void;
+  /** Whether to show search functionality */
+  showSearch?: boolean;
+  /** Whether to show pagination controls */
+  showPagination?: boolean;
+  /** Number of members to show per page */
+  perPage?: number;
+  /** Whether to allow inviting new members */
+  allowInvite?: boolean;
+  /** Callback when a member action is performed (notification only) */
+  onAction?: (
+    action:
+      | "view_profile"
+      | "remove_member"
+      | "make_admin"
+      | "remove_admin"
+      | "invite_members"
+      | "leave_team",
+    userId: string,
+  ) => void;
+  /** Custom CSS class name */
   className?: string;
-  sx?: React.CSSProperties;
+  /** MUI system props for custom styling */
+  sx?: SxProps<Theme>;
+  /** ID attribute for the component */
   id?: string;
 }
 
@@ -21,17 +49,32 @@ export interface TeamMembersContainerProps {
  * Handles loading, pagination, searching, and member actions
  */
 const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
-  const { teamId, team: propTeam, onAction, className, sx, id } = props;
+  const {
+    teamId,
+    team: propTeam,
+    showSearch = true,
+    showPagination = true,
+    perPage = 20,
+    allowInvite = true,
+    onAction,
+    className,
+    sx,
+    id,
+  } = props;
 
   const dialog = useDialog();
   const { currentUser } = useAuth();
 
+  // Use useTeam hook directly instead of useContainerTeam
   const {
     team: fetchedTeam,
     members,
     formattedMembers,
-    isUpdating,
-  } = useContainerTeam(teamId);
+    isLoading,
+    error,
+    refreshMembers,
+    update,
+  } = useTeam(teamId);
 
   const team = propTeam || fetchedTeam;
 
@@ -45,19 +88,26 @@ const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
     }
   }, [currentUser, members]);
 
-  const [listState, listAPI] = useListContainer({
-    items: formattedMembers || [],
-    idField: "user_id",
-    displayField: "username",
-    searchFields: ["username", "display_name", "email"],
-    emptyMessage: "No members found in this team.",
-    onItemSelect: (member) => {
-      if (onAction) {
-        onAction("view_profile", member.user_id);
-      }
+  // Setup list container for members
+  const [listState, listAPI] = useListContainer(
+    {
+      items: formattedMembers || [],
+      idField: "user_id",
+      displayField: "username",
+      searchFields: ["username", "display_name", "email"],
+      emptyMessage: "No members found in this team.",
+      onItemSelect: (member) => {
+        handleMemberAction("view_profile", member.user_id);
+      },
     },
-  });
+    {
+      paginationOptions: { initialPerPage: perPage },
+      enableSearch: showSearch,
+      enablePagination: showPagination,
+    },
+  );
 
+  // Handle search term changes
   const handleSearchChange = useCallback(
     (term: string) => {
       listAPI.setSearchTerm(term);
@@ -65,6 +115,7 @@ const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
     [listAPI],
   );
 
+  // Handle pagination changes
   const handlePageChange = useCallback(
     (page: number) => {
       listAPI.setPage(page);
@@ -72,21 +123,25 @@ const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
     [listAPI],
   );
 
+  // Handle per page size changes
   const handlePerPageChange = useCallback(
-    (perPage: number) => {
-      listAPI.setPerPage(perPage);
+    (newPerPage: number) => {
+      listAPI.setPerPage(newPerPage);
     },
     [listAPI],
   );
 
+  // Handle invite members action
   const handleInviteMembers = useCallback(() => {
     if (onAction) {
       onAction("invite_members", teamId);
     }
   }, [onAction, teamId]);
 
+  // Handle member removal with confirmation
   const handleRemoveMember = useCallback(
     async (userId: string) => {
+      // Check if it's the current user (leaving team)
       if (currentUser?.id === userId) {
         const confirmed = await dialog.confirmAsync({
           title: "Leave Team",
@@ -97,10 +152,15 @@ const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
 
         if (!confirmed) return;
 
+        // Logic to leave team would go here
+        // ...
+
+        // Notify parent component
         if (onAction) {
           onAction("leave_team", userId);
         }
       } else {
+        // Remove other team member
         const confirmed = await dialog.confirmAsync({
           title: "Remove Member",
           message: `Are you sure you want to remove this member from the team?`,
@@ -110,14 +170,22 @@ const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
 
         if (!confirmed) return;
 
+        // Logic to remove member would go here
+        // ...
+
+        // Refresh members list
+        refreshMembers();
+
+        // Notify parent component
         if (onAction) {
           onAction("remove_member", userId);
         }
       }
     },
-    [dialog, team, currentUser, onAction],
+    [dialog, team, currentUser, onAction, refreshMembers],
   );
 
+  // Handle changing member role (make/remove admin)
   const handleChangeMemberRole = useCallback(
     async (userId: string, makeAdmin: boolean) => {
       const action = makeAdmin ? "make_admin" : "remove_admin";
@@ -133,33 +201,66 @@ const TeamMembersContainer: React.FC<TeamMembersContainerProps> = (props) => {
 
       if (!confirmed) return;
 
+      // Logic to change member role would go here
+      // ...
+
+      // Refresh members list
+      refreshMembers();
+
+      // Notify parent component
       if (onAction) {
         onAction(action, userId);
       }
     },
-    [dialog, onAction],
+    [dialog, onAction, refreshMembers],
   );
 
+  // General member action handler
+  const handleMemberAction = useCallback(
+    (action: string, userId: string) => {
+      switch (action) {
+        case "remove_member":
+          handleRemoveMember(userId);
+          break;
+        case "make_admin":
+          handleChangeMemberRole(userId, true);
+          break;
+        case "remove_admin":
+          handleChangeMemberRole(userId, false);
+          break;
+      }
+    },
+    [handleRemoveMember, handleChangeMemberRole, onAction],
+  );
+
+  // Create UI props for the presentation component
   const uiProps = {
     team: team!,
     members: listState.items,
-    isLoading: listState.isLoading || isUpdating,
+    isLoading: isLoading || listState.isLoading,
     isAdmin: isTeamAdmin,
+    hasError: !!error,
+    error,
+    allowInvite,
     page: listState.page,
     perPage: listState.perPage,
     totalMembers: formattedMembers?.length || 0,
     searchTerm: listState.searchTerm,
+    showSearch,
+    showPagination,
     onSearchChange: handleSearchChange,
     onPageChange: handlePageChange,
     onPerPageChange: handlePerPageChange,
     onInviteMembers: handleInviteMembers,
     onRemoveMember: handleRemoveMember,
     onChangeMemberRole: handleChangeMemberRole,
+    onAction: handleMemberAction,
     className,
     sx,
     id,
   };
 
+  // Don't render anything if no team available
   if (!team) {
     return null;
   }

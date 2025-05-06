@@ -85,6 +85,7 @@ export interface AlertDialogOptions {
   onConfirm?: () => void | Promise<void>;
   preventBackdropClose?: boolean;
   maxWidth?: "xs" | "sm" | "md" | "lg" | "xl" | false;
+  cancelText?: string;
 }
 
 // Options for custom dialog shorthand

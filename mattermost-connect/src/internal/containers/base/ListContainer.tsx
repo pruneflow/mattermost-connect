@@ -34,7 +34,6 @@ import {
   SelectionProps,
   EmptyStateProps,
 } from "../../types/componentTypes";
-import { createEmptyStateProps } from "../../utils/containerUtils";
 
 /**
  * List container options

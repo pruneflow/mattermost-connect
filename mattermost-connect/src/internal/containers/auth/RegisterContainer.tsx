@@ -20,7 +20,7 @@ export interface RegisterContainerProps {
   onRegisterSuccess?: (user: User) => void;
   requireEmailVerification?: boolean;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 

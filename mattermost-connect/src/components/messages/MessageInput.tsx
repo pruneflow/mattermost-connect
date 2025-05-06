@@ -5,7 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import MessageInputContainer from "../../internal/containers/messages/MessageInputContainer";
-import { Message } from "../../index";
+import { Message } from "../../types";
 
 export interface MessageInputProps {
   /** Channel ID to send messages to */
@@ -95,19 +95,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
   return (
     <MessageInputContainer
       channelId={channelId}
-      initialValue={initialValue}
-      allowAttachments={allowAttachments}
-      allowEmojis={allowEmojis}
       editingMessage={editingMessage}
-      showReply={showReply}
       replyToMessage={replyToMessage}
-      maxAttachments={maxAttachments}
-      maxFileSize={maxFileSize}
-      emojiPickerComponent={emojiPickerComponent}
       onMessageSent={onMessageSent}
-      onMessageEdited={onMessageEdited}
-      onEditCancel={onEditCancel}
-      onReplyCancel={onReplyCancel}
       className={className}
       sx={sx}
       id={id}
@@ -115,4 +105,4 @@ const MessageInput: React.FC<MessageInputProps> = ({
   );
 };
 
-export default MessageInput;
+export default React.memo(MessageInput);

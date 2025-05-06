@@ -5,7 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import ChannelListContainer from "../../internal/containers/channels/ChannelListContainer";
-import { Channel } from "../../index";
+import { Channel } from "../../types";
 
 export interface ChannelListProps {
   /** Team ID for the channels */
@@ -94,9 +94,13 @@ const ChannelList: React.FC<ChannelListProps> = ({
       showSearch={showSearch}
       groupByType={groupByType}
       showFavorites={showFavorites}
-      emptyMessage={emptyMessage}
-      onChannelSelect={onChannelSelect}
-      onCreateSuccess={onCreateSuccess}
+      onSelectChannel={onChannelSelect}
+      onCreateChannel={() => {}}
+      onChannelAction={(action, channel) => {
+        if (action === "create_success" && onCreateSuccess) {
+          onCreateSuccess(channel);
+        }
+      }}
       className={className}
       sx={sx}
       id={id}

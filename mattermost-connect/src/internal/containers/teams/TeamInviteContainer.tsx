@@ -1,20 +1,35 @@
 // src/internal/containers/teams/TeamInviteContainer.tsx
+/**
+ * Container for team invitation functionality
+ * Handles user search, email validation, and invitation processes
+ */
 import React, { useCallback, useEffect, useState } from "react";
-import { useListContainer } from "../base/ListContainer";
-import { useContainerTeam } from "../../hooks/useContainerTeam";
-import { useUserSearch } from "../../../hooks";
+import { useTeam } from "../../../hooks/useTeams";
+import { useUserSearch } from "../../../hooks/useUsers";
 import { Team, User } from "../../../types";
 import TeamInviteUI from "../../components/teams/TeamInviteUI";
 import { useDialog } from "../../hooks/useDialog";
 import { useDebouncedCallback } from "../../utils/performanceUtils";
+import { SxProps, Theme } from "@mui/material";
 
 export interface TeamInviteContainerProps {
+  /** Team ID for connected mode */
   teamId: string;
+  /** Team object (optional if teamId is provided) */
   team?: Team;
+  /** Whether to show email invitation option */
+  showEmailInvite?: boolean;
+  /** Whether to show invite link generation option */
+  showInviteLink?: boolean;
+  /** Callback when invitations are sent successfully (notification only) */
   onInviteSuccess?: () => void;
+  /** Callback when invitation process is canceled */
   onCancel?: () => void;
+  /** Custom CSS class name */
   className?: string;
-  sx?: React.CSSProperties;
+  /** MUI system props for custom styling */
+  sx?: SxProps<Theme>;
+  /** ID attribute for the component */
   id?: string;
 }
 
@@ -26,6 +41,8 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
   const {
     teamId,
     team: propTeam,
+    showEmailInvite = true,
+    showInviteLink = true,
     onInviteSuccess,
     onCancel,
     className,
@@ -35,23 +52,30 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
 
   const dialog = useDialog();
 
-  const { team: fetchedTeam, members } = useContainerTeam(teamId);
+  // Use useTeam hook directly instead of useContainerTeam
+  const {
+    team: fetchedTeam,
+    members,
+    isLoading: teamLoading,
+  } = useTeam(teamId);
 
   const team = propTeam || fetchedTeam;
+
+  // State for selected users, search term, and invite link
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [inviteLink, setInviteLink] = useState<string | undefined>(undefined);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [isSendingInvites, setIsSendingInvites] = useState(false);
 
-  // User search functionality
+  // Use useUserSearch hook for user search
   const {
     results: searchResults,
     isLoading: isSearching,
     search,
   } = useUserSearch(searchTerm, { inTeam: teamId });
 
-  // Filtered search results (exclude team members and already selected users)
+  // Filter search results to exclude team members and already selected users
   const filteredResults = React.useMemo(() => {
     if (!searchResults || !members) return [];
 
@@ -63,7 +87,7 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
     return searchResults.filter((user) => !excludedIds.has(user.id));
   }, [searchResults, members, selectedUsers]);
 
-  // Debounced search function
+  // Debounced search function to prevent excessive API calls
   const debouncedSearch = useDebouncedCallback((term: string) => {
     if (term.length >= 2) {
       search();
@@ -95,10 +119,22 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
       try {
         setIsSendingInvites(true);
 
-        // This would call the actual API to send email invites
-        // const result = await teamService.sendEmailInvites(teamId, emails);
+        // Validate email addresses
+        const invalidEmails = emails.filter((email) => {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          return !emailRegex.test(email);
+        });
 
-        // For now, simulate API call
+        if (invalidEmails.length > 0) {
+          await dialog.showError(
+            "Invalid Email Addresses",
+            `The following email addresses are invalid: ${invalidEmails.join(", ")}`,
+          );
+          return;
+        }
+
+        // Logic to send email invites would go here
+        // This would call the team service API in a real implementation
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
         await dialog.showSuccess(
@@ -125,21 +161,28 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
 
   // Handle sending invites to selected users
   const handleSendInvites = useCallback(async () => {
-    if (selectedUsers.length === 0) return;
+    if (selectedUsers.length === 0) {
+      await dialog.showError(
+        "No Users Selected",
+        "Please select at least one user to invite.",
+      );
+      return;
+    }
 
     try {
       setIsSendingInvites(true);
 
-      // This would call the actual API to invite users
-      // const result = await teamService.inviteUsers(teamId, selectedUsers.map(u => u.id));
-
-      // For now, simulate API call
+      // Logic to invite selected users would go here
+      // This would call the team service API in a real implementation
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       await dialog.showSuccess(
         "Invitations Sent",
         `Successfully added ${selectedUsers.length} users to the team.`,
       );
+
+      // Clear selection after successful invites
+      setSelectedUsers([]);
 
       if (onInviteSuccess) {
         onInviteSuccess();
@@ -161,16 +204,20 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
     try {
       setIsGeneratingLink(true);
 
-      // This would call the actual API to generate an invite link
-      // const result = await teamService.generateInviteLink(teamId);
-
-      // For now, simulate API call
+      // Logic to generate an invite link would go here
+      // This would call the team service API in a real implementation
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Generate a fake invite link for demonstration
       const baseUrl = window.location.origin;
-      setInviteLink(
-        `${baseUrl}/signup/team/${teamId}/${Math.random().toString(36).substring(2, 10)}`,
+      const randomToken = Math.random().toString(36).substring(2, 10);
+      const newInviteLink = `${baseUrl}/signup/team/${teamId}/${randomToken}`;
+
+      setInviteLink(newInviteLink);
+
+      await dialog.showSuccess(
+        "Invite Link Generated",
+        "Successfully created a team invitation link.",
       );
     } catch (error) {
       await dialog.showError(
@@ -184,27 +231,51 @@ const TeamInviteContainer: React.FC<TeamInviteContainerProps> = (props) => {
     }
   }, [teamId, dialog]);
 
+  // Copy invite link to clipboard
+  const handleCopyLink = useCallback(async () => {
+    if (!inviteLink) return;
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      await dialog.showSuccess(
+        "Link Copied",
+        "The invitation link has been copied to your clipboard.",
+      );
+    } catch (error) {
+      await dialog.showError(
+        "Copy Failed",
+        "Failed to copy the link to clipboard. Please try again.",
+      );
+    }
+  }, [inviteLink, dialog]);
+
+  // Create UI props for the presentation component
   const uiProps = {
     team: team!,
     users: filteredResults,
     selectedUsers,
     inviteLink,
-    isLoading: isSearching || isSendingInvites || isGeneratingLink,
+    isLoading:
+      teamLoading || isSearching || isSendingInvites || isGeneratingLink,
     searchTerm,
     searchResults: filteredResults,
     isSearching,
+    showEmailInvite,
+    showInviteLink,
     onSearchChange: handleSearchChange,
     onSelectUser: handleSelectUser,
     onRemoveUser: handleRemoveUser,
     onInviteByEmail: handleInviteByEmail,
     onSendInvites: handleSendInvites,
     onGenerateLink: handleGenerateLink,
+    onCopyLink: handleCopyLink,
     onCancel,
     className,
     sx,
     id,
   };
 
+  // Don't render anything if no team available
   if (!team) {
     return null;
   }

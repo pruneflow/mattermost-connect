@@ -5,8 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import UserCardContainer from "../../internal/containers/users/UserCardContainer";
-import UserCardUI from "../../internal/components/users/UserCardUI";
-import { User, UserStatus } from "../../index";
+import { User, UserStatus } from "../../types";
 
 export interface UserCardProps {
   /** User ID - used to fetch user data from store */
@@ -24,13 +23,29 @@ export interface UserCardProps {
   /** User's roles (array of role names, if no userId is provided) */
   roles?: string[];
   /** Card size variant */
-  variant?: "compact" | "normal" | "expanded";
+  variant?: "default" | "compact" | "expanded";
+  /** Size of the avatar */
+  avatarSize?: number;
+  /** Whether to show the user's status */
+  showStatus?: boolean;
+  /** Whether to show additional user details */
+  showDetails?: boolean;
+  /** Whether to add an outline to the card */
+  outlined?: boolean;
+  /** Card elevation (shadow depth) */
+  elevation?: number;
+  /** Whether the card is in selected state */
+  selected?: boolean;
   /** Callback when message button is clicked */
   onMessageClick?: () => void;
   /** Callback when more options button is clicked */
   onMoreOptionsClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Callback when action is performed */
+  onAction?: (action: string, user: User) => void;
   /** Callback when card is clicked */
   onClick?: () => void;
+  /** Callback when status is changed */
+  onStatusChange?: (user: User, newStatus: UserStatus) => void;
   /** Custom CSS class name */
   className?: string;
   /** MUI system props for custom styling */
@@ -45,6 +60,13 @@ export interface UserCardProps {
  * This component can work in two modes:
  * 1. Connected mode (with userId): Fetches user data and status from the store
  * 2. Standalone mode (with user object): Uses provided data directly
+ *
+ * Both modes use the same underlying container to ensure consistent behavior.
+ *
+ * The card supports several built-in actions:
+ * - Send direct message: Opens a direct message channel with the user
+ * - View profile: Shows detailed user profile information
+ * - Change status: Allows the current user to change their online status
  *
  * @example
  * ```tsx
@@ -73,51 +95,69 @@ const UserCard: React.FC<UserCardProps> = ({
   showMoreOptions = true,
   showRoles = false,
   roles = [],
-  variant = "normal",
+  variant = "default",
+  avatarSize,
+  showStatus = true,
+  showDetails = true,
+  outlined = false,
+  elevation = 1,
+  selected = false,
   onMessageClick,
   onMoreOptionsClick,
+  onAction,
   onClick,
+  onStatusChange,
   className,
   sx,
   id,
 }) => {
-  // If userId is provided, use the container for connected functionality
-  if (userId) {
-    return (
-      <UserCardContainer
-        userId={userId}
-        showMessageButton={showMessageButton}
-        showMoreOptions={showMoreOptions}
-        showRoles={showRoles}
-        variant={variant}
-        onMessageClick={onMessageClick}
-        onMoreOptionsClick={onMoreOptionsClick}
-        onClick={onClick}
-        className={className}
-        sx={sx}
-        id={id}
-      />
-    );
-  }
-
-  // If no user data is provided, don't render anything
-  if (!user) {
+  // If no userId and no user provided, don't render anything
+  if (!userId && !user) {
     return null;
   }
 
-  // Otherwise, use the UI component directly with provided props
+  // Configure available actions based on props
+  const availableActions = [];
+
+  if (showMessageButton) {
+    availableActions.push("message");
+  }
+
+  if (showMoreOptions) {
+    availableActions.push("more");
+  }
+
+  // Add standard actions
+  availableActions.push("profile");
+  availableActions.push("changeStatus");
+
+  // Handler for actions to map to specific callbacks
+  const handleAction = (action: string, actionUser: User) => {
+    if (action === "message" && onMessageClick) {
+      onMessageClick();
+    } else if (onAction) {
+      onAction(action, actionUser);
+    }
+  };
+
+  // Always use the container to ensure consistent behavior
   return (
-    <UserCardUI
+    <UserCardContainer
+      userId={userId}
       user={user}
-      status={status}
-      showMessageButton={showMessageButton}
-      showMoreOptions={showMoreOptions}
-      showRoles={showRoles}
-      roles={roles}
       variant={variant}
-      onMessageClick={onMessageClick}
+      avatarSize={avatarSize}
+      showStatus={showStatus}
+      showDetails={showDetails}
+      showActions={showMessageButton || showMoreOptions}
+      availableActions={availableActions}
+      outlined={outlined}
+      elevation={elevation}
+      selected={selected}
+      onAction={handleAction}
+      onClick={onClick ? () => onClick() : undefined}
+      onStatusChange={onStatusChange}
       onMoreOptionsClick={onMoreOptionsClick}
-      onClick={onClick}
       className={className}
       sx={sx}
       id={id}

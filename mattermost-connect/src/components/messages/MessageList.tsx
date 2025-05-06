@@ -5,7 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import MessageListContainer from "../../internal/containers/messages/MessageListContainer";
-import { Message } from "../../index";
+import { Message } from "../../types";
 
 export interface MessageListProps {
   /** Channel ID to display messages for */
@@ -80,15 +80,6 @@ const MessageList: React.FC<MessageListProps> = ({
   return (
     <MessageListContainer
       channelId={channelId}
-      showInput={showInput}
-      allowFileUploads={allowFileUploads}
-      allowEmojis={allowEmojis}
-      maxAttachments={maxAttachments}
-      maxFileSize={maxFileSize}
-      emojiPickerComponent={emojiPickerComponent}
-      onMessageSent={onMessageSent}
-      onMessageEdited={onMessageEdited}
-      onMessageDeleted={onMessageDeleted}
       className={className}
       sx={sx}
       id={id}
@@ -96,4 +87,4 @@ const MessageList: React.FC<MessageListProps> = ({
   );
 };
 
-export default MessageList;
+export default React.memo(MessageList);

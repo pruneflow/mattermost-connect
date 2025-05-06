@@ -4,9 +4,10 @@ import { useBaseContainer } from "../base/BaseContainer";
 import UserAvatarUI from "../../components/users/UserAvatarUI";
 import { User } from "../../../types";
 import { useUser } from "../../../hooks";
+import { SxProps, Theme } from "@mui/material/styles";
 
 export interface UserAvatarContainerProps {
-  userId: string;
+  userId?: string;
   user?: User;
   size?: "small" | "medium" | "large" | number;
   showStatus?: boolean;
@@ -17,7 +18,7 @@ export interface UserAvatarContainerProps {
   clickable?: boolean;
   onClick?: (user: User) => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 

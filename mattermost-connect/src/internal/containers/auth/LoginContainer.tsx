@@ -4,6 +4,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { User, LoginParams } from "../../../types";
 import { useFormContainer } from "../base/FormContainer";
 import LoginFormUI from "../../components/auth/LoginFormUI";
+import { SxProps, Theme } from "@mui/material";
 
 export interface LoginContainerProps {
   initialUsername?: string;
@@ -18,7 +19,7 @@ export interface LoginContainerProps {
   onForgotPasswordClick?: () => void;
   onLoginSuccess?: (user: User) => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 

@@ -5,7 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import TeamListContainer from "../../internal/containers/teams/TeamListContainer";
-import { Team } from "../../index";
+import { Team } from "../../types";
 
 export interface TeamListProps {
   /** How to display the teams (list, grid, sidebar, tabs) */
@@ -78,7 +78,7 @@ const TeamList: React.FC<TeamListProps> = ({
       allowCreate={allowCreate}
       showSearch={showSearch}
       emptyMessage={emptyMessage}
-      onTeamSelect={onTeamSelect}
+      onSelectTeam={onTeamSelect}
       onCreateSuccess={onCreateSuccess}
       className={className}
       sx={sx}

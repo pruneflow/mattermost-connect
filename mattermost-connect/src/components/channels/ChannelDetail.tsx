@@ -6,7 +6,7 @@ import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import ChannelDetailContainer from "../../internal/containers/channels/ChannelDetailContainer";
 import ChannelDetailUI from "../../internal/components/channels/ChannelDetailUI";
-import { Channel } from "../../index";
+import { Channel } from "../../types";
 
 export interface ChannelDetailProps {
   /** Channel ID to display */
@@ -106,45 +106,12 @@ const ChannelDetail: React.FC<ChannelDetailProps> = ({
   id,
 }) => {
   // If channelId is provided, use the container for connected functionality
-  if (channelId) {
-    return (
-      <ChannelDetailContainer
-        channelId={channelId}
-        showActions={showActions}
-        memberPreviewCount={memberPreviewCount}
-        onDelete={onDelete}
-        onLeave={onLeave}
-        onUpdate={onUpdate}
-        onViewMembers={onViewMembers}
-        className={className}
-        sx={sx}
-        id={id}
-      />
-    );
-  }
-
-  // If no channel data is provided, don't render anything
-  if (!channel) {
-    return null;
-  }
-
-  // Otherwise, use the UI component directly with provided props
+  if (!channelId && !channel) return null;
   return (
-    <ChannelDetailUI
+    <ChannelDetailContainer
       channel={channel}
-      isFavorite={isFavorite}
-      isMuted={isMuted}
-      memberCount={memberCount}
-      memberPreview={memberPreview}
+      channelId={channelId}
       showActions={showActions}
-      canManage={canManage}
-      onToggleFavorite={onToggleFavorite}
-      onViewMembers={onViewMembers}
-      onInvite={onInvite}
-      onEdit={onEdit}
-      onCopyLink={onCopyLink}
-      onLeave={onLeave}
-      onDelete={onDelete}
       className={className}
       sx={sx}
       id={id}

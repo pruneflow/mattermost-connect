@@ -5,13 +5,14 @@ import { useTeamCreation } from "../../../hooks";
 import { Team, CreateTeamParams } from "../../../types";
 import TeamCreateUI from "../../components/teams/TeamCreateUI";
 import { useDialog } from "../../hooks/useDialog";
+import { SxProps, Theme } from "@mui/material";
 
 export interface TeamCreateContainerProps {
   initialData?: Partial<CreateTeamParams>;
   onCreateSuccess?: (team: Team) => void;
   onCancel?: () => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 

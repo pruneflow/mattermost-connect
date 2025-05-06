@@ -5,7 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import MessageThreadContainer from "../../internal/containers/messages/MessageThreadContainer";
-import { Message } from "../../index";
+import { Message } from "../../types";
 
 export interface MessageThreadProps {
   /** Root message ID */
@@ -83,15 +83,9 @@ const MessageThread: React.FC<MessageThreadProps> = ({
 }) => {
   return (
     <MessageThreadContainer
-      rootMessageId={rootMessageId}
+      rootId={rootMessageId}
       channelId={channelId}
-      showReplyInput={showReplyInput}
-      allowAttachments={allowAttachments}
-      allowEmojis={allowEmojis}
-      maxAttachments={maxAttachments}
-      maxFileSize={maxFileSize}
-      emojiPickerComponent={emojiPickerComponent}
-      onReplySent={onReplySent}
+      onReplyPosted={onReplySent}
       onClose={onClose}
       className={className}
       sx={sx}
@@ -100,4 +94,4 @@ const MessageThread: React.FC<MessageThreadProps> = ({
   );
 };
 
-export default MessageThread;
+export default React.memo(MessageThread);

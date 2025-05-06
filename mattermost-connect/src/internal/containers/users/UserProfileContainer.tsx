@@ -5,9 +5,10 @@ import { useUser } from "../../../hooks/";
 import UserProfileUI from "../../components/users/UserProfileUI";
 import { User, UserProfileUpdate, UserStatus } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
+import { SxProps, Theme } from "@mui/material/styles";
 
 export interface UserProfileContainerProps {
-  userId: string;
+  userId?: string;
   user?: User;
   variant?: "standard" | "compact" | "card";
   avatarSize?: number;
@@ -29,7 +30,7 @@ export interface UserProfileContainerProps {
   onStatusChange?: (user: User, newStatus: UserStatus) => void;
   onProfileUpdate?: (user: User) => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 
@@ -54,8 +55,6 @@ const UserProfileContainer: React.FC<UserProfileContainerProps> = (props) => {
     id,
   } = props;
 
-  const dialog = useDialog();
-
   const {
     user: fetchedUser,
     status,
@@ -63,7 +62,6 @@ const UserProfileContainer: React.FC<UserProfileContainerProps> = (props) => {
     isCurrentUser,
     refreshUser,
     updateProfile,
-    updateStatus,
     isUpdatingProfile,
   } = useUser(userId);
 

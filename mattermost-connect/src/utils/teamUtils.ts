@@ -198,7 +198,7 @@ export function formatTeamForDisplay(
   };
 }
 
-export const isValidField = (name: string): name is TeamField => {
+export const isValidField = (name: string): name is any => {
   return [
     "name",
     "display_name",

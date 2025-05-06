@@ -5,8 +5,7 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import ChannelHeaderContainer from "../../internal/containers/channels/ChannelHeaderContainer";
-import ChannelHeaderUI from "../../internal/components/channels/ChannelHeaderUI";
-import { Channel } from "../../index";
+import { Channel } from "../../types";
 
 export interface ChannelHeaderProps {
   /** Channel ID to display */
@@ -102,50 +101,17 @@ const ChannelHeader: React.FC<ChannelHeaderProps> = ({
   id,
 }) => {
   // If channelId is provided, use the container for connected functionality
-  if (channelId) {
-    return (
-      <ChannelHeaderContainer
-        channelId={channelId}
-        size={size}
-        showSearch={showSearch}
-        showSettings={showSettings}
-        showLeave={showLeave}
-        onSearch={onSearch}
-        onDelete={onDelete}
-        onLeave={onLeave}
-        onViewMembers={onViewMembers}
-        className={className}
-        sx={sx}
-        id={id}
-      />
-    );
-  }
-
-  // If no channel data is provided, don't render anything
-  if (!channel) {
-    return null;
-  }
-
-  // Otherwise, use the UI component directly with provided props
+  if (!channelId && !channel) return null;
   return (
-    <ChannelHeaderUI
+    <ChannelHeaderContainer
+      channelId={channelId}
       channel={channel}
-      membersCount={membersCount}
-      isFavorite={isFavorite}
-      isMuted={isMuted}
-      hasSearch={showSearch}
+      size={size}
+      showSearch={showSearch}
       showSettings={showSettings}
       showLeave={showLeave}
-      size={size}
       onSearch={onSearch}
-      onToggleFavorite={onToggleFavorite}
-      onToggleMute={onToggleMute}
-      onSettings={onSettings}
-      onInfo={onInfo}
       onViewMembers={onViewMembers}
-      onInvite={onInvite}
-      onLeave={onLeave}
-      onDelete={onDelete}
       className={className}
       sx={sx}
       id={id}

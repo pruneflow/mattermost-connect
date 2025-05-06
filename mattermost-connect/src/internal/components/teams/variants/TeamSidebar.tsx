@@ -3,7 +3,6 @@
 import React from "react";
 import { Box, Stack, Tooltip, IconButton } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
-import { Team } from "../../../../index";
 import { TeamVariantProps } from "../types";
 import TeamItemSidebar from "./TeamItemSidebar";
 

@@ -15,7 +15,7 @@ import { isChannelMuted } from "../../../core/store/userSettingsStore";
 
 export interface ChannelDetailContainerProps {
   /** Channel ID */
-  channelId: string;
+  channelId?: string;
   /** Channel object (if already available) */
   channel?: Channel;
   /** Display variant */

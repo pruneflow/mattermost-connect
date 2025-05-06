@@ -1,10 +1,11 @@
 // src/internal/containers/teams/TeamSettingsContainer.tsx
 import React, { useCallback, useEffect } from "react";
 import { useFormContainer } from "../base/FormContainer";
-import { useContainerTeam } from "../../hooks/useContainerTeam";
 import { Team, UpdateTeamParams } from "../../../types";
 import TeamSettingsUI from "../../components/teams/TeamSettingsUI";
 import { useDialog } from "../../hooks";
+import { useTeam } from "../../../hooks";
+import { SxProps, Theme } from "@mui/material";
 
 export interface TeamSettingsContainerProps {
   teamId: string;
@@ -19,7 +20,7 @@ export interface TeamSettingsContainerProps {
   onUpdate?: (team: Team) => void;
   onCancel?: () => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 
@@ -43,11 +44,15 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
 
   const dialog = useDialog();
 
+  // Use useTeam hook directly instead of useContainerTeam
   const {
     team: fetchedTeam,
-    updateTeam,
+    update: updateTeam,
+    isLoading,
     isUpdating,
-  } = useContainerTeam(teamId);
+    error,
+    refreshTeam,
+  } = useTeam(teamId);
 
   const team = propTeam || fetchedTeam;
 
@@ -148,6 +153,27 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
     if (onCancel) onCancel();
   }, [formState.isDirty, dialog, formAPI, onCancel]);
 
+  const handleRefresh = useCallback(() => {
+    if (formState.isDirty) {
+      dialog
+        .confirmAsync({
+          title: "Discard Changes",
+          message: "Refreshing will discard your unsaved changes. Continue?",
+          confirmText: "Refresh",
+          cancelText: "Cancel",
+        })
+        .then((confirmed) => {
+          if (confirmed) {
+            refreshTeam().then(() => {
+              formAPI.resetForm();
+            });
+          }
+        });
+    } else {
+      refreshTeam();
+    }
+  }, [dialog, formState.isDirty, refreshTeam, formAPI]);
+
   const handleFieldChange = useCallback(
     (field: any, value: any) => {
       formAPI.setFieldValue(field, value);
@@ -163,16 +189,18 @@ const TeamSettingsContainer: React.FC<TeamSettingsContainerProps> = (props) => {
     team,
     formData: formState.formData,
     errors: formState.errors,
-    isLoading: formState.isSubmitting || isUpdating,
+    isLoading: formState.isSubmitting || isUpdating || isLoading,
     isValid: formState.isValid,
     isDirty: formState.isDirty,
     editableFields,
     onFieldChange: handleFieldChange,
     onSubmit: handleSubmit,
     onCancel: handleCancel,
+    onRefresh: handleRefresh,
     className,
     sx,
     id,
+    error,
   };
 
   return <TeamSettingsUI {...uiProps} />;

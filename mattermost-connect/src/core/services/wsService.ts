@@ -3,7 +3,6 @@
  * WebSocket service
  * Provides centralized management of WebSocket connections and events
  */
-import { EventEmitter } from "events";
 import {
   WebSocketEventType,
   WebSocketMessage,
@@ -14,6 +13,8 @@ import {
 } from "../../types";
 import { handleError } from "../store";
 import { emitEvent } from "../api/eventUtils";
+// Nouvel import
+import { eventEmitter, EventHandler } from "./eventService";
 
 /**
  * WebSocket connection states
@@ -44,7 +45,8 @@ interface ConnectionInfo {
  */
 class WebSocketService {
   private socket: WebSocket | null = null;
-  private eventEmitter: EventEmitter = new EventEmitter();
+  // Utilisation de notre eventEmitter au lieu de Node's EventEmitter
+  private eventEmitter = eventEmitter;
   private connectionInfo: ConnectionInfo = {
     url: null,
     token: null,
@@ -261,16 +263,8 @@ class WebSocketService {
    * @param listener Event handler function
    * @returns Function to unregister the listener
    */
-  public on<T = any>(
-    eventType: string,
-    listener: (data: T) => void,
-  ): () => void {
-    this.eventEmitter.on(eventType, listener);
-
-    // Return function to remove the listener
-    return () => {
-      this.eventEmitter.removeListener(eventType, listener);
-    };
+  public on<T = any>(eventType: string, listener: EventHandler<T>): () => void {
+    return this.eventEmitter.on(eventType, listener);
   }
 
   /**
@@ -279,7 +273,7 @@ class WebSocketService {
    * @returns Function to unregister all listeners
    */
   public onMultiple<T = any>(
-    listeners: Record<string, (data: T) => void>,
+    listeners: Record<string, EventHandler<T>>,
   ): () => void {
     const unsubscribers: Array<() => void> = [];
 
@@ -310,11 +304,6 @@ class WebSocketService {
    */
   private emit<T = any>(eventType: string, data: T): void {
     this.eventEmitter.emit(eventType, data);
-
-    // Also emit to wildcard listeners
-    if (eventType !== "*") {
-      this.eventEmitter.emit("*", { type: eventType, data });
-    }
   }
 
   /**

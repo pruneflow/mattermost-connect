@@ -67,11 +67,7 @@ const Login: React.FC<LoginProps> = ({
 }) => {
   return (
     <LoginContainer
-      initialMode={mode}
-      showModeSelector={showModeSelector}
-      allowRememberMe={allowRememberMe}
       onLoginSuccess={onSuccess}
-      onLoginError={onError}
       title={title}
       submitText={submitText}
       initialServerUrl={initialServerUrl}

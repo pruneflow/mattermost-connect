@@ -65,7 +65,34 @@ export interface FileUploadProps {
  * ```
  */
 const FileUpload: React.FC<FileUploadProps> = (props) => {
-  return <FileUploadContainer {...props} />;
+  const {
+    channelId,
+    maxFiles,
+    maxSize,
+    accept,
+    onFilesSelected,
+    onUploadStart,
+    onUploadComplete,
+    onUploadError,
+    className,
+    sx,
+    id,
+  } = props;
+
+  return (
+    <FileUploadContainer
+      channelId={channelId}
+      maxFiles={maxFiles}
+      maxFileSize={maxSize}
+      allowedTypes={accept ? accept.split(",") : undefined}
+      onFilesSelected={onFilesSelected}
+      onUploadComplete={onUploadComplete}
+      onUploadError={onUploadError}
+      className={className}
+      sx={sx}
+      id={id}
+    />
+  );
 };
 
-export default FileUpload;
+export default React.memo(FileUpload);

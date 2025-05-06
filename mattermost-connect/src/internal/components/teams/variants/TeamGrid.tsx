@@ -3,7 +3,6 @@
 import React from "react";
 import { Box, Grid, Button } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
-import { Team } from "../../../../index";
 import { TeamSearchableVariantProps } from "../types";
 import { SearchInput } from "../../../components/common";
 import TeamItemGrid from "./TeamItemGrid";

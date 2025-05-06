@@ -98,6 +98,6 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({
 };
 
 // Import Team type at the end to avoid circular dependency issues
-import { Team } from "../../../../index";
+import { Team } from "../../../../types";
 
 export default TeamSelector;

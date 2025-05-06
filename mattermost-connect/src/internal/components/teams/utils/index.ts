@@ -1,7 +1,7 @@
 // src/internal/components/teams/utils/index.ts
 
-import { stringToColor, Team } from "../../../../index";
-import { getInitials } from "../../../utils/helper";
+import { stringToColor } from "../../../../index";
+import { Team } from "../../../../types";
 
 /**
  * Formats a team name, optionally truncating to a maximum length
@@ -25,16 +25,6 @@ export const formatTeamName = (name: string, maxLength: number = 0): string => {
  */
 export const getTeamAvatarColor = (team: Team): string => {
   return stringToColor(team.name || team.display_name);
-};
-
-/**
- * Gets team initials for avatar display
- *
- * @param team - The team object
- * @returns Initials string for team avatar
- */
-export const getTeamInitials = (team: Team): string => {
-  return getInitials(team.display_name);
 };
 
 /**

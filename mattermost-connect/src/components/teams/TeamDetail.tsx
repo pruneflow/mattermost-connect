@@ -5,34 +5,36 @@
 import React from "react";
 import { SxProps, Theme } from "@mui/material/styles";
 import TeamDetailContainer from "../../internal/containers/teams/TeamDetailContainer";
-import TeamDetailUI from "../../internal/components/teams/TeamDetailUI";
-import { Team } from "../../index";
+import { Team } from "../../types";
 
 export interface TeamDetailProps {
   /** Team ID to display */
-  teamId?: string;
-  /** Team data (if no teamId is provided) */
-  team?: Team;
+  teamId: string;
   /** Whether to show team actions */
   showActions?: boolean;
   /** Size variant */
-  variant?: "compact" | "normal" | "expanded";
-  /** Team member count (only used with direct team prop) */
-  memberCount?: number;
-  /** Whether the current user is an admin (only used with direct team prop) */
-  isAdmin?: boolean;
-  /** Callback when team is deleted */
+  variant?: "standard" | "compact" | "card";
+  /** Custom tabs configuration */
+  tabs?: Array<{
+    id: string;
+    label: string;
+    content?: React.ReactNode;
+    disabled?: boolean;
+  }>;
+  /** Initial active tab */
+  activeTab?: string;
+  /** Available actions for the team */
+  availableActions?: string[];
+  /** Callback when an action is performed (notification only) */
+  onAction?: (action: string, team: Team) => void;
+  /** Callback when tab changes (notification only) */
+  onTabChange?: (tabId: string) => void;
+  /** Callback when team is deleted (notification only) */
   onDelete?: () => void;
-  /** Callback when team is left */
+  /** Callback when team is left (notification only) */
   onLeave?: () => void;
-  /** Callback when team is updated */
+  /** Callback when team is updated (notification only) */
   onUpdate?: () => void;
-  /** Callback when edit button is clicked (only used with direct team prop) */
-  onEdit?: () => void;
-  /** Callback when view members button is clicked (only used with direct team prop) */
-  onViewMembers?: () => void;
-  /** Callback when settings button is clicked (only used with direct team prop) */
-  onSettings?: () => void;
   /** Custom CSS class name */
   className?: string;
   /** MUI system props for custom styling */
@@ -42,82 +44,61 @@ export interface TeamDetailProps {
 }
 
 /**
- * Team details component that can display information about a team
+ * Team details component that displays information about a team
  *
- * This component can work in two modes:
- * 1. Connected mode (with teamId): Fetches team data from the store
- * 2. Standalone mode (with team object): Uses provided data directly
+ * This component provides a detailed view of a team with tabs for different sections:
+ * - Info: Basic team information
+ * - Members: Team members management
+ * - Settings: Team settings management
  *
  * @example
  * ```tsx
- * // Connected mode
+ * // Basic usage
  * <TeamDetail
  *   teamId="team123"
- *   variant="expanded"
- *   onDelete={() => console.log('Team deleted')}
+ *   onAction={(action, team) => console.log(`Action ${action} on team ${team.name}`)}
  * />
  *
- * // Standalone mode
+ * // With custom tabs and actions
  * <TeamDetail
- *   team={teamObject}
- *   memberCount={15}
- *   isAdmin={true}
- *   variant="normal"
+ *   teamId="team123"
+ *   variant="card"
+ *   activeTab="members"
+ *   availableActions={["edit", "leave"]}
+ *   onTabChange={(tabId) => console.log(`Tab changed to ${tabId}`)}
+ *   onUpdate={() => fetchTeams()}
  * />
  * ```
  */
 const TeamDetail: React.FC<TeamDetailProps> = ({
   teamId,
-  team,
   showActions = true,
-  variant = "normal",
-  memberCount,
-  isAdmin,
+  variant = "standard",
+  tabs,
+  activeTab,
+  availableActions,
+  onAction,
+  onTabChange,
   onDelete,
   onLeave,
   onUpdate,
-  onEdit,
-  onViewMembers,
-  onSettings,
   className,
   sx,
   id,
 }) => {
-  // If teamId is provided, use the container for connected functionality
-  if (teamId) {
-    return (
-      <TeamDetailContainer
-        teamId={teamId}
-        showActions={showActions}
-        variant={variant}
-        onDelete={onDelete}
-        onLeave={onLeave}
-        onUpdate={onUpdate}
-        className={className}
-        sx={sx}
-        id={id}
-      />
-    );
-  }
-
-  // If no team data is provided, don't render anything
-  if (!team) {
-    return null;
-  }
-
-  // Otherwise, use the UI component directly with provided props
   return (
-    <TeamDetailUI
-      team={team}
-      memberCount={memberCount}
-      isAdmin={isAdmin}
+    <TeamDetailContainer
+      teamId={teamId}
       showActions={showActions}
       variant={variant}
-      onEdit={onEdit}
+      tabs={tabs}
+      activeTab={activeTab}
+      availableActions={availableActions}
+      onAction={onAction}
+      onTabChange={onTabChange}
       onDelete={onDelete}
       onLeave={onLeave}
-      onViewMembers={onViewMembers}
-      onSettings={onSettings}
+      onUpdate={onUpdate}
       className={className}
       sx={sx}
       id={id}

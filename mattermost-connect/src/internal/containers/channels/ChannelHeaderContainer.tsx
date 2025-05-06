@@ -14,7 +14,7 @@ import { ChannelHeaderData } from "../../types/componentTypes";
 
 export interface ChannelHeaderContainerProps {
   /** Channel ID */
-  channelId: string;
+  channelId?: string;
   /** Channel object (if already available) */
   channel?: Channel;
   /** Size variant */

@@ -55,7 +55,6 @@ export interface MessageListContainerProps {
 const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
   const {
     channelId,
-    channel,
     virtualized = true,
     showDateSeparators = true,
     groupByUser = true,
@@ -64,9 +63,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
     compact = false,
     highlightMentions = true,
     onMessageSelect,
-    onMessageAction,
     onScroll,
-    onUnreadMarkerVisible,
     className,
     sx,
     id,
@@ -85,15 +82,12 @@ const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
     editingMessageId,
     isLoading,
     isFetching,
-    error,
-    hasUserReacted,
     deleteMessage,
     togglePin,
     toggleReaction,
     replyTo,
     startEditing,
     refreshMessages,
-    sendMessage,
   } = useMessages(channelId);
 
   // Use WebSocket events for real-time updates
@@ -194,22 +188,9 @@ const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
           // For simplicity, we'll just toggle a default reaction
           toggleReaction(message.id, "thumbsup");
           break;
-        default:
-          // Pass any other actions to the parent component
-          if (onMessageAction) {
-            onMessageAction(action, message);
-          }
       }
     },
-    [
-      replyTo,
-      startEditing,
-      deleteMessage,
-      togglePin,
-      toggleReaction,
-      dialog,
-      onMessageAction,
-    ],
+    [replyTo, startEditing, deleteMessage, togglePin, toggleReaction, dialog],
   );
 
   // Load more messages when scrolling to top

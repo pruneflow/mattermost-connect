@@ -4,6 +4,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { useFormContainer } from "../base/FormContainer";
 import { useDialog } from "../../hooks/useDialog";
 import MFAUI from "../../components/auth/MFAUI";
+import { SxProps, Theme } from "@mui/material/styles";
 
 export interface MFAContainerProps {
   userId: string;
@@ -20,7 +21,7 @@ export interface MFAContainerProps {
   onBackClick?: () => void;
   onResendCode?: () => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 

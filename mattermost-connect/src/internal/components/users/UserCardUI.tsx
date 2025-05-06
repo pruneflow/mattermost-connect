@@ -37,7 +37,7 @@ export interface UserCardUIProps extends BaseComponentProps {
   /** User's display name */
   displayName: string;
   /** User's status */
-  status: UserStatus;
+  status?: UserStatus;
   /** Card variant */
   variant?: "default" | "compact" | "expanded";
   /** Whether the component is loading */

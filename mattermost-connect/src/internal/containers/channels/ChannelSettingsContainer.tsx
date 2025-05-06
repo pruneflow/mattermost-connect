@@ -12,7 +12,7 @@ import ChannelSettingsUI from "../../components/channels/ChannelSettingsUI";
 
 export interface ChannelSettingsContainerProps {
   /** Channel ID */
-  channelId: string;
+  channelId?: string;
   /** Channel object (if already available) */
   channel?: Channel;
   /** Whether form is in edit mode */

@@ -20,7 +20,7 @@ export interface PasswordResetContainerProps {
   onResetRequestSuccess?: () => void;
   onResetSuccess?: () => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
   id?: string;
 }
 
