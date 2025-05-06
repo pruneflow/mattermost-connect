@@ -16,6 +16,7 @@ import {
   UserStore,
 } from "../../types";
 import { userService } from "../services/userService";
+import { channelLoadingService } from "../services/channelLoadingService";
 import { createCommonSlice } from "./slices/commonSlice";
 import { emitEvent } from "../api/eventUtils";
 
@@ -41,6 +42,8 @@ export const useUserStore = create<UserState & UserStore>()(
         statusByUserId: {},
         typingUsers: {},
         isInitialized: false,
+        // Track loading state for user batches to prevent duplicate requests
+        loadingBatches: new Map<string, boolean>(),
 
         /**
          * Sets a single user in the store
@@ -69,6 +72,9 @@ export const useUserStore = create<UserState & UserStore>()(
             state.lastUpdated = Date.now();
           });
 
+          // Clear user loading flag in the loading service
+          channelLoadingService.setUserLoading(user.id, false);
+
           // Emit user updated event
           emitEvent(EventType.USER_UPDATED, { user });
         },
@@ -82,12 +88,15 @@ export const useUserStore = create<UserState & UserStore>()(
 
           set((state) => {
             const now = Date.now();
+            const userIds: string[] = [];
 
             users.forEach((user) => {
               if (!user || !user.id) {
                 console.warn("Attempted to set invalid user:", user);
                 return;
               }
+
+              userIds.push(user.id);
 
               // Add or update the user
               state.byId[user.id] = user;
@@ -104,21 +113,114 @@ export const useUserStore = create<UserState & UserStore>()(
             // Ensure initialization flag is set
             state.isInitialized = true;
             state.lastUpdated = now;
+
+            // Clear batch loading flag if we're finished with these users
+            if (userIds.length > 0) {
+              const batchKeys = Array.from(state.loadingBatches.keys());
+              for (const key of batchKeys) {
+                // Check if the key contains all loaded user IDs
+                const keyIds = key.split(",");
+                if (keyIds.every((id) => userIds.includes(id))) {
+                  state.loadingBatches.delete(key);
+                }
+              }
+            }
+          });
+
+          // Clear user loading flags in the loading service
+          users.forEach((user) => {
+            if (user.id) {
+              channelLoadingService.setUserLoading(user.id, false);
+            }
           });
         },
 
         /**
-         * Loads users by batch
+         * Marks a batch of users as loading to prevent duplicate requests
+         * @param userIds Array of user IDs being loaded
+         * @param isLoading Whether the batch is loading or not
+         */
+        setLoadingUsersBatch: (userIds: string[], isLoading: boolean) => {
+          if (!userIds.length) return;
+
+          // Sort user IDs to ensure consistent key generation
+          const sortedIds = [...userIds].sort();
+          const batchKey = sortedIds.join(",");
+
+          set((state) => {
+            if (isLoading) {
+              state.loadingBatches.set(batchKey, true);
+            } else {
+              state.loadingBatches.delete(batchKey);
+            }
+            state.lastUpdated = Date.now();
+          });
+        },
+
+        /**
+         * Checks if a batch of users is already loading
+         * @param userIds Array of user IDs to check
+         * @returns Whether the batch is loading
+         */
+        isLoadingUserBatch: (userIds: string[]): boolean => {
+          if (!userIds.length) return false;
+
+          const batches = get().loadingBatches;
+          if (batches.size === 0) return false;
+
+          // First check for exact match (all users in one batch)
+          const sortedIds = [...userIds].sort();
+          const batchKey = sortedIds.join(",");
+          if (batches.has(batchKey)) return true;
+
+          // Next check if these users are part of any ongoing batches
+          // This is more expensive but prevents duplicate loading
+          for (const key of batches.keys()) {
+            const batchUserIds = key.split(",");
+
+            // If all of the requested users are in this batch, they're being loaded
+            if (userIds.every((id) => batchUserIds.includes(id))) {
+              return true;
+            }
+          }
+
+          return false;
+        },
+
+        /**
+         * Loads users by batch with enhanced tracking
          * @param userIds User IDs to mark as loading
          */
         loadUsersBatch: (userIds: string[]) => {
           if (!userIds || !userIds.length) return;
 
+          // Check if any of these users are already loading
+          const anyLoading = userIds.some(
+            (userId) =>
+              channelLoadingService.isUserLoading(userId) ||
+              get().loadingIds.includes(userId),
+          );
+
+          // Skip if already loading to prevent loops
+          if (anyLoading) return;
+
+          // Generate batch key for tracking
+          const sortedIds = [...userIds].sort();
+          const batchKey = sortedIds.join(",");
+
+          // Check if this exact batch is already loading
+          if (get().loadingBatches.has(batchKey)) return;
+
           set((state) => {
-            // Mark these users as loading
+            // Mark batch as loading
+            state.loadingBatches.set(batchKey, true);
+
+            // Mark these users as loading individually
             userIds.forEach((userId) => {
               if (!state.loadingIds.includes(userId) && !state.byId[userId]) {
                 state.loadingIds.push(userId);
+                // Also mark in the loading service
+                channelLoadingService.setUserLoading(userId, true);
               }
             });
 
@@ -146,6 +248,9 @@ export const useUserStore = create<UserState & UserStore>()(
             state.lastFetchTimes[id] = Date.now();
             state.lastUpdated = Date.now();
           });
+
+          // Invalidate user in cache for channels that might display it
+          channelLoadingService.invalidateUserCache(id);
 
           // Emit user updated event
           emitEvent(EventType.USER_UPDATED, { user: get().byId[id] });
@@ -175,6 +280,9 @@ export const useUserStore = create<UserState & UserStore>()(
 
             state.lastUpdated = Date.now();
           });
+
+          // Invalidate user in the loading service
+          channelLoadingService.invalidateUserCache(userId);
         },
 
         /**
@@ -347,12 +455,25 @@ export const useUserStore = create<UserState & UserStore>()(
         },
 
         /**
-         * Gets a user by ID
+         * Gets a user by ID with loading state detection
          * @param userId User ID
          * @returns User object or null if not found
          */
         getUserById: (userId: string): User | null => {
-          return get().byId[userId] || null;
+          // First check for direct access
+          const user = get().byId[userId];
+          if (user) return user;
+
+          // If not found, check if we're loading this user
+          const isLoading =
+            get().loadingIds.includes(userId) ||
+            channelLoadingService.isUserLoading(userId);
+
+          // If loading, return null but don't trigger another load
+          if (isLoading) return null;
+
+          // If not found and not loading, return null (might trigger a load)
+          return null;
         },
 
         /**
@@ -428,7 +549,10 @@ export const useUserStore = create<UserState & UserStore>()(
          * @returns Whether the user is pending
          */
         isPendingUser: (userId: string): boolean => {
-          return get().loadingIds.includes(userId);
+          return (
+            get().loadingIds.includes(userId) ||
+            channelLoadingService.isUserLoading(userId)
+          );
         },
 
         /**
@@ -443,6 +567,7 @@ export const useUserStore = create<UserState & UserStore>()(
               isInitialized: false,
               isLoading: false,
               loadingIds: [],
+              loadingBatches: new Map(),
               error: null,
               errors: [],
               lastUpdated: Date.now(),

@@ -25,6 +25,7 @@ import { useUserSettingsStore } from "../core/store/userSettingsStore";
 import { useUnreadStore } from "../core/store/unreadStore";
 import { useUserStore } from "../core/store/userStore";
 import { channelService } from "../core/services/channelService";
+import { channelLoadingService } from "../core/services/channelLoadingService";
 import {
   Channel,
   ChannelMember,
@@ -46,7 +47,11 @@ export function useChannels(teamId: string | undefined) {
   // Current user ID for filtering
   const { currentUser } = useAuthStore();
 
-  // Add state for tracking preload status
+  // Add state to track loading phases to prevent loops
+  const [loadingPhase, setLoadingPhase] = useState;
+  "idle" | "channels" | "users" | ("complete" > "idle");
+
+  // State for tracking preload status
   const [hasPreloadedUsers, setHasPreloadedUsers] = useState(false);
 
   // Get channels using React Query
@@ -65,9 +70,11 @@ export function useChannels(teamId: string | undefined) {
   const { preloadDirectChannelsInfo, refreshDirectChannelInfo } =
     useDirectChannelStore();
 
-  // Get user store for preloading
-  const { loadUsersBatch } = useUserStore();
+  // Get user store for preloading with additional batch loading capability
+  const { loadUsersBatch, setLoadingUsersBatch, isLoadingUserBatch } =
+    useUserStore();
 
+  // Update the setActiveChannel to use the store's function directly
   const setActiveChannel = useCallback((channel: Channel) => {
     return useChannelStore.getState().setActiveChannel(channel);
   }, []);
@@ -107,57 +114,132 @@ export function useChannels(teamId: string | undefined) {
 
   // Preload direct channel users
   useEffect(() => {
-    if (
-      teamId &&
-      currentUser &&
-      !hasPreloadedUsers &&
-      (directChannels.length > 0 || groupChannels.length > 0)
-    ) {
-      const allDirectAndGroupChannels = [...directChannels, ...groupChannels];
-
-      // Preload direct channel info
-      const userIdsToLoad = preloadDirectChannelsInfo(
-        allDirectAndGroupChannels,
-        currentUser.id,
-      );
-
-      // Batch load users
-      if (userIdsToLoad.length > 0) {
-        loadUsersBatch(userIdsToLoad);
-
-        // Create users query to fetch the users
-        const usersQuery = useUsersQuery({
-          userIds: userIdsToLoad,
-          withStatuses: true,
-        });
-
-        // Execute the query
-        usersQuery.refetch().then(() => {
-          setHasPreloadedUsers(true);
-
-          // Refresh direct channel info for all channels
-          allDirectAndGroupChannels.forEach((channel) => {
-            refreshDirectChannelInfo(channel.id, currentUser.id);
-          });
-        });
-      } else {
-        setHasPreloadedUsers(true);
-      }
+    // Skip if no channels or no current user
+    if (!teamId || !currentUser) {
+      return;
     }
+
+    // Prevent unnecessary work if we're already done
+    if (hasPreloadedUsers || loadingPhase === "complete") {
+      return;
+    }
+
+    // Only proceed with preloading if we have direct/group channels
+    const allDirectAndGroupChannels = [...directChannels, ...groupChannels];
+    if (allDirectAndGroupChannels.length === 0) {
+      setHasPreloadedUsers(true);
+      setLoadingPhase("complete");
+      return;
+    }
+
+    // Start preloading if we're in the idle phase or channels phase
+    if (loadingPhase === "idle") {
+      setLoadingPhase("channels");
+    }
+
+    // Don't proceed further if we're not in the channels phase
+    if (loadingPhase !== "channels") {
+      return;
+    }
+
+    // Check if any of these channels are already being loaded
+    const isAnyChannelLoading = allDirectAndGroupChannels.some((channel) =>
+      channelLoadingService.isChannelLoading(channel.id),
+    );
+
+    // If channels are already loading, wait for the next cycle
+    if (isAnyChannelLoading) {
+      return;
+    }
+
+    // Start user preloading phase
+    setLoadingPhase("users");
+
+    // Use the channel loading service to preload direct channel info
+    const userIdsToLoad = preloadDirectChannelsInfo(
+      allDirectAndGroupChannels,
+      currentUser.id,
+    );
+
+    // Skip if there are no users to load or preloading is already flagged
+    if (userIdsToLoad.length === 0) {
+      setHasPreloadedUsers(true);
+      setLoadingPhase("complete");
+      return;
+    }
+
+    // Check if any users are already being loaded
+    const isAnyUserLoading = userIdsToLoad.some((userId) =>
+      channelLoadingService.isUserLoading(userId),
+    );
+
+    // If users are already loading, wait for the next cycle
+    if (isAnyUserLoading || isLoadingUserBatch(userIdsToLoad)) {
+      return;
+    }
+
+    // Set loading flag in the user store
+    setLoadingUsersBatch(userIdsToLoad, true);
+
+    // Batch load users via the store
+    loadUsersBatch(userIdsToLoad);
+
+    // Create users query to fetch the users
+    const usersQuery = useUsersQuery({
+      userIds: userIdsToLoad,
+      withStatuses: true,
+    });
+
+    // Execute the query and finalize
+    usersQuery
+      .refetch()
+      .then(() => {
+        // Clear loading flags
+        setLoadingUsersBatch(userIdsToLoad, false);
+
+        // Update state to reflect completion
+        setHasPreloadedUsers(true);
+        setLoadingPhase("complete");
+
+        // Refresh direct channel info for all channels
+        allDirectAndGroupChannels.forEach((channel) => {
+          if (!channelLoadingService.isChannelLoading(channel.id)) {
+            refreshDirectChannelInfo(channel.id, currentUser.id);
+          }
+        });
+      })
+      .catch((error) => {
+        // Handle errors during preload
+        setLoadingUsersBatch(userIdsToLoad, false);
+        handleError(error as Error, ErrorSource.API, undefined, {
+          method: "preloadDirectChannelUsers",
+          userIds: userIdsToLoad.join(","),
+        });
+
+        // Even if there's an error, mark as complete to avoid locking
+        setHasPreloadedUsers(true);
+        setLoadingPhase("complete");
+      });
   }, [
     teamId,
     currentUser,
     directChannels,
     groupChannels,
     hasPreloadedUsers,
+    loadingPhase,
     preloadDirectChannelsInfo,
     loadUsersBatch,
+    setLoadingUsersBatch,
+    isLoadingUserBatch,
     refreshDirectChannelInfo,
   ]);
 
   // Reset preload status when team changes
   useEffect(() => {
-    setHasPreloadedUsers(false);
+    if (teamId) {
+      setHasPreloadedUsers(false);
+      setLoadingPhase("idle");
+    }
   }, [teamId]);
 
   // View channel mutation
@@ -183,14 +265,20 @@ export function useChannels(teamId: string | undefined) {
   );
 
   /**
-   * Refreshes channel data
+   * Refreshes channel data with safeguards against loops
    */
   const refreshChannels = useCallback(() => {
+    // Only reset if we're not already in a loading phase
+    if (loadingPhase !== "idle" && loadingPhase !== "complete") {
+      return channelsQuery.refetch();
+    }
+
     // Reset preload status to trigger a fresh preload
     setHasPreloadedUsers(false);
+    setLoadingPhase("idle");
 
     return channelsQuery.refetch();
-  }, [channelsQuery]);
+  }, [channelsQuery, loadingPhase]);
 
   /**
    * Checks if a channel has unreads
@@ -229,6 +317,15 @@ export function useChannels(teamId: string | undefined) {
     [],
   );
 
+  // Calculate loading state, with safeguards against unnecessary renders
+  const isLoading = useMemo(() => {
+    // Consider loading if we're in any loading phase except complete
+    const isPreloading = loadingPhase !== "complete";
+
+    // Also consider loading if the channel store is loading
+    return channelsQuery.isLoading || storeLoading || isPreloading;
+  }, [channelsQuery.isLoading, storeLoading, loadingPhase]);
+
   return {
     // Data
     channels: teamId ? getChannelsByTeam(teamId) : [],
@@ -240,10 +337,11 @@ export function useChannels(teamId: string | undefined) {
     activeChannel,
 
     // State
-    isLoading: channelsQuery.isLoading || storeLoading,
+    isLoading,
     isFetching: channelsQuery.isFetching,
     error: channelsQuery.error || storeError,
     hasPreloadedUsers,
+    loadingPhase,
 
     // Actions
     selectChannel,
@@ -312,7 +410,7 @@ export function useChannel(channelId: string | undefined) {
     return null;
   }, [channelId, channel, getDirectChannelInfo]);
 
-  // Refresh direct channel info when needed
+  // Refresh direct channel info when needed, with safeguards against loops
   useEffect(() => {
     if (
       channel &&
@@ -320,7 +418,19 @@ export function useChannel(channelId: string | undefined) {
       channelService.isDirectOrGroupChannel(channel) &&
       (!directInfo || directInfo.status === "loading")
     ) {
-      refreshDirectChannelInfo(channelId!, currentUser.id);
+      // Check if channel is already loading to avoid loops
+      if (!channelLoadingService.isChannelLoading(channelId!)) {
+        // Mark as loading in the service before refreshing to prevent loops
+        channelLoadingService.setChannelLoading(channelId!, true);
+
+        // Request refresh
+        refreshDirectChannelInfo(channelId!, currentUser.id);
+
+        // Clear loading state after a short delay to prevent locking
+        setTimeout(() => {
+          channelLoadingService.setChannelLoading(channelId!, false);
+        }, 100);
+      }
     }
   }, [channel, currentUser, directInfo, channelId, refreshDirectChannelInfo]);
 
