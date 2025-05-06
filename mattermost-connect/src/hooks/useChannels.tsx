@@ -38,6 +38,8 @@ import { useAuthStore } from "../core/store/authStore";
 import { handleError } from "../core/store/errorStore";
 import { ErrorSource } from "../types";
 
+type LoadingPhase = "idle" | "channels" | "users" | "complete";
+
 /**
  * Hook for channel management functionality
  * @param teamId Team ID
@@ -47,9 +49,8 @@ export function useChannels(teamId: string | undefined) {
   // Current user ID for filtering
   const { currentUser } = useAuthStore();
 
-  // Add state to track loading phases to prevent loops
-  const [loadingPhase, setLoadingPhase] = useState;
-  "idle" | "channels" | "users" | ("complete" > "idle");
+  // Puis l'utiliser dans le useState
+  const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>("idle");
 
   // State for tracking preload status
   const [hasPreloadedUsers, setHasPreloadedUsers] = useState(false);

@@ -19,6 +19,7 @@ interface LoadingState {
   isLoading: boolean;
   timestamp: number;
   retryCount: number;
+  hasError: boolean;
 }
 
 interface CachedDirectInfo {
@@ -34,6 +35,7 @@ class ChannelLoadingService {
   private channelLoadingState: Map<string, LoadingState> = new Map();
   private userLoadingState: Map<string, LoadingState> = new Map();
   private directInfoCache: Map<string, CachedDirectInfo> = new Map();
+  private channelErrorState: Map<string, Error> = new Map();
 
   // Settings
   private cacheLifetime = 5 * 60 * 1000; // 5 minutes
@@ -88,6 +90,7 @@ class ChannelLoadingService {
         isLoading: true,
         timestamp: Date.now(),
         retryCount: existingState ? existingState.retryCount : 0,
+        hasError: existingState ? existingState.hasError : false, // Préserve l'état d'erreur existant
       });
     } else {
       this.channelLoadingState.delete(channelId);
@@ -106,12 +109,18 @@ class ChannelLoadingService {
         isLoading: true,
         timestamp: Date.now(),
         retryCount: existingState ? existingState.retryCount : 0,
+        hasError: existingState ? existingState.hasError : false, // Préserve l'état d'erreur existant
       });
     } else {
       this.userLoadingState.delete(userId);
     }
   }
 
+  /**
+   * Increments retry count for a channel
+   * @param channelId Channel ID
+   * @returns Whether max retries has been reached
+   */
   /**
    * Increments retry count for a channel
    * @param channelId Channel ID
@@ -124,18 +133,32 @@ class ChannelLoadingService {
         isLoading: true,
         timestamp: Date.now(),
         retryCount: 1,
+        hasError: false, // Initialiser le nouvel état d'erreur
       });
       return false;
     }
 
     const newRetryCount = state.retryCount + 1;
+    const maxRetriesReached = newRetryCount >= this.maxRetries;
+
     this.channelLoadingState.set(channelId, {
       ...state,
       retryCount: newRetryCount,
       timestamp: Date.now(),
+      hasError: maxRetriesReached, // Mettre à jour l'état d'erreur si max retries atteint
     });
 
-    return newRetryCount >= this.maxRetries;
+    // Si on a atteint le nombre max de tentatives, marquer comme erreur
+    if (maxRetriesReached) {
+      this.channelErrorState.set(
+        channelId,
+        new Error(
+          `Maximum retry attempts (${this.maxRetries}) reached for channel ${channelId}`,
+        ),
+      );
+    }
+
+    return maxRetriesReached;
   }
 
   /**
@@ -292,6 +315,68 @@ class ChannelLoadingService {
 
     // Clear loading state
     this.userLoadingState.delete(userId);
+  }
+
+  /**
+   * Checks if a channel has already reached maximum retry attempts
+   * @param channelId Channel ID
+   * @returns Whether more retry attempts are allowed
+   */
+  public shouldRetryLoading(entityId: string): boolean {
+    // Check if it's a channel or user ID (could be either)
+    const channelState = this.channelLoadingState.get(entityId);
+    const userState = this.userLoadingState.get(entityId);
+
+    // Get the appropriate state
+    const state = channelState || userState;
+
+    // If no state exists yet, retries are allowed
+    if (!state) return true;
+
+    // Check if we've reached the maximum number of retries
+    return state.retryCount < this.maxRetries;
+  }
+
+  /**
+   * Checks if a channel is in an error state
+   * @param channelId Channel ID
+   * @returns Whether the channel is in an error state
+   */
+  public isChannelError(channelId: string): boolean {
+    // Check if channel is in error map
+    if (this.channelErrorState.has(channelId)) {
+      return true;
+    }
+
+    // Check if channel has an error state in the loading state
+    const state = this.channelLoadingState.get(channelId);
+    return state?.hasError || false;
+  }
+
+  /**
+   * Sets a channel as being in an error state
+   * @param channelId Channel ID
+   * @param error Optional error object
+   */
+  public setChannelError(channelId: string, error?: Error): void {
+    // Update loading state to reflect error
+    const state = this.channelLoadingState.get(channelId);
+    if (state) {
+      state.hasError = true;
+      this.channelLoadingState.set(channelId, state);
+    } else {
+      this.channelLoadingState.set(channelId, {
+        isLoading: false,
+        timestamp: Date.now(),
+        retryCount: this.maxRetries, // Max out retries
+        hasError: true,
+      });
+    }
+
+    // Store error if provided
+    if (error) {
+      this.channelErrorState.set(channelId, error);
+    }
   }
 
   /**
