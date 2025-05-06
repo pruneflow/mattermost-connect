@@ -10,6 +10,7 @@ import { useUserStore } from "../core/store/userStore";
 import { useUsersQuery } from "../core/api/queries/userQueries";
 import { channelService } from "../core/services/channelService";
 import { userService } from "../core/services/userService";
+import { channelLoadingService } from "../core/services/channelLoadingService";
 import { Channel, User, UserWithStatus } from "../types";
 import { useAuthStore } from "../core/store/authStore";
 import { handleError } from "../core/store/errorStore";
@@ -25,6 +26,7 @@ export function useDirectChannelUsers(channelId: string | undefined) {
 
   // State for tracking data initialization
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isForceLoading, setIsForceLoading] = useState(false);
 
   // Get stores
   const { getChannelById } = useChannelStore();
@@ -63,24 +65,22 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     return channel ? channelService.isGroupChannel(channel) : false;
   }, [channel]);
 
-  // Extract user IDs from channel
+  // Extract user IDs from channel with error handling
   const userIds = useMemo(() => {
     if (!channel) return [];
 
     try {
-      // Pour les canaux directs, extrayons directement du nom
+      // Check if we already have userIds in directInfo
+      if (directInfo && directInfo.userIds && directInfo.userIds.length > 0) {
+        return directInfo.userIds;
+      }
+
       if (isDirect) {
         return channelService.getUserIdsFromDirectChannel(channel.name);
       }
 
-      // Pour les canaux de groupe, même logique
       if (isGroup) {
         return channelService.getUserIdsFromGroupChannel(channel);
-      }
-
-      // Utiliser directInfo si disponible
-      if (directInfo && directInfo.userIds && directInfo.userIds.length > 0) {
-        return directInfo.userIds;
       }
 
       return [];
@@ -99,10 +99,11 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     return userIds.filter((id) => id !== currentUser.id);
   }, [userIds, currentUser]);
 
-  // Fetch users with query
+  // Fetch users with query but don't automatically trigger
   const usersQuery = useUsersQuery({
     userIds: otherUserIds,
     withStatuses: true,
+    enabled: false, // Don't run automatically
   });
 
   // Pre-load existing users from store
@@ -112,28 +113,100 @@ export function useDirectChannelUsers(channelId: string | undefined) {
 
   // Check if we need to fetch missing users
   const needsFetch = useMemo(() => {
-    return preloadedUsers.length < otherUserIds.length;
+    // If we have all users, no need to fetch
+    if (preloadedUsers.length === otherUserIds.length) {
+      return false;
+    }
+
+    // If any user is currently loading, don't fetch again
+    const loadingUsers = otherUserIds.some((id) =>
+      channelLoadingService.isUserLoading(id),
+    );
+
+    return !loadingUsers;
   }, [preloadedUsers, otherUserIds]);
 
-  // Pre-load users on mount and when otherUserIds change
+  // Pre-load users on mount and when otherUserIds change - with loading checks
   useEffect(() => {
-    if (otherUserIds.length > 0 && (needsFetch || !isInitialized)) {
-      // Force fetch users
-      usersQuery.refetch().then(() => {
-        setIsInitialized(true);
-      });
+    if (!channelId || !channel || otherUserIds.length === 0) {
+      return;
     }
-  }, [otherUserIds, needsFetch, usersQuery, isInitialized]);
 
-  // Initialize or refresh direct channel info when needed
-  useEffect(() => {
-    if (
-      channel &&
-      currentUser &&
-      (isDirect || isGroup) &&
-      (!directInfo || directInfo.status === "loading")
+    // Only fetch if we need to and not initialized
+    if ((needsFetch || isForceLoading) && (!isInitialized || isForceLoading)) {
+      // Mark users as loading
+      otherUserIds.forEach((userId) => {
+        if (!getUserById(userId)) {
+          channelLoadingService.setUserLoading(userId, true);
+        }
+      });
+
+      // Fetch users
+      usersQuery
+        .refetch()
+        .then(() => {
+          // Mark as initialized and remove loading flag
+          setIsInitialized(true);
+          setIsForceLoading(false);
+
+          // Mark users as not loading
+          otherUserIds.forEach((userId) => {
+            channelLoadingService.setUserLoading(userId, false);
+          });
+        })
+        .catch(() => {
+          // On error, also remove loading flags
+          setIsForceLoading(false);
+          otherUserIds.forEach((userId) => {
+            channelLoadingService.setUserLoading(userId, false);
+          });
+        });
+    } else if (
+      preloadedUsers.length === otherUserIds.length &&
+      !isInitialized
     ) {
+      // If we have all users but not initialized, mark as initialized
+      setIsInitialized(true);
+    }
+  }, [
+    channel,
+    channelId,
+    otherUserIds,
+    needsFetch,
+    usersQuery,
+    isInitialized,
+    isForceLoading,
+    getUserById,
+    preloadedUsers.length,
+  ]);
+
+  // Initialize or refresh direct channel info when needed - with loading protection
+  useEffect(() => {
+    if (!channel || !currentUser || (!isDirect && !isGroup)) {
+      return;
+    }
+
+    // Check loading state to avoid loops
+    if (channelLoadingService.isChannelLoading(channelId!)) {
+      return;
+    }
+
+    const shouldRefresh =
+      !directInfo ||
+      directInfo.status === "loading" ||
+      (isForceLoading && directInfo.status !== "complete");
+
+    if (shouldRefresh) {
+      // Set loading flag
+      channelLoadingService.setChannelLoading(channelId!, true);
+
+      // Refresh info
       refreshDirectChannelInfo(channelId!, currentUser.id);
+
+      // Clear loading flag after a short delay
+      setTimeout(() => {
+        channelLoadingService.setChannelLoading(channelId!, false);
+      }, 100);
     }
   }, [
     channel,
@@ -143,6 +216,7 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     directInfo,
     channelId,
     refreshDirectChannelInfo,
+    isForceLoading,
   ]);
 
   // Other user in direct channel
@@ -181,36 +255,69 @@ export function useDirectChannelUsers(channelId: string | undefined) {
       .filter((userStatus): userStatus is UserWithStatus => !!userStatus);
   }, [otherUserIds, getUserById, getUserStatus, getUserDisplayName]);
 
-  // Loading status
+  // Loading status with proper checks to avoid loops
   const isLoading = useMemo(() => {
-    // Consider loading if we're fetching users or if the direct channel info is loading
-    return (
-      usersQuery.isLoading ||
-      (channelId ? isDirectChannelLoading(channelId) : false) ||
-      (needsFetch && !isInitialized)
+    // If we're forcing a load, we're loading
+    if (isForceLoading) return true;
+
+    // If we have no channel or are not direct/group, we're not loading
+    if (!channel || (!isDirect && !isGroup)) return false;
+
+    // Check if channel is loading
+    if (channelId && isDirectChannelLoading(channelId)) return true;
+
+    // Check if any users are loading
+    const anyUserLoading = otherUserIds.some((id) =>
+      channelLoadingService.isUserLoading(id),
     );
+
+    // We're loading if we're not initialized, need to fetch, or any user is loading
+    return !isInitialized || needsFetch || anyUserLoading;
   }, [
-    usersQuery.isLoading,
+    channel,
     channelId,
+    isDirect,
+    isGroup,
     isDirectChannelLoading,
-    needsFetch,
     isInitialized,
+    needsFetch,
+    otherUserIds,
+    isForceLoading,
   ]);
 
   /**
-   * Refreshes user information
+   * Refreshes user information with loading protection
    */
   const refreshUsers = useCallback(() => {
+    // Don't refresh if we're already loading
+    if (isLoading || isForceLoading) return Promise.resolve(null);
+
+    // Force loading flag
+    setIsForceLoading(true);
+
+    // Return the query to allow chaining
     return usersQuery.refetch();
-  }, [usersQuery]);
+  }, [isLoading, isForceLoading, usersQuery]);
 
   /**
-   * Refreshes direct channel info
+   * Refreshes direct channel info with loading protection
    */
   const refreshInfo = useCallback(() => {
-    if (channelId && currentUser) {
-      refreshDirectChannelInfo(channelId, currentUser.id);
-    }
+    if (!channelId || !currentUser) return;
+
+    // Don't refresh if we're already loading
+    if (channelLoadingService.isChannelLoading(channelId)) return;
+
+    // Set loading flag
+    channelLoadingService.setChannelLoading(channelId, true);
+
+    // Refresh info
+    refreshDirectChannelInfo(channelId, currentUser.id);
+
+    // Clear loading flag after a short delay
+    setTimeout(() => {
+      channelLoadingService.setChannelLoading(channelId, false);
+    }, 100);
   }, [channelId, currentUser, refreshDirectChannelInfo]);
 
   /**

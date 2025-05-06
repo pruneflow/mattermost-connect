@@ -3,12 +3,14 @@
  * Container for channel lists
  * Handles loading, filtering, grouping, and actions for channels
  */
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useListContainer } from "../base/ListContainer";
 import { useChannels, useTeamUnreadCount } from "../../../hooks";
 import { Channel, ChannelGroupType } from "../../../types";
 import ChannelListUI from "../../components/channels/ChannelListUI";
 import { useDialog } from "../../hooks/useDialog";
+import { channelService } from "../../../core/services/channelService";
+import { channelLoadingService } from "../../../core/services/channelLoadingService";
 
 export interface ChannelListContainerProps {
   /** Team ID to filter channels */
@@ -74,6 +76,11 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
 
   const dialog = useDialog();
 
+  // Track rendering phases to avoid flickering
+  const [renderPhase, setRenderPhase] = useState<
+    "loading" | "loaded" | "initialized"
+  >("loading");
+
   // Use channels hook for channel data - now with preloading status
   const {
     channels: fetchedChannels,
@@ -89,6 +96,11 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     hasPreloadedUsers,
     refreshChannels,
   } = useChannels(teamId);
+
+  // Direct/group channels that need special handling
+  const directOrGroupChannels = useMemo(() => {
+    return [...directChannels, ...groupChannels];
+  }, [directChannels, groupChannels]);
 
   // Filter channels based on props
   const filteredChannels = useMemo(() => {
@@ -137,7 +149,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     displayField: "display_name",
     searchFields: ["display_name", "name", "header", "purpose"],
     emptyMessage: "No channels available",
-    initialLoading: channelsLoading && !hasPreloadedUsers,
+    initialLoading: renderPhase === "loading",
     onItemSelect: (channel) => {
       selectChannel(channel);
       if (onSelectChannel) {
@@ -146,12 +158,40 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     },
   });
 
-  // Effect to force refresh if needed
+  // Initialize render phase based on channels and loading state
   useEffect(() => {
-    if (teamId && directChannels.length > 0 && !hasPreloadedUsers) {
-      refreshChannels();
+    // Start in loading phase
+    if (renderPhase === "loading") {
+      // If we have channels, move to loaded phase
+      if (fetchedChannels.length > 0) {
+        // Check if we need to wait for direct channel preloading
+        const hasDirectChannels = directOrGroupChannels.length > 0;
+
+        if (!hasDirectChannels || hasPreloadedUsers) {
+          setRenderPhase("initialized");
+        } else {
+          setRenderPhase("loaded");
+        }
+      }
+      // If no channels but loading is done, move to loaded phase
+      else if (!channelsLoading) {
+        setRenderPhase("loaded");
+      }
     }
-  }, [teamId, directChannels.length, hasPreloadedUsers, refreshChannels]);
+    // In loaded phase, check if initialization is complete
+    else if (renderPhase === "loaded") {
+      // If direct channels exist and users are preloaded, or there are no direct channels, move to initialized
+      if (hasPreloadedUsers || directOrGroupChannels.length === 0) {
+        setRenderPhase("initialized");
+      }
+    }
+  }, [
+    fetchedChannels,
+    channelsLoading,
+    hasPreloadedUsers,
+    directOrGroupChannels,
+    renderPhase,
+  ]);
 
   // Update list items when filtered channels change
   useEffect(() => {
@@ -191,28 +231,21 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     [listAPI],
   );
 
-  // Determine if the list is actually loading
+  // Determine if the list is actually loading with optimized logic
   const isActuallyLoading = useMemo(() => {
-    // For direct channels, we need special handling
-    if (
-      channelType === "direct" ||
-      channelType === "group" ||
-      channelType === "all"
-    ) {
-      // If we have channels but haven't preloaded users, we're still effectively loading
-      if (directChannels.length > 0 && !hasPreloadedUsers) {
-        return true;
-      }
+    // If we're still in initial loading phase
+    if (renderPhase === "loading") {
+      return true;
     }
 
-    return listState.items.length > 0 ? false : listState.isLoading;
-  }, [
-    channelType,
-    directChannels.length,
-    hasPreloadedUsers,
-    listState.items.length,
-    listState.isLoading,
-  ]);
+    // If we have no channels but are loading, show loading
+    if (listState.items.length === 0 && channelsLoading) {
+      return true;
+    }
+
+    // Consider initial loading done once we've reached loaded or initialized phase
+    return false;
+  }, [renderPhase, listState.items.length, channelsLoading]);
 
   // Prepare UI props
   const uiProps = {

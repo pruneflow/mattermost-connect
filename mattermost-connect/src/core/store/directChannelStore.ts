@@ -16,6 +16,7 @@ import {
   Channel,
 } from "../../types";
 import { channelService } from "../services/channelService";
+import { channelLoadingService } from "../services/channelLoadingService";
 import { createCommonSlice } from "./slices/commonSlice";
 import { handleError } from "./errorStore";
 import { useChannelStore } from "./channelStore";
@@ -70,6 +71,9 @@ export const useDirectChannelStore = create<
                 (id: string) => id !== channelId,
               );
             });
+
+            // Clear channel loading flag in service
+            channelLoadingService.setChannelLoading(channelId, false);
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {
@@ -225,7 +229,11 @@ export const useDirectChannelStore = create<
          */
         isDirectChannelLoading: (channelId: string): boolean => {
           try {
-            return get().loadingIds.includes(channelId);
+            // Check both store and service loading state
+            return (
+              get().loadingIds.includes(channelId) ||
+              channelLoadingService.isChannelLoading(channelId)
+            );
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {
@@ -243,7 +251,10 @@ export const useDirectChannelStore = create<
          */
         isPendingUser: (userId: string): boolean => {
           try {
-            return get().pendingUserIds.includes(userId);
+            return (
+              get().pendingUserIds.includes(userId) ||
+              channelLoadingService.isUserLoading(userId)
+            );
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {
@@ -267,52 +278,52 @@ export const useDirectChannelStore = create<
             // Get dependencies at runtime to avoid circular dependencies
             const userStore = useUserStore.getState();
 
-            // First, collect all user IDs that need to be loaded
-            const userIdsToLoad = new Set<string>();
+            // Use the loading service to identify required users
+            const { highPriority, lowPriority } =
+              channelLoadingService.identifyRequiredUserIds(
+                channels,
+                userStore.byId,
+                currentUserId,
+              );
 
+            // Mark direct channels as loading
             channels.forEach((channel) => {
-              if (channelService.isDirectChannel(channel)) {
-                const userIds = channelService.getUserIdsFromDirectChannel(
-                  channel.name,
-                );
-                userIds.forEach((id) => {
-                  if (id !== currentUserId && !userStore.getUserById(id)) {
-                    userIdsToLoad.add(id);
+              if (channelService.isDirectOrGroupChannel(channel)) {
+                const info = get().directChannelInfoById[channel.id];
+                // Only mark as loading if we don't have complete info
+                if (!info || info.status !== "complete") {
+                  if (!get().loadingIds.includes(channel.id)) {
+                    set((state) => {
+                      state.loadingIds.push(channel.id);
+                    });
                   }
-                });
-              } else if (channelService.isGroupChannel(channel)) {
-                const userIds =
-                  channelService.getUserIdsFromGroupChannel(channel);
-                userIds.forEach((id) => {
-                  if (id !== currentUserId && !userStore.getUserById(id)) {
-                    userIdsToLoad.add(id);
-                  }
-                });
+                  channelLoadingService.setChannelLoading(channel.id, true);
+                }
               }
             });
 
-            // Now set these user IDs as pending
+            // Mark users as pending
             set((state) => {
-              userIdsToLoad.forEach((userId) => {
+              // Add high priority users first
+              highPriority.forEach((userId) => {
                 if (!state.pendingUserIds.includes(userId)) {
                   state.pendingUserIds.push(userId);
+                  channelLoadingService.setUserLoading(userId, true);
                 }
               });
 
-              // Mark direct channels as loading
-              channels.forEach((channel) => {
-                if (
-                  channelService.isDirectOrGroupChannel(channel) &&
-                  !state.loadingIds.includes(channel.id)
-                ) {
-                  state.loadingIds.push(channel.id);
+              // Add low priority users
+              lowPriority.forEach((userId) => {
+                if (!state.pendingUserIds.includes(userId)) {
+                  state.pendingUserIds.push(userId);
+                  channelLoadingService.setUserLoading(userId, true);
                 }
               });
 
               state.lastUpdated = Date.now();
             });
 
-            return Array.from(userIdsToLoad);
+            return [...highPriority, ...lowPriority];
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {
@@ -333,6 +344,35 @@ export const useDirectChannelStore = create<
           currentUserId: string,
         ) => {
           try {
+            // Check if already loading to prevent loops
+            if (
+              channelLoadingService.isChannelLoading(channelId) &&
+              get().loadingIds.includes(channelId)
+            ) {
+              // Increment retry count and check if max retries reached
+              if (channelLoadingService.incrementChannelRetry(channelId)) {
+                // Clear loading state if max retries reached
+                set((state) => {
+                  state.loadingIds = state.loadingIds.filter(
+                    (id) => id !== channelId,
+                  );
+                });
+                channelLoadingService.setChannelLoading(channelId, false);
+
+                // Set error state in channel info
+                const existingInfo = get().directChannelInfoById[channelId];
+                if (existingInfo) {
+                  set((state) => {
+                    state.directChannelInfoById[channelId] = {
+                      ...existingInfo,
+                      status: "error",
+                    };
+                  });
+                }
+                return;
+              }
+            }
+
             // Get dependencies at runtime to avoid circular dependencies
             const { getChannelById } = useChannelStore.getState();
             const { byId: users } = useUserStore.getState();
@@ -345,20 +385,23 @@ export const useDirectChannelStore = create<
             // Only process direct or group channels
             if (!channelService.isDirectOrGroupChannel(channel)) return;
 
-            // Set loading status while refreshing
+            // Set loading status
             set((state) => {
               if (!state.loadingIds.includes(channelId)) {
                 state.loadingIds.push(channelId);
               }
             });
+            channelLoadingService.setChannelLoading(channelId, true);
 
-            const info = channelService.createDirectChannelInfo(
+            // Get info from service
+            const info = channelLoadingService.getOrCreateDirectChannelInfo(
               channel,
               currentUserId,
               users,
               statuses,
             );
 
+            // Update store
             set((state) => {
               state.directChannelInfoById[channelId] = info;
               state.lastFetchTimes[channelId] = Date.now();
@@ -369,6 +412,9 @@ export const useDirectChannelStore = create<
                 (id) => id !== channelId,
               );
             });
+
+            // Clear loading state in service
+            channelLoadingService.setChannelLoading(channelId, false);
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {
@@ -383,6 +429,7 @@ export const useDirectChannelStore = create<
                 (id) => id !== channelId,
               );
             });
+            channelLoadingService.setChannelLoading(channelId, false);
           }
         },
 
@@ -391,6 +438,9 @@ export const useDirectChannelStore = create<
          */
         reset: () => {
           try {
+            // Clear service caches
+            channelLoadingService.clearAllCaches();
+
             set((state) => {
               // Reset domain-specific state
               state.directChannelInfoById = {};
