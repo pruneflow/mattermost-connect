@@ -34,13 +34,13 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     if (!channelId) return null;
     return getChannelById(channelId);
   }, [channelId, getChannelById]);
-  console.debug("channel", channel);
+
   // Get direct channel info
   const directInfo = useMemo(() => {
     if (!channelId) return null;
     return getDirectChannelInfo(channelId);
   }, [channelId, getDirectChannelInfo]);
-  console.debug("directInfo", directInfo);
+
   // Determine if this is a direct or group channel
   const isDirect = useMemo(() => {
     return channel ? channelService.isDirectChannel(channel) : false;
@@ -50,38 +50,60 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     return channel ? channelService.isGroupChannel(channel) : false;
   }, [channel]);
 
-  // Extract user IDs from channel
+  // Extract user IDs from channel - MODIFICATION ICI
   const userIds = useMemo(() => {
-    if (!channel || !directInfo) return [];
+    console.log("Extracting userIds for channel:", channel?.name);
 
-    if (directInfo.userIds && directInfo.userIds.length > 0) {
+    if (!channel) return [];
+
+    // Pour les canaux directs, extrayons toujours directement du nom
+    if (isDirect) {
+      const extractedIds = channelService.getUserIdsFromDirectChannel(
+        channel.name,
+      );
+      console.log("Extracted IDs from direct channel name:", extractedIds);
+      return extractedIds;
+    }
+
+    // Pour les canaux de groupe, même logique
+    if (isGroup) {
+      const extractedIds = channelService.getUserIdsFromGroupChannel(channel);
+      console.log("Extracted IDs from group channel:", extractedIds);
+      return extractedIds;
+    }
+
+    // Finalement, essayons directInfo si disponible
+    if (directInfo && directInfo.userIds && directInfo.userIds.length > 0) {
+      console.log("Using userIds from directInfo:", directInfo.userIds);
       return directInfo.userIds;
     }
 
-    if (isDirect && channel) {
-      return channelService.getUserIdsFromDirectChannel(channel.name);
-    }
-
-    if (isGroup && channel) {
-      return channelService.getUserIdsFromGroupChannel(channel);
-    }
-
+    console.log("No user IDs found for channel:", channel.id);
     return [];
   }, [channel, directInfo, isDirect, isGroup]);
-
-  console.debug("userIds", userIds);
 
   // Filter out current user
   const otherUserIds = useMemo(() => {
     if (!currentUser) return userIds;
     return userIds.filter((id) => id !== currentUser.id);
   }, [userIds, currentUser]);
-  console.debug("otherUserIds", otherUserIds);
+
   // Fetch users
   const usersQuery = useUsersQuery({
     userIds: otherUserIds,
     withStatuses: true,
   });
+
+  // Force le chargement des utilisateurs une fois que nous avons leurs IDs
+  useEffect(() => {
+    if (otherUserIds.length > 0) {
+      // Forcer le chargement des utilisateurs correspondant aux IDs
+      console.log("Forcing user load for IDs:", otherUserIds);
+
+      // Utilisez usersQuery.refetch() pour recharger spécifiquement ces utilisateurs
+      refreshUsers();
+    }
+  }, [otherUserIds]);
 
   // Other user in direct channel
   const otherUser = useMemo(() => {

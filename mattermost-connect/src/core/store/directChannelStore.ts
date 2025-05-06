@@ -206,7 +206,13 @@ export const useDirectChannelStore = create<
          */
         getDirectChannelInfo: (channelId: string): DirectChannelInfo | null => {
           try {
-            return get().directChannelInfoById[channelId] || null;
+            const result = get().directChannelInfoById[channelId] || null;
+            console.log(`getDirectChannelInfo(${channelId}) returned:`, result);
+            console.log(
+              "Current directChannelInfoById:",
+              get().directChannelInfoById,
+            );
+            return result;
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {

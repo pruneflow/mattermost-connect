@@ -65,10 +65,12 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     isDirect,
     isGroup,
     refreshInfo,
+    refreshUsers,
     isLoading: isLoadingUsers,
     otherUser,
     usersWithStatus,
     groupUsers,
+    otherUserIds,
   } = useDirectChannelUsers(channel.id);
 
   // Use channel hook for this specific channel
@@ -93,9 +95,18 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
   // Force refresh of direct channel info if needed
   useEffect(() => {
     if ((isDirect || isGroup) && currentUser) {
+      console.log("Refreshing channel info for:", channel.id);
       refreshInfo();
     }
-  }, [isDirect, isGroup, currentUser, refreshInfo]);
+  }, [channel.id, isDirect, isGroup, currentUser, refreshInfo]);
+
+  // Force refresh des utilisateurs quand otherUserIds change
+  useEffect(() => {
+    if (otherUserIds.length > 0) {
+      console.log("Refreshing users for IDs:", otherUserIds);
+      refreshUsers();
+    }
+  }, [otherUserIds, refreshUsers]);
 
   // Handle click
   const handleClick = useCallback(() => {
@@ -164,42 +175,42 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
 
   // Determine channel display name based on channel type
   const displayName = useMemo(() => {
-    // For direct messages
+    // Pour les canaux directs
     if (isDirect) {
-      // If we have the other user loaded
+      // Si nous avons l'autre utilisateur chargé
       if (otherUser) {
         return (
           otherUser.username ||
-          otherUser.first_name ||
           (otherUser.first_name && otherUser.last_name
             ? `${otherUser.first_name} ${otherUser.last_name}`
-            : "Direct Message")
+            : otherUser.first_name) ||
+          "Direct Message"
         );
       }
 
-      // If we have users with status
+      // Si nous avons des utilisateurs avec statut
       if (usersWithStatus && usersWithStatus.length > 0) {
         return usersWithStatus[0].displayName;
       }
 
-      // Fallback for direct channels
+      // Fallback pour les canaux directs
       return isLoadingUsers ? "Loading..." : "Direct Message";
     }
 
-    // For group messages
+    // Pour les messages de groupe
     if (isGroup) {
-      // If we have group users
+      // Si nous avons des utilisateurs de groupe
       if (groupUsers && groupUsers.length > 0) {
         return groupUsers
           .map((user) => user.username || user.first_name || "User")
           .join(", ");
       }
 
-      // Fallback for group channels
+      // Fallback pour les canaux de groupe
       return isLoadingUsers ? "Loading..." : "Group Message";
     }
 
-    // For regular channels, use the display_name
+    // Pour les canaux réguliers, utilisez display_name
     return channel.display_name;
   }, [
     channel.display_name,
