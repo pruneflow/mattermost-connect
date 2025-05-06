@@ -142,19 +142,17 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
   // Gérer une sélection d'équipe
   const handleTeamSelect = useCallback(
     (team: Team) => {
-      setActiveTeam(team);
       handleCloseDrawer();
     },
-    [setActiveTeam, handleCloseDrawer],
+    [handleCloseDrawer],
   );
 
   // Gérer une sélection de canal
   const handleChannelSelect = useCallback(
     (channel: Channel) => {
-      setActiveChannel(channel);
       handleCloseDrawer();
     },
-    [setActiveChannel, handleCloseDrawer],
+    [handleCloseDrawer],
   );
 
   // Gérer l'ouverture d'un fil de discussion
@@ -182,7 +180,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
         }}
       >
         <CircularProgress />
-        <Typography variant="body1" sx={{ mt: 2 }}>
+        <Typography variant="body1" component={"div"} sx={{ mt: 2 }}>
           Loading teams...
         </Typography>
       </Box>
@@ -218,7 +216,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
         }}
       >
         <CircularProgress />
-        <Typography variant="body1" sx={{ mt: 2 }}>
+        <Typography variant="body1" component={"div"} sx={{ mt: 2 }}>
           Connecting to Mattermost...
         </Typography>
       </Box>
@@ -250,7 +248,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                   size="small"
                   showStatus={true}
                 />
-                <Typography variant="body2" sx={{ ml: 1 }}>
+                <Typography variant="body2" component={"div"} sx={{ ml: 1 }}>
                   {currentUser.first_name
                     ? `${currentUser.first_name} ${currentUser.last_name || ""}`
                     : currentUser.username}
@@ -278,7 +276,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
           }}
         >
           <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
-            <Typography variant="subtitle1" fontWeight="bold">
+            <Typography variant="subtitle1" component={"div"} fontWeight="bold">
               Teams & Channels
             </Typography>
           </Box>
@@ -372,7 +370,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                 p: 3,
               }}
             >
-              <Typography variant="h5" gutterBottom>
+              <Typography variant="h5" component={"div"} gutterBottom>
                 {activeTeam
                   ? "Select a channel to start chatting"
                   : "Select a team to see channels"}
@@ -407,7 +405,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                 size="small"
                 showStatus={true}
               />
-              <Typography variant="body2" sx={{ ml: 1 }}>
+              <Typography variant="body2" component={"div"} sx={{ ml: 1 }}>
                 {currentUser.first_name
                   ? `${currentUser.first_name} ${currentUser.last_name || ""}`
                   : currentUser.username}
@@ -465,7 +463,11 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
             />
           ) : (
             <Box sx={{ p: 2 }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                component={"div"}
+                color="text.secondary"
+              >
                 Select a team to view channels
               </Typography>
             </Box>
@@ -542,7 +544,7 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
                 p: 3,
               }}
             >
-              <Typography variant="h5" gutterBottom>
+              <Typography variant="h5" component={"div"} gutterBottom>
                 {activeTeam
                   ? "Select a channel to start chatting"
                   : "Select a team to see channels"}

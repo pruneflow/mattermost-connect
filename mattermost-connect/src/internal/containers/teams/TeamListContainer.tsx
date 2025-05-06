@@ -94,12 +94,16 @@ const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
       // Use the built-in selectTeam functionality
       selectTeam(team);
 
+      if (listAPI) {
+        listAPI.selectItem(team);
+      }
+
       // Notify parent component if callback provided
       if (onSelectTeam) {
         onSelectTeam(team);
       }
     },
-    [selectTeam, onSelectTeam],
+    [selectTeam, listAPI, onSelectTeam],
   );
 
   // Handle create team button click
