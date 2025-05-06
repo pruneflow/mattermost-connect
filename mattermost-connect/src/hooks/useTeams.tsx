@@ -57,9 +57,13 @@ export function useTeams() {
    */
   const selectTeam = useCallback(
     (team: Team) => {
+      // Check if team is already active to prevent unnecessary updates
+      if (activeTeam && activeTeam.id === team.id) {
+        return;
+      }
       setActiveTeam(team);
     },
-    [setActiveTeam],
+    [setActiveTeam, activeTeam],
   );
 
   /**

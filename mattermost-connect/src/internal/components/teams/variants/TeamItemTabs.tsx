@@ -1,8 +1,6 @@
 // src/internal/components/teams/variants/TeamItemTabs.tsx
-/**
- * Tab item component for displaying a team in the TeamTabs variant
- */
-import React from "react";
+
+import React, { useCallback } from "react";
 import { Tab, Box, Typography, useMediaQuery, useTheme } from "@mui/material";
 import { BaseComponentProps } from "../../../types/componentTypes";
 import { UnreadBadge } from "../../../components/common";
@@ -50,11 +48,12 @@ const TeamItemTabs: React.FC<TeamItemTabsProps> = ({
       ? unreadCounts[team.id]
       : { msg_count: 0, mention_count: 0 };
 
-  const handleClick = () => {
+  // Handle click with a memoized callback to prevent unnecessary re-renders
+  const handleClick = useCallback(() => {
     if (onClick) {
       onClick(value);
     }
-  };
+  }, [onClick, value]);
 
   const teamLabel = (
     <Box

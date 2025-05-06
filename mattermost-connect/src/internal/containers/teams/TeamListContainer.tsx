@@ -84,26 +84,28 @@ const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
       { field: "type", label: "Type" },
     ],
     initialSortField: "display_name",
-    onItemSelect: (team) => handleTeamSelect(team),
     emptyMessage: emptyMessage,
   });
 
   // Handle team selection
   const handleTeamSelect = useCallback(
     (team: Team) => {
-      // Use the built-in selectTeam functionality
+      if (
+        listState.selectedIds.length > 0 &&
+        listState.selectedIds[0] === team.id
+      ) {
+        return;
+      }
       selectTeam(team);
 
-      if (listAPI) {
-        listAPI.selectItem(team);
-      }
+      listAPI.selectItem(team);
 
-      // Notify parent component if callback provided
+      // Notifier le parent si nécessaire
       if (onSelectTeam) {
         onSelectTeam(team);
       }
     },
-    [selectTeam, listAPI, onSelectTeam],
+    [selectTeam, onSelectTeam],
   );
 
   // Handle create team button click
