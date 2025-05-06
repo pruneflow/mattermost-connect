@@ -34,7 +34,7 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     if (!channelId) return null;
     return getChannelById(channelId);
   }, [channelId, getChannelById]);
-
+  console.debug("channel", channel);
   // Get direct channel info
   const directInfo = useMemo(() => {
     if (!channelId) return null;

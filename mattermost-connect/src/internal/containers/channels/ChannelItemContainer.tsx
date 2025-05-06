@@ -3,12 +3,13 @@
  * Container for individual channel items
  * Handles specific actions for a single channel
  */
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import {
   useAuth,
   useChannel,
   useChannelUnreadCount,
   useDirectChannelUsers,
+  useUsers,
 } from "../../../hooks";
 import ChannelItemUI from "../../components/channels/ChannelItemUI";
 import { useBaseContainer } from "../base/BaseContainer";
@@ -56,22 +57,20 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     id,
   } = props;
 
+  const { currentUser } = useAuth();
   const dialog = useDialog();
 
-  // Use DirectChannelUsers hook for handling users in direct/group channels
+  // Get direct service methods through hooks
   const {
-    otherUser,
-    groupUsers,
-    usersWithStatus,
-    isLoading: isLoadingUsers,
-    formatDisplayName,
     isDirect,
     isGroup,
+    refreshInfo,
+    isLoading: isLoadingUsers,
+    otherUser,
+    usersWithStatus,
+    groupUsers,
   } = useDirectChannelUsers(channel.id);
 
-  console.debug("otherUser", otherUser);
-  console.debug("isDirect", isDirect);
-  console.debug("usersWithStatus", usersWithStatus);
   // Use channel hook for this specific channel
   const {
     isFavorite,
@@ -90,6 +89,13 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     sx,
     initialLoading: isLoadingChannel || isLoadingUsers,
   });
+
+  // Force refresh of direct channel info if needed
+  useEffect(() => {
+    if ((isDirect || isGroup) && currentUser) {
+      refreshInfo();
+    }
+  }, [isDirect, isGroup, currentUser, refreshInfo]);
 
   // Handle click
   const handleClick = useCallback(() => {
@@ -157,53 +163,52 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
   }, [unreadCount]);
 
   // Determine channel display name based on channel type
-  const getChannelDisplayName = useCallback((): string => {
+  const displayName = useMemo(() => {
     // For direct messages
     if (isDirect) {
-      // If we have the other user loaded, use their formatted name
+      // If we have the other user loaded
       if (otherUser) {
-        return formatDisplayName(otherUser.id);
+        return (
+          otherUser.username ||
+          otherUser.first_name ||
+          (otherUser.first_name && otherUser.last_name
+            ? `${otherUser.first_name} ${otherUser.last_name}`
+            : "Direct Message")
+        );
       }
 
-      // Check if we have users with status
+      // If we have users with status
       if (usersWithStatus && usersWithStatus.length > 0) {
         return usersWithStatus[0].displayName;
       }
 
-      // Fallback to channel display name or loading state
-      return (
-        channel.display_name ||
-        (isLoadingUsers ? "Loading..." : "Direct Message")
-      );
+      // Fallback for direct channels
+      return isLoadingUsers ? "Loading..." : "Direct Message";
     }
 
     // For group messages
     if (isGroup) {
-      // If we have group users, format them
+      // If we have group users
       if (groupUsers && groupUsers.length > 0) {
         return groupUsers
-          .map((user) => user.username || user.first_name || "Unknown User")
+          .map((user) => user.username || user.first_name || "User")
           .join(", ");
       }
 
-      // Fallback to channel display name or loading state
-      return (
-        channel.display_name ||
-        (isLoadingUsers ? "Loading..." : "Group Message")
-      );
+      // Fallback for group channels
+      return isLoadingUsers ? "Loading..." : "Group Message";
     }
 
     // For regular channels, use the display_name
     return channel.display_name;
   }, [
-    channel,
+    channel.display_name,
     isDirect,
     isGroup,
+    isLoadingUsers,
     otherUser,
     groupUsers,
     usersWithStatus,
-    isLoadingUsers,
-    formatDisplayName,
   ]);
 
   // Prepare UI props
@@ -225,7 +230,7 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     className,
     sx,
     id,
-    displayName: getChannelDisplayName(),
+    displayName: displayName,
   };
 
   return <ChannelItemUI {...uiProps} />;
