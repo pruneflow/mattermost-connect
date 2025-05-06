@@ -18,10 +18,12 @@ import {
   useRemoveChannelFromFavoritesMutation,
   useToggleChannelMutedMutation,
 } from "../core/api/queries/channelQueries";
+import { useUsersQuery } from "../core/api/queries/userQueries";
 import { useChannelStore } from "../core/store/channelStore";
 import { useDirectChannelStore } from "../core/store/directChannelStore";
 import { useUserSettingsStore } from "../core/store/userSettingsStore";
 import { useUnreadStore } from "../core/store/unreadStore";
+import { useUserStore } from "../core/store/userStore";
 import { channelService } from "../core/services/channelService";
 import {
   Channel,
@@ -44,6 +46,9 @@ export function useChannels(teamId: string | undefined) {
   // Current user ID for filtering
   const { currentUser } = useAuthStore();
 
+  // Add state for tracking preload status
+  const [hasPreloadedUsers, setHasPreloadedUsers] = useState(false);
+
   // Get channels using React Query
   const channelsQuery = useChannelsQuery(teamId);
 
@@ -55,6 +60,13 @@ export function useChannels(teamId: string | undefined) {
     isLoading: storeLoading,
     error: storeError,
   } = useChannelStore();
+
+  // Get direct channel store for preloading
+  const { preloadDirectChannelsInfo, refreshDirectChannelInfo } =
+    useDirectChannelStore();
+
+  // Get user store for preloading
+  const { loadUsersBatch } = useUserStore();
 
   const setActiveChannel = useCallback((channel: Channel) => {
     return useChannelStore.getState().setActiveChannel(channel);
@@ -93,6 +105,61 @@ export function useChannels(teamId: string | undefined) {
     return getChannelsByType(teamId, "favorite");
   }, [teamId, getChannelsByType]);
 
+  // Preload direct channel users
+  useEffect(() => {
+    if (
+      teamId &&
+      currentUser &&
+      !hasPreloadedUsers &&
+      (directChannels.length > 0 || groupChannels.length > 0)
+    ) {
+      const allDirectAndGroupChannels = [...directChannels, ...groupChannels];
+
+      // Preload direct channel info
+      const userIdsToLoad = preloadDirectChannelsInfo(
+        allDirectAndGroupChannels,
+        currentUser.id,
+      );
+
+      // Batch load users
+      if (userIdsToLoad.length > 0) {
+        loadUsersBatch(userIdsToLoad);
+
+        // Create users query to fetch the users
+        const usersQuery = useUsersQuery({
+          userIds: userIdsToLoad,
+          withStatuses: true,
+        });
+
+        // Execute the query
+        usersQuery.refetch().then(() => {
+          setHasPreloadedUsers(true);
+
+          // Refresh direct channel info for all channels
+          allDirectAndGroupChannels.forEach((channel) => {
+            refreshDirectChannelInfo(channel.id, currentUser.id);
+          });
+        });
+      } else {
+        setHasPreloadedUsers(true);
+      }
+    }
+  }, [
+    teamId,
+    currentUser,
+    directChannels,
+    groupChannels,
+    hasPreloadedUsers,
+    preloadDirectChannelsInfo,
+    loadUsersBatch,
+    refreshDirectChannelInfo,
+  ]);
+
+  // Reset preload status when team changes
+  useEffect(() => {
+    setHasPreloadedUsers(false);
+  }, [teamId]);
+
   // View channel mutation
   const viewMutation = useViewChannelMutation();
 
@@ -119,6 +186,9 @@ export function useChannels(teamId: string | undefined) {
    * Refreshes channel data
    */
   const refreshChannels = useCallback(() => {
+    // Reset preload status to trigger a fresh preload
+    setHasPreloadedUsers(false);
+
     return channelsQuery.refetch();
   }, [channelsQuery]);
 
@@ -173,6 +243,7 @@ export function useChannels(teamId: string | undefined) {
     isLoading: channelsQuery.isLoading || storeLoading,
     isFetching: channelsQuery.isFetching,
     error: channelsQuery.error || storeError,
+    hasPreloadedUsers,
 
     // Actions
     selectChannel,

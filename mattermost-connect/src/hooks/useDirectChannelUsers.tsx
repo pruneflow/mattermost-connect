@@ -23,11 +23,24 @@ import { ErrorSource } from "../types";
 export function useDirectChannelUsers(channelId: string | undefined) {
   const { currentUser } = useAuthStore();
 
+  // State for tracking data initialization
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Get stores
   const { getChannelById } = useChannelStore();
-  const { getDirectChannelInfo, refreshDirectChannelInfo } =
-    useDirectChannelStore();
-  const { getUserById, getUserStatus, getUserDisplayName } = useUserStore();
+  const {
+    getDirectChannelInfo,
+    refreshDirectChannelInfo,
+    setDirectChannelInfo,
+    isDirectChannelLoading,
+  } = useDirectChannelStore();
+  const {
+    getUserById,
+    getUserStatus,
+    getUserDisplayName,
+    getUsersByIds,
+    setUsers,
+  } = useUserStore();
 
   // Get channel
   const channel = useMemo(() => {
@@ -50,36 +63,34 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     return channel ? channelService.isGroupChannel(channel) : false;
   }, [channel]);
 
-  // Extract user IDs from channel - MODIFICATION ICI
+  // Extract user IDs from channel
   const userIds = useMemo(() => {
-    console.log("Extracting userIds for channel:", channel?.name);
-
     if (!channel) return [];
 
-    // Pour les canaux directs, extrayons toujours directement du nom
-    if (isDirect) {
-      const extractedIds = channelService.getUserIdsFromDirectChannel(
-        channel.name,
-      );
-      console.log("Extracted IDs from direct channel name:", extractedIds);
-      return extractedIds;
-    }
+    try {
+      // Pour les canaux directs, extrayons directement du nom
+      if (isDirect) {
+        return channelService.getUserIdsFromDirectChannel(channel.name);
+      }
 
-    // Pour les canaux de groupe, même logique
-    if (isGroup) {
-      const extractedIds = channelService.getUserIdsFromGroupChannel(channel);
-      console.log("Extracted IDs from group channel:", extractedIds);
-      return extractedIds;
-    }
+      // Pour les canaux de groupe, même logique
+      if (isGroup) {
+        return channelService.getUserIdsFromGroupChannel(channel);
+      }
 
-    // Finalement, essayons directInfo si disponible
-    if (directInfo && directInfo.userIds && directInfo.userIds.length > 0) {
-      console.log("Using userIds from directInfo:", directInfo.userIds);
-      return directInfo.userIds;
-    }
+      // Utiliser directInfo si disponible
+      if (directInfo && directInfo.userIds && directInfo.userIds.length > 0) {
+        return directInfo.userIds;
+      }
 
-    console.log("No user IDs found for channel:", channel.id);
-    return [];
+      return [];
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "useDirectChannelUsers.userIds",
+        channelId: channel.id,
+      });
+      return [];
+    }
   }, [channel, directInfo, isDirect, isGroup]);
 
   // Filter out current user
@@ -88,22 +99,51 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     return userIds.filter((id) => id !== currentUser.id);
   }, [userIds, currentUser]);
 
-  // Fetch users
+  // Fetch users with query
   const usersQuery = useUsersQuery({
     userIds: otherUserIds,
     withStatuses: true,
   });
 
-  // Force le chargement des utilisateurs une fois que nous avons leurs IDs
-  useEffect(() => {
-    if (otherUserIds.length > 0) {
-      // Forcer le chargement des utilisateurs correspondant aux IDs
-      console.log("Forcing user load for IDs:", otherUserIds);
+  // Pre-load existing users from store
+  const preloadedUsers = useMemo(() => {
+    return getUsersByIds(otherUserIds);
+  }, [getUsersByIds, otherUserIds]);
 
-      // Utilisez usersQuery.refetch() pour recharger spécifiquement ces utilisateurs
-      refreshUsers();
+  // Check if we need to fetch missing users
+  const needsFetch = useMemo(() => {
+    return preloadedUsers.length < otherUserIds.length;
+  }, [preloadedUsers, otherUserIds]);
+
+  // Pre-load users on mount and when otherUserIds change
+  useEffect(() => {
+    if (otherUserIds.length > 0 && (needsFetch || !isInitialized)) {
+      // Force fetch users
+      usersQuery.refetch().then(() => {
+        setIsInitialized(true);
+      });
     }
-  }, [otherUserIds]);
+  }, [otherUserIds, needsFetch, usersQuery, isInitialized]);
+
+  // Initialize or refresh direct channel info when needed
+  useEffect(() => {
+    if (
+      channel &&
+      currentUser &&
+      (isDirect || isGroup) &&
+      (!directInfo || directInfo.status === "loading")
+    ) {
+      refreshDirectChannelInfo(channelId!, currentUser.id);
+    }
+  }, [
+    channel,
+    currentUser,
+    isDirect,
+    isGroup,
+    directInfo,
+    channelId,
+    refreshDirectChannelInfo,
+  ]);
 
   // Other user in direct channel
   const otherUser = useMemo(() => {
@@ -141,6 +181,22 @@ export function useDirectChannelUsers(channelId: string | undefined) {
       .filter((userStatus): userStatus is UserWithStatus => !!userStatus);
   }, [otherUserIds, getUserById, getUserStatus, getUserDisplayName]);
 
+  // Loading status
+  const isLoading = useMemo(() => {
+    // Consider loading if we're fetching users or if the direct channel info is loading
+    return (
+      usersQuery.isLoading ||
+      (channelId ? isDirectChannelLoading(channelId) : false) ||
+      (needsFetch && !isInitialized)
+    );
+  }, [
+    usersQuery.isLoading,
+    channelId,
+    isDirectChannelLoading,
+    needsFetch,
+    isInitialized,
+  ]);
+
   /**
    * Refreshes user information
    */
@@ -171,6 +227,13 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     [getUserById],
   );
 
+  // Add users to store when query completes
+  useEffect(() => {
+    if (usersQuery.data && usersQuery.data.length > 0) {
+      setUsers(usersQuery.data);
+    }
+  }, [usersQuery.data, setUsers]);
+
   return {
     // Data
     userIds,
@@ -182,7 +245,8 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     usersWithStatus,
 
     // State
-    isLoading: usersQuery.isLoading,
+    isLoading,
+    isInitialized,
     error: usersQuery.error,
 
     // Actions

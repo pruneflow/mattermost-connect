@@ -108,6 +108,25 @@ export const useUserStore = create<UserState & UserStore>()(
         },
 
         /**
+         * Loads users by batch
+         * @param userIds User IDs to mark as loading
+         */
+        loadUsersBatch: (userIds: string[]) => {
+          if (!userIds || !userIds.length) return;
+
+          set((state) => {
+            // Mark these users as loading
+            userIds.forEach((userId) => {
+              if (!state.loadingIds.includes(userId) && !state.byId[userId]) {
+                state.loadingIds.push(userId);
+              }
+            });
+
+            state.lastUpdated = Date.now();
+          });
+        },
+
+        /**
          * Updates a user with partial data
          * @param userData Partial user data with ID
          */
@@ -363,9 +382,7 @@ export const useUserStore = create<UserState & UserStore>()(
          * @returns Formatted user name
          */
         getUserDisplayName: (userId: string): string => {
-          console.debug("userId", userId);
           const user = get().byId[userId];
-          console.debug("user", user);
           return userService.formatUserName(user);
         },
 

@@ -74,7 +74,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
 
   const dialog = useDialog();
 
-  // Use channels hook for channel data - no need for actions here
+  // Use channels hook for channel data - now with preloading status
   const {
     channels: fetchedChannels,
     publicChannels,
@@ -86,6 +86,8 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     hasUnreads,
     hasMentions,
     isLoading: channelsLoading,
+    hasPreloadedUsers,
+    refreshChannels,
   } = useChannels(teamId);
 
   // Filter channels based on props
@@ -135,7 +137,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     displayField: "display_name",
     searchFields: ["display_name", "name", "header", "purpose"],
     emptyMessage: "No channels available",
-    initialLoading: channelsLoading,
+    initialLoading: channelsLoading && !hasPreloadedUsers,
     onItemSelect: (channel) => {
       selectChannel(channel);
       if (onSelectChannel) {
@@ -143,6 +145,13 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
       }
     },
   });
+
+  // Effect to force refresh if needed
+  useEffect(() => {
+    if (teamId && directChannels.length > 0 && !hasPreloadedUsers) {
+      refreshChannels();
+    }
+  }, [teamId, directChannels.length, hasPreloadedUsers, refreshChannels]);
 
   // Update list items when filtered channels change
   useEffect(() => {
@@ -182,13 +191,36 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     [listAPI],
   );
 
+  // Determine if the list is actually loading
+  const isActuallyLoading = useMemo(() => {
+    // For direct channels, we need special handling
+    if (
+      channelType === "direct" ||
+      channelType === "group" ||
+      channelType === "all"
+    ) {
+      // If we have channels but haven't preloaded users, we're still effectively loading
+      if (directChannels.length > 0 && !hasPreloadedUsers) {
+        return true;
+      }
+    }
+
+    return listState.items.length > 0 ? false : listState.isLoading;
+  }, [
+    channelType,
+    directChannels.length,
+    hasPreloadedUsers,
+    listState.items.length,
+    listState.isLoading,
+  ]);
+
   // Prepare UI props
   const uiProps = {
     items: listState.items,
     activeId: listState.selectedIds[0],
     variant,
     density,
-    isLoading: listState.items.length > 0 ? false : listState.isLoading,
+    isLoading: isActuallyLoading,
     emptyMessage: listState.isEmpty
       ? "No channels match your criteria"
       : "No channels available",

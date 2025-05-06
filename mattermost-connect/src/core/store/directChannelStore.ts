@@ -13,6 +13,7 @@ import {
   ErrorSource,
   DirectChannelState,
   DirectChannelStore,
+  Channel,
 } from "../../types";
 import { channelService } from "../services/channelService";
 import { createCommonSlice } from "./slices/commonSlice";
@@ -206,13 +207,7 @@ export const useDirectChannelStore = create<
          */
         getDirectChannelInfo: (channelId: string): DirectChannelInfo | null => {
           try {
-            const result = get().directChannelInfoById[channelId] || null;
-            console.log(`getDirectChannelInfo(${channelId}) returned:`, result);
-            console.log(
-              "Current directChannelInfoById:",
-              get().directChannelInfoById,
-            );
-            return result;
+            return get().directChannelInfoById[channelId] || null;
           } catch (error) {
             // Standardized error handling
             handleError(error as Error, ErrorSource.STORAGE, undefined, {
@@ -260,6 +255,75 @@ export const useDirectChannelStore = create<
         },
 
         /**
+         * Preloads user information for all direct/group channels
+         * @param channels List of channels
+         * @param currentUserId Current user ID
+         */
+        preloadDirectChannelsInfo: (
+          channels: Channel[],
+          currentUserId: string,
+        ) => {
+          try {
+            // Get dependencies at runtime to avoid circular dependencies
+            const userStore = useUserStore.getState();
+
+            // First, collect all user IDs that need to be loaded
+            const userIdsToLoad = new Set<string>();
+
+            channels.forEach((channel) => {
+              if (channelService.isDirectChannel(channel)) {
+                const userIds = channelService.getUserIdsFromDirectChannel(
+                  channel.name,
+                );
+                userIds.forEach((id) => {
+                  if (id !== currentUserId && !userStore.getUserById(id)) {
+                    userIdsToLoad.add(id);
+                  }
+                });
+              } else if (channelService.isGroupChannel(channel)) {
+                const userIds =
+                  channelService.getUserIdsFromGroupChannel(channel);
+                userIds.forEach((id) => {
+                  if (id !== currentUserId && !userStore.getUserById(id)) {
+                    userIdsToLoad.add(id);
+                  }
+                });
+              }
+            });
+
+            // Now set these user IDs as pending
+            set((state) => {
+              userIdsToLoad.forEach((userId) => {
+                if (!state.pendingUserIds.includes(userId)) {
+                  state.pendingUserIds.push(userId);
+                }
+              });
+
+              // Mark direct channels as loading
+              channels.forEach((channel) => {
+                if (
+                  channelService.isDirectOrGroupChannel(channel) &&
+                  !state.loadingIds.includes(channel.id)
+                ) {
+                  state.loadingIds.push(channel.id);
+                }
+              });
+
+              state.lastUpdated = Date.now();
+            });
+
+            return Array.from(userIdsToLoad);
+          } catch (error) {
+            // Standardized error handling
+            handleError(error as Error, ErrorSource.STORAGE, undefined, {
+              action: "preloadDirectChannelsInfo",
+              channelCount: channels.length,
+            });
+            return [];
+          }
+        },
+
+        /**
          * Refreshes direct channel info using current user data
          * @param channelId Channel ID
          * @param currentUserId Current user ID
@@ -281,6 +345,13 @@ export const useDirectChannelStore = create<
             // Only process direct or group channels
             if (!channelService.isDirectOrGroupChannel(channel)) return;
 
+            // Set loading status while refreshing
+            set((state) => {
+              if (!state.loadingIds.includes(channelId)) {
+                state.loadingIds.push(channelId);
+              }
+            });
+
             const info = channelService.createDirectChannelInfo(
               channel,
               currentUserId,
@@ -292,6 +363,11 @@ export const useDirectChannelStore = create<
               state.directChannelInfoById[channelId] = info;
               state.lastFetchTimes[channelId] = Date.now();
               state.lastUpdated = Date.now();
+
+              // Remove from loading IDs
+              state.loadingIds = state.loadingIds.filter(
+                (id) => id !== channelId,
+              );
             });
           } catch (error) {
             // Standardized error handling
@@ -299,6 +375,13 @@ export const useDirectChannelStore = create<
               action: "refreshDirectChannelInfo",
               channelId,
               currentUserId,
+            });
+
+            // Make sure to clear loading state even on error
+            set((state) => {
+              state.loadingIds = state.loadingIds.filter(
+                (id) => id !== channelId,
+              );
             });
           }
         },

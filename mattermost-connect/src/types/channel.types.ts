@@ -219,4 +219,9 @@ export interface DirectChannelStore extends CommonSliceActions {
 
   // Reset
   reset: () => void;
+
+  preloadDirectChannelsInfo: (
+    channels: Channel[],
+    currentUserId: string,
+  ) => string[];
 }
