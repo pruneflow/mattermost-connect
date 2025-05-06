@@ -73,7 +73,37 @@ class ChannelService {
    * @returns Array of user IDs
    */
   public getUserIdsFromDirectChannel(channelName: string): string[] {
-    return channelName.split("__");
+    try {
+      // Ensure we have a valid direct channel name format
+      if (!channelName) {
+        console.warn(
+          "Empty channel name passed to getUserIdsFromDirectChannel",
+        );
+        return [];
+      }
+
+      // Handle edge case where channelName is not a string
+      if (typeof channelName !== "string") {
+        console.error("Invalid channel name type:", typeof channelName);
+        return [];
+      }
+
+      // Split by double underscore and filter out empty segments
+      const userIds = channelName
+        .split("__")
+        .filter((id) => id && id.length > 0);
+
+      // Validate extracted IDs
+      if (userIds.length < 2) {
+        console.warn(`Unexpected direct channel name format: ${channelName}`);
+      }
+
+      return userIds;
+    } catch (error) {
+      console.error("Error extracting user IDs from direct channel:", error);
+      // Return empty array instead of failing completely
+      return [];
+    }
   }
 
   /**
@@ -87,7 +117,18 @@ class ChannelService {
     currentUserId: string,
   ): string | null {
     try {
+      if (!channelName || !currentUserId) {
+        return null;
+      }
+
       const userIds = this.getUserIdsFromDirectChannel(channelName);
+
+      // No user IDs extracted
+      if (userIds.length === 0) {
+        return null;
+      }
+
+      // Find the ID that's not the current user
       const otherUserId = userIds.find((id) => id !== currentUserId);
       return otherUserId || null;
     } catch (error) {
@@ -111,19 +152,41 @@ class ChannelService {
     members?: { user_id: string }[],
   ): string[] {
     try {
+      // If members are provided, use them as the primary source
       if (members && members.length > 0) {
         return members.map((member) => member.user_id);
       }
 
-      // If members aren't provided and we have a channel name that looks like a
-      // group of user IDs (G__user1__user2__user3), try to parse those
+      // Fall back to parsing channel name if it follows the expected format
       if (channel.name && channel.name.startsWith("G__")) {
         const parts = channel.name.split("__");
         // Remove the 'G' prefix and return the rest of the parts
-        return parts.slice(1).filter((part) => part.length > 0);
+        const userIds = parts.slice(1).filter((part) => part.length > 0);
+
+        // Validate the extracted IDs
+        if (userIds.length === 0) {
+          console.warn(
+            `No user IDs found in group channel name: ${channel.name}`,
+          );
+        }
+
+        return userIds;
+      }
+
+      // Check if channel has a custom_data field with userIds
+      if (
+        "props" in channel &&
+        channel.props &&
+        typeof (channel as any).props === "object" &&
+        Array.isArray((channel as any).props.userIds)
+      ) {
+        return (channel as any).props.userIds;
       }
 
       // If we can't determine the members, return an empty array
+      console.warn(
+        `Unable to extract user IDs for group channel: ${channel.id}`,
+      );
       return [];
     } catch (error) {
       handleError(error as Error, ErrorSource.UI, undefined, {
@@ -142,6 +205,11 @@ class ChannelService {
    */
   public generateDirectChannelName(userId: string, otherId: string): string {
     // Direct channel names are two user IDs sorted alphabetically and joined with a double underscore
+    if (!userId || !otherId) {
+      throw new Error(
+        "Both user IDs are required to generate direct channel name",
+      );
+    }
     return [userId, otherId].sort().join("__");
   }
 
@@ -239,6 +307,7 @@ class ChannelService {
    * @returns Placeholder display name
    */
   public getPlaceholderDisplayName(userId: string): string {
+    if (!userId) return "Loading...";
     return `User ${userId.substring(0, 5)}...`;
   }
 
@@ -347,20 +416,21 @@ class ChannelService {
           currentUserId,
         );
 
+        // If no other user ID was found, return a loading state
         if (!otherUserId) {
           return {
             ...defaultInfo,
             isDirect: true,
             userIds,
-            displayName: "Direct Message",
-            status: "error",
+            displayName: "Loading...",
+            status: "loading",
           };
         }
 
         const otherUser = users[otherUserId];
 
         if (otherUser) {
-          // User is loaded
+          // User is loaded - complete state
           return {
             isDirect: true,
             isGroup: false,
@@ -374,7 +444,7 @@ class ChannelService {
             status: "complete",
           };
         } else {
-          // User is not loaded yet
+          // User is not loaded yet - loading state
           return {
             isDirect: true,
             isGroup: false,
@@ -410,16 +480,20 @@ class ChannelService {
                 `/api/v4/users/${user.id}/image?_=${user.last_picture_update}`,
             );
 
+          // Determine status based on if we have all users
+          const status =
+            availableUsers.length === userIds.length ? "complete" : "loading";
+
           return {
             isDirect: false,
             isGroup: true,
             displayName,
             userIds,
             groupAvatarUrls,
-            status: "complete",
+            status,
           };
         } else {
-          // Users not loaded yet
+          // No users loaded yet - loading state
           return {
             isDirect: false,
             isGroup: true,
@@ -438,7 +512,7 @@ class ChannelService {
         channelId: channel.id,
       });
 
-      // Return a safe default
+      // Return a safe default with error state
       return {
         isDirect: false,
         isGroup: false,
@@ -530,6 +604,60 @@ class ChannelService {
         channelCount: channels.length,
       });
       return [];
+    }
+  }
+
+  /**
+   * Groups direct channels by loaded status to facilitate optimized loading
+   * @param channels List of channels
+   * @param users Current loaded users map
+   * @param currentUserId Current user ID
+   * @returns Grouped channels by loading status
+   */
+  public groupDirectChannelsByLoadStatus(
+    channels: Channel[],
+    users: Record<string, User>,
+    currentUserId: string,
+  ): {
+    loaded: Channel[];
+    needLoading: Channel[];
+  } {
+    try {
+      const result = {
+        loaded: [] as Channel[],
+        needLoading: [] as Channel[],
+      };
+
+      channels.forEach((channel) => {
+        if (!this.isDirectOrGroupChannel(channel)) {
+          result.loaded.push(channel);
+          return;
+        }
+
+        const isLoaded = this.areDirectChannelUsersLoaded(
+          channel,
+          users,
+          currentUserId,
+        );
+        if (isLoaded) {
+          result.loaded.push(channel);
+        } else {
+          result.needLoading.push(channel);
+        }
+      });
+
+      return result;
+    } catch (error) {
+      handleError(error as Error, ErrorSource.UI, undefined, {
+        method: "groupDirectChannelsByLoadStatus",
+        channelCount: channels.length,
+      });
+
+      // Return all channels as loaded to avoid breaking the UI
+      return {
+        loaded: channels,
+        needLoading: [],
+      };
     }
   }
 
