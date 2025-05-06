@@ -15,6 +15,7 @@ import { apiClient } from "../core/api/client";
 import { queryClient } from "../core/api/queryClient";
 import { emitEvent } from "../core/api/eventUtils";
 import { EventType } from "../types";
+import { DialogProvider } from "../internal/providers/DialogProvider";
 
 // Using hooks instead of directly accessing stores
 import {
@@ -212,7 +213,29 @@ const WebSocketInitializer: React.FC<{
         }
 
         if (wsUrl) {
-          await connectWebSocket(wsUrl, token);
+          try {
+            await connectWebSocket(wsUrl, token);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              (error.message.includes("timeout") ||
+                error.message.includes("CORS") ||
+                error.message.includes("could not be accessed"))
+            ) {
+              console.warn(
+                "WebSocket connection failed but continuing:",
+                error,
+              );
+              // Émettre un événement pour indiquer que le WebSocket a échoué mais on continue
+              emitEvent(EventType.WEBSOCKET_FAILED_CONTINUE, {
+                error,
+                timestamp: Date.now(),
+              });
+            } else {
+              // Pour d'autres erreurs, on les remonte
+              throw error;
+            }
+          }
         }
       } catch (error) {
         console.error("Failed to connect WebSocket:", error);
@@ -362,30 +385,31 @@ export const MattermostProvider: React.FC<MattermostProviderProps> = ({
         token={token}
         onError={onAuthError}
       />
+      <DialogProvider>
+        {/* Auth Initializer */}
+        <MemoizedAuthInitializer
+          token={token}
+          persistAuth={persistAuth}
+          onInitialized={onInitialized}
+          onError={onAuthError}
+        />
 
-      {/* Auth Initializer */}
-      <MemoizedAuthInitializer
-        token={token}
-        persistAuth={persistAuth}
-        onInitialized={onInitialized}
-        onError={onAuthError}
-      />
+        {/* WebSocket Initializer - only when enabled */}
+        <MemoizedWebSocketInitializer
+          mode={determineMode(serverUrl, proxyUrl, clientId)}
+          serverUrl={serverUrl}
+          proxyUrl={proxyUrl}
+          clientId={clientId}
+          enabled={enableWebSocket}
+          onError={onWebSocketError}
+        />
 
-      {/* WebSocket Initializer - only when enabled */}
-      <MemoizedWebSocketInitializer
-        mode={determineMode(serverUrl, proxyUrl, clientId)}
-        serverUrl={serverUrl}
-        proxyUrl={proxyUrl}
-        clientId={clientId}
-        enabled={enableWebSocket}
-        onError={onWebSocketError}
-      />
+        {/* Data Initializer */}
+        <MemoizedDataInitializer enabled={true} />
 
-      {/* Data Initializer */}
-      <MemoizedDataInitializer enabled={true} />
-
-      {/* Render children directly */}
-      {children}
+        {/* Render children directly */}
+        {children}
+      </DialogProvider>
     </QueryClientProvider>
   );
 };

@@ -38,10 +38,13 @@ export function useTeams() {
   const {
     teams,
     activeTeam,
-    setActiveTeam,
     isLoading: storeLoading,
     error: storeError,
   } = useTeamStore();
+
+  const setActiveTeam = useCallback((team: Team) => {
+    return useTeamStore.getState().setActiveTeam(team);
+  }, []);
 
   // Computed values with useMemo
   const formattedTeams = useMemo(() => {
@@ -80,6 +83,7 @@ export function useTeams() {
     // Actions
     selectTeam,
     refreshTeams,
+    setActiveTeam,
   };
 }
 

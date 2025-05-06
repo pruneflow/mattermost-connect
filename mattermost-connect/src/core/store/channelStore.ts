@@ -3,6 +3,7 @@
  * Channel store
  * Manages channel data and state
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";
@@ -19,6 +20,7 @@ import { channelService } from "../services/channelService";
 import { createCommonSlice } from "./slices/commonSlice";
 import { emitEvent } from "../api/eventUtils";
 import { handleError } from "./errorStore";
+import { useUserStore } from "./userStore";
 
 /**
  * Channel store for managing channel data
@@ -512,7 +514,6 @@ export function getChannelDisplayName(
   try {
     if (isDirectChannel(channel)) {
       // Get users at execution time to avoid circular dependencies
-      const { useUserStore } = require("./userStore");
       const { byId: users } = useUserStore.getState();
       const otherUserId = channelService.getOtherUserIdFromDirectChannel(
         channel.name,

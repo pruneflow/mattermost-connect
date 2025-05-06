@@ -4,6 +4,7 @@
  * Centralized query client and key definitions
  */
 import { QueryClient } from "@tanstack/react-query";
+import { useChannelStore } from "../store";
 
 /**
  * Default React Query configuration
@@ -173,8 +174,7 @@ export const invalidateQueries = {
     });
 
     // Get the channel to find its team
-    const { getChannelById } =
-      require("../store/channelStore").useChannelStore.getState();
+    const { getChannelById } = useChannelStore.getState();
     const channel = getChannelById(channelId);
 
     if (channel?.team_id) {

@@ -3,8 +3,9 @@
  * Authentication store
  * Manages user authentication state and actions
  */
+import "./storeConfig";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import {
   User,
@@ -28,11 +29,39 @@ import { handleError } from "./errorStore";
 const authPersistConfig = {
   name: "mattermost-auth",
 
-  // Only persist token and serverUrl to avoid security issues
+  storage: createJSONStorage(() => localStorage),
+
+  // Partialiser pour ne stocker que les données nécessaires
   partialize: (state: AuthState) => ({
-    token: state.token,
-    serverUrl: state.serverUrl,
+    token: state.token || null,
+    serverUrl: state.serverUrl || null,
   }),
+  // Ajouter une fonction de migration pour gérer les changements de structure
+  version: 1,
+  migrate: (persistedState: any, version: number) => {
+    if (version === 0) {
+      // Migration de la version 0 vers 1 si nécessaire
+      return {
+        token: persistedState.token || null,
+        serverUrl: persistedState.serverUrl || null,
+      };
+    }
+    return persistedState;
+  },
+
+  // Gérer les erreurs de désérialisation
+  onRehydrateStorage: (state: any) => {
+    return (rehydratedState: any, error: any) => {
+      if (error) {
+        console.error("Error rehydrating auth store:", error);
+        handleError(error, ErrorSource.STORAGE, undefined, {
+          action: "rehydrate-auth-store",
+        });
+      } else {
+        console.log("Auth store rehydrated successfully");
+      }
+    };
+  },
 };
 
 /**
@@ -442,6 +471,7 @@ export const useAuthStore = create<AuthState & AuthStore>()(
             state.error = null;
             state.lastUpdated = Date.now();
           });
+          localStorage.removeItem("mattermost-auth");
         },
       };
     }),

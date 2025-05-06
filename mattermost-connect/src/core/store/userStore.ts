@@ -3,6 +3,7 @@
  * User store
  * Manages user data, statuses, and typing indicators
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";

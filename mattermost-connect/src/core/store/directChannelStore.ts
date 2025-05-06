@@ -3,6 +3,7 @@
  * Direct channel store
  * Manages direct and group message channel data
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";
@@ -16,6 +17,8 @@ import {
 import { channelService } from "../services/channelService";
 import { createCommonSlice } from "./slices/commonSlice";
 import { handleError } from "./errorStore";
+import { useChannelStore } from "./channelStore";
+import { useUserStore } from "./userStore";
 
 /**
  * Default direct channel info object
@@ -261,9 +264,6 @@ export const useDirectChannelStore = create<
         ) => {
           try {
             // Get dependencies at runtime to avoid circular dependencies
-            const { useChannelStore } = require("./channelStore");
-            const { useUserStore } = require("./userStore");
-
             const { getChannelById } = useChannelStore.getState();
             const { byId: users } = useUserStore.getState();
             const { statusByUserId: statuses } = useUserStore.getState();

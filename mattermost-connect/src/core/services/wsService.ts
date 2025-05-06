@@ -73,6 +73,35 @@ class WebSocketService {
   }
 
   /**
+   * Checks if the WebSocket server is accessible
+   * @param url WebSocket server URL
+   * @returns Promise that resolves to true if accessible, false otherwise
+   */
+  private async isServerAccessible(url: string): Promise<boolean> {
+    try {
+      // Convert WebSocket URL to HTTP URL
+      const httpUrl = url
+        .replace(/^ws/, "http")
+        .replace(/\/websocket$/, "/system/ping");
+
+      // Try to fetch with timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(httpUrl, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      return response.ok;
+    } catch (error) {
+      console.warn("Server accessibility check failed:", error);
+      return false;
+    }
+  }
+
+  /**
    * Gets current connection state
    * @returns Connection information
    */
@@ -97,23 +126,59 @@ class WebSocketService {
       return;
     }
 
+    // Vérifier que l'URL est valide
+    if (!url) {
+      const error = new Error("WebSocket URL is required");
+      handleError(error, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR);
+      throw error;
+    }
+
     // Update connection state
     this.connectionInfo.isConnecting = true;
     this.connectionInfo.url = url;
     this.connectionInfo.token = token;
 
     try {
+      // Enregistrer la tentative de connexion en cours
+      console.log(`Attempting WebSocket connection to ${url}`);
+
+      // Avant de créer le WebSocket
+      const isAccessible = await this.isServerAccessible(url);
+      if (!isAccessible) {
+        console.warn(
+          `WebSocket server at ${url} might not be accessible, attempting connection anyway`,
+        );
+      }
       this.socket = new WebSocket(url);
 
+      const connectionTimeout = setTimeout(() => {
+        if (
+          this.socket &&
+          this.socket.readyState === WebSocketState.CONNECTING
+        ) {
+          // La connexion prend trop de temps, annuler
+          this.socket.close();
+          const timeoutError = new Error("WebSocket connection timeout");
+          handleError(timeoutError, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR);
+
+          // Mettre à jour l'état de connexion
+          this.connectionInfo.isConnecting = false;
+          this.connectionInfo.lastDisconnectedAt = Date.now();
+        }
+      }, 10000); // 10 secondes par défaut
+
       this.socket.onopen = () => {
+        clearTimeout(connectionTimeout);
         this.handleOpen(options);
       };
 
       this.socket.onclose = (event) => {
+        clearTimeout(connectionTimeout);
         this.handleClose(event, options);
       };
 
       this.socket.onerror = (event) => {
+        clearTimeout(connectionTimeout);
         this.handleError(event, options);
       };
 
@@ -126,8 +191,14 @@ class WebSocketService {
 
       // Increment reconnect attempts and schedule reconnect
       this.connectionInfo.reconnectAttempts++;
-      this.scheduleReconnect(url, token, options);
+      const isCriticalError =
+        error instanceof Error &&
+        (error.message.includes("Invalid URL") ||
+          error.message.includes("timeout"));
 
+      if (!isCriticalError) {
+        this.scheduleReconnect(url, token, options);
+      }
       // Use standardized error handling from Group 2
       handleError(error as Error, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR, {
         url,
@@ -318,6 +389,11 @@ class WebSocketService {
     this.connectionInfo.isConnecting = false;
     this.connectionInfo.lastConnectedAt = now;
     this.connectionInfo.reconnectAttempts = 0;
+
+    this.emit("connection", {
+      isConnected: true,
+      timestamp: now,
+    });
 
     // Send authentication challenge
     this.sendAuthChallenge();

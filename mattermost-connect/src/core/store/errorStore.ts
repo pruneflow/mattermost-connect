@@ -3,6 +3,7 @@
  * Error store for centralized error management
  * Provides a global error handling system with source tracking and categorization
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { v4 as uuidv4 } from "uuid";

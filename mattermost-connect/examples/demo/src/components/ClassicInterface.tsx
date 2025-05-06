@@ -80,6 +80,8 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
   const { isConnected: isWebSocketConnected, connect: connectWebSocket } =
     useWebSocket();
 
+  const [wsConnectionTimedOut, setWsConnectionTimedOut] = useState(false);
+
   // Initialiser WebSocket si on utilise le service mock
   useEffect(() => {
     if (mockService && !isWebSocketConnected) {
@@ -92,6 +94,22 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
       };
     }
   }, [mockService, isWebSocketConnected]);
+
+  useEffect(() => {
+    if (!mockService && activeTeam && !isWebSocketConnected) {
+      // Définir un timeout de 10 secondes pour la connexion WebSocket
+      const timeout = setTimeout(() => {
+        console.warn("WebSocket connection timeout, proceeding anyway");
+        setWsConnectionTimedOut(true);
+      }, 10000);
+
+      // Nettoyer le timeout si la connexion réussit
+      return () => {
+        clearTimeout(timeout);
+        setWsConnectionTimedOut(false);
+      };
+    }
+  }, [mockService, activeTeam, isWebSocketConnected]);
 
   // Enregistrer les gestionnaires WebSocket pour les mises à jour de messages
   useWebSocketMessageEvents(
@@ -183,7 +201,12 @@ const ClassicInterface: React.FC<ClassicInterfaceProps> = ({
   }
 
   // Afficher un indicateur de chargement pendant la connexion WebSocket (uniquement pour les connexions réelles)
-  if (!mockService && activeTeam && !isWebSocketConnected) {
+  if (
+    !mockService &&
+    activeTeam &&
+    !isWebSocketConnected &&
+    !wsConnectionTimedOut
+  ) {
     return (
       <Box
         sx={{

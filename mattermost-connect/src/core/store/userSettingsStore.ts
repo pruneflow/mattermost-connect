@@ -4,6 +4,7 @@
  * Central management of user preferences and settings
  * Optimized with immer and persist middleware for seamless updates and persistence
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { persist } from "zustand/middleware";

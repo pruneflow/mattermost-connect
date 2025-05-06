@@ -70,6 +70,7 @@ export enum EventType {
   WEBSOCKET_CONNECTED = "websocket:connected",
   WEBSOCKET_DISCONNECTED = "websocket:disconnected",
   WEBSOCKET_ERROR = "websocket:error",
+  WEBSOCKET_FAILED_CONTINUE = "websocket:failed_continue",
 
   // Settings events
   SETTINGS_CHANGED = "settings:changed",

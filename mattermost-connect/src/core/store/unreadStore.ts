@@ -3,6 +3,7 @@
  * Unread store
  * Manages unread counts for channels and teams
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";

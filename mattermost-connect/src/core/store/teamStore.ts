@@ -3,6 +3,7 @@
  * Team store
  * Manages team data, active team, and team-related state
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";

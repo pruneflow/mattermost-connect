@@ -3,6 +3,7 @@
  * WebSocket store
  * Manages WebSocket connection state and event subscription
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";

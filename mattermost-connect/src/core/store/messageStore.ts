@@ -3,6 +3,7 @@
  * Message store
  * Manages message data, threads, reactions, and related states
  */
+import "./storeConfig";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";

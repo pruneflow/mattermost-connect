@@ -52,10 +52,13 @@ export function useChannels(teamId: string | undefined) {
     getChannelsByTeam,
     getChannelsByType,
     activeChannel,
-    setActiveChannel,
     isLoading: storeLoading,
     error: storeError,
   } = useChannelStore();
+
+  const setActiveChannel = useCallback((channel: Channel) => {
+    return useChannelStore.getState().setActiveChannel(channel);
+  }, []);
 
   // Favorites and muted channels
   const { getFavorites, isFavorite, getMutedChannels, isChannelMuted } =
@@ -174,6 +177,7 @@ export function useChannels(teamId: string | undefined) {
     // Actions
     selectChannel,
     refreshChannels,
+    setActiveChannel,
 
     // Helper methods
     hasUnreads,
