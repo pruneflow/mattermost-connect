@@ -43,14 +43,12 @@ export interface ChannelItemUIProps extends ItemComponentProps<Channel> {
   showFavoriteToggle?: boolean;
   /** Whether to show the channel is muted */
   isMuted?: boolean;
-  /** User names for direct/group messages */
-  displayNames?: string[];
   /** Whether the item is a compact version */
   compact?: boolean;
   /** Callback when favorite is toggled */
   onToggleFavorite?: (channel: Channel) => void;
   /** Channel display name */
-  displayName?: string;
+  displayName: string;
 }
 
 const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
@@ -64,7 +62,6 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
   isFavorite = false,
   showFavoriteToggle = false,
   isMuted = false,
-  displayNames = [],
   compact = false,
   onClick,
   onAction,
@@ -90,15 +87,6 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
     }
   };
   console.debug("displayName", displayName);
-  // Get channel display name
-  const getDisplayName = () => {
-    console.debug("displayNames", displayNames);
-    // For direct/group messages, use the display names if provided
-    if ((item.type === "D" || item.type === "G") && displayNames.length > 0) {
-      return displayNames.join(", ");
-    }
-    return item.display_name;
-  };
 
   // Handle click
   const handleClick = () => {
@@ -189,7 +177,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                         unreadCount > 0 ? "fontWeightMedium" : "inherit",
                     }}
                   >
-                    {displayName || getDisplayName()}
+                    {displayName}
                   </Typography>
                 </Box>
               }
@@ -241,7 +229,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                     alignItems: "center",
                   }}
                 >
-                  {getDisplayName()}
+                  {displayName}
                   {isFavorite && (
                     <StarIcon
                       fontSize="small"
@@ -309,7 +297,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                   opacity: isMuted ? 0.6 : 1,
                 }}
               >
-                {getDisplayName()}
+                {displayName}
               </Typography>
               {!compact && item.purpose && (
                 <Typography
@@ -410,7 +398,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                         unreadCount > 0 ? "fontWeightMedium" : "inherit",
                     }}
                   >
-                    {getDisplayName()}
+                    {displayName}
                   </Typography>
                   {isFavorite && (
                     <StarIcon

@@ -9,7 +9,6 @@ import { useChannel } from "../../../hooks";
 import ChannelHeaderUI from "../../components/channels/ChannelHeaderUI";
 import { Channel } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
-import { isChannelMuted } from "../../../core/store/userSettingsStore";
 import { ChannelHeaderData } from "../../types/componentTypes";
 
 export interface ChannelHeaderContainerProps {
@@ -79,6 +78,7 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
     deleteChannel,
     isFavorite,
     isLoading,
+    isMuted,
   } = useChannel(channelId);
 
   const channel = propChannel || fetchedChannel;
@@ -245,7 +245,7 @@ const ChannelHeaderContainer: React.FC<ChannelHeaderContainerProps> = (
   // Prepare UI props
   const uiProps = {
     ...headerData,
-    isMuted: channel ? isChannelMuted(channel.id) : false,
+    isMuted,
     hasSearch: showSearch,
     showSettings,
     showLeave,

@@ -105,22 +105,6 @@ const ChannelHeaderUI: React.FC<ChannelHeaderUIProps> = ({
     }
   };
 
-  // Get channel type label
-  const getChannelTypeLabel = (): string => {
-    switch (channel.type) {
-      case "O":
-        return "Public Channel";
-      case "P":
-        return "Private Channel";
-      case "D":
-        return "Direct Message";
-      case "G":
-        return "Group Message";
-      default:
-        return "Channel";
-    }
-  };
-
   // Handle menu open
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setMenuAnchorEl(event.currentTarget);

@@ -40,7 +40,7 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     if (!channelId) return null;
     return getDirectChannelInfo(channelId);
   }, [channelId, getDirectChannelInfo]);
-
+  console.debug("directInfo", directInfo);
   // Determine if this is a direct or group channel
   const isDirect = useMemo(() => {
     return channel ? channelService.isDirectChannel(channel) : false;
@@ -69,12 +69,14 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     return [];
   }, [channel, directInfo, isDirect, isGroup]);
 
+  console.debug("userIds", userIds);
+
   // Filter out current user
   const otherUserIds = useMemo(() => {
     if (!currentUser) return userIds;
     return userIds.filter((id) => id !== currentUser.id);
   }, [userIds, currentUser]);
-
+  console.debug("otherUserIds", otherUserIds);
   // Fetch users
   const usersQuery = useUsersQuery({
     userIds: otherUserIds,

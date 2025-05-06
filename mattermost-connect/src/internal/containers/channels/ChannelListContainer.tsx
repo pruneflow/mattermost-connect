@@ -182,20 +182,6 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     [listAPI],
   );
 
-  // Get display names for direct/group channels - would be populated from a real hook in production
-  const displayNamesByChannel = useMemo(() => {
-    const result: Record<string, string[]> = {};
-
-    listState.items.forEach((channel) => {
-      if (channel.type === "D" || channel.type === "G") {
-        // Display existing name, would be filled with real data in production
-        result[channel.id] = [channel.display_name];
-      }
-    });
-
-    return result;
-  }, [listState.items]);
-
   // Prepare UI props
   const uiProps = {
     items: listState.items,
@@ -211,7 +197,6 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     searchTerm: listState.searchTerm,
     groupByType,
     showFavorites,
-    displayNamesByChannel,
     onItemClick: handleChannelClick,
     onCreateChannel: handleCreateChannel,
     onChannelAction: handleChannelAction,

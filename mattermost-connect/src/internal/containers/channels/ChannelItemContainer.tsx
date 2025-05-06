@@ -8,13 +8,12 @@ import {
   useAuth,
   useChannel,
   useChannelUnreadCount,
-  useUsers,
+  useDirectChannelUsers,
 } from "../../../hooks";
 import ChannelItemUI from "../../components/channels/ChannelItemUI";
 import { useBaseContainer } from "../base/BaseContainer";
 import { Channel } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
-import { isChannelMuted } from "../../../core/store/userSettingsStore";
 
 export interface ChannelItemContainerProps {
   /** Channel object */
@@ -27,8 +26,6 @@ export interface ChannelItemContainerProps {
   showActions?: boolean;
   /** Whether the display is compact */
   compact?: boolean;
-  /** Override display names for direct/group channels */
-  displayNames?: string[];
   /** Callback when the channel is clicked */
   onClick?: (channel: Channel) => void;
   /** Callback when an action is performed */
@@ -52,20 +49,37 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     isActive = false,
     showActions = false,
     compact = false,
-    displayNames,
     onClick,
     onAction,
     className,
     sx,
     id,
   } = props;
-  const { currentUser } = useAuth();
-  const { getDisplayName } = useUsers();
+
   const dialog = useDialog();
 
+  // Use DirectChannelUsers hook for handling users in direct/group channels
+  const {
+    otherUser,
+    groupUsers,
+    usersWithStatus,
+    isLoading: isLoadingUsers,
+    formatDisplayName,
+    isDirect,
+    isGroup,
+  } = useDirectChannelUsers(channel.id);
+
+  console.debug("otherUser", otherUser);
+  console.debug("isDirect", isDirect);
+  console.debug("usersWithStatus", usersWithStatus);
   // Use channel hook for this specific channel
-  const { isFavorite, toggleFavoriteStatus, toggleMutedStatus, isLoading } =
-    useChannel(channel.id);
+  const {
+    isFavorite,
+    toggleFavoriteStatus,
+    toggleMutedStatus,
+    isLoading: isLoadingChannel,
+    isMuted,
+  } = useChannel(channel.id);
 
   const { unreadCount } = useChannelUnreadCount(channel.id);
 
@@ -74,7 +88,7 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     id,
     className,
     sx,
-    initialLoading: isLoading,
+    initialLoading: isLoadingChannel || isLoadingUsers,
   });
 
   // Handle click
@@ -142,28 +156,55 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     };
   }, [unreadCount]);
 
+  // Determine channel display name based on channel type
   const getChannelDisplayName = useCallback((): string => {
-    console.debug("channel", channel);
-    console.debug("currentUser", currentUser);
-    // For standard channels, use the display_name
-    if (channel.type !== "D" && channel.type !== "G") {
-      return channel.display_name;
-    }
-
-    // For direct messages, use user display name
-    if (channel.name && channel.name.includes("__") && currentUser) {
-      const parts = channel.name.split("__");
-      // Find user ID that's not the current user
-      const otherUserId = parts.find((id) => id !== currentUser.id);
-      if (otherUserId) {
-        console.debug("otherUserId", otherUserId);
-        return getDisplayName(otherUserId);
+    // For direct messages
+    if (isDirect) {
+      // If we have the other user loaded, use their formatted name
+      if (otherUser) {
+        return formatDisplayName(otherUser.id);
       }
+
+      // Check if we have users with status
+      if (usersWithStatus && usersWithStatus.length > 0) {
+        return usersWithStatus[0].displayName;
+      }
+
+      // Fallback to channel display name or loading state
+      return (
+        channel.display_name ||
+        (isLoadingUsers ? "Loading..." : "Direct Message")
+      );
     }
 
-    // Fallback to channel display name
+    // For group messages
+    if (isGroup) {
+      // If we have group users, format them
+      if (groupUsers && groupUsers.length > 0) {
+        return groupUsers
+          .map((user) => user.username || user.first_name || "Unknown User")
+          .join(", ");
+      }
+
+      // Fallback to channel display name or loading state
+      return (
+        channel.display_name ||
+        (isLoadingUsers ? "Loading..." : "Group Message")
+      );
+    }
+
+    // For regular channels, use the display_name
     return channel.display_name;
-  }, [currentUser, getDisplayName]);
+  }, [
+    channel,
+    isDirect,
+    isGroup,
+    otherUser,
+    groupUsers,
+    usersWithStatus,
+    isLoadingUsers,
+    formatDisplayName,
+  ]);
 
   // Prepare UI props
   const uiProps = {
@@ -176,8 +217,7 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     mention_count: unreadInfo.mention_count,
     isFavorite,
     showFavoriteToggle: true,
-    isMuted: isChannelMuted(channel.id),
-    displayNames: displayNames || [],
+    isMuted,
     compact,
     onClick: handleClick,
     onAction: handleAction,

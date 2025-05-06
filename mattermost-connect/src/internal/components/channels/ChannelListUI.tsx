@@ -55,7 +55,6 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
   searchTerm = "",
   groupByType = true,
   showFavorites = true,
-  displayNamesByChannel = {},
   onItemClick,
   onCreateChannel,
   onChannelAction,
@@ -150,7 +149,6 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
   // Render a channel item using ChannelItemContainer
   const renderChannelItem = (channel: Channel) => {
     const isActive = channel.id === activeId;
-    const displayNames = displayNamesByChannel[channel.id];
 
     return (
       <ChannelItemContainer
@@ -160,7 +158,6 @@ const ChannelListUI: React.FC<ChannelListUIProps> = ({
         isActive={isActive}
         showActions={true}
         compact={density === "compact"}
-        displayNames={displayNames}
         onClick={onItemClick}
         onAction={onChannelAction}
       />

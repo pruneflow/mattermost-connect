@@ -11,7 +11,6 @@ import ChannelDetailUI from "../../components/channels/ChannelDetailUI";
 import ChannelMembersContainer from "./ChannelMembersContainer";
 import ChannelSettingsContainer from "./ChannelSettingsContainer";
 import { useDialog } from "../../hooks/useDialog";
-import { isChannelMuted } from "../../../core/store/userSettingsStore";
 
 export interface ChannelDetailContainerProps {
   /** Channel ID */
@@ -85,6 +84,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
     isLoading,
     isUpdating,
     isDeleting,
+    isMuted,
   } = useChannel(channelId);
 
   // Get direct channel specific info
@@ -379,7 +379,7 @@ const ChannelDetailContainer: React.FC<ChannelDetailContainerProps> = (
     error: detailState.error,
     isEditMode: isSettingsEditMode || detailState.isEditMode,
     isFavorite,
-    isMuted: channelId ? isChannelMuted(channelId) : false,
+    isMuted,
     isDirect,
     isGroup,
     variant,
