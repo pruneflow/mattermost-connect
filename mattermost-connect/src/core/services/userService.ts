@@ -36,8 +36,9 @@ class UserService {
     user: User | null | undefined,
     preferUsername: boolean = false,
   ): string {
+    console.debug("user", user);
     if (!user) return "Unknown User";
-
+    console.debug("preferUsername", preferUsername);
     try {
       if (!preferUsername && user.first_name && user.last_name) {
         return `${user.first_name} ${user.last_name}`;

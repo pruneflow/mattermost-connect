@@ -4,7 +4,12 @@
  * Handles specific actions for a single channel
  */
 import React, { useCallback, useMemo } from "react";
-import { useChannel, useChannelUnreadCount } from "../../../hooks";
+import {
+  useAuth,
+  useChannel,
+  useChannelUnreadCount,
+  useUsers,
+} from "../../../hooks";
 import ChannelItemUI from "../../components/channels/ChannelItemUI";
 import { useBaseContainer } from "../base/BaseContainer";
 import { Channel } from "../../../types";
@@ -54,7 +59,8 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     sx,
     id,
   } = props;
-
+  const { currentUser } = useAuth();
+  const { getDisplayName } = useUsers();
   const dialog = useDialog();
 
   // Use channel hook for this specific channel
@@ -136,6 +142,29 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     };
   }, [unreadCount]);
 
+  const getChannelDisplayName = useCallback((): string => {
+    console.debug("channel", channel);
+    console.debug("currentUser", currentUser);
+    // For standard channels, use the display_name
+    if (channel.type !== "D" && channel.type !== "G") {
+      return channel.display_name;
+    }
+
+    // For direct messages, use user display name
+    if (channel.name && channel.name.includes("__") && currentUser) {
+      const parts = channel.name.split("__");
+      // Find user ID that's not the current user
+      const otherUserId = parts.find((id) => id !== currentUser.id);
+      if (otherUserId) {
+        console.debug("otherUserId", otherUserId);
+        return getDisplayName(otherUserId);
+      }
+    }
+
+    // Fallback to channel display name
+    return channel.display_name;
+  }, [currentUser, getDisplayName]);
+
   // Prepare UI props
   const uiProps = {
     item: channel,
@@ -156,6 +185,7 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     className,
     sx,
     id,
+    displayName: getChannelDisplayName(),
   };
 
   return <ChannelItemUI {...uiProps} />;

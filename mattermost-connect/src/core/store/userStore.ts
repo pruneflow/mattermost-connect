@@ -363,7 +363,9 @@ export const useUserStore = create<UserState & UserStore>()(
          * @returns Formatted user name
          */
         getUserDisplayName: (userId: string): string => {
+          console.debug("userId", userId);
           const user = get().byId[userId];
+          console.debug("user", user);
           return userService.formatUserName(user);
         },
 

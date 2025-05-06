@@ -2,7 +2,7 @@
 /**
  * Component that displays a single channel item
  */
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ListItem,
   ListItemButton,
@@ -49,6 +49,8 @@ export interface ChannelItemUIProps extends ItemComponentProps<Channel> {
   compact?: boolean;
   /** Callback when favorite is toggled */
   onToggleFavorite?: (channel: Channel) => void;
+  /** Channel display name */
+  displayName?: string;
 }
 
 const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
@@ -70,6 +72,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
   className,
   sx,
   id,
+  displayName,
 }) => {
   // Get channel icon based on type
   const getChannelIcon = () => {
@@ -86,9 +89,10 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
         return <PublicIcon fontSize="small" />;
     }
   };
-
+  console.debug("displayName", displayName);
   // Get channel display name
   const getDisplayName = () => {
+    console.debug("displayNames", displayNames);
     // For direct/group messages, use the display names if provided
     if ((item.type === "D" || item.type === "G") && displayNames.length > 0) {
       return displayNames.join(", ");
@@ -185,7 +189,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                         unreadCount > 0 ? "fontWeightMedium" : "inherit",
                     }}
                   >
-                    {getDisplayName()}
+                    {displayName || getDisplayName()}
                   </Typography>
                 </Box>
               }
