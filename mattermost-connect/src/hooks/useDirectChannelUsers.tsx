@@ -34,7 +34,8 @@ export function useDirectChannelUsers(channelId: string | undefined) {
 
   // Get stores
   const { getChannelById } = useChannelStore();
-  const { getDirectChannelInfo } = useDirectChannelStore();
+  const { getDirectChannelInfo, refreshDirectChannelInfo } =
+    useDirectChannelStore();
   const { getUserById, getUserStatus, getUserDisplayName } = useUserStore();
 
   // Get channel
@@ -174,6 +175,54 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     otherUserIds,
     getUserById,
     usersQuery,
+  ]);
+
+  useEffect(() => {
+    // Sortir si pas de canal ou d'utilisateur actuel
+    if (
+      !channelId ||
+      !currentUser ||
+      !channel ||
+      !channelService.isDirectOrGroupChannel(channel)
+    ) {
+      return;
+    }
+
+    const refreshIfNeeded = () => {
+      const currentDirectInfo = getDirectChannelInfo(channelId);
+
+      if (
+        currentDirectInfo?.status === "loading" &&
+        !channelLoadingService.isChannelLoading(channelId)
+      ) {
+        const userIds = currentDirectInfo.userIds.filter(
+          (id) => id !== currentUser.id,
+        );
+        const allUsersLoaded = userIds.every((id) => getUserById(id) !== null);
+
+        if (allUsersLoaded) {
+          refreshDirectChannelInfo(channelId, currentUser.id);
+        }
+      }
+    };
+
+    const unsubscribe = useUserStore.subscribe(
+      (state) => state.byId,
+      () => {
+        refreshIfNeeded();
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [
+    channelId,
+    currentUser,
+    channel,
+    getDirectChannelInfo,
+    getUserById,
+    refreshDirectChannelInfo,
   ]);
 
   // Other user in direct channel

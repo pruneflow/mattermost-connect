@@ -147,7 +147,7 @@ export interface DirectChannelInfo {
   userImageUrl?: string;
   userStatus?: UserStatus;
   groupAvatarUrls?: string[];
-  status: "complete" | "loading" | "error";
+  status: string;
 }
 
 /**

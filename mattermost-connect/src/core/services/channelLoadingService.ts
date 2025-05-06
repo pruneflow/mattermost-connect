@@ -265,16 +265,44 @@ class ChannelLoadingService {
     statuses: Record<string, UserStatus> = {},
   ): DirectChannelInfo {
     try {
-      // Check cache first
+      // Check if we already have complete info
       const cacheKey = `${channel.id}:${currentUserId}`;
       const cachedInfo = this.directInfoCache.get(cacheKey);
 
-      // Use cache if valid
-      if (
-        cachedInfo &&
-        Date.now() - cachedInfo.timestamp < this.cacheLifetime
-      ) {
+      // If we have cached info and it's complete, use it
+      if (cachedInfo && cachedInfo.info.status === "complete") {
         return cachedInfo.info;
+      }
+
+      // For direct channels, check if we have the other user
+      if (channelService.isDirectChannel(channel)) {
+        const otherUserId = channelService.getOtherUserIdFromDirectChannel(
+          channel.name,
+          currentUserId,
+        );
+
+        // If we have the user data, create complete info immediately
+        if (otherUserId && users[otherUserId]) {
+          const completeInfo = {
+            isDirect: true,
+            isGroup: false,
+            displayName: channelService.getDirectChannelDisplayName(
+              users[otherUserId],
+            ),
+            userIds: [currentUserId, otherUserId],
+            otherUserId,
+            userStatus: statuses[otherUserId] || "offline",
+            status: "complete",
+          };
+
+          // Update cache
+          this.directInfoCache.set(cacheKey, {
+            info: completeInfo,
+            timestamp: Date.now(),
+          });
+
+          return completeInfo;
+        }
       }
 
       // Create new info

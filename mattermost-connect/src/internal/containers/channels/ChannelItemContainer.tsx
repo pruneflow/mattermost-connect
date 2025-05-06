@@ -101,6 +101,8 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     initialLoading: isLoadingChannel,
   });
 
+  const isLoading = isLoadingChannel || isLoadingUsers || baseState.isLoading;
+
   // Handle click
   const handleClick = useCallback(() => {
     if (onClick) {
@@ -168,32 +170,34 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
 
   // Derive the display name directly from available data
   const displayName = useMemo(() => {
-    // Simple priority order for direct/group channels:
-    // 1. Use directInfo if available (comes from channel hook)
-    if (isDirectOrGroup && directInfo && directInfo.displayName) {
-      return directInfo.displayName;
-    }
-
-    // 2. Use channel's display_name directly for regular channels
-    if (!isDirectOrGroup || !isDirectOrGroup) {
+    // If not a direct/group channel, use normal display name
+    if (!isDirectOrGroup) {
       return channel.display_name || "";
     }
 
-    // 3. Simple loading indicator if nothing else available
-    return channel.display_name || "Loading...";
-  }, [isDirectOrGroup, directInfo, channel.display_name]);
-
-  // Determine loading state - optimize to avoid unnecessary renders
-  const isLoading = useMemo(() => {
-    if (baseState.isLoading) return true;
-
-    // For direct/group channels, show loading if directInfo is loading
-    if (isDirectOrGroup) {
-      return directInfo?.status === "loading" || isLoadingUsers;
+    // For direct/group channels, use better fallbacks
+    if (directInfo && directInfo.displayName) {
+      return directInfo.displayName;
     }
 
-    return false;
-  }, [baseState.isLoading, isDirectOrGroup, directInfo, isLoadingUsers]);
+    // Extract user IDs for better fallback
+    if (isDirect) {
+      const userIds = channelService.getUserIdsFromDirectChannel(channel.name);
+      const otherUserId = userIds.find((id) => id !== currentUser?.id);
+      if (otherUserId) {
+        // Use a formatted user ID as fallback
+        return `User ${otherUserId.substring(0, 6)}...`;
+      }
+    }
+
+    // For group channels
+    if (isGroup) {
+      return "Group Message";
+    }
+
+    // Last resort
+    return channel.display_name || "Loading...";
+  }, [isDirectOrGroup, isDirect, isGroup, directInfo, channel, currentUser]);
 
   // Prepare UI props
   const uiProps = {
