@@ -119,6 +119,8 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
     }
   };
 
+  const disabled = isLoading && !item;
+
   // Create secondary content (if applicable)
   const secondaryContent = !compact ? (
     <Box
@@ -160,7 +162,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
           <ListItemButton
             selected={isActive}
             onClick={handleClick}
-            disabled={isLoading}
+            disabled={disabled}
             sx={{
               borderRadius: 1,
               py: 0.75,
@@ -255,7 +257,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
             </Box>
           }
           value={item.id}
-          disabled={isLoading}
+          disabled={disabled}
           onClick={handleClick}
           className={className}
           sx={{
@@ -280,7 +282,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
           }}
           id={id}
         >
-          <CardActionArea onClick={handleClick} disabled={isLoading}>
+          <CardActionArea onClick={handleClick} disabled={disabled}>
             <CardContent>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 {getChannelIcon()}
@@ -349,7 +351,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                   <IconButton
                     edge="end"
                     onClick={handleFavoriteToggle}
-                    disabled={isLoading}
+                    disabled={disabled}
                     size="small"
                   >
                     {isFavorite ? (
@@ -362,7 +364,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
                 <IconButton
                   edge="end"
                   onClick={handleMoreClick}
-                  disabled={isLoading}
+                  disabled={disabled}
                   size="small"
                 >
                   <MoreIcon />
@@ -377,7 +379,7 @@ const ChannelItemUI: React.FC<ChannelItemUIProps> = ({
           <ListItemButton
             selected={isActive}
             onClick={handleClick}
-            disabled={isLoading}
+            disabled={disabled}
             sx={{
               borderRadius: 1,
               opacity: isMuted ? 0.6 : 1,

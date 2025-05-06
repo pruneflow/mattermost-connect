@@ -202,7 +202,7 @@ const ChannelListContainer: React.FC<ChannelListContainerProps> = (props) => {
     activeId: listState.selectedIds[0],
     variant,
     density,
-    isLoading: listState.isLoading,
+    isLoading: listState.items.length > 0 ? false : listState.isLoading,
     emptyMessage: listState.isEmpty
       ? "No channels match your criteria"
       : "No channels available",
