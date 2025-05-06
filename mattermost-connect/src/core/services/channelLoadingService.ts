@@ -19,7 +19,7 @@ interface LoadingState {
   isLoading: boolean;
   timestamp: number;
   retryCount: number;
-  hasError: boolean;
+  hasError: boolean; // Nouveau champ pour suivre l'état d'erreur
 }
 
 interface CachedDirectInfo {
@@ -36,6 +36,7 @@ class ChannelLoadingService {
   private userLoadingState: Map<string, LoadingState> = new Map();
   private directInfoCache: Map<string, CachedDirectInfo> = new Map();
   private channelErrorState: Map<string, Error> = new Map();
+  private userBatchLoading: Map<string, boolean> = new Map();
 
   // Settings
   private cacheLifetime = 5 * 60 * 1000; // 5 minutes
@@ -79,6 +80,37 @@ class ChannelLoadingService {
   }
 
   /**
+   * Checks if a batch of users is currently being loaded
+   * @param userIds User IDs array
+   * @returns Whether the batch is being loaded
+   */
+  public isUserBatchLoading(userIds: string[]): boolean {
+    if (!userIds.length) return false;
+
+    // Create a batch key from sorted user IDs
+    const batchKey = [...userIds].sort().join(",");
+    return this.userBatchLoading.get(batchKey) === true;
+  }
+
+  /**
+   * Sets a batch of users as loading
+   * @param userIds User IDs array
+   * @param isLoading Loading state
+   */
+  public setUserBatchLoading(userIds: string[], isLoading: boolean): void {
+    if (!userIds.length) return;
+
+    // Create a batch key from sorted user IDs
+    const batchKey = [...userIds].sort().join(",");
+
+    if (isLoading) {
+      this.userBatchLoading.set(batchKey, true);
+    } else {
+      this.userBatchLoading.delete(batchKey);
+    }
+  }
+
+  /**
    * Sets a channel's loading state
    * @param channelId Channel ID
    * @param isLoading Whether the channel is loading
@@ -90,7 +122,7 @@ class ChannelLoadingService {
         isLoading: true,
         timestamp: Date.now(),
         retryCount: existingState ? existingState.retryCount : 0,
-        hasError: existingState ? existingState.hasError : false, // Préserve l'état d'erreur existant
+        hasError: existingState ? existingState.hasError : false,
       });
     } else {
       this.channelLoadingState.delete(channelId);
@@ -109,18 +141,13 @@ class ChannelLoadingService {
         isLoading: true,
         timestamp: Date.now(),
         retryCount: existingState ? existingState.retryCount : 0,
-        hasError: existingState ? existingState.hasError : false, // Préserve l'état d'erreur existant
+        hasError: existingState ? existingState.hasError : false,
       });
     } else {
       this.userLoadingState.delete(userId);
     }
   }
 
-  /**
-   * Increments retry count for a channel
-   * @param channelId Channel ID
-   * @returns Whether max retries has been reached
-   */
   /**
    * Increments retry count for a channel
    * @param channelId Channel ID
@@ -133,7 +160,7 @@ class ChannelLoadingService {
         isLoading: true,
         timestamp: Date.now(),
         retryCount: 1,
-        hasError: false, // Initialiser le nouvel état d'erreur
+        hasError: false,
       });
       return false;
     }
@@ -145,7 +172,7 @@ class ChannelLoadingService {
       ...state,
       retryCount: newRetryCount,
       timestamp: Date.now(),
-      hasError: maxRetriesReached, // Mettre à jour l'état d'erreur si max retries atteint
+      hasError: maxRetriesReached,
     });
 
     // Si on a atteint le nombre max de tentatives, marquer comme erreur
@@ -159,6 +186,68 @@ class ChannelLoadingService {
     }
 
     return maxRetriesReached;
+  }
+
+  /**
+   * Checks if a channel/user has already reached maximum retry attempts
+   * @param entityId Channel ID or User ID
+   * @returns Whether more retry attempts are allowed
+   */
+  public shouldRetryLoading(entityId: string): boolean {
+    // Check if it's a channel or user ID (could be either)
+    const channelState = this.channelLoadingState.get(entityId);
+    const userState = this.userLoadingState.get(entityId);
+
+    // Get the appropriate state
+    const state = channelState || userState;
+
+    // If no state exists yet, retries are allowed
+    if (!state) return true;
+
+    // Check if we've reached the maximum number of retries
+    return state.retryCount < this.maxRetries;
+  }
+
+  /**
+   * Checks if a channel is in an error state
+   * @param channelId Channel ID
+   * @returns Whether the channel is in an error state
+   */
+  public isChannelError(channelId: string): boolean {
+    // Check if channel is in error map
+    if (this.channelErrorState.has(channelId)) {
+      return true;
+    }
+
+    // Check if channel has an error state in the loading state
+    const state = this.channelLoadingState.get(channelId);
+    return state?.hasError || false;
+  }
+
+  /**
+   * Sets a channel as being in an error state
+   * @param channelId Channel ID
+   * @param error Optional error object
+   */
+  public setChannelError(channelId: string, error?: Error): void {
+    // Update loading state to reflect error
+    const state = this.channelLoadingState.get(channelId);
+    if (state) {
+      state.hasError = true;
+      this.channelLoadingState.set(channelId, state);
+    } else {
+      this.channelLoadingState.set(channelId, {
+        isLoading: false,
+        timestamp: Date.now(),
+        retryCount: this.maxRetries, // Max out retries
+        hasError: true,
+      });
+    }
+
+    // Store error if provided
+    if (error) {
+      this.channelErrorState.set(channelId, error);
+    }
   }
 
   /**
@@ -298,6 +387,8 @@ class ChannelLoadingService {
 
     // Clear loading state
     this.channelLoadingState.delete(channelId);
+    // Clear error state
+    this.channelErrorState.delete(channelId);
   }
 
   /**
@@ -306,76 +397,22 @@ class ChannelLoadingService {
    */
   public invalidateUserCache(userId: string): void {
     // Remove direct info cache that might contain this user
-    for (const [_, cachedInfo] of this.directInfoCache) {
+    for (const [cacheKey, cachedInfo] of this.directInfoCache) {
       const info = cachedInfo.info;
       if (info.userIds.includes(userId)) {
-        this.directInfoCache.delete(_);
+        this.directInfoCache.delete(cacheKey);
       }
     }
 
     // Clear loading state
     this.userLoadingState.delete(userId);
-  }
 
-  /**
-   * Checks if a channel has already reached maximum retry attempts
-   * @param channelId Channel ID
-   * @returns Whether more retry attempts are allowed
-   */
-  public shouldRetryLoading(entityId: string): boolean {
-    // Check if it's a channel or user ID (could be either)
-    const channelState = this.channelLoadingState.get(entityId);
-    const userState = this.userLoadingState.get(entityId);
-
-    // Get the appropriate state
-    const state = channelState || userState;
-
-    // If no state exists yet, retries are allowed
-    if (!state) return true;
-
-    // Check if we've reached the maximum number of retries
-    return state.retryCount < this.maxRetries;
-  }
-
-  /**
-   * Checks if a channel is in an error state
-   * @param channelId Channel ID
-   * @returns Whether the channel is in an error state
-   */
-  public isChannelError(channelId: string): boolean {
-    // Check if channel is in error map
-    if (this.channelErrorState.has(channelId)) {
-      return true;
-    }
-
-    // Check if channel has an error state in the loading state
-    const state = this.channelLoadingState.get(channelId);
-    return state?.hasError || false;
-  }
-
-  /**
-   * Sets a channel as being in an error state
-   * @param channelId Channel ID
-   * @param error Optional error object
-   */
-  public setChannelError(channelId: string, error?: Error): void {
-    // Update loading state to reflect error
-    const state = this.channelLoadingState.get(channelId);
-    if (state) {
-      state.hasError = true;
-      this.channelLoadingState.set(channelId, state);
-    } else {
-      this.channelLoadingState.set(channelId, {
-        isLoading: false,
-        timestamp: Date.now(),
-        retryCount: this.maxRetries, // Max out retries
-        hasError: true,
-      });
-    }
-
-    // Store error if provided
-    if (error) {
-      this.channelErrorState.set(channelId, error);
+    // Clear batch loadings that include this user
+    for (const [batchKey, _] of this.userBatchLoading) {
+      const userIds = batchKey.split(",");
+      if (userIds.includes(userId)) {
+        this.userBatchLoading.delete(batchKey);
+      }
     }
   }
 
@@ -386,6 +423,8 @@ class ChannelLoadingService {
     this.channelLoadingState.clear();
     this.userLoadingState.clear();
     this.directInfoCache.clear();
+    this.channelErrorState.clear();
+    this.userBatchLoading.clear();
   }
 }
 

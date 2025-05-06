@@ -175,11 +175,9 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
       // Cache for 5 minutes
       staleTime: 5 * 60 * 1000,
       // Only enable the query if we have parameters to search with
-      enabled: !!(
-        options.userIds?.length ||
-        options.inChannel ||
-        options.inTeam
-      ),
+      enabled:
+        options.enabled ||
+        !!(options.userIds?.length || options.inChannel || options.inTeam),
     }),
   });
 };

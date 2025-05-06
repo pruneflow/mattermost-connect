@@ -73,6 +73,7 @@ export interface GetUsersOptions {
   inTeam?: string;
   withProfiles?: boolean;
   withStatuses?: boolean;
+  enabled?: boolean;
 }
 
 /**

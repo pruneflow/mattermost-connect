@@ -3,7 +3,7 @@
  * Container for individual channel items
  * Handles specific actions for a single channel
  */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   useAuth,
   useChannel,
@@ -15,9 +15,7 @@ import { useBaseContainer } from "../base/BaseContainer";
 import { Channel } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
 import { channelService } from "../../../core/services/channelService";
-import { channelLoadingService } from "../../../core/services/channelLoadingService";
 import { userService } from "../../../core/services/userService";
-import { useUserStore } from "../../../core/store/userStore";
 
 export interface ChannelItemContainerProps {
   /** Channel object */
@@ -62,25 +60,18 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
 
   const dialog = useDialog();
   const { currentUser } = useAuth();
-  const { getUserById } = useUserStore();
 
-  // Track display name and loading state locally to avoid loops
-  const [displayName, setDisplayName] = useState(channel.display_name || "");
-  const [displayNameLoading, setDisplayNameLoading] = useState(false);
-
-  // Only use useDirectChannelUsers for direct/group channels
+  // Only use useDirectChannelUsers for direct/group channels if really needed
   const isDirect = channelService.isDirectChannel(channel);
   const isGroup = channelService.isGroupChannel(channel);
   const isDirectOrGroup = isDirect || isGroup;
 
+  // Only extract the data we need from useDirectChannelUsers, not the action functions
   const {
     otherUser,
     groupUsers,
     usersWithStatus,
     isLoading: isLoadingUsers,
-    isInitialized,
-    refreshUsers,
-    refreshInfo,
   } = isDirectOrGroup
     ? useDirectChannelUsers(channel.id)
     : {
@@ -88,9 +79,6 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
         groupUsers: [],
         usersWithStatus: [],
         isLoading: false,
-        isInitialized: true,
-        refreshUsers: () => Promise.resolve(null),
-        refreshInfo: () => {},
       };
 
   // Use channel hook for this specific channel
@@ -100,6 +88,7 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     toggleMutedStatus,
     isLoading: isLoadingChannel,
     isMuted,
+    directInfo,
   } = useChannel(channel.id);
 
   const { unreadCount } = useChannelUnreadCount(channel.id);
@@ -177,140 +166,34 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
     };
   }, [unreadCount]);
 
-  // Load user data for direct channels only if needed
-  useEffect(() => {
-    if (
-      isDirectOrGroup &&
-      !isInitialized &&
-      !displayNameLoading &&
-      !channelLoadingService.isChannelLoading(channel.id)
-    ) {
-      setDisplayNameLoading(true);
-
-      // Call both refresh functions to ensure data is loaded
-      refreshInfo();
-      refreshUsers()
-        .then(() => {
-          setDisplayNameLoading(false);
-        })
-        .catch(() => {
-          setDisplayNameLoading(false);
-        });
-    }
-  }, [
-    isDirectOrGroup,
-    isInitialized,
-    refreshInfo,
-    refreshUsers,
-    channel.id,
-    displayNameLoading,
-  ]);
-
-  // Update display name whenever channel or user data changes
-  useEffect(() => {
-    // Special handling for direct/group channels
-    if (isDirectOrGroup) {
-      // Handle direct channels
-      if (isDirect) {
-        // Use other user if available
-        if (otherUser) {
-          setDisplayName(userService.formatUserName(otherUser));
-          return;
-        }
-
-        // Try to extract the other user ID and get user directly
-        if (currentUser) {
-          const otherUserId = channelService.getOtherUserIdFromDirectChannel(
-            channel.name,
-            currentUser.id,
-          );
-
-          if (otherUserId) {
-            const user = getUserById(otherUserId);
-            if (user) {
-              setDisplayName(userService.formatUserName(user));
-              return;
-            }
-          }
-        }
-
-        // If users are loading, show loading indicator
-        if (isLoadingUsers || displayNameLoading) {
-          setDisplayName("Loading...");
-          return;
-        }
-
-        // Use usersWithStatus as fallback
-        if (usersWithStatus && usersWithStatus.length > 0) {
-          setDisplayName(usersWithStatus[0].displayName);
-          return;
-        }
-      }
-      // Handle group channels
-      else if (isGroup) {
-        // Use group users if available
-        if (groupUsers && groupUsers.length > 0) {
-          const formattedName = groupUsers
-            .map((user) => userService.formatUserName(user))
-            .join(", ");
-          setDisplayName(formattedName);
-          return;
-        }
-
-        // If users are loading, show loading indicator
-        if (isLoadingUsers || displayNameLoading) {
-          setDisplayName("Loading...");
-          return;
-        }
-
-        // Use usersWithStatus as fallback
-        if (usersWithStatus && usersWithStatus.length > 0) {
-          const formattedName = usersWithStatus
-            .map((status) => status.displayName)
-            .join(", ");
-          setDisplayName(formattedName);
-          return;
-        }
-      }
+  // Derive the display name directly from available data
+  const displayName = useMemo(() => {
+    // Simple priority order for direct/group channels:
+    // 1. Use directInfo if available (comes from channel hook)
+    if (isDirectOrGroup && directInfo && directInfo.displayName) {
+      return directInfo.displayName;
     }
 
-    // Default to channel display name for non-direct channels
-    setDisplayName(channel.display_name || "");
-  }, [
-    channel,
-    isDirect,
-    isGroup,
-    isDirectOrGroup,
-    otherUser,
-    groupUsers,
-    usersWithStatus,
-    isLoadingUsers,
-    currentUser,
-    getUserById,
-    displayNameLoading,
-  ]);
+    // 2. Use channel's display_name directly for regular channels
+    if (!isDirectOrGroup || !isDirectOrGroup) {
+      return channel.display_name || "";
+    }
+
+    // 3. Simple loading indicator if nothing else available
+    return channel.display_name || "Loading...";
+  }, [isDirectOrGroup, directInfo, channel.display_name]);
 
   // Determine loading state - optimize to avoid unnecessary renders
   const isLoading = useMemo(() => {
     if (baseState.isLoading) return true;
 
-    // Only consider user loading state for direct/group channels
+    // For direct/group channels, show loading if directInfo is loading
     if (isDirectOrGroup) {
-      // If display name is already resolved and not loading, don't show loading
-      if (displayName && displayName !== "Loading..." && !displayNameLoading) {
-        return false;
-      }
-      return isLoadingUsers || displayNameLoading;
+      return directInfo?.status === "loading" || isLoadingUsers;
     }
 
     return false;
-  }, [
-    baseState.isLoading,
-    isDirectOrGroup,
-    displayName,
-    isLoadingUsers,
-    displayNameLoading,
-  ]);
+  }, [baseState.isLoading, isDirectOrGroup, directInfo, isLoadingUsers]);
 
   // Prepare UI props
   const uiProps = {
