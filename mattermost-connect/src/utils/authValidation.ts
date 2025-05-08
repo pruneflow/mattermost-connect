@@ -38,9 +38,9 @@ export interface ValidationRules {
 export const defaultValidationRules: ValidationRules = {
   minUsernameLength: 3,
   maxUsernameLength: 22,
-  usernamePattern: /^[a-zA-Z0-9\.\-\_]{3,22}$/,
+  usernamePattern: /^[a-zA-Z0-9\.\-\_]+@[a-zA-Z0-9\-\_\.]+\.[a-zA-Z]{2,}$|^[a-zA-Z0-9\.\-\_]{3,22}$/,
   usernamePatternError:
-    "Username must contain only letters, numbers, dots, hyphens, and underscores",
+    "Username must be an email address or contain only letters, numbers, dots, hyphens, and underscores",
   minPasswordLength: 8,
   maxPasswordLength: 64,
   enforcePasswordStrength: true,
