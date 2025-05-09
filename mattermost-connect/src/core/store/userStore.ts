@@ -457,9 +457,10 @@ export const useUserStore = create<UserState & UserStore>()(
         /**
          * Gets a user by ID with loading state detection
          * @param userId User ID
+         * @param autoLoad Whether to automatically load missing users (default: false)
          * @returns User object or null if not found
          */
-        getUserById: (userId: string): User | null => {
+        getUserById: (userId: string, autoLoad: boolean = false): User | null => {
           // First check for direct access
           const user = get().byId[userId];
           if (user) return user;
@@ -472,7 +473,15 @@ export const useUserStore = create<UserState & UserStore>()(
           // If loading, return null but don't trigger another load
           if (isLoading) return null;
 
-          // If not found and not loading, return null (might trigger a load)
+          // If autoLoad is true and user is not found and not loading, trigger a load
+          if (autoLoad && !isLoading) {
+            // Schedule loading for the next event loop to avoid triggering loads during render
+            setTimeout(() => {
+              get().loadUsersBatch([userId]);
+            }, 0);
+          }
+
+          // If not found and not loading, return null
           return null;
         },
 

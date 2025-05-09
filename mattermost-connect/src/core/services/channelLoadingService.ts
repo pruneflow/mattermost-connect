@@ -19,7 +19,7 @@ interface LoadingState {
   isLoading: boolean;
   timestamp: number;
   retryCount: number;
-  hasError: boolean; // Nouveau champ pour suivre l'état d'erreur
+  hasError: boolean; // New field to track error state
 }
 
 interface CachedDirectInfo {
@@ -175,7 +175,7 @@ class ChannelLoadingService {
       hasError: maxRetriesReached,
     });
 
-    // Si on a atteint le nombre max de tentatives, marquer comme erreur
+    // If max retries have been reached, mark as error
     if (maxRetriesReached) {
       this.channelErrorState.set(
         channelId,

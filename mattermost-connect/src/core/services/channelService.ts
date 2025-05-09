@@ -313,8 +313,10 @@ class ChannelService {
    */
   public getPlaceholderDisplayName(userId: string): string {
     if (!userId) return "Loading...";
-    // Return a shorter version of the user ID for display
-    return `User ${userId.substring(0, 5)}...`;
+    
+    // Create a more user-friendly placeholder that doesn't look like an error
+    // Using a format like "User-1a2b3c" rather than "Unknown User (1a2b3c...)"
+    return `User-${userId.substring(0, 6)}`;
   }
 
   /**
@@ -492,11 +494,11 @@ class ChannelService {
               status: "loading",
             };
           } else {
-            // Too many retries, return error state
+            // Too many retries, return error state but with a user-friendly display name
             return {
               isDirect: true,
               isGroup: false,
-              displayName: `User (ID: ${otherUserId.substring(0, 5)}...)`,
+              displayName: this.getPlaceholderDisplayName(otherUserId),
               userIds,
               otherUserId,
               status: "error",

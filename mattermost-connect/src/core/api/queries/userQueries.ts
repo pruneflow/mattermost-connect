@@ -122,12 +122,45 @@ export const useUsersQuery = (options: GetUsersOptions = {}) => {
 
         // Handle fetching users by IDs - use POST to /users/ids
         if (options.userIds?.length) {
-          // Use POST request to fetch users by IDs
-          const response = await apiClient.post<User[]>(
-            "users/ids",
-            options.userIds,
-          );
-          users = response.data;
+          try {
+            // Use POST request to fetch users by IDs
+            const response = await apiClient.post<User[]>(
+              "users/ids",
+              options.userIds,
+            );
+            users = response.data;
+            
+            // Log if we didn't get all the users we asked for
+            if (users.length < options.userIds.length) {
+              const receivedIds = users.map(u => u.id);
+              const missingIds = options.userIds.filter(id => !receivedIds.includes(id));
+              console.warn(`[userQueries] Missing users in response: ${missingIds.join(', ')}`);
+            }
+          } catch (error) {
+            console.error('[userQueries] Error fetching users by IDs:', error);
+            // Attempt to fetch users one by one in case of batch failure
+            if (options.userIds.length > 1) {
+              console.log(`[userQueries] Attempting to fetch ${options.userIds.length} users individually`);
+              const individualUsers: User[] = [];
+              
+              // Simple promise-based sequential fetching with error handling
+              for (const userId of options.userIds) {
+                try {
+                  const response = await apiClient.get<User>(`users/${userId}`);
+                  if (response.data) {
+                    individualUsers.push(response.data);
+                  }
+                } catch (userError) {
+                  console.warn(`[userQueries] Failed to fetch individual user ${userId}:`, userError);
+                }
+              }
+              
+              if (individualUsers.length > 0) {
+                console.log(`[userQueries] Recovered ${individualUsers.length}/${options.userIds.length} users`);
+                users = individualUsers;
+              }
+            }
+          }
         }
         // Handle fetching users by channel
         else if (options.inChannel) {
@@ -418,8 +451,8 @@ export const useUploadProfileImageMutation = () => {
         const formData = new FormData();
         formData.append("image", imageFile);
 
-        // Upload image
-        await apiClient.post(`users/${currentUser.id}/image`, formData);
+        // Upload image - using uploadFiles method instead of post to handle FormData correctly
+        await apiClient.uploadFiles(formData, `users/${currentUser.id}/image`);
 
         return currentUser.id;
       } catch (error) {

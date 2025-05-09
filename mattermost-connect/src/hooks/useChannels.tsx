@@ -26,6 +26,7 @@ import { useUnreadStore } from "../core/store/unreadStore";
 import { useUserStore } from "../core/store/userStore";
 import { channelService } from "../core/services/channelService";
 import { channelLoadingService } from "../core/services/channelLoadingService";
+import { userService } from "../core/services/userService";
 import {
   Channel,
   ChannelMember,
@@ -49,7 +50,7 @@ export function useChannels(teamId: string | undefined) {
   // Current user ID for filtering
   const { currentUser } = useAuthStore();
 
-  // Puis l'utiliser dans le useState
+  // Then use it in useState
   const [isPreloadingUsers, setIsPreloadingUsers] = useState(false);
 
   // State for tracking preload status
@@ -128,7 +129,7 @@ export function useChannels(teamId: string | undefined) {
 
     setIsPreloadingUsers(true);
 
-    // Collecter immédiatement les IDs utilisateurs à charger
+    // Immediately collect user IDs to load
     const userIdsToLoad = preloadDirectChannelsInfo(
       allDirectAndGroupChannels,
       currentUser.id,
@@ -140,20 +141,41 @@ export function useChannels(teamId: string | undefined) {
       return;
     }
 
+    // Track which users we're attempting to load
+    console.log(`[useChannels] Loading ${userIdsToLoad.length} users for direct channels`);
     setLoadingUsersBatch(userIdsToLoad, true);
 
+    // Enhanced error handling for user loading
     useUsersQuery({
       userIds: userIdsToLoad,
       withStatuses: true,
     })
       .refetch()
+      .then(users => {
+        // Log success/failure status
+        if (users && users.length > 0) {
+          console.log(`[useChannels] Successfully loaded ${users.length}/${userIdsToLoad.length} users`);
+          
+          // Check for missing users
+          if (users.length < userIdsToLoad.length) {
+            const loadedIds = users.map(u => u.id);
+            const missingIds = userIdsToLoad.filter(id => !loadedIds.includes(id));
+            console.warn(`[useChannels] Failed to load some users: ${missingIds.join(', ')}`);
+          }
+        } else {
+          console.warn(`[useChannels] Failed to load any users from the requested ${userIdsToLoad.length}`);
+        }
+      })
+      .catch(error => {
+        console.error('[useChannels] Error loading users:', error);
+      })
       .finally(() => {
-        // Mettre à jour les infos des canaux avec les données utilisateurs nouvellement chargées
+        // Always update channel info with any loaded user data
         allDirectAndGroupChannels.forEach((channel) => {
           refreshDirectChannelInfo(channel.id, currentUser.id);
         });
 
-        // Marquer comme terminé
+        // Mark as completed
         setLoadingUsersBatch(userIdsToLoad, false);
         setHasPreloadedUsers(true);
         setIsPreloadingUsers(false);
@@ -243,7 +265,49 @@ export function useChannels(teamId: string | undefined) {
    */
   const getDirectChannelInfo = useCallback(
     (channelId: string): DirectChannelInfo | null => {
-      return useDirectChannelStore.getState().getDirectChannelInfo(channelId);
+      const { getDirectChannelInfo } = useDirectChannelStore.getState();
+      const { getUserById } = useUserStore.getState();
+      
+      // Get basic info from direct channel store
+      const channelInfo = getDirectChannelInfo(channelId);
+      
+      if (!channelInfo) {
+        return null;
+      }
+      
+      // Handle error states with user ID - attempt to recover user data
+      if (channelInfo.otherUserId) {
+        const otherUser = getUserById(channelInfo.otherUserId);
+        
+        if (otherUser) {
+          // We have the user, so return improved info with properly formatted name
+          return {
+            ...channelInfo,
+            displayName: userService.formatUserName(otherUser),
+            userStatus: channelInfo.userStatus || 'offline',
+            status: "complete"
+          };
+        }
+        
+        // If we're in error state, provide a better fallback name
+        if (channelInfo.status === "error") {
+          // Use a more user-friendly display name format
+          return {
+            ...channelInfo,
+            displayName: `User-${channelInfo.otherUserId.substring(0, 6)}`,
+          };
+        }
+      }
+      
+      // For group channels in error state, improve the display name
+      if (channelInfo.isGroup && channelInfo.status === "error") {
+        return {
+          ...channelInfo,
+          displayName: channelInfo.displayName || "Group Message",
+        };
+      }
+      
+      return channelInfo;
     },
     [],
   );

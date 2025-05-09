@@ -160,12 +160,12 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
   >("success");
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
 
-  // État pour la gestion des erreurs d'authentification
+  // State for authentication error handling
   const [authError, setAuthError] = useState<boolean>(false);
   const [authDialogOpen, setAuthDialogOpen] = useState<boolean>(false);
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
 
-  // Gestion du chargement direct de l'image pour l'aperçu en plein écran
+  // Handle direct image loading for fullscreen preview
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState<boolean>(false);
@@ -186,7 +186,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     : (file as AttachmentType).size || 0;
   const fileId = isLocalFile ? undefined : (file as AttachmentType).id;
 
-  // Nettoyage des URLs blob à la destruction du composant
+  // Cleanup blob URLs when component is destroyed
   useEffect(() => {
     return () => {
       if (previewUrl && previewUrl.startsWith("blob:") && fileService) {
@@ -218,12 +218,12 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     } else if (mattermostFile?.url || mattermostFile?.link) {
       window.open(mattermostFile.url || mattermostFile.link, "_blank");
     } else if (fileId && isImageType(fileType, fileName)) {
-      // Si c'est une image et qu'on a l'ID du fichier, on peut charger l'image en plein écran
+      // If it's an image and we have the file ID, we can load the image in full screen
       await handleOpenImagePreview(fileId);
     }
   };
 
-  // Vérifie si le fichier est une image
+  // Check if the file is an image
   const isImageType = (type: string, name?: string): boolean => {
     return (
       type.includes("image") ||
@@ -231,7 +231,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     );
   };
 
-  // Ouvre l'aperçu d'image en plein écran
+  // Open fullscreen image preview
   const handleOpenImagePreview = async (id: string) => {
     if (!fileService) return;
 
@@ -242,11 +242,11 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
       setPreviewUrl(imageUrl);
       setPreviewDialogOpen(true);
     } catch (error) {
-      console.error("Erreur lors du chargement de l'image:", error);
+      console.error("Error loading image:", error);
 
-      // Montrer une notification d'erreur
+      // Show error notification
       setSnackbarMessage(
-        "Erreur lors du chargement de l'image. Veuillez réessayer.",
+        "Error loading image. Please try again.",
       );
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
@@ -266,11 +266,11 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
   };
 
-  // Ferme la boîte de dialogue d'aperçu
+  // Close the preview dialog
   const handleClosePreview = () => {
     setPreviewDialogOpen(false);
 
-    // Nettoyer l'URL du preview après fermeture
+    // Clean up the preview URL after closing
     if (previewUrl && previewUrl.startsWith("blob:") && fileService) {
       setTimeout(() => {
         fileService.revokeObjectURL(previewUrl);
@@ -379,12 +379,12 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     }
   };
 
-  // Fonction pour gérer les tentatives de réauthentification
+  // Function to handle reauthentication attempts
   const handleRetryAuth = async () => {
     setIsRetrying(true);
 
     try {
-      // Utiliser la méthode handleAuthError du service de fichiers amélioré
+      // Use the handleAuthError method of the enhanced file service
       if (fileService && "handleAuthError" in fileService) {
         // @ts-ignore
         const success = await fileService.handleAuthError();
@@ -397,9 +397,9 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
           // Réinitialiser l'erreur de miniature
           setThumbnailError(false);
         } else {
-          // Informer l'utilisateur de l'échec
+          // Inform the user of the failure
           setSnackbarMessage(
-            "Échec de la réauthentification. Veuillez vous reconnecter manuellement.",
+            "Authentication failure. Please reconnect manually.",
           );
           setSnackbarSeverity("error");
           setSnackbarOpen(true);
@@ -414,10 +414,10 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
       }
     } catch (error) {
       console.error(
-        "Erreur lors de la tentative de réauthentification:",
+        "Error during reauthentication attempt:",
         error,
       );
-      setSnackbarMessage("Erreur lors de la tentative de réauthentification");
+      setSnackbarMessage("Error during reauthentication attempt");
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
     } finally {
@@ -430,7 +430,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
     setSnackbarOpen(false);
   };
 
-  // Fermer la boîte de dialogue d'authentification
+  // Close the authentication dialog
   const handleAuthDialogClose = () => {
     setAuthDialogOpen(false);
   };
@@ -535,17 +535,17 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
         aria-labelledby="auth-error-dialog-title"
       >
         <DialogTitle id="auth-error-dialog-title">
-          Problème d'authentification
+          Authentication Problem
         </DialogTitle>
         <DialogContent>
           <DialogContent>
-            Votre session semble avoir expiré ou n'être plus valide. Voulez-vous
-            essayer de vous reconnecter automatiquement ?
+            Your session seems to have expired or is no longer valid. Would you
+            like to try to reconnect automatically?
           </DialogContent>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleAuthDialogClose} color="inherit">
-            Annuler
+            Cancel
           </Button>
           <Button
             onClick={handleRetryAuth}
@@ -553,12 +553,12 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
             disabled={isRetrying}
             startIcon={isRetrying ? <CircularProgress size={16} /> : null}
           >
-            {isRetrying ? "Reconnexion en cours..." : "Se reconnecter"}
+            {isRetrying ? "Reconnecting..." : "Reconnect"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Boîte de dialogue d'aperçu d'image */}
+      {/* Image preview dialog */}
       <Dialog
         open={previewDialogOpen}
         onClose={handleClosePreview}
@@ -583,11 +583,11 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
               />
             </Box>
           ) : (
-            <Box sx={{ textAlign: "center", p: 2 }}>Image non disponible</Box>
+            <Box sx={{ textAlign: "center", p: 2 }}>Image not available</Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClosePreview}>Fermer</Button>
+          <Button onClick={handleClosePreview}>Close</Button>
           {previewUrl && (
             <Button
               onClick={() => {
@@ -597,7 +597,7 @@ const Attachment: React.FC<AttachmentProps> = (props) => {
               }}
               color="primary"
             >
-              Télécharger
+              Download
             </Button>
           )}
         </DialogActions>

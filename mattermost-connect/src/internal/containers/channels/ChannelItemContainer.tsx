@@ -185,19 +185,33 @@ const ChannelItemContainer: React.FC<ChannelItemContainerProps> = (props) => {
       const userIds = channelService.getUserIdsFromDirectChannel(channel.name);
       const otherUserId = userIds.find((id) => id !== currentUser?.id);
       if (otherUserId) {
-        // Use a formatted user ID as fallback
-        return `User ${otherUserId.substring(0, 6)}...`;
+        // Get the user from the store or from usersWithStatus
+        const directUser = otherUser || usersWithStatus.find(u => u.user.id === otherUserId)?.user;
+        // Use formatUserName from userService
+        if (directUser) {
+          return userService.formatUserName(directUser);
+        }
+        // If user not found, use display_name as fallback or a more user-friendly ID
+        return channel.display_name || `User ${otherUserId.substring(0, 6)}...`;
       }
     }
 
     // For group channels
     if (isGroup) {
+      // Try to create a group name from participants if we have them
+      if (groupUsers && groupUsers.length > 0) {
+        const userNames = groupUsers.slice(0, 3).map(user => 
+          userService.formatUserName(user)
+        );
+        const remaining = groupUsers.length > 3 ? ` +${groupUsers.length - 3}` : '';
+        return `${userNames.join(', ')}${remaining}`;
+      }
       return "Group Message";
     }
 
     // Last resort
     return channel.display_name || "Loading...";
-  }, [isDirectOrGroup, isDirect, isGroup, directInfo, channel, currentUser]);
+  }, [isDirectOrGroup, isDirect, isGroup, directInfo, channel, currentUser, otherUser, usersWithStatus, groupUsers]);
 
   // Prepare UI props
   const uiProps = {

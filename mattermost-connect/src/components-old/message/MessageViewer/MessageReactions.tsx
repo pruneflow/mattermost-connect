@@ -6,6 +6,7 @@ import {
   CircularProgress,
   alpha,
   Tooltip,
+  Zoom,
 } from "@mui/material";
 import { MessageReactionsProps } from "./MessageTypes";
 import {
@@ -17,14 +18,14 @@ import { getEmojiFromName } from "../../../utils";
 import { WebSocketEventType } from "../../../services/";
 
 /**
- * Type interne pour la gestion des réactions
- * Structure plus organisée pour faciliter le suivi des réactions
+ * Internal type for reaction management
+ * Well-organized structure to facilitate tracking reactions
  */
 interface ReactionInfo {
-  emojiName: string; // Nom de l'emoji (pour l'API)
-  emoji: string; // Caractère de l'emoji
-  count: number; // Nombre total de réactions
-  userIds: Set<string>; // Ensemble des IDs utilisateurs ayant réagi (pour éviter les doublons)
+  emojiName: string; // Emoji name (for API)
+  emoji: string; // Emoji character
+  count: number; // Total number of reactions
+  userIds: Set<string>; // Set of user IDs who reacted (to avoid duplicates)
 }
 
 /**
@@ -40,6 +41,7 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
   const { addReaction, removeReaction } = useMessageContext();
   const [reactions, setReactions] = useState<ReactionInfo[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [clickedReaction, setClickedReaction] = useState<string | null>(null);
 
   // Fonction utilitaire pour organiser les réactions depuis le message
   const processReactions = useCallback(() => {
@@ -251,22 +253,55 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
     [reactions, currentUser],
   );
 
+  // Créer une liste de noms d'utilisateurs pour l'infobulle
+  const getUserNamesForTooltip = useCallback(
+    (userIds: Set<string>): string => {
+      if (!userIds.size) return "";
+      
+      // Convertir le Set en Array pour pouvoir utiliser les méthodes d'array
+      const userIdArray = Array.from(userIds);
+      
+      // Limiter à 3 utilisateurs maximum pour l'infobulle
+      const displayCount = Math.min(userIdArray.length, 3);
+      const remainingCount = userIdArray.length - displayCount;
+      
+      // Si l'utilisateur courant a réagi, le mettre en premier
+      let displayUsers = userIdArray
+        .slice(0, displayCount)
+        .map(id => {
+          if (id === currentUser?.id) return "Vous";
+          // Idéalement ici, on récupérerait les noms des utilisateurs à partir d'un service
+          // Pour l'instant, on affiche juste l'ID raccourci
+          return `Utilisateur ${id.substring(0, 5)}...`;
+        });
+      
+      let tooltipText = displayUsers.join(", ");
+      
+      // Ajouter "+ X autres" si nécessaire
+      if (remainingCount > 0) {
+        tooltipText += ` et ${remainingCount} autre${remainingCount > 1 ? "s" : ""}`;
+      }
+      
+      return tooltipText;
+    },
+    [currentUser]
+  );
+
   // Gérer le clic sur une réaction
   const handleReactionClick = useCallback(
     async (emojiName: string) => {
       if (!currentUser) return;
 
       setLoading((prev) => ({ ...prev, [emojiName]: true }));
+      setClickedReaction(emojiName);
 
       try {
         const alreadyReacted = hasUserReacted(emojiName);
 
         if (alreadyReacted) {
-          // Remplacer services?.emojiService.removeReaction par:
           await removeReaction(message.id, emojiName);
         } else {
           const emojiChar = getEmojiFromName(emojiName) || emojiName;
-          // Remplacer services?.emojiService.addReaction par:
           await addReaction(message.id, emojiChar);
         }
       } catch (error) {
@@ -277,6 +312,11 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
           delete newLoading[emojiName];
           return newLoading;
         });
+        
+        // Réinitialiser la réaction cliquée après un court délai
+        setTimeout(() => {
+          setClickedReaction(null);
+        }, 300);
       }
     },
     [message, hasUserReacted, addReaction, removeReaction, currentUser],
@@ -292,8 +332,8 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
       sx={{
         display: "flex",
         flexWrap: "wrap",
-        gap: 0.5,
-        mt: 0.5,
+        gap: 0.8, // Légèrement augmenté pour plus d'espace
+        mt: 0.8,
         justifyContent: isFromCurrentUser ? "flex-end" : "flex-start",
         maxWidth: { xs: "95%", sm: "85%" },
         alignSelf: isFromCurrentUser ? "flex-end" : "flex-start",
@@ -305,44 +345,70 @@ const MessageReactions: React.FC<MessageReactionsProps> = ({
         const userHasReacted = currentUser
           ? reaction.userIds.has(currentUser.id)
           : false;
+        const isClicked = clickedReaction === reaction.emojiName;
+        
+        // Construire le tooltip en fonction de qui a réagi
+        const tooltipTitle = userHasReacted
+          ? `${getUserNamesForTooltip(reaction.userIds)}. Cliquez pour retirer votre réaction.`
+          : `${getUserNamesForTooltip(reaction.userIds)}. Cliquez pour réagir.`;
 
         return (
           <Tooltip
             key={reaction.emojiName}
-            title={
-              userHasReacted
-                ? "Cliquez pour retirer votre réaction"
-                : "Cliquez pour réagir"
-            }
+            title={tooltipTitle}
+            arrow
+            placement="top"
+            TransitionComponent={Zoom}
           >
             <Box
               onClick={() =>
                 !isLoading && handleReactionClick(reaction.emojiName)
               }
+              role="button"
+              aria-label={userHasReacted ? `Retirer la réaction ${reaction.emoji}` : `Ajouter la réaction ${reaction.emoji}`}
+              aria-pressed={userHasReacted}
               sx={{
-                borderRadius: "12px",
+                borderRadius: "16px", // Plus arrondi pour être plus visible
                 border: "1px solid",
-                borderColor: "divider",
-                px: 1,
-                py: 0.5,
-                fontSize: "0.875rem",
+                borderColor: userHasReacted ? "primary.main" : "divider",
+                px: 1.2, // Légèrement plus grand
+                py: 0.6, // Légèrement plus grand
+                fontSize: "0.95rem", // Légèrement plus grand
                 display: "flex",
                 alignItems: "center",
+                gap: 0.7, // Espace entre l'emoji et le nombre
+                boxShadow: userHasReacted ? 1 : 0, // Ombre légère pour les réactions de l'utilisateur
                 bgcolor: (theme) =>
                   userHasReacted
-                    ? alpha(theme.palette.primary.main, 0.2)
-                    : alpha(theme.palette.primary.main, 0.1),
+                    ? alpha(theme.palette.primary.main, 0.15)
+                    : alpha(theme.palette.background.paper, 0.8),
                 cursor: "pointer",
+                transition: "all 0.2s ease-in-out", // Animation de transition
+                transform: isClicked ? "scale(0.9)" : "scale(1)", // Animation lorsqu'on clique
                 "&:hover": {
-                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+                  bgcolor: (theme) => 
+                    userHasReacted
+                      ? alpha(theme.palette.primary.main, 0.25)
+                      : alpha(theme.palette.primary.main, 0.1),
+                  boxShadow: 2,
+                  transform: "scale(1.05)",
                 },
                 position: "relative",
               }}
             >
-              {reaction.emoji}{" "}
-              <Typography component={"div"} variant="caption" sx={{ ml: 0.5 }}>
+              <span role="img" aria-label={reaction.emojiName}>{reaction.emoji}</span>
+              <Typography 
+                component={"div"} 
+                variant="caption" 
+                sx={{ 
+                  fontWeight: userHasReacted ? 600 : 400,
+                  color: userHasReacted ? "primary.main" : "text.secondary",
+                  minWidth: '14px',
+                  textAlign: 'center'
+                }}
+              >
                 {isLoading ? (
-                  <CircularProgress size={10} thickness={2} sx={{ ml: 0.5 }} />
+                  <CircularProgress size={12} thickness={2} />
                 ) : (
                   reaction.count
                 )}

@@ -384,17 +384,53 @@ const MessageItemUI: React.FC<MessageItemUIProps> = ({
               />
             </Box>
           )}
-
-          {/* Reactions */}
-          {showReactions && reactions.length > 0 && (
-            <Box sx={{ mt: 1 }}>
-              <MessageReactionsUI
-                reactions={reactions}
-                currentUserId={currentUserId}
-                onReactionClick={onReactionClick}
-              />
-            </Box>
-          )}
+          
+          {/* Thread replies indicator and Reactions in one row */}
+          <Box sx={{ 
+            mt: 1, 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            {/* Thread replies indicator */}
+            {item.reply_count > 0 && (
+              <Box 
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  color: 'primary.main',
+                  width: 'fit-content',
+                  '&:hover': {
+                    textDecoration: 'underline'
+                  }
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Use the "thread" action instead of "reply" when clicking on thread indicator
+                  console.log(`Thread indicator clicked for message: ${item.id}, reply count: ${item.reply_count}`);
+                  if (onAction) onAction("thread");
+                }}
+                data-testid={`thread-indicator-${item.id}`}
+              >
+                <ReplyIcon fontSize="small" sx={{ mr: 0.5 }} />
+                <Typography variant="body2" component="span">
+                  {item.reply_count} {item.reply_count === 1 ? 'reply' : 'replies'}
+                </Typography>
+              </Box>
+            )}
+            
+            {/* Reactions */}
+            {showReactions && reactions.length > 0 && (
+              <Box>
+                <MessageReactionsUI
+                  reactions={reactions}
+                  currentUserId={currentUserId}
+                  onReactionClick={onReactionClick}
+                />
+              </Box>
+            )}
+          </Box>
         </Box>
 
         {/* Action buttons (visible on hover) */}

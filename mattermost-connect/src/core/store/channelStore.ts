@@ -136,7 +136,7 @@ export const useChannelStore = create<ChannelState & ChannelStore>()(
               let teamIdToUpdate: string | undefined;
               let channelToRemove: Channel | undefined;
 
-              // Utiliser for...in au lieu de Object.entries pour préserver le type
+              // Use for...in instead of Object.entries to preserve the type
               for (const teamId in state.channelsByTeam) {
                 const channels = state.channelsByTeam[teamId];
                 const channelIndex = channels.findIndex(

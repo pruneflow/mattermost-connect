@@ -92,10 +92,16 @@ export function useMessages(
     return storeMessages.length > 0 ? storeMessages : messagesQuery.data || [];
   }, [channelId, getChannelMessages, messagesQuery.data, options]);
 
+  // Filter out thread replies from main channel view,
+  // only keeping the root messages (messages without root_id)
+  const filteredMessages = useMemo(() => {
+    return messages.filter(message => !message.root_id);
+  }, [messages]);
+
   // Sort messages by date, oldest first
   const sortedMessages = useMemo(() => {
-    return messageService.sortMessages(messages);
-  }, [messages]);
+    return messageService.sortMessages(filteredMessages);
+  }, [filteredMessages]);
 
   // Group messages by date for display
   const messagesByDate = useMemo(() => {
@@ -325,6 +331,8 @@ export function useMessages(
 export function useThread(rootMessageId: string | undefined) {
   const { currentUser } = useAuthStore();
 
+  console.log(`useThread hook called with rootMessageId: ${rootMessageId}`);
+  
   // Get thread messages using React Query
   const threadQuery = useThreadMessagesQuery(rootMessageId);
 
@@ -338,11 +346,20 @@ export function useThread(rootMessageId: string | undefined) {
   const removeReactionMutation = useRemoveReactionMutation();
   const uploadMutation = useUploadFilesMutation();
 
-  // Root message from store
+  // Root message from either the thread API response or the store
   const rootMessage = useMemo(() => {
     if (!rootMessageId) return null;
+    
+    // Check if we already have the parent message from the thread API response
+    // TypeScript doesn't know about our custom property, so we need to use a type assertion
+    const threadResponse = threadQuery.data as Message[] & { parentMessage?: Message };
+    if (threadResponse?.parentMessage) {
+      return threadResponse.parentMessage;
+    }
+    
+    // Fall back to the store if not available in the API response
     return getMessageById(rootMessageId);
-  }, [rootMessageId, getMessageById]);
+  }, [rootMessageId, getMessageById, threadQuery.data]);
 
   // Channel ID from root message
   const channelId = useMemo(() => {

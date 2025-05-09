@@ -226,13 +226,13 @@ const WebSocketInitializer: React.FC<{
                 "WebSocket connection failed but continuing:",
                 error,
               );
-              // Émettre un événement pour indiquer que le WebSocket a échoué mais on continue
+              // Emit an event to indicate that WebSocket failed but we continue
               emitEvent(EventType.WEBSOCKET_FAILED_CONTINUE, {
                 error,
                 timestamp: Date.now(),
               });
             } else {
-              // Pour d'autres erreurs, on les remonte
+              // For other errors, propagate them
               throw error;
             }
           }

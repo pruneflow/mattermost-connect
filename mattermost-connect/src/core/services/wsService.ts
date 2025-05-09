@@ -13,7 +13,7 @@ import {
 } from "../../types";
 import { handleError } from "../store";
 import { emitEvent } from "../api/eventUtils";
-// Nouvel import
+// New import
 import { eventEmitter, EventHandler } from "./eventService";
 
 /**
@@ -45,7 +45,7 @@ interface ConnectionInfo {
  */
 class WebSocketService {
   private socket: WebSocket | null = null;
-  // Utilisation de notre eventEmitter au lieu de Node's EventEmitter
+  // Using our eventEmitter instead of Node's EventEmitter
   private eventEmitter = eventEmitter;
   private connectionInfo: ConnectionInfo = {
     url: null,
@@ -126,7 +126,7 @@ class WebSocketService {
       return;
     }
 
-    // Vérifier que l'URL est valide
+    // Verify that the URL is valid
     if (!url) {
       const error = new Error("WebSocket URL is required");
       handleError(error, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR);
@@ -139,10 +139,10 @@ class WebSocketService {
     this.connectionInfo.token = token;
 
     try {
-      // Enregistrer la tentative de connexion en cours
+      // Log the current connection attempt
       console.log(`Attempting WebSocket connection to ${url}`);
 
-      // Avant de créer le WebSocket
+      // Before creating the WebSocket
       const isAccessible = await this.isServerAccessible(url);
       if (!isAccessible) {
         console.warn(
@@ -156,16 +156,16 @@ class WebSocketService {
           this.socket &&
           this.socket.readyState === WebSocketState.CONNECTING
         ) {
-          // La connexion prend trop de temps, annuler
+          // Connection is taking too long, cancel it
           this.socket.close();
           const timeoutError = new Error("WebSocket connection timeout");
           handleError(timeoutError, ErrorSource.WEBSOCKET, ErrorSeverity.ERROR);
 
-          // Mettre à jour l'état de connexion
+          // Update connection state
           this.connectionInfo.isConnecting = false;
           this.connectionInfo.lastDisconnectedAt = Date.now();
         }
-      }, 10000); // 10 secondes par défaut
+      }, 10000); // 10 seconds by default
 
       this.socket.onopen = () => {
         clearTimeout(connectionTimeout);

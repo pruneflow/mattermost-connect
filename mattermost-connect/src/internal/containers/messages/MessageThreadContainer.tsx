@@ -4,12 +4,13 @@
  * Combines thread message list and input for thread replies
  */
 import React, { useCallback, useMemo } from "react";
+import { Box } from "@mui/material";
 import { useBaseContainer } from "../base/BaseContainer";
 import { useThread } from "../../../hooks";
 import { Message, User } from "../../../types";
 import { useDialog } from "../../hooks/useDialog";
 import MessageThreadUI from "../../components/messages/MessageThreadUI";
-import MessageListContainer from "./MessageListContainer";
+import MessageItemContainer from "./MessageItemContainer";
 import MessageInputContainer from "./MessageInputContainer";
 
 export interface MessageThreadContainerProps {
@@ -60,7 +61,8 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = (
 
   const dialog = useDialog();
 
-  // Use thread hook for data and operations
+  // Use thread hook for data and operations - logs added for debugging
+  console.log(`MessageThreadContainer initialized with rootId: ${rootId}`);
   const {
     rootMessage: fetchedRootMessage,
     threadMessages,
@@ -70,6 +72,9 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = (
     isReplying,
     refreshThread,
   } = useThread(rootId);
+  
+  // Log thread data for debugging
+  console.log(`Thread data loaded: rootMessage exists: ${!!fetchedRootMessage}, thread messages count: ${threadMessages.length}`);
 
   const rootMessage = propRootMessage || fetchedRootMessage;
   const channelId = propChannelId || rootMessage?.channel_id;
@@ -116,16 +121,38 @@ const MessageThreadContainer: React.FC<MessageThreadContainerProps> = (
     isReplying,
     onClose,
     renderMessageList: () => (
-      <MessageListContainer
-        channelId={channelId || ""}
-        virtualized={threadMessages.length > 50}
-        showDateSeparators={true}
-        groupByUser={true}
-        enableActions={showActions}
-        showAvatars={showAvatars}
-        compact={compact}
-        onMessageAction={handleMessageAction}
-      />
+      <>
+        {/* Display the root message first */}
+        {rootMessage && (
+          <Box sx={{ mb: 2, borderBottom: '1px solid', borderColor: 'divider', pb: 2 }}>
+            <MessageItemContainer
+              message={rootMessage}
+              showActions={showActions}
+              compact={compact}
+              showAvatar={showAvatars}
+              onAction={(action) => handleMessageAction(action, rootMessage)}
+            />
+          </Box>
+        )}
+        
+        {/* Then display all the thread replies */}
+        {threadMessages.length > 0 ? (
+          threadMessages.map((message) => (
+            <MessageItemContainer
+              key={message.id}
+              message={message}
+              showActions={showActions}
+              compact={compact}
+              showAvatar={showAvatars}
+              onAction={(action) => handleMessageAction(action, message)}
+            />
+          ))
+        ) : (
+          <Box sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+            No replies in this thread yet.
+          </Box>
+        )}
+      </>
     ),
     renderMessageInput: () => (
       <MessageInputContainer

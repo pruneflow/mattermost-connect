@@ -8,33 +8,33 @@ import { useUserContext, withAuthentication } from "../../../context";
 import { useDebugRenders } from "../../../hooks";
 
 interface MessageListProps {
-  /** Liste des messages à afficher */
+  /** List of messages to display */
   messages: MessageType[];
-  /** Si le canal est en lecture seule */
+  /** Whether the channel is read-only */
   readOnly: boolean;
-  /** ID de l'utilisateur actuel */
+  /** Current user ID */
   currentUserId?: string;
-  /** Fonction de rendu personnalisée pour les messages */
+  /** Custom render function for messages */
   messageRenderer?: (props: {
     message: MessageType;
     author: User | null;
     formattedText: string;
   }) => React.ReactNode;
-  /** Fonction pour répondre à un message */
+  /** Function to reply to a message */
   handleReply: (message: MessageType) => void;
-  /** Fonction pour éditer un message */
+  /** Function to edit a message */
   handleEditMessage: (message: MessageType) => void;
-  /** Fonction pour supprimer un message */
+  /** Function to delete a message */
   handleDeleteMessage: (message: MessageType) => void;
-  /** Propriétés personnalisées pour les messages */
+  /** Custom properties for messages */
   messageProps?: Partial<React.ComponentProps<typeof Message>>;
-  /** Ensemble des IDs des messages à mettre en évidence */
+  /** Set of message IDs to highlight */
   messagesToHighlight: Set<string>;
-  /** Si le défilement automatique vers le bas doit être activé */
+  /** Whether automatic scrolling to bottom should be enabled */
   autoScrollToBottom?: boolean;
-  /** Map des messages référencés pour optimisation (optionnel) */
+  /** Map of referenced messages for optimization (optional) */
   referencedMessages?: Record<string, MessageType>;
-  /** Map des auteurs des messages référencés pour optimisation (optionnel) */
+  /** Map of authors of referenced messages for optimization (optional) */
   referencedAuthors?: Record<string, User>;
 }
 
@@ -55,13 +55,13 @@ const Messages: React.FC<MessageListProps> = (props) => {
     referencedAuthors = {},
   } = props;
   const { currentUser } = useUserContext();
-  // Référence pour le scrolling
+  // Reference for scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Référence pour suivre si le composant est monté
+  // Reference to track if component is mounted
   const isMountedRef = useRef<boolean>(true);
 
-  // Créer une map des messages qui sont des réponses
+  // Create a map of messages that are replies
   const replyMessages = useMemo(() => {
     const repliesMap: Record<string, MessageType[]> = {};
     messages.forEach((msg) => {
@@ -75,13 +75,13 @@ const Messages: React.FC<MessageListProps> = (props) => {
     return repliesMap;
   }, [messages]);
 
-  // Défilement automatique vers le bas après rendu
+  // Automatic scrolling to the bottom after rendering
   useEffect(() => {
-    // Ne pas créer une fonction locale pour le nettoyage
-    // car elle est recréée à chaque rendu
+    // Don't create a local function for cleanup
+    // because it's recreated on each render
     isMountedRef.current = true;
 
-    // Fonction pour défiler vers le bas
+    // Function to scroll to the bottom
     const scrollToBottom = () => {
       if (
         isMountedRef.current &&
@@ -92,30 +92,30 @@ const Messages: React.FC<MessageListProps> = (props) => {
       }
     };
 
-    // Utiliser un délai pour s'assurer que le rendu est terminé
+    // Use a timeout to ensure rendering is complete
     const timeoutId = setTimeout(scrollToBottom, 100);
 
-    // Nettoyer le timeout et le drapeau isMounted au démontage
+    // Clean up the timeout and isMounted flag on unmounting
     return () => {
       isMountedRef.current = false;
       clearTimeout(timeoutId);
     };
   }, [messagesEndRef, autoScrollToBottom, messages.length]);
 
-  // Fonction mémorisée pour déterminer si un message vient de l'utilisateur actuel
+  // Memoized function to determine if a message is from the current user
   const isMessageFromCurrentUser = useCallback(
     (message: MessageType): boolean => {
       return (
-        // Utiliser userId des props si présent
+        // Use userId from props if present
         (!!currentUserId && message.user_id === currentUserId) ||
-        // Sinon, utiliser l'utilisateur du contexte
+        // Otherwise, use the user from context
         (!!currentUser && message.user_id === currentUser.id)
       );
     },
     [currentUserId, currentUser],
   );
 
-  // Gestionnaire sécurisé pour la réponse à un message
+  // Safe handler for replying to a message
   const safeHandleReply = useCallback(
     (message: MessageType) => {
       if (isMountedRef.current) {
@@ -125,7 +125,7 @@ const Messages: React.FC<MessageListProps> = (props) => {
     [handleReply],
   );
 
-  // Gestionnaire sécurisé pour l'édition d'un message
+  // Safe handler for editing a message
   const safeHandleEditMessage = useCallback(
     (message: MessageType) => {
       if (isMountedRef.current) {
@@ -135,7 +135,7 @@ const Messages: React.FC<MessageListProps> = (props) => {
     [handleEditMessage],
   );
 
-  // Gestionnaire sécurisé pour la suppression d'un message
+  // Safe handler for deleting a message
   const safeHandleDeleteMessage = useCallback(
     (message: MessageType) => {
       if (isMountedRef.current) {
@@ -145,7 +145,7 @@ const Messages: React.FC<MessageListProps> = (props) => {
     [handleDeleteMessage],
   );
 
-  // Pour chaque message, trouver le message référencé s'il s'agit d'une réponse
+  // For each message, find the referenced message if it's a reply
   const getReferencedMessageData = useCallback(
     (message: MessageType) => {
       if (!message.root_id) return null;
@@ -161,7 +161,7 @@ const Messages: React.FC<MessageListProps> = (props) => {
     [messages, referencedMessages],
   );
 
-  // Pour chaque message référencé, trouver son auteur
+  // For each referenced message, find its author
   const getReferencedAuthorData = useCallback(
     (referencedMsg: MessageType | null) => {
       if (!referencedMsg || !referencedMsg.user_id) return null;

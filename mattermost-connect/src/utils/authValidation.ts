@@ -495,8 +495,6 @@ export function validateEmail(email: string): ValidationResult {
   return authValidator.validateEmail(email);
 }
 
-// src/utils/authValidation.ts
-// Ajouter la fonction suivante à ce fichier
 
 /**
  * Check password strength and return score and feedback

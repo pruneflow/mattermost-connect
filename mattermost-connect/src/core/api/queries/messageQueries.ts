@@ -150,18 +150,40 @@ export function useThreadMessagesQuery(rootMessageId: string | undefined) {
       setThreadLoading(rootMessageId, true);
 
       try {
+        console.log(`Fetching thread for message ID: ${rootMessageId}`);
+        // Use the correct API endpoint for thread messages
         const response = await apiClient.get<PostsResponse>(
           `posts/${rootMessageId}/thread`,
         );
 
         const { posts, order } = response.data;
-        const messages = order
+        
+        // Get all messages including the parent message
+        const allMessages = order
           .map((postId) => posts[postId])
-          .filter((msg): msg is Message => !!msg && msg.id !== rootMessageId);
+          .filter((msg): msg is Message => !!msg);
 
-        setThreadMessages(rootMessageId, messages);
-        return messages;
+        // Separate parent and child messages
+        const parentMessage = allMessages.find(msg => msg.id === rootMessageId);
+        const threadMessages = allMessages.filter(msg => msg.id !== rootMessageId);
+
+        console.log(`Thread messages found: ${threadMessages.length}`);
+        console.log(`Parent message found: ${parentMessage ? 'Yes' : 'No'}`);
+
+        // Only store the replies in the thread messages
+        setThreadMessages(rootMessageId, threadMessages);
+        
+        // Return thread messages and include a special property to access the parent
+        // We'll use defineProperty to avoid altering the array type
+        Object.defineProperty(threadMessages, 'parentMessage', {
+          value: parentMessage,
+          enumerable: false,
+          configurable: true
+        });
+        
+        return threadMessages;
       } catch (error) {
+        console.error(`Error fetching thread messages for ${rootMessageId}:`, error);
         setError(rootMessageId, error as Error);
         handleError(error as Error, ErrorSource.API, undefined, {
           rootMessageId,
@@ -476,19 +498,24 @@ export function useReplyToMessageMutation() {
         );
       }
 
+      console.log(`Posting reply to thread with rootId: ${rootMessageId}`);
+      
+      // Setting root_id property makes this a thread reply
       const response = await apiClient.post<Message>("posts", {
         channel_id: channelId,
-        root_id: rootMessageId,
+        root_id: rootMessageId,  // This is key for thread replies
         message: message || "",
         file_ids: fileIds,
       });
 
+      console.log(`Reply posted successfully, response:`, response.data);
       return response.data;
     },
 
     onSuccess: (newMessage) => {
       // Invalidate thread messages
       if (newMessage.root_id) {
+        console.log(`Invalidating thread queries for ${newMessage.root_id}`);
         invalidateQueries.thread(newMessage.root_id);
       }
 

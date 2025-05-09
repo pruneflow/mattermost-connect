@@ -1,10 +1,10 @@
 // src/core/store/storeConfig.ts
 import { enableMapSet } from "immer";
 
-// Activer l'extension MapSet d'immer
+// Enable immer's MapSet extension
 enableMapSet();
 
-// Exporter d'autres configurations si nécessaire
+// Export other configurations if needed
 export const storeConfig = {
   initialized: true,
 };

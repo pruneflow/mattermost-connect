@@ -30,31 +30,41 @@ class UserService {
    * Formats a user's name for display
    * @param user User object
    * @param preferUsername Whether to prefer username over fullname
+   * @param fallbackText Text to show when user is null/undefined (default: "Utilisateur inconnu")
    * @returns Formatted display name
    */
   public formatUserName(
     user: User | null | undefined,
     preferUsername: boolean = false,
+    fallbackText: string = "Utilisateur inconnu"
   ): string {
-    console.debug("user", user);
-    if (!user) return "Unknown User";
-    console.debug("preferUsername", preferUsername);
+    if (!user) return fallbackText;
+    
     try {
+      // Check for full name first (first and last name)
       if (!preferUsername && user.first_name && user.last_name) {
         return `${user.first_name} ${user.last_name}`;
-      } else if (!preferUsername && user.nickname) {
+      } 
+      // Then check for first name only
+      else if (!preferUsername && user.first_name) {
+        return user.first_name;
+      }
+      // Then check for nickname
+      else if (!preferUsername && user.nickname) {
         return user.nickname;
-      } else if (user.username) {
+      } 
+      // Finally fall back to username
+      else if (user.username) {
         return user.username;
       }
 
-      return "Unknown User";
+      return user.id ? `User-${user.id}` : fallbackText;
     } catch (error) {
       handleError(error as Error, ErrorSource.UI, undefined, {
         method: "formatUserName",
         userId: user?.id,
       });
-      return user?.username || "Unknown User";
+      return user?.username || fallbackText;
     }
   }
 
@@ -100,7 +110,11 @@ class UserService {
 
     try {
       const timestamp = user.last_picture_update || "";
-      return `/api/v4/users/${user.id}/image?_=${timestamp}&size=${size}`;
+      
+      // Récupérer la base URL depuis le client si disponible
+      // sinon utiliser une URL absolue
+      const baseUrl = window.location.origin || "";
+      return `${baseUrl}/api/v4/users/${user.id}/image?_=${timestamp}&size=${size}`;
     } catch (error) {
       handleError(error as Error, ErrorSource.UI, undefined, {
         method: "getProfilePictureUrl",

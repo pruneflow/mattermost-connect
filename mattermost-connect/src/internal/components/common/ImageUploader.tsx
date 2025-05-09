@@ -2,21 +2,21 @@ import { UploadFile as UploadFileIcon } from "@mui/icons-material";
 import { Box, Button, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 
-// Composant d'upload d'image
+// Image upload component
 const ImageUploader: React.FC<{
   onDataChange?: (data: { file: File | null }) => void;
 }> = ({ onDataChange }) => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
-  // Mettre à jour les données du parent quand le fichier change
+  // Update parent data when file changes
   useEffect(() => {
     if (onDataChange) {
       onDataChange({ file });
     }
   }, [file, onDataChange]);
 
-  // Générer la prévisualisation de l'image
+  // Generate image preview
   useEffect(() => {
     if (!file) {
       setPreview(null);
@@ -26,7 +26,7 @@ const ImageUploader: React.FC<{
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
 
-    // Nettoyer l'URL de l'objet lors du démontage
+    // Clean up object URL on unmount
     return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
 
@@ -34,9 +34,9 @@ const ImageUploader: React.FC<{
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0];
 
-      // Vérifier si le fichier est bien une image
+      // Check if the file is actually an image
       if (!selectedFile.type.startsWith("image/")) {
-        // Afficher une erreur si ce n'est pas une image
+        // Show an error if it's not an image
         alert("Please select an image file");
         return;
       }

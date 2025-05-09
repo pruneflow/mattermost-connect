@@ -8,10 +8,10 @@ import MessageThreadContainer from "../../internal/containers/messages/MessageTh
 import { Message } from "../../types";
 
 export interface MessageThreadProps {
-  /** Root message ID */
+  /** Root message ID - ID of the message for which to display the thread */
   rootMessageId: string;
-  /** Channel ID */
-  channelId: string;
+  /** Channel ID - Optional, will be determined from root message if not provided */
+  channelId?: string;
   /** Whether to show an input for replying */
   showReplyInput?: boolean;
   /** Whether to allow file attachments */
@@ -47,20 +47,17 @@ export interface MessageThreadProps {
  * // Basic usage
  * <MessageThread
  *   rootMessageId="message123"
- *   channelId="channel123"
  * />
  *
- * // Without reply input
+ * // With explicit channel ID (optional)
  * <MessageThread
  *   rootMessageId="message123"
  *   channelId="channel123"
- *   showReplyInput={false}
  * />
  *
  * // With callbacks
  * <MessageThread
  *   rootMessageId="message123"
- *   channelId="channel123"
  *   onReplySent={(reply) => console.log('Reply sent:', reply)}
  *   onClose={() => console.log('Thread closed')}
  * />
@@ -81,6 +78,7 @@ const MessageThread: React.FC<MessageThreadProps> = ({
   sx,
   id,
 }) => {
+  console.log(`MessageThread component rendering with rootMessageId: ${rootMessageId}`);
   return (
     <MessageThreadContainer
       rootId={rootMessageId}

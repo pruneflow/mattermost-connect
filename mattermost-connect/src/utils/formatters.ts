@@ -99,13 +99,20 @@ export function formatUserName(
 ): string {
   if (!user) return "Unknown User";
 
+  // Check for full name first (first and last name)
   if (user.first_name && user.last_name) {
     return `${user.first_name} ${user.last_name}`;
-  } else if (user.nickname) {
-    return user.nickname;
-  } else if (user.first_name) {
+  } 
+  // Then check for first name only
+  else if (user.first_name) {
     return user.first_name;
-  } else if (user.username) {
+  }
+  // Then check for nickname
+  else if (user.nickname) {
+    return user.nickname;
+  } 
+  // Finally fall back to username
+  else if (user.username) {
     return user.username;
   }
 

@@ -34,7 +34,6 @@ export enum AuthErrorType {
   UNKNOWN = "unknown",
 }
 
-// Ajout des méthodes à authService.ts
 
 /**
  * MFA verification parameters

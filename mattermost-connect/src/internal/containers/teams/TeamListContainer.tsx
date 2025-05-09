@@ -100,7 +100,7 @@ const TeamListContainer: React.FC<TeamListContainerProps> = (props) => {
 
       listAPI.selectItem(team);
 
-      // Notifier le parent si nécessaire
+      // Notify parent if needed
       if (onSelectTeam) {
         onSelectTeam(team);
       }

@@ -335,7 +335,18 @@ export function useDirectChannelUsers(channelId: string | undefined) {
     formatDisplayName: useCallback(
       (userId: string): string => {
         const user = getUserById(userId);
-        if (!user) return "Unknown User";
+        if (!user) {
+          // Si l'utilisateur n'est pas trouvé, déclenchons une récupération
+          // et retournons une valeur temporaire d'attente
+          if (!channelLoadingService.isUserLoading(userId)) {
+            // Déclencher le chargement de l'utilisateur
+            setTimeout(() => {
+              const { loadUsersBatch } = useUserStore.getState();
+              loadUsersBatch([userId]);
+            }, 0);
+          }
+          return "Chargement...";
+        }
         return userService.formatUserName(user);
       },
       [getUserById],

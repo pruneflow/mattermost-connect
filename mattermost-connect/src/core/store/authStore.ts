@@ -31,16 +31,16 @@ const authPersistConfig = {
 
   storage: createJSONStorage(() => localStorage),
 
-  // Partialiser pour ne stocker que les données nécessaires
+  // Partialize to only store necessary data
   partialize: (state: AuthState) => ({
     token: state.token || null,
     serverUrl: state.serverUrl || null,
   }),
-  // Ajouter une fonction de migration pour gérer les changements de structure
+  // Add a migration function to handle structure changes
   version: 1,
   migrate: (persistedState: any, version: number) => {
     if (version === 0) {
-      // Migration de la version 0 vers 1 si nécessaire
+      // Migration from version 0 to 1 if needed
       return {
         token: persistedState.token || null,
         serverUrl: persistedState.serverUrl || null,
@@ -49,7 +49,7 @@ const authPersistConfig = {
     return persistedState;
   },
 
-  // Gérer les erreurs de désérialisation
+  // Handle deserialization errors
   onRehydrateStorage: (state: any) => {
     return (rehydratedState: any, error: any) => {
       if (error) {

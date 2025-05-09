@@ -162,6 +162,26 @@ const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
         case "reply":
           replyTo(message);
           break;
+        case "thread":
+          // When viewing a thread, we should use the root_id of the message if it's a reply
+          // or the message id if it's a root message
+          console.log(`Opening thread for message: ${message.id}, has root_id: ${!!message.root_id}`);
+          if (onMessageSelect) {
+            // If it's already a reply, open the thread for its parent
+            // Otherwise, open the thread for this message
+            const threadRootId = message.root_id || message.id;
+            // Create a copy of the message with the correct ID to use for the thread
+            const messageCopy = { ...message };
+            
+            // If this is a reply, we need to use the root_id as the message id 
+            // so the thread will open correctly
+            if (message.root_id) {
+              messageCopy.id = message.root_id;
+            }
+            
+            onMessageSelect(messageCopy);
+          }
+          break;
         case "edit":
           startEditing(message.id);
           break;
@@ -190,7 +210,7 @@ const MessageListContainer: React.FC<MessageListContainerProps> = (props) => {
           break;
       }
     },
-    [replyTo, startEditing, deleteMessage, togglePin, toggleReaction, dialog],
+    [replyTo, startEditing, deleteMessage, togglePin, toggleReaction, dialog, onMessageSelect],
   );
 
   // Load more messages when scrolling to top
