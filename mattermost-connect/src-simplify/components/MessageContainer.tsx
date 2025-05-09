@@ -34,19 +34,37 @@ export function MessageContainer({
   const [replyToMessageId, setReplyToMessageId] = useState<string | undefined>(undefined);
   const [threadMessageId, setThreadMessageId] = useState<string | undefined>(externalThreadMessageId);
   const containerRef = useRef<HTMLDivElement>(null);
+  const mainInputRef = useRef<any>(null);
   
   // View channel service call
   const { viewChannel } = useMessages(channelId);
   
+  // Get message service for the current channel
+  const messageService = useMessages(channelId);
+
   // Handle reply to message
   const handleReplyMessage = useCallback((messageId: string) => {
     setReplyToMessageId(messageId);
   }, []);
-  
+
   // Handle cancel reply
   const handleCancelReply = useCallback(() => {
     setReplyToMessageId(undefined);
   }, []);
+
+  // Handle thread message sent - refresh main message list to update thread counts
+  const handleThreadMessageSent = useCallback((message?: any) => {
+    // Refresh the main channel messages to update thread reply counts
+    if (message && message.root_id) {
+      console.debug(`MessageContainer: Thread reply sent, refreshing message list`, {
+        messageId: message.id,
+        rootId: message.root_id
+      });
+
+      // Trigger a message list refresh
+      messageService.refetch();
+    }
+  }, [messageService]);
   
   // Handle opening thread
   const handleOpenThread = useCallback((messageId: string) => {
@@ -70,6 +88,11 @@ export function MessageContainer({
   useEffect(() => {
     if (channelId) {
       viewChannel();
+
+      // Clear any attachment previews when changing channels
+      if (mainInputRef.current && mainInputRef.current.resetAttachments) {
+        mainInputRef.current.resetAttachments();
+      }
     }
   }, [channelId, viewChannel]);
 
@@ -132,6 +155,7 @@ export function MessageContainer({
             zIndex: 10,
           }}>
             <MessageInput
+              ref={mainInputRef}
               channelId={channelId}
               replyToMessageId={replyToMessageId}
               placeholder={`Type a message...`}
@@ -144,11 +168,11 @@ export function MessageContainer({
       
       {/* Thread area - conditionally displayed */}
       {isThreadVisible && threadMessageId && (
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             flexBasis: { xs: '100%', md: '25%' },
-            minWidth: { md: '350px' }, // Increased from 300px to 350px
-            maxWidth: { md: '450px' }, // Increased from 400px to 450px
+            minWidth: { md: '350px' },
+            maxWidth: { md: '450px' },
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
@@ -158,6 +182,7 @@ export function MessageContainer({
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
             }),
+            overflow: 'hidden', // Ensure the thread doesn't overflow
           }}
         >
           <MessageThread
@@ -166,6 +191,7 @@ export function MessageContainer({
             currentUserId={currentUserId}
             onClose={handleCloseThread}
             isMobile={isMobile}
+            onMessageSent={handleThreadMessageSent}
           />
         </Box>
       )}

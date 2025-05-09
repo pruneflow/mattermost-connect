@@ -10,8 +10,10 @@ export interface MessageInputProps {
   channelId: string;
   replyToMessageId?: string;
   placeholder?: string;
-  onMessageSent?: () => void;
+  onMessageSent?: (message?: any) => void;
   onCancelReply?: () => void;
+  isInThread?: boolean; // Pour appliquer des styles spécifiques en contexte de thread
+  onAttachmentsChange?: (files: FileStatus[]) => void; // Pour informer le parent des changements d'attachements
 }
 
 interface FileStatus {
@@ -22,21 +24,57 @@ interface FileStatus {
   url?: string;
 }
 
-export function MessageInput({ 
-  channelId, 
-  replyToMessageId, 
-  placeholder = 'Type a message...', 
+export const MessageInput = React.forwardRef(({
+  channelId,
+  replyToMessageId,
+  placeholder = 'Type a message...',
   onMessageSent,
-  onCancelReply 
-}: MessageInputProps) {
+  onCancelReply,
+  isInThread = false,
+  onAttachmentsChange
+}: MessageInputProps, ref: React.ForwardedRef<{
+  resetAttachments: () => void;
+  getCurrentAttachments: () => FileStatus[];
+  removeAttachment: (file: File) => void;
+}>) => {
   // Local state
   const [message, setMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFileIds, setUploadedFileIds] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<FileStatus[]>([]);
-  
+
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Expose des méthodes pour manipuler les pièces jointes
+  React.useImperativeHandle(ref, () => ({
+    resetAttachments: () => {
+      setUploadedFileIds([]);
+      setAttachments([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      console.debug('MessageInput: Attachments reset via ref');
+
+      // Informer le parent du changement
+      if (onAttachmentsChange) {
+        onAttachmentsChange([]);
+      }
+    },
+    getCurrentAttachments: () => {
+      return attachments;
+    },
+    removeAttachment: (file: File) => {
+      handleRemoveAttachment(file);
+    }
+  }));
+
+  // Notifier le parent quand l'état des attachements change
+  useEffect(() => {
+    if (onAttachmentsChange) {
+      onAttachmentsChange(attachments);
+    }
+  }, [attachments, onAttachmentsChange]);
   
   // Get message actions
   const { createMessage, uploadFile, isCreating } = useMessages(channelId);
@@ -113,24 +151,24 @@ export function MessageInput({
       setMessage('');
       
       // Create the message with the correct parameters
-      await createMessage({
+      const createdMessage = await createMessage({
         channel_id: channelId,
         message: messageToSend,
         root_id: replyToMessageId,
         file_ids: fileIdsToSend,
       });
-      
+
       // Log successful message send
       console.debug(`MessageInput: Message sent successfully`, {
         channelId,
         wasThreadReply: !!replyToMessageId,
         timestamp: new Date().toISOString()
       });
-      
+
       // Reset all related states
       setUploadedFileIds([]);
       setAttachments([]);
-      
+
       // Notify parent that message was sent with a slight delay to ensure all cache updates are complete
       if (onMessageSent) {
         // Add a short delay to ensure state is updated properly
@@ -139,7 +177,7 @@ export function MessageInput({
             timestamp: new Date().toISOString(),
             isThreadReply: !!replyToMessageId
           });
-          onMessageSent();
+          onMessageSent(createdMessage);
         }, 50);
       }
       
@@ -239,23 +277,42 @@ export function MessageInput({
   };
 
   return (
-    <Box>
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Show typing indicator if anyone is typing */}
       {typingUsers.length > 0 && (
-        <TypingIndicator 
+        <TypingIndicator
           channelId={channelId}
           typingUsers={typingUsers}
         />
       )}
-      
-      {/* Show attachment previews if there are any */}
-      {attachments.length > 0 && (
-        <AttachmentPreview 
-          files={attachments}
-          onRemove={handleRemoveAttachment}
-        />
+
+      {/* Show attachment previews if there are any - différents affichages selon le contexte */}
+      {attachments.length > 0 && !isInThread && (
+        <Box
+          sx={{
+            width: '100%',
+            maxHeight: '200px',
+            overflowY: 'auto',
+            mb: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            bgcolor: 'background.paper'
+          }}
+        >
+          <AttachmentPreview
+            files={attachments}
+            onRemove={handleRemoveAttachment}
+            variant="grid" // Utilisation de la variante en grille pour l'affichage normal
+          />
+        </Box>
       )}
-      
+
+      {/* Pour le thread, nous utilisons la zone spéciale d'overlay */}
+      {attachments.length > 0 && isInThread && document.getElementById('thread-attachments-content') && (
+        <>{/* L'affichage des attachements est géré par le parent */}</>
+      )}
+
       <Paper
         elevation={3}
         sx={{
@@ -317,6 +374,6 @@ export function MessageInput({
     </Paper>
   </Box>
   );
-}
+});
 
 export default MessageInput;

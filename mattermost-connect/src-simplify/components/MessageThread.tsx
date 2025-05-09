@@ -1,26 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { 
-  Box, 
-  Paper, 
-  Typography, 
-  IconButton, 
-  Divider, 
+import {
+  Box,
+  Paper,
+  Typography,
+  IconButton,
+  Divider,
   CircularProgress,
-  Button,
   Avatar,
-  Tooltip
 } from '@mui/material';
-import { 
+import {
   Close as CloseIcon,
   ArrowBack as ArrowBackIcon,
-  Comment as CommentIcon
+  Comment as CommentIcon,
+  InsertDriveFile
 } from '@mui/icons-material';
+import { useQueryClient } from '@tanstack/react-query';
 import { useThreadMessages } from '../hooks/useMessages';
 import { useUser } from '../hooks/useUsers';
-import { formatRelativeTime, formatUserName, getUserInitials } from '../utils/formatters';
+import { formatRelativeTime, formatUserName, getUserInitials, formatFileSize } from '../utils/formatters';
 import MessageInput from './MessageInput';
 import MessageList from './MessageList';
 import MessageAttachment from './MessageAttachment';
+import AttachmentPreview from './AttachmentPreview';
 import Markdown from './Markdown';
 import { Message } from '../api/types';
 
@@ -30,81 +31,94 @@ export interface MessageThreadProps {
   currentUserId?: string;
   onClose: () => void;
   isMobile?: boolean; // To determine mobile vs desktop layout
+  onMessageSent?: (message?: any) => void; // Callback for when a message is sent in the thread
 }
 
-// Define the keyframes animation for the loading bar
-const loadingAnimation = `
-@keyframes loading {
-  0% {
-    transform: translateX(-100%);
-  }
-  50% {
-    transform: translateX(400%);
-  }
-  100% {
-    transform: translateX(-100%);
-  }
-}
-`;
-
-export function MessageThread({ 
-  rootMessageId = '', 
-  channelId, 
+export function MessageThread({
+  rootMessageId = '',
+  channelId,
   currentUserId,
   onClose,
   isMobile = true, // Default to mobile layout
+  onMessageSent,
 }: MessageThreadProps) {
+  // References for scrolling
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Référence pour accéder à l'input des messages et réinitialiser son état
+  const messageInputRef = useRef<any>(null);
+
+  // Get query client for manual cache updates
+  const queryClient = useQueryClient();
+
   // State
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
+  const [showingAttachments, setShowingAttachments] = useState<boolean>(false);
   
-  // Get thread messages - this will include both thread messages and parent message
-  console.debug(`MessageThread: fetching thread for rootMessageId=${rootMessageId}, channelId=${channelId}`, {
-    isMobile,
-    currentTime: new Date().toISOString(),
-    initialRender: true,
-  });
-  
-  
-  if (!rootMessageId) {
-    console.error("MessageThread: No valid rootMessageId provided, thread loading will fail");
-  }
-  
-  console.log(`MessageThread component rendering with rootId=${rootMessageId} channelId=${channelId}`, {
-    isMobile,
-    parentMessageInfo: 'Will be fetched from useThreadMessages',
-  });
-
   // Use our new useThreadMessages hook specifically designed for thread views
-  const { 
-    parentMessage: threadParentMessage, 
+  const {
+    parentMessage: threadParentMessage,
     threadMessages = [], // Provide default empty array
-    isLoading, 
+    isLoading,
     createReply,
     isReplying,
-    refetch
+    refetch,
+    threadKey: threadQueryKey  // Get the query key used internally by the hook
   } = useThreadMessages(rootMessageId, channelId);
   
   // Set parent message when it's loaded
   useEffect(() => {
-    console.debug(`MessageThread: Effect runs with threadParentMessage:`, threadParentMessage);
     if (threadParentMessage) {
       setParentMessage(threadParentMessage);
     }
   }, [threadParentMessage]);
+
+  // Reset attachments when channel or rootMessageId changes
+  useEffect(() => {
+    // Clear any attachment previews when changing context
+    if (messageInputRef.current && messageInputRef.current.resetAttachments) {
+      messageInputRef.current.resetAttachments();
+    }
+
+    // Reset attachments display state and vider notre liste locale
+    setShowingAttachments(false);
+    setCurrentAttachments([]);
+  }, [channelId, rootMessageId]);
   
   // Get parent message author
   const { user: parentAuthor } = useUser(parentMessage?.user_id);
   
-  // UI references
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const threadContainerRef = useRef<HTMLDivElement>(null);
-  
-  // Scroll to bottom on first load
+  // Scroll to bottom when new messages arrive or thread is loaded
   useEffect(() => {
-    if (!isLoading && threadMessages.length > 0 && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    // Tentative de scroll uniquement quand les messages sont chargés
+    if (!isLoading && threadMessages.length > 0) {
+      // Première tentative immédiate
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+      }
+
+      // Plusieurs tentatives avec des délais croissants
+      [100, 300, 800].forEach(delay => {
+        setTimeout(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: delay > 300 ? 'smooth' : 'auto', block: 'end' });
+          }
+        }, delay);
+      });
     }
   }, [isLoading, threadMessages.length]);
+
+  // Scroll spécifique pour le chargement initial du thread
+  useEffect(() => {
+    if (rootMessageId && !isLoading && parentMessage) {
+      // Scroll après un court délai pour s'assurer que tout est rendu
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+        }
+      }, 250);
+    }
+  }, [rootMessageId, isLoading, parentMessage]);
   
   // Generate avatar color based on username
   const getAvatarColor = (username?: string): string => {
@@ -124,94 +138,119 @@ export function MessageThread({
     return color;
   };
 
-  const replyToThread = async (message: string) => {
-    if (!message.trim()) return;
-    
-    try {
-      console.debug(`MessageThread: Sending reply to thread`, {
-        channelId,
-        rootMessageId,
-        messageLength: message.trim().length,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Create the reply
-      const newReply = await createReply({
-        message: message.trim(),
-        fileIds: []
-      });
-      
-      console.debug(`MessageThread: Successfully sent thread reply`, {
-        replyId: newReply?.id,
-        timestamp: new Date().toISOString(),
-        threadMessagesCount: threadMessages.length + 1
-      });
-      
-      // Scroll to bottom after sending
-      // Note: We no longer need to refetch since the cache is updated automatically
-      setTimeout(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
-    } catch (error) {
-      console.error('Failed to send reply:', error);
-    }
+  // State pour suivre les pièces jointes en temps réel
+  const [currentAttachments, setCurrentAttachments] = useState<any[]>([]);
+
+  // Fonction pour surveiller les changements d'attachements
+  const handleAttachmentsChange = (files: any[]) => {
+    console.debug(`MessageThread: Attachments updated`, {
+      count: files.length,
+      uploading: files.some(f => f.uploading),
+      fileNames: files.map(f => f.file.name)
+    });
+
+    // Mise à jour de notre liste locale de fichiers
+    setCurrentAttachments(files);
+
+    // Mise à jour de l'état d'affichage
+    setShowingAttachments(files.length > 0);
   };
 
-  // Handle new reply sent - called by MessageInput component when a message is sent
-  const handleReplySent = () => {
-    // Just scroll to bottom after message is sent - the cache is updated automatically
-    setTimeout(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  // Handle new reply sent
+  const handleReplySent = (newMessage?: any) => {
+    // If we received the newly created message, add it to our thread messages
+    if (newMessage) {
+      console.debug(`MessageThread: Adding new message to thread`, {
+        messageId: newMessage.id,
+        rootId: rootMessageId,
+        timestamp: new Date().toISOString()
+      });
+
+      // Notify parent container about the new message (to update thread counts in message list)
+      if (onMessageSent) {
+        onMessageSent(newMessage);
       }
-    }, 100);
+
+      // Réinitialiser explicitement les pièces jointes via la référence
+      if (messageInputRef.current) {
+        messageInputRef.current.resetAttachments();
+      }
+
+      // Masquer la zone d'attachements après envoi et vider notre liste locale
+      setShowingAttachments(false);
+      setCurrentAttachments([]);
+
+      // Manually update the threadMessages state to avoid refetching
+      // This gives an instant response while waiting for cache update
+      // Ensure new messages are added in the correct order (by creation date)
+      const updatedThreadMessages = Array.isArray(threadMessages)
+        ? [...threadMessages, newMessage].sort((a, b) => a.create_at - b.create_at)
+        : [newMessage];
+
+      // Update the parent message reply count
+      if (parentMessage) {
+        // Clone to avoid direct mutation
+        const updatedParentMessage = { ...parentMessage };
+        // @ts-ignore - Dynamic property
+        updatedParentMessage.reply_count = (updatedParentMessage.reply_count || 0) + 1;
+        // @ts-ignore - Dynamic property
+        updatedParentMessage.has_replies = true;
+
+        // Update the parent message in the React Query cache
+        queryClient.setQueryData(threadQueryKey, {
+          parentMessage: updatedParentMessage,
+          threadMessages: updatedThreadMessages
+        });
+      }
+      
+      requestAnimationFrame(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'end'
+          });
+        }
+      });
+
+ 
+
+    } else {
+      // If no message object was provided, use a more fluid approach
+
+      // First scroll immediately for responsiveness
+      requestAnimationFrame(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'end'
+          });
+        }
+      });
+
+      // Then refetch data
+      refetch().catch(error => {
+        console.error('Error refetching thread messages:', error);
+      });
+    }
   };
 
   return (
     <Box 
       sx={{ 
-        // Different positioning based on mobile vs desktop
         position: isMobile ? 'fixed' : 'relative',
         top: isMobile ? 0 : 'auto',
         right: isMobile ? 0 : 'auto',
         bottom: isMobile ? 0 : 'auto',
-        // Width constraints as required
-        width: isMobile 
-          ? { xs: '100%' }
-          : { 
-              xs: '100%',
-              sm: '100%', // Use full width of container
-            },
-        height: isMobile ? '100%' : '100%',
+        width: isMobile ? '100%' : '100%',
+        height: '100%',
         bgcolor: 'background.paper',
         borderLeft: '1px solid',
         borderColor: 'divider',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: isMobile ? 1200 : 1, // Lower z-index for desktop as it's part of the normal flow
+        zIndex: isMobile ? 1200 : 1,
         boxShadow: '-4px 0px 10px rgba(0, 0, 0, 0.15)',
-        transition: 'all 0.3s ease', // Smooth transition when opening/closing
-        pt: '64px', // Add padding top to prevent being hidden under the app bar
-        boxSizing: 'border-box', // Ensure padding is included in the height calculation
-      }}
-      // Add the CSS keyframes animation
-      component="div"
-      sx={{
-        '@global': {
-          '@keyframes loading': {
-            '0%': {
-              transform: 'translateX(-100%)',
-            },
-            '50%': {
-              transform: 'translateX(400%)',
-            },
-            '100%': {
-              transform: 'translateX(-100%)',
-            },
-          },
-        },
+        boxSizing: 'border-box',
       }}
     >
       {/* Thread Header */}
@@ -224,8 +263,8 @@ export function MessageThread({
         alignItems: 'center',
         justifyContent: 'space-between',
         bgcolor: 'background.paper',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.05)', // Subtle shadow for depth
-        flexShrink: 0, // Don't allow the header to shrink
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+        flexShrink: 0,
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <IconButton 
@@ -247,24 +286,95 @@ export function MessageThread({
         </IconButton>
       </Box>
 
-      {/* Main content container - exactly matches MessageList structure */}
-      <Box sx={{ 
+      {/* Thread Messages Container - Scrollable Area */}
+      <Box sx={{
+        flexGrow: 1,
         display: 'flex',
         flexDirection: 'column',
-        flexGrow: 1,
-        height: 'calc(100% - 64px)', // Full height minus header
+        overflow: 'hidden', // Container doesn't scroll
         position: 'relative',
-        overflow: 'hidden',
       }}>
-        {/* Thread messages area - scrollable */}
+        {/* Zone overlay pour les previews d'attachements - positionnée de manière absolue */}
+        <Box
+          id="thread-attachments-overlay"
+          sx={{
+            position: 'absolute',
+            bottom: 76, // Juste au-dessus de l'input
+            left: 0,
+            right: 0,
+            zIndex: 30, // Au-dessus des messages mais en-dessous des menus
+            display: 'flex',
+            justifyContent: 'center',
+            visibility: showingAttachments ? 'visible' : 'hidden',
+            maxWidth: '100%',
+            px: 2,
+          }}
+        >
+          {/* Conteneur avec arrière-plan pour les attachements */}
+          <Paper
+            elevation={8}
+            sx={{
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '250px',
+              overflowY: 'auto',
+              p: 1,
+              bgcolor: 'background.paper',
+              borderRadius: '8px 8px 0 0',
+              pointerEvents: 'auto', // Pour permettre l'interaction avec les attachements
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+            id="thread-attachments-container"
+          >
+            {/* Nous récupérerons les attachements directement du input */}
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+              Pièces jointes
+            </Typography>
+            <Box sx={{ maxHeight: '200px', overflowY: 'auto' }}>
+              {/* L'élément AttachmentPreview sera ajouté ici en relation avec le MessageInput */}
+              <div id="thread-attachments-content">
+                {/* On crée un AttachmentPreview ici */}
+                {showingAttachments && currentAttachments.length > 0 && (
+                  <AttachmentPreview
+                    files={currentAttachments}
+                    variant="list"
+                    onRemove={(file) => {
+                      // Supprimer via la référence pour mettre à jour les états réels
+                      if (messageInputRef.current && messageInputRef.current.removeAttachment) {
+                        console.debug(`MessageThread: Removing attachment`, {
+                          fileName: file.name
+                        });
+                        messageInputRef.current.removeAttachment(file);
+                      }
+
+                      // Mettre à jour notre liste locale pour un feedback visuel immédiat
+                      const updatedAttachments = currentAttachments.filter(a => a.file.name !== file.name);
+                      setCurrentAttachments(updatedAttachments);
+
+                      // Masquer le container si c'était le dernier fichier
+                      if (updatedAttachments.length === 0) {
+                        setShowingAttachments(false);
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            </Box>
+          </Paper>
+        </Box>
+
+        {/* Scrollable Area for Messages */}
         <Box 
           sx={{ 
-            height: 'calc(100% - 76px)', // Full height minus input area
-            overflowY: 'auto',
+            flexGrow: 1,
+            overflow: 'auto', // This element handles scrolling
+            display: 'flex',
+            flexDirection: 'column',
             px: 3,
-            pt: 4,
+            pt: 2,
             pb: 2,
-            boxSizing: 'border-box',
+            height: 'calc(100% - 76px)', // Height minus the input height
           }}
         >
           {/* Parent message */}
@@ -336,71 +446,75 @@ export function MessageThread({
             </Box>
           )}
 
+          {/* Separator */}
           <Divider sx={{ my: 2 }} />
 
           {/* Thread messages */}
-          <Box ref={threadContainerRef}>
-            {/* Initial loading state */}
-            {isLoading && !threadMessages.length && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                <CircularProgress size={24} />
-              </Box>
-            )}
-            
-            {/* No replies yet */}
-            {!isLoading && threadMessages.length === 0 && (
-              <Box sx={{
-                p: 3,
-                textAlign: 'center',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '200px',
-                opacity: 0.7
-              }}>
-                <CommentIcon sx={{ fontSize: 48, mb: 2, color: 'text.secondary' }} />
-                <Typography color="text.secondary" variant="body1" gutterBottom>
-                  No replies yet
-                </Typography>
-                <Typography color="text.secondary" variant="body2">
-                  Start the conversation
-                </Typography>
-              </Box>
-            )}
+          {isLoading && !threadMessages.length ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : threadMessages.length === 0 ? (
+            <Box sx={{
+              p: 3,
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexGrow: 1,
+              opacity: 0.7
+            }}>
+              <CommentIcon sx={{ fontSize: 48, mb: 2, color: 'text.secondary' }} />
+              <Typography color="text.secondary" variant="body1" gutterBottom>
+                No replies yet
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                Start the conversation
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              {/* Thread replies - sorted by creation date (oldest first) */}
+              {[...threadMessages]
+                .sort((a, b) => a.create_at - b.create_at) // Sort chronologically (oldest to newest)
+                .map(message => (
+                <MessageList.MessageItem
+                  key={message.id}
+                  messageId={message.id}
+                  userId={message.user_id}
+                  content={message.message}
+                  timestamp={message.create_at}
+                  channelId={channelId}
+                  reactions={message.props?.reactions}
+                  isCurrentUser={currentUserId === message.user_id}
+                  fileIds={message.file_ids}
+                  sx={{
+                    maxWidth: '100%',
+                    ml:  0,
+                    mr:  0,
+                  }}    
+                />
+              ))}
+            </>
+          )}
 
-            {/* Thread messages */}
-            {threadMessages.map(message => (
-              <MessageList.MessageItem
-                key={message.id}
-                messageId={message.id}
-                userId={message.user_id}
-                content={message.message}
-                timestamp={message.create_at}
-                channelId={channelId}
-                reactions={message.props?.reactions}
-                isCurrentUser={currentUserId === message.user_id}
-                fileIds={message.file_ids}
-              />
-            ))}
-
-            <div ref={messagesEndRef} />
-          </Box>
+          {/* Scroll target */}
+          <div ref={messagesEndRef} style={{ height: 1 }} />
         </Box>
 
-        {/* Message Input - Fixed at bottom */}
+        {/* Input Container - Fixed at bottom */}
         <Box sx={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          p: 2,
           borderTop: '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper',
-          height: '76px', // Fixed height
-          boxSizing: 'border-box',
+          flexShrink: 0, // Prevent from shrinking
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          zIndex: 10,
         }}>
+          {/* Loading indicator for replying */}
           {isReplying && (
             <Box
               sx={{
@@ -411,7 +525,7 @@ export function MessageThread({
                 height: 4,
                 bgcolor: 'primary.main',
                 opacity: 0.7,
-                zIndex: 10
+                zIndex: 15,
               }}
             >
               <Box
@@ -419,17 +533,29 @@ export function MessageThread({
                   height: '100%',
                   width: '30%',
                   bgcolor: 'primary.light',
-                  animation: 'loading 1.5s infinite ease-in-out'
+                  animation: 'loading 1.5s infinite ease-in-out',
+                  '@keyframes loading': {
+                    '0%': { transform: 'translateX(-100%)' },
+                    '50%': { transform: 'translateX(400%)' },
+                    '100%': { transform: 'translateX(-100%)' },
+                  },
                 }}
               />
             </Box>
           )}
-          <MessageInput
-            channelId={channelId}
-            replyToMessageId={rootMessageId}
-            placeholder="Reply to thread..."
-            onMessageSent={handleReplySent}
-          />
+
+          {/* Actual input with fixed height for stability */}
+          <Box sx={{ p: 2, height: '76px' }}>
+            <MessageInput
+              ref={messageInputRef}
+              channelId={channelId}
+              replyToMessageId={rootMessageId}
+              placeholder="Reply to thread..."
+              onMessageSent={handleReplySent}
+              isInThread={true}
+              onAttachmentsChange={handleAttachmentsChange}
+            />
+          </Box>
         </Box>
       </Box>
     </Box>

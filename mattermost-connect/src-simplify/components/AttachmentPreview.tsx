@@ -14,21 +14,37 @@ interface FileStatus {
 interface AttachmentPreviewProps {
   files: FileStatus[];
   onRemove: (file: File) => void;
+  variant?: 'grid' | 'list'; // Options de style: grid (default) ou list (en colonne)
+  maxWidth?: number | string; // Permet de définir une largeur maximale personnalisée
 }
 
 /**
  * Preview component for files being uploaded or already uploaded
  */
-export function AttachmentPreview({ files, onRemove }: AttachmentPreviewProps) {
+export function AttachmentPreview({
+  files,
+  onRemove,
+  variant = 'grid',
+  maxWidth
+}: AttachmentPreviewProps) {
   if (!files || files.length === 0) return null;
-  
+
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, p: 1 }}>
+    <Box sx={{
+      display: 'flex',
+      flexDirection: variant === 'list' ? 'column' : 'row',
+      flexWrap: variant === 'list' ? 'nowrap' : 'wrap',
+      gap: 1,
+      p: 1,
+      width: '100%',
+    }}>
       {files.map((fileStatus, index) => (
-        <AttachmentItem 
+        <AttachmentItem
           key={index}
           fileStatus={fileStatus}
           onRemove={() => onRemove(fileStatus.file)}
+          variant={variant}
+          maxWidth={maxWidth}
         />
       ))}
     </Box>
@@ -38,12 +54,14 @@ export function AttachmentPreview({ files, onRemove }: AttachmentPreviewProps) {
 interface AttachmentItemProps {
   fileStatus: FileStatus;
   onRemove: () => void;
+  variant?: 'grid' | 'list';
+  maxWidth?: number | string;
 }
 
 /**
  * Individual attachment preview item
  */
-function AttachmentItem({ fileStatus, onRemove }: AttachmentItemProps) {
+function AttachmentItem({ fileStatus, onRemove, variant = 'grid', maxWidth }: AttachmentItemProps) {
   const { file, uploading, uploaded, fileId, url } = fileStatus;
   
   // Determine if this is an image that can be previewed
@@ -62,23 +80,48 @@ function AttachmentItem({ fileStatus, onRemove }: AttachmentItemProps) {
     };
   }, [previewUrl]);
   
+  // Styles en fonction de la variante
+  const getStyles = () => {
+    if (variant === 'list') {
+      return {
+        width: '100%',
+        maxWidth: maxWidth || '100%',
+        height: 60,
+        position: 'relative' as const,
+        overflow: 'hidden' as const,
+        display: 'flex' as const,
+        flexDirection: 'row' as const,
+      };
+    }
+    // Style par défaut ('grid')
+    return {
+      width: 160,
+      height: 160,
+      position: 'relative' as const,
+      overflow: 'hidden' as const,
+      display: 'flex' as const,
+      flexDirection: 'column' as const,
+    };
+  };
+
   return (
-    <Paper 
-      elevation={1} 
-      sx={{ 
-        width: 160, 
-        height: 160, 
-        position: 'relative',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column'
-      }}
+    <Paper
+      elevation={1}
+      sx={getStyles()}
     >
       {/* Remove button */}
       <IconButton
         size="small"
         onClick={onRemove}
-        sx={{
+        sx={variant === 'list' ? {
+          ml: 'auto',
+          mr: 1,
+          color: 'text.secondary',
+          '&:hover': {
+            bgcolor: 'action.hover',
+          },
+          zIndex: 1
+        } : {
           position: 'absolute',
           top: 4,
           right: 4,
@@ -93,10 +136,18 @@ function AttachmentItem({ fileStatus, onRemove }: AttachmentItemProps) {
         <CloseIcon fontSize="small" />
       </IconButton>
       
-      {/* Upload status indicator */}
+      {/* Upload status indicator - adapté selon la variante */}
       {uploading && (
         <Box
-          sx={{
+          sx={variant === 'list' ? {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 40,
+            height: 40,
+            mr: 1,
+            position: 'relative'
+          } : {
             position: 'absolute',
             top: 0,
             left: 0,
@@ -109,17 +160,23 @@ function AttachmentItem({ fileStatus, onRemove }: AttachmentItemProps) {
             zIndex: 1
           }}
         >
-          <CircularProgress color="primary" size={40} />
+          <CircularProgress color="primary" size={variant === 'list' ? 24 : 40} />
         </Box>
       )}
       
-      {/* File preview */}
+      {/* File preview - styles différents selon la variante */}
       {isImage && previewUrl ? (
         <Box
           component="img"
           src={previewUrl}
           alt={file.name}
-          sx={{
+          sx={variant === 'list' ? {
+            width: 40,
+            height: 40,
+            objectFit: 'cover',
+            borderRadius: 1,
+            mr: 1
+          } : {
             width: '100%',
             height: '70%',
             objectFit: 'cover',
@@ -129,7 +186,16 @@ function AttachmentItem({ fileStatus, onRemove }: AttachmentItemProps) {
         />
       ) : (
         <Box
-          sx={{
+          sx={variant === 'list' ? {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 40,
+            height: 40,
+            bgcolor: 'action.hover',
+            borderRadius: 1,
+            mr: 1
+          } : {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -140,12 +206,22 @@ function AttachmentItem({ fileStatus, onRemove }: AttachmentItemProps) {
             borderColor: 'divider'
           }}
         >
-          <FileIcon sx={{ fontSize: 50, color: 'text.secondary' }} />
+          <FileIcon sx={{ fontSize: variant === 'list' ? 24 : 50, color: 'text.secondary' }} />
         </Box>
       )}
-      
-      {/* File info */}
-      <Box sx={{ p: 1, height: '30%', overflow: 'hidden' }}>
+
+      {/* File info - styles différents selon la variante */}
+      <Box sx={variant === 'list' ? {
+        flexGrow: 1,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center'
+      } : {
+        p: 1,
+        height: '30%',
+        overflow: 'hidden'
+      }}>
         <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {file.name}
         </Typography>

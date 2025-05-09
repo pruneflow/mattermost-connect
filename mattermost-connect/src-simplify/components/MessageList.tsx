@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Typography, CircularProgress, Divider, Paper, Button, IconButton, Menu, MenuItem } from '@mui/material';
+import { Box, Typography, CircularProgress, Divider, Paper, Button, IconButton, Menu, MenuItem, SxProps, Theme } from '@mui/material';
 import { MoreVert as MoreVertIcon, Reply as ReplyIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useMessages } from '../hooks/useMessages';
 import { useUser } from '../hooks/useUsers';
@@ -33,12 +33,54 @@ export function MessageList({ channelId, currentUserId, onReplyMessage, onOpenTh
     deleteMessage
   } = useMessages(channelId);
   
-  // Auto-scroll to bottom when new messages arrive
+  // État pour suivre si nous avons récemment changé de canal
+  const [recentChannelChange, setRecentChannelChange] = useState(false);
+
+  // Auto-scroll seulement quand les messages changent ET que nous ne sommes pas en train de charger
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    // On ne scrolle automatiquement que si on n'est pas en chargement
+    // et si nous avons des messages à afficher
+    if (!isLoading && !loadingMore && messages.length > 0) {
+      // Attendre que le rendu soit complet
+      const timeoutId = setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+      }, 200); // Légèrement plus long pour s'assurer que les images sont rendues
+
+      return () => clearTimeout(timeoutId);
     }
-  }, [messages.length]);
+  }, [messages.length, isLoading, loadingMore]);
+
+  // Effet spécifique pour le chargement initial après changement de canal
+  useEffect(() => {
+    if (channelId) {
+      setRecentChannelChange(true);
+
+      // Défiler au bas immédiatement quand le canal change, mais seulement après le chargement
+      if (!isLoading && messages.length > 0) {
+        // Première tentative immédiate
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'instant', block: 'end' });
+        }
+
+        // Puis plusieurs tentatives avec délai croissant pour s'assurer que tout est rendu
+        [300, 600, 1000].forEach(delay => {
+          setTimeout(() => {
+            if (messagesEndRef.current) {
+              messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+            }
+          }, delay);
+        });
+
+        // Réinitialiser le drapeau après un délai
+        setTimeout(() => setRecentChannelChange(false), 2000);
+      }
+    }
+  }, [channelId, isLoading, messages.length]);
+
+  // Nous n'utilisons pas d'auto-refresh pour éviter trop de requêtes
+  // Les mises à jour seront gérées via WebSocket et les callbacks de thread
   
   // Group messages by date for better UI presentation
   const groupedMessages = React.useMemo(() => {
@@ -121,10 +163,10 @@ export function MessageList({ channelId, currentUserId, onReplyMessage, onOpenTh
     <Box 
       sx={{ 
         height: '100%', 
-        width: '100%', // Ensure full width
+        width: '100%',
         overflowY: 'auto', 
-        px: 3, // Changed from p: 2 to reduce left/right margin to 24px
-        pt: 4, // Added top margin to prevent messages from being cut off
+        px: 3, 
+        pt: 4, 
         pb: 2,
         boxSizing: 'border-box',
       }} 
@@ -182,9 +224,8 @@ export function MessageList({ channelId, currentUserId, onReplyMessage, onOpenTh
           {groupedMessages[date]
             .sort((a, b) => a.create_at - b.create_at) // Sort by create_at in ascending order
             .map(message => (
-            <>
+            <React.Fragment key={message.id}>
               <MessageItem 
-                key={message.id} 
                 messageId={message.id} 
                 userId={message.user_id} 
                 content={message.message}
@@ -238,7 +279,7 @@ export function MessageList({ channelId, currentUserId, onReplyMessage, onOpenTh
                   }
                 }}
               />
-            </>
+            </React.Fragment>
           ))}
         </Box>
       ))}
@@ -271,6 +312,7 @@ interface MessageItemProps {
   onOpenThread?: () => void;
   onEdit?: (messageId: string, content: string) => Promise<void>;
   onDelete?: (messageId: string) => Promise<void>;
+  sx?: SxProps<Theme>;
 }
 
 function MessageItem({ 
@@ -288,6 +330,7 @@ function MessageItem({
   onOpenThread,
   onEdit,
   onDelete,
+  sx = {}
 }: MessageItemProps) {
   // Get user data for the message author
   const { user, isLoading } = useUser(userId);
@@ -360,6 +403,7 @@ function MessageItem({
         ml: isCurrentUser ? 'auto' : 0,
         mr: isCurrentUser ? 0 : 'auto',
         mb: 2,
+        ...sx
       }}
     >
       <Paper 

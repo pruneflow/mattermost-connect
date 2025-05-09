@@ -112,10 +112,10 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
           console.debug(`Parent message has reply_count=${parentMessage.reply_count}`);
         }
         
-        // Exclude the parent message from thread messages
-        const threadMessages = messages.filter(
-          message => message.id !== rootId
-        );
+        // Exclude the parent message from thread messages and sort by creation date
+        const threadMessages = messages
+          .filter(message => message.id !== rootId)
+          .sort((a, b) => a.create_at - b.create_at); // Sort chronologically (oldest first)
         
         console.debug(`Thread messages count: ${threadMessages.length}`, {
           messagesCount: messages.length,
@@ -151,34 +151,75 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
       return response.data;
     },
     onSuccess: (newMessage) => {
-      // Update thread cache directly
+      console.debug(`Thread reply created successfully: ${newMessage.id}`);
+
+      // Update thread cache directly with better error handling
       queryClient.setQueryData(
         threadQueryKey,
         (oldData: any = { threadMessages: [] }) => {
-          // Check if message already exists to prevent duplicates
-          if (oldData.threadMessages && !oldData.threadMessages.some((m: any) => m.id === newMessage.id)) {
+          // Make sure oldData and oldData.threadMessages exist and are valid
+          if (!oldData) {
+            console.debug(`Thread cache not found, creating new cache entry`);
             return {
-              ...oldData,
-              threadMessages: [...(oldData.threadMessages || []), newMessage]
+              threadMessages: [newMessage],
+              parentMessage: null // Will be fetched later if needed
             };
           }
+
+          // Ensure threadMessages is an array
+          const threadMessages = Array.isArray(oldData.threadMessages)
+            ? oldData.threadMessages
+            : [];
+
+          // Check if message already exists to prevent duplicates
+          const messageExists = threadMessages.some((m: any) => m.id === newMessage.id);
+
+          if (!messageExists) {
+            console.debug(`Adding new message ${newMessage.id} to thread cache`);
+            return {
+              ...oldData,
+              threadMessages: [...threadMessages, newMessage]
+                .sort((a, b) => a.create_at - b.create_at) // Sort chronologically (oldest first)
+            };
+          }
+
+          console.debug(`Message ${newMessage.id} already exists in thread cache`);
           return oldData;
         }
       );
 
       // Also update the parent message's reply count in the main message list
       if (channelId && rootId) {
-        queryClient.setQueryData<Message[]>(
-          messageKeys.list(channelId),
-          (oldMessages = []) => {
-            if (!oldMessages) return [];
+        try {
+          console.debug(`Updating reply count for parent message ${rootId} in channel ${channelId}`);
 
-            // Find the parent message in the list
-            return oldMessages.map(msg => {
-              // If this is the parent message, update its reply count
-              if (msg.id === rootId) {
+          // First verify the current cache state
+          const currentMessages = queryClient.getQueryData<Message[]>(messageKeys.list(channelId));
+          const hasValidCache = Array.isArray(currentMessages);
+
+          if (hasValidCache) {
+            // If we have valid cache, update it
+            queryClient.setQueryData<Message[]>(
+              messageKeys.list(channelId),
+              (oldMessages = []) => {
+                if (!Array.isArray(oldMessages) || oldMessages.length === 0) {
+                  console.debug(`No valid messages cache to update for channel ${channelId}`);
+                  return [];
+                }
+
+                // Find the parent message in the list
+                const parentIndex = oldMessages.findIndex(msg => msg.id === rootId);
+
+                if (parentIndex === -1) {
+                  console.debug(`Parent message ${rootId} not found in channel messages cache`);
+                  return oldMessages; // Parent not found, don't change anything
+                }
+
+                // Create a new array with the updated message
+                const updatedMessages = [...oldMessages];
+
                 // Clone the message to avoid mutating the cache directly
-                const updatedMsg = { ...msg };
+                const updatedMsg = { ...updatedMessages[parentIndex] };
 
                 // Update or initialize reply_count
                 // @ts-ignore - We're adding a dynamic property
@@ -188,12 +229,22 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
 
                 console.debug(`Updated parent message reply_count to ${updatedMsg.reply_count}`);
 
-                return updatedMsg;
+                // Replace the old message with the updated one
+                updatedMessages[parentIndex] = updatedMsg;
+
+                return updatedMessages;
               }
-              return msg;
+            );
+          } else {
+            console.debug(`No messages cache exists yet for channel ${channelId}`);
+            // Force a refetch of the channel messages to get updated thread counts
+            queryClient.invalidateQueries({
+              queryKey: messageKeys.list(channelId)
             });
           }
-        );
+        } catch (error) {
+          console.error(`Error updating parent message reply count:`, error);
+        }
       }
     }
   });
@@ -208,7 +259,8 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
     hasMore,
     createReply: createReplyMutation.mutateAsync,
     isReplying: createReplyMutation.isPending,
-    refetch: threadQuery.refetch
+    refetch: threadQuery.refetch,
+    threadKey: threadQueryKey  // Expose the query key for external cache manipulation
   };
 }
 
@@ -508,8 +560,8 @@ export function useMessages(channelId: string | undefined, params: MessageParams
         queryClient.setQueryData<Message[]>(
           messageKeys.thread(newMessage.root_id),
           (oldMessages = []) => {
-            // First check if we already have this message in the cache
-            if (!oldMessages.some(msg => msg.id === newMessage.id)) {
+            // First check if oldMessages is an array and that we don't already have this message
+            if (Array.isArray(oldMessages) && !oldMessages.some(msg => msg.id === newMessage.id)) {
               // Get the parent message from the existing data if available
               const parentMsg = (oldMessages as any).parentMessage;
 
@@ -527,7 +579,7 @@ export function useMessages(channelId: string | undefined, params: MessageParams
 
               return updatedMessages;
             }
-            return oldMessages;
+            return oldMessages || [];
           }
         );
 
