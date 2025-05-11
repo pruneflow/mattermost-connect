@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { Box, CssBaseline, ThemeProvider, createTheme, Button, Container, Paper, Typography, TextField, CircularProgress } from '@mui/material';
 import { MattermostProvider, useAuth } from '../../../src-simplify';
-import { MattermostChat } from '../../../src-simplify/components/MattermostChat';
-import UserAvatar from '../../../src-simplify/components/UserAvatar';
-import MessageContainer from '../../../src-simplify/components/MessageContainer';
+import { MattermostChat, UserAvatar, MessageContainer } from '../../../src-simplify/components';
 
 // Create theme
 const theme = createTheme({
