@@ -4,3 +4,5 @@ export * from './useChannelUtils';
 export * from './useMessages';
 export * from './useUsers';
 export * from './useWebSocket';
+export * from './useUserStatus';
+export * from './useMessageReactions';

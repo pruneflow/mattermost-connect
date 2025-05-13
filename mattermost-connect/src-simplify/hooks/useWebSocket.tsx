@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, createContext, useContext } from 'react';
+import { useEffect, useState, useCallback, useRef, createContext, useContext, useMemo } from 'react';
 import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -18,6 +18,8 @@ interface WebSocketContextValue {
     channel_id: string;
     timestamp: number;
   }>;
+  // Ajout des statuts des utilisateurs
+  userStatuses: Record<string, string>;
   sendTypingEvent: (channelId: string) => void;
   connect: () => void;
   disconnect: () => void;
@@ -43,37 +45,409 @@ const parseEventPost = (event: WebSocketEvent) => {
 
 // Singleton privé pour stocker l'instance WebSocket partagée et son état
 // Ce pattern de module nous permet de maintenir un état partagé sans exposer les détails d'implémentation
-const WebSocketSingleton = (() => {
+export const WebSocketSingleton = (() => {
   // Instance WebSocket et état
   let wsInstance: WebSocket | null = null;
+  
+  // Tableau global des événements de frappe
   let wsTypingEvents: Array<{
     username: string;
     channel_id: string;
     timestamp: number;
   }> = [];
+  
+  // Nouvelle structure : événements de frappe organisés par canal
+  // Clé : ID du canal, Valeur : Tableau des événements pour ce canal
+  let wsTypingEventsByChannel: Record<string, Array<{
+    username: string;
+    channel_id: string;
+    timestamp: number;
+  }>> = {};
+  
+  // Statuts des utilisateurs centralisés
+  let wsUserStatuses: Record<string, string> = {};
+  
+  // Suivi des utilisateurs dont les statuts ont été initialisés via API
+  let wsUserStatusesInitialized = new Set<string>();
+  
+  // Suivi des utilisateurs à surveiller pour les statuts
+  let wsUserStatusesToWatch = new Set<string>();
+  
+  // Timer pour le pull périodique des statuts
+  let wsStatusPullTimer: NodeJS.Timeout | null = null;
+  
+  // Stockage des réactions aux messages
+  // Clé : ID du message, Valeur : Tableau des réactions pour ce message
+  let wsMessageReactions: Record<string, Array<{
+    user_id: string;
+    emoji_name: string;
+    post_id: string;
+    create_at: number;
+  }>> = {};
+  
   let wsIsConnected = false;
   let wsIsConnecting = false;
   let wsError: Error | null = null;
   
-  // Abonnés à l'état WebSocket
+  // Abonnements par canal pour les événements de frappe
+  // Clé : ID du canal, Valeur : Ensemble des fonctions callback pour ce canal
+  const channelSubscribers: Record<string, Set<() => void>> = {};
+  
+  // Abonnements par utilisateur pour les changements de statut
+  // Clé : ID de l'utilisateur, Valeur : Ensemble des fonctions callback pour cet utilisateur
+  const userStatusSubscribers: Record<string, Set<() => void>> = {};
+  
+  // Abonnements par message pour les réactions
+  // Clé : ID du message, Valeur : Ensemble des fonctions callback pour ce message
+  const messageReactionSubscribers: Record<string, Set<() => void>> = {};
+  
+  // Abonnés à l'état WebSocket global
   const subscribers = new Set<() => void>();
   
-  // Notifier tous les abonnés d'un changement d'état
+  // Notifier tous les abonnés d'un changement d'état global
   const notifySubscribers = () => {
     subscribers.forEach(callback => callback());
   };
   
-  // Mettre à jour les événements de saisie
+  // Notifier les abonnés d'un canal spécifique
+  const notifyChannelSubscribers = (channelId: string) => {
+    if (channelSubscribers[channelId]) {
+      channelSubscribers[channelId].forEach(callback => callback());
+    }
+  };
+  
+  // Notifier les abonnés d'un utilisateur spécifique
+  const notifyUserStatusSubscribers = (userId: string) => {
+    if (userStatusSubscribers[userId]) {
+      userStatusSubscribers[userId].forEach(callback => callback());
+    }
+  };
+  
+  // Notifier les abonnés d'un message spécifique (pour les réactions)
+  const notifyMessageReactionSubscribers = (postId: string) => {
+    if (messageReactionSubscribers[postId]) {
+      messageReactionSubscribers[postId].forEach(callback => callback());
+    }
+  };
+  
+  // Mettre à jour les événements de saisie avec organisation par canal
   const updateTypingEvents = (newEvents: typeof wsTypingEvents) => {
-    wsTypingEvents = newEvents;
+    // Vérifier si les événements ont réellement changé
+    const hasChanged = 
+      newEvents.length !== wsTypingEvents.length || 
+      JSON.stringify(newEvents) !== JSON.stringify(wsTypingEvents);
+    
+    // Mettre à jour seulement s'il y a un changement réel
+    if (hasChanged) {
+      // Mettre à jour le tableau global
+      wsTypingEvents = newEvents;
+      
+      // Réorganiser les événements par canal
+      const newEventsByChannel: Record<string, typeof wsTypingEvents> = {};
+      const affectedChannels = new Set<string>();
+      
+      // Grouper les événements par canal
+      newEvents.forEach(event => {
+        const channelId = event.channel_id;
+        if (!newEventsByChannel[channelId]) {
+          newEventsByChannel[channelId] = [];
+        }
+        newEventsByChannel[channelId].push(event);
+        affectedChannels.add(channelId);
+      });
+      
+      // Identifier les canaux dont les événements ont changé
+      for (const channelId of Object.keys(wsTypingEventsByChannel)) {
+        if (!newEventsByChannel[channelId] || 
+            JSON.stringify(newEventsByChannel[channelId]) !== JSON.stringify(wsTypingEventsByChannel[channelId])) {
+          affectedChannels.add(channelId);
+        }
+      }
+      
+      // Mettre à jour la structure par canal
+      wsTypingEventsByChannel = newEventsByChannel;
+      
+      // Notifier les abonnés des canaux affectés uniquement
+      affectedChannels.forEach(channelId => {
+        notifyChannelSubscribers(channelId);
+      });
+      
+      // Notifier aussi les abonnés globaux
+      notifySubscribers();
+    }
+  };
+  
+  // Mettre à jour les statuts des utilisateurs
+  const updateUserStatus = (userId: string, status: string) => {
+    // N'envoyer des notifications que si le statut a réellement changé
+    if (wsUserStatuses[userId] !== status) {
+      wsUserStatuses = { ...wsUserStatuses, [userId]: status };
+      
+      // Notifier uniquement les abonnés de cet utilisateur spécifique
+      notifyUserStatusSubscribers(userId);
+      
+      // Notifier aussi les abonnés globaux
+      notifySubscribers();
+    }
+  };
+  
+  // Récupérer tous les statuts des utilisateurs
+  const getUserStatuses = () => wsUserStatuses;
+  
+  // Récupérer le statut d'un utilisateur spécifique
+  const getUserStatus = (userId: string) => wsUserStatuses[userId] || 'offline';
+  
+  // Initialiser le statut d'un utilisateur via API directe
+  const initializeUserStatus = async (userId: string, serverUrl: string, token: string) => {
+    // Vérifier si l'initialisation a déjà été faite
+    if (wsUserStatusesInitialized.has(userId) || !userId || !serverUrl || !token) {
+      return;
+    }
+    
+    try {
+      console.log(`Initializing status for user ${userId} via direct API call`);
+      
+      // Construire l'URL pour l'API de statut
+      const statusUrl = `${serverUrl}/api/v4/users/${userId}/status`;
+      
+      // Faire l'appel API
+      const response = await fetch(statusUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch status: ${response.status} ${response.statusText}`);
+      }
+      
+      // Extraire les données
+      const data = await response.json();
+      
+      // Mettre à jour le statut si la réponse contient un statut valide
+      if (data && data.status) {
+        console.log(`Status API response for ${userId}: ${data.status}`);
+        updateUserStatus(userId, data.status);
+        
+        // Marquer comme initialisé
+        wsUserStatusesInitialized.add(userId);
+      }
+    } catch (error) {
+      console.error(`Error fetching user status for ${userId}:`, error);
+    }
+  };
+  
+  // Vérifier si le statut a été initialisé
+  const isUserStatusInitialized = (userId: string) => wsUserStatusesInitialized.has(userId);
+  
+  // Ajouter un utilisateur à la liste de surveillance des statuts
+  const addUserToStatusWatch = (userId: string) => {
+    if (userId && !wsUserStatusesToWatch.has(userId)) {
+      wsUserStatusesToWatch.add(userId);
+      // Log uniquement pour le debug avancé
+      if (wsUserStatusesToWatch.size % 5 === 0) {
+        console.log(`Status watch list update: ${wsUserStatusesToWatch.size} users being monitored`);
+      }
+    }
+  };
+  
+  // Supprimer un utilisateur de la liste de surveillance des statuts
+  const removeUserFromStatusWatch = (userId: string) => {
+    if (userId && wsUserStatusesToWatch.has(userId)) {
+      wsUserStatusesToWatch.delete(userId);
+      // Log uniquement pour le debug avancé ou en cas de vidage complet
+      if (wsUserStatusesToWatch.size === 0 || wsUserStatusesToWatch.size % 5 === 0) {
+        console.log(`Status watch list update: ${wsUserStatusesToWatch.size} users being monitored`);
+      }
+    }
+  };
+  
+  // Récupérer tous les utilisateurs actuellement surveillés
+  const getStatusWatchList = () => Array.from(wsUserStatusesToWatch);
+  
+  // Timestamp du dernier pull pour éviter les requêtes trop fréquentes
+  let lastStatusPullTimestamp = 0;
+  
+  // Envoyer une requête WebSocket pour obtenir les statuts des utilisateurs
+  const requestStatusUpdates = (ws: WebSocket) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    
+    // Obtenir la liste des utilisateurs à surveiller
+    const userIds = getStatusWatchList();
+    
+    // Ne pas envoyer de requête si la liste est vide
+    if (userIds.length === 0) return;
+    
+    // Limiter la fréquence des requêtes (pas plus d'une toutes les 5 secondes)
+    const now = Date.now();
+    if (now - lastStatusPullTimestamp < 5000) {
+      console.log('Skipping status update request - too soon since last request');
+      return;
+    }
+    
+    // Mettre à jour le timestamp
+    lastStatusPullTimestamp = now;
+    
+    // Log simplifié
+    console.log(`Requesting status updates for ${userIds.length} users`);
+    
+    // Préparer la requête WebSocket get_statuses
+    const getStatusesMessage = {
+      action: "get_statuses",
+      seq: now, // Identifiant unique basé sur le timestamp
+      data: { user_ids: userIds }
+    };
+    
+    try {
+      // Envoyer la requête
+      ws.send(JSON.stringify(getStatusesMessage));
+    } catch (error) {
+      console.error('Error sending status update request:', error);
+    }
+  };
+  
+  // Démarrer le timer de pull périodique des statuts
+  const startStatusPullTimer = (ws: WebSocket) => {
+    // Annuler le timer existant s'il y en a un
+    stopStatusPullTimer();
+    
+    // Créer un nouveau timer qui s'exécute toutes les 60 secondes
+    wsStatusPullTimer = setInterval(() => {
+      requestStatusUpdates(ws);
+    }, 60000); // 60 secondes
+    
+    console.log('Status pull system initialized (60s interval)');
+  };
+  
+  // Arrêter le timer de pull périodique
+  const stopStatusPullTimer = () => {
+    if (wsStatusPullTimer) {
+      clearInterval(wsStatusPullTimer);
+      wsStatusPullTimer = null;
+    }
+  };
+  
+  // Mettre à jour les réactions à un message
+  const updateMessageReactions = (postId: string, reaction: {
+    user_id: string;
+    emoji_name: string;
+    post_id: string;
+    create_at: number;
+  }, isAdd: boolean) => {
+    // Créer une nouvelle liste de réactions pour ce message
+    let currentReactions = wsMessageReactions[postId] || [];
+    
+    if (isAdd) {
+      // Ajouter la réaction si elle n'existe pas déjà
+      const exists = currentReactions.some(r => 
+        r.user_id === reaction.user_id && r.emoji_name === reaction.emoji_name
+      );
+      
+      if (!exists) {
+        currentReactions = [...currentReactions, reaction];
+      }
+    } else {
+      // Supprimer la réaction
+      currentReactions = currentReactions.filter(r => 
+        !(r.user_id === reaction.user_id && r.emoji_name === reaction.emoji_name)
+      );
+    }
+    
+    // Mettre à jour le stockage
+    if (currentReactions.length > 0) {
+      wsMessageReactions = { ...wsMessageReactions, [postId]: currentReactions };
+    } else {
+      // Si plus de réactions, supprimer l'entrée
+      const { [postId]: _, ...rest } = wsMessageReactions;
+      wsMessageReactions = rest;
+    }
+    
+    // Notifier les abonnés de ce message
+    notifyMessageReactionSubscribers(postId);
+    
+    // Notifier aussi les abonnés globaux
     notifySubscribers();
   };
   
-  // S'abonner aux changements d'état
+  // Récupérer les réactions d'un message spécifique
+  const getMessageReactions = (postId: string) => wsMessageReactions[postId] || [];
+  
+  // S'abonner aux changements d'état global
   const subscribe = (callback: () => void) => {
     subscribers.add(callback);
     return () => {
       subscribers.delete(callback);
+    };
+  };
+  
+  // S'abonner aux changements d'état pour un canal spécifique
+  const subscribeToChannel = (channelId: string, callback: () => void) => {
+    // Créer l'ensemble de subscribers pour ce canal s'il n'existe pas
+    if (!channelSubscribers[channelId]) {
+      channelSubscribers[channelId] = new Set();
+    }
+    
+    // Ajouter le callback
+    channelSubscribers[channelId].add(callback);
+    
+    // Retourner une fonction de nettoyage
+    return () => {
+      if (channelSubscribers[channelId]) {
+        channelSubscribers[channelId].delete(callback);
+        
+        // Nettoyer l'ensemble si vide
+        if (channelSubscribers[channelId].size === 0) {
+          delete channelSubscribers[channelId];
+        }
+      }
+    };
+  };
+  
+  // S'abonner aux changements d'état pour un utilisateur spécifique
+  const subscribeToUserStatus = (userId: string, callback: () => void) => {
+    // Créer l'ensemble de subscribers pour cet utilisateur s'il n'existe pas
+    if (!userStatusSubscribers[userId]) {
+      userStatusSubscribers[userId] = new Set();
+    }
+    
+    // Ajouter le callback
+    userStatusSubscribers[userId].add(callback);
+    
+    // Retourner une fonction de nettoyage
+    return () => {
+      if (userStatusSubscribers[userId]) {
+        userStatusSubscribers[userId].delete(callback);
+        
+        // Nettoyer l'ensemble si vide
+        if (userStatusSubscribers[userId].size === 0) {
+          delete userStatusSubscribers[userId];
+        }
+      }
+    };
+  };
+  
+  // S'abonner aux changements des réactions pour un message spécifique
+  const subscribeToMessageReactions = (postId: string, callback: () => void) => {
+    // Créer l'ensemble de subscribers pour ce message s'il n'existe pas
+    if (!messageReactionSubscribers[postId]) {
+      messageReactionSubscribers[postId] = new Set();
+    }
+    
+    // Ajouter le callback
+    messageReactionSubscribers[postId].add(callback);
+    
+    // Retourner une fonction de nettoyage
+    return () => {
+      if (messageReactionSubscribers[postId]) {
+        messageReactionSubscribers[postId].delete(callback);
+        
+        // Nettoyer l'ensemble si vide
+        if (messageReactionSubscribers[postId].size === 0) {
+          delete messageReactionSubscribers[postId];
+        }
+      }
     };
   };
   
@@ -85,8 +459,31 @@ const WebSocketSingleton = (() => {
       notifySubscribers();
     },
     
+    // API globale pour les événements de frappe
     getTypingEvents: () => wsTypingEvents,
     updateTypingEvents,
+    
+    // API pour les événements par canal
+    getTypingEventsForChannel: (channelId: string) => wsTypingEventsByChannel[channelId] || [],
+    
+    // API pour les statuts utilisateur
+    getUserStatuses,
+    getUserStatus,
+    updateUserStatus,
+    initializeUserStatus,
+    isUserStatusInitialized,
+    
+    // API pour la gestion des statuts par pull périodique
+    addUserToStatusWatch,
+    removeUserFromStatusWatch,
+    getStatusWatchList,
+    requestStatusUpdates,
+    startStatusPullTimer,
+    stopStatusPullTimer,
+    
+    // API pour les réactions aux messages
+    getMessageReactions,
+    updateMessageReactions,
     
     getIsConnected: () => wsIsConnected,
     setIsConnected: (value: boolean) => {
@@ -106,7 +503,11 @@ const WebSocketSingleton = (() => {
       notifySubscribers();
     },
     
-    subscribe
+    // Abonnements
+    subscribe,
+    subscribeToChannel,
+    subscribeToUserStatus,
+    subscribeToMessageReactions
   };
 })();
 
@@ -142,6 +543,7 @@ export function useWebSocket() {
   
   // États locaux synchronisés avec le singleton
   const typingEvents = WebSocketSingleton.getTypingEvents();
+  const userStatuses = WebSocketSingleton.getUserStatuses();
   const isConnected = WebSocketSingleton.getIsConnected();
   const isConnecting = WebSocketSingleton.getIsConnecting();
   const error = WebSocketSingleton.getError();
@@ -205,6 +607,17 @@ export function useWebSocket() {
         
         ws.send(JSON.stringify(authMessage));
         console.log('WebSocket authentication sent');
+        
+        // Délai pour s'assurer que l'authentification est traitée
+        setTimeout(() => {
+          // Démarrer le timer de pull périodique des statuts
+          WebSocketSingleton.startStatusPullTimer(ws);
+          
+          // Effectuer une requête immédiate des statuts si nous avons des utilisateurs à surveiller
+          if (WebSocketSingleton.getStatusWatchList().length > 0) {
+            WebSocketSingleton.requestStatusUpdates(ws);
+          }
+        }, 2000);
       };
       
       // Track intentional disconnections - use the global ref
@@ -257,7 +670,9 @@ export function useWebSocket() {
       // Handle messages
       ws.onmessage = (event) => {
         try {
+          console.log('📨 Raw WebSocket message received');
           const data = JSON.parse(event.data);
+          console.log('📩 Parsed WebSocket message:', data);
           handleWebSocketEvent(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -276,6 +691,9 @@ export function useWebSocket() {
   const disconnect = useCallback(() => {
     // Mark this disconnection as intentional to prevent auto-reconnect
     intentionalDisconnectRef.current = true;
+    
+    // Arrêter le timer de pull périodique des statuts
+    WebSocketSingleton.stopStatusPullTimer();
     
     if (wsRef.current) {
       wsRef.current.close(1000, 'Normal closure, intentional disconnect'); // Normal closure
@@ -320,11 +738,8 @@ export function useWebSocket() {
       // Filtrer les événements périmés
       const filtered = currentEvents.filter(event => now - event.timestamp < 10000);
       
-      // Ne mettre à jour que si quelque chose a changé
-      if (filtered.length !== currentEvents.length) {
-        WebSocketSingleton.updateTypingEvents(filtered);
-        console.log(`Cleaned up typing events. Now have ${filtered.length} active events.`);
-      }
+      // Utiliser updateTypingEvents qui vérifiera lui-même si une mise à jour est nécessaire
+      WebSocketSingleton.updateTypingEvents(filtered);
     }, 1000);
     
     return () => clearInterval(interval);
@@ -384,15 +799,30 @@ export function useWebSocket() {
     // Statut utilisateur
     status_change: {
       handle: (event, queryClient) => {
-        console.log('Handling status_change event:', event);
         const userId = event.data?.user_id;
         const status = event.data?.status;
+        
         if (userId && status) {
+          // Log uniquement si le statut a changé
+          const oldStatus = WebSocketSingleton.getUserStatus(userId);
+          if (oldStatus !== status) {
+            console.log(`Status change from event: user ${userId.slice(0, 6)}... => ${status}`);
+          }
+          
+          // Mise à jour centralisée dans le singleton
+          WebSocketSingleton.updateUserStatus(userId, status);
+          
+          // Mettre également à jour le cache React Query pour cohérence
           queryClient.setQueryData(
             userKeys.detail(userId),
             (oldData: any) => oldData ? { ...oldData, status } : oldData
           );
-          queryClient.invalidateQueries({ queryKey: userKeys.detail(userId) });
+          
+          // Mise à jour du cache userKeys.status
+          queryClient.setQueryData(
+            userKeys.status(userId),
+            status
+          );
         }
       }
     },
@@ -439,16 +869,6 @@ export function useWebSocket() {
           
           // Mettre à jour le singleton
           WebSocketSingleton.updateTypingEvents(updatedEvents);
-          
-          // Log de débogage
-          console.log(`Typing event processed: user ${username} is typing in channel ${channelId}`);
-          console.log(`Total typing events: ${updatedEvents.length}`);
-          
-          // Invalider les requêtes pour forcer un rafraîchissement
-          queryClient.invalidateQueries({ 
-            queryKey: ['typing', channelId],
-            exact: true
-          });
         } catch (error) {
           console.error('Error processing typing event:', error);
         }
@@ -459,18 +879,75 @@ export function useWebSocket() {
     reaction_added: {
       handle: (event, queryClient) => {
         console.log('Handling reaction_added event:', event);
-        const post = parseEventPost(event);
-        if (post?.channel_id) {
-          queryClient.invalidateQueries({ queryKey: messageKeys.list(post.channel_id) });
-          if (post.root_id) {
-            queryClient.invalidateQueries({ queryKey: messageKeys.thread(post.root_id) });
+        
+        try {
+          // Les données de réaction sont dans un JSON stringifié dans event.data.reaction
+          const reactionData = event.data?.reaction 
+            ? JSON.parse(event.data.reaction)
+            : null;
+            
+          if (reactionData) {
+            const { emoji_name, post_id, user_id, create_at } = reactionData;
+            
+            if (emoji_name && post_id && user_id) {
+              console.log(`Processing reaction_added: ${emoji_name} by ${user_id} on ${post_id}`);
+              
+              // Mettre à jour le stockage central via le singleton
+              WebSocketSingleton.updateMessageReactions(post_id, {
+                emoji_name,
+                post_id,
+                user_id,
+                create_at: create_at || Date.now()
+              }, true); // true = ajouter
+            }
           }
+          
+          // Maintenir aussi l'invalidation du cache pour compatibilité
+          const channelId = event.broadcast?.channel_id;
+          if (channelId) {
+            queryClient.invalidateQueries({ queryKey: messageKeys.list(channelId) });
+          }
+        } catch (error) {
+          console.error('Error processing reaction_added event:', error, event);
         }
       }
     },
     
     reaction_removed: {
-      handle: (event, queryClient) => eventHandlers.reaction_added.handle(event, queryClient)
+      handle: (event, queryClient) => {
+        console.log('Handling reaction_removed event:', event);
+        
+        try {
+          // Les données de réaction sont dans un JSON stringifié dans event.data.reaction
+          const reactionData = event.data?.reaction 
+            ? JSON.parse(event.data.reaction)
+            : null;
+            
+          if (reactionData) {
+            const { emoji_name, post_id, user_id, create_at } = reactionData;
+            
+            if (emoji_name && post_id && user_id) {
+              console.log(`Processing reaction_removed: ${emoji_name} by ${user_id} on ${post_id}`);
+              
+              // Mettre à jour le stockage central via le singleton
+              WebSocketSingleton.updateMessageReactions(post_id, {
+                emoji_name,
+                post_id,
+                user_id,
+                create_at: create_at || Date.now()
+              }, false); // false = supprimer
+            }
+          }
+          
+          // Maintenir aussi l'invalidation du cache pour compatibilité
+          const channelId = event.broadcast?.channel_id;
+          if (channelId) {
+            queryClient.invalidateQueries({ queryKey: messageKeys.list(channelId) });
+          }
+        } catch (error) {
+          console.error('Error processing reaction_removed event:', error, event);
+        }
+      }
     },
     
     // Membres d'équipe
@@ -552,17 +1029,79 @@ export function useWebSocket() {
           );
         }
       }
+    },
+    
+    // Test pour les statuts (potentiellement avec des noms différents)
+    user_status_change: {
+      handle: (event, queryClient) => {
+        console.log('🟢 TROUVÉ: user_status_change event:', event);
+        // On essaie avec un nom d'événement alternatif
+      }
+    },
+    
+    user_updated: {
+      handle: (event, queryClient) => {
+        console.log('🟢 TROUVÉ: user_updated event (peut contenir des statuts):', event);
+        // Les mises à jour utilisateur peuvent inclure des changements de statut
+      }
     }
   };
 
   // Handle WebSocket events and update cache
   const handleWebSocketEvent = useCallback((event: WebSocketEvent) => {
-    if (!event || !event.event) return;
+    if (!event) return;
     
-    // Seuls les logs essentiels
-    if (event.event === 'typing') {
-      // Logs spécifiques pour le debug typing
-      console.log(`WebSocket typing event received: user=${event.data?.user_id}, channel=${event.broadcast?.channel_id}`);
+    // Gérer les réponses aux commandes (comme get_statuses)
+    if ((event.status === "OK" || event.seq_reply) && !event.event) {
+      // Vérifier si c'est une réponse à get_statuses avec des données
+      if (event.data && typeof event.data === 'object') {
+        // Traiter les statuts reçus
+        try {
+          const statusData = event.data;
+          const statusCount = Object.keys(statusData).length;
+          
+          // Log condensé pour éviter de polluer la console
+          if (statusCount > 0) {
+            console.log(`Received ${statusCount} user status updates`);
+          }
+          
+          // Parcourir tous les statuts reçus
+          Object.entries(statusData).forEach(([userId, status]) => {
+            if (typeof status === 'string') {
+              // Log uniquement si le statut a changé
+              const oldStatus = WebSocketSingleton.getUserStatus(userId);
+              if (oldStatus !== status) {
+                console.log(`Status change: user ${userId.slice(0, 6)}... => ${status}`);
+              }
+              
+              // Utiliser la référence directe au singleton pour mettre à jour le statut
+              WebSocketSingleton.updateUserStatus(userId, status);
+            }
+          });
+        } catch (error) {
+          console.error('Error processing status response:', error);
+        }
+      }
+      
+      return; // Ne pas continuer le traitement pour les réponses aux commandes
+    }
+    
+    // Traitement normal des événements
+    if (!event.event) return;
+    
+    // Log limité aux événements importants
+    if (event.event === 'status_change' || 
+        event.event === 'typing' || 
+        event.event === 'reaction_added' || 
+        event.event === 'reaction_removed') {
+      console.log(`WebSocket ${event.event} event received`);
+    }
+    
+    // Détecter les nouveaux types d'événements liés aux statuts pour le debug
+    if (event.event && 
+        (event.event.includes('status') || event.event.includes('presence')) && 
+        event.event !== 'status_change') {
+      console.log(`Potential new status event type detected: ${event.event}`);
     }
     
     const handler = eventHandlers[event.event];
@@ -573,6 +1112,8 @@ export function useWebSocket() {
       } catch (error) {
         console.error(`Error handling WebSocket event ${event.event}:`, error);
       }
+    } else {
+      console.log(`No handler defined for event type: ${event.event}`);
     }
   }, [queryClient]);
   
@@ -642,6 +1183,9 @@ export function useWebSocket() {
     typingEvents,
     sendTypingEvent,
     
+    // User statuses
+    userStatuses,
+    
     // Actions
     connect,
     disconnect,
@@ -663,6 +1207,7 @@ export function useWebSocketContext() {
   // pour la compatibilité avec les composants existants
   return {
     typingEvents: [],
+    userStatuses: {},
     sendTypingEvent: () => {},
     isConnected: false,
     isConnecting: false,

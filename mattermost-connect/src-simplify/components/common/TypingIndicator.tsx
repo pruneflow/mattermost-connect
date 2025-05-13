@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 import { useWebSocket } from '../../hooks/useWebSocket';
 
@@ -14,7 +14,6 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
   
   // WebSocket hook (utilisation de l'instance partagée en singleton)
   const { typingEvents, sendTypingEvent } = useWebSocket();
-  console.debug("TypingIndicator: typingEvents reçus", typingEvents, "pour le canal", channelId)
   
   // Update typing state based on props
   useEffect(() => {
@@ -40,10 +39,10 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
     }
   }, [typingUsers]);
   
-  // Update typing state based on WebSocket events
-  useEffect(() => {
+  // Mémoiser le filtrage des événements de saisie pour ce canal
+  const uniqueUsernames = useMemo(() => {
     if (!typingEvents || !channelId) {
-      return;
+      return [];
     }
     
     // Convert channelId to string to ensure consistent comparison
@@ -52,29 +51,42 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
     // Filter typing events for this channel
     const channelTypingEvents = typingEvents.filter(event => {
       const eventChannelId = String(event.channel_id);
-      const matches = eventChannelId === channelIdStr;
-      return matches;
+      return eventChannelId === channelIdStr;
     });
     
     // Get unique usernames
-    const uniqueUsernames = Array.from(
+    return Array.from(
       new Set(channelTypingEvents.map(event => event.username))
     );
-    
-    if (uniqueUsernames.length > 0) {
-      setIsVisible(true);
-      
-      if (uniqueUsernames.length === 1) {
-        setTypingMessage(`${uniqueUsernames[0]} is typing...`);
-      } else if (uniqueUsernames.length === 2) {
-        setTypingMessage(`${uniqueUsernames[0]} and ${uniqueUsernames[1]} are typing...`);
-      } else {
-        setTypingMessage('Several people are typing...');
-      }
-    } else {
-      setIsVisible(false);
-    }
   }, [typingEvents, channelId]);
+  
+  // Mettre à jour l'état de l'indicateur périodiquement plutôt qu'à chaque changement
+  useEffect(() => {
+    // Mettre à jour l'état seulement si nécessaire
+    const updateTypingStatus = () => {
+      if (uniqueUsernames.length > 0) {
+        setIsVisible(true);
+        
+        if (uniqueUsernames.length === 1) {
+          setTypingMessage(`${uniqueUsernames[0]} is typing...`);
+        } else if (uniqueUsernames.length === 2) {
+          setTypingMessage(`${uniqueUsernames[0]} and ${uniqueUsernames[1]} are typing...`);
+        } else {
+          setTypingMessage('Several people are typing...');
+        }
+      } else {
+        setIsVisible(false);
+      }
+    };
+    
+    // Exécuter immédiatement
+    updateTypingStatus();
+    
+    // Configurer un intervalle pour actualiser périodiquement, pas à chaque rendu
+    const interval = setInterval(updateTypingStatus, 1000);
+    
+    return () => clearInterval(interval);
+  }, [uniqueUsernames.length]);
   
   // Send typing event when user is typing in this channel
   const notifyTyping = () => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
-import { useWebSocket } from '../../hooks/useWebSocket';
+import { useTypingEventsForChannel } from '../../hooks/useTypingEventsForChannel';
 
 interface ChannelTypingIndicatorProps {
   channelId: string;
@@ -11,9 +11,13 @@ interface ChannelTypingIndicatorProps {
  * Indicateur de saisie compact pour être affiché dans la liste des canaux
  */
 export function ChannelTypingIndicator({ channelId, compact = true }: ChannelTypingIndicatorProps) {
-  // WebSocket hook pour récupérer les événements de saisie (utilisation du singleton partagé)
-  const { typingEvents } = useWebSocket();
-  console.debug("ChannelTypingIndicator: typingEvents reçus", typingEvents, "pour le canal", channelId);
+  // Hook spécialisé qui ne récupère et ne s'abonne qu'aux événements de ce canal spécifique
+  const { typingEvents } = useTypingEventsForChannel(channelId);
+  
+  // Log seulement quand il y a des événements (pour éviter les logs constants)
+  if (typingEvents.length > 0) {
+    console.debug("ChannelTypingIndicator: événements de frappe détectés pour le canal", channelId, typingEvents);
+  }
 
   // Animation pour l'indicateur de saisie
   const typingAnimation = {
@@ -25,24 +29,16 @@ export function ChannelTypingIndicator({ channelId, compact = true }: ChannelTyp
     animation: 'blink 1s infinite ease-in-out',
   };
 
-  // Convertir channelId en string pour assurer une comparaison cohérente
-  const channelIdStr = String(channelId);
-
-  // Filtrer les événements de saisie pour ce canal
-  const channelTypingEvents = typingEvents?.filter(event => {
-    const eventChannelId = String(event.channel_id);
-    return eventChannelId === channelIdStr;
-  }) || [];
+  // Récupérer les noms d'utilisateurs uniques qui tapent
+  // Plus besoin de filtrer car le hook ne retourne déjà que les événements pour ce canal
+  const uniqueUsernames = Array.from(
+    new Set(typingEvents.map(event => event.username))
+  );
 
   // Si personne ne tape, ne rien afficher
-  if (channelTypingEvents.length === 0) {
+  if (uniqueUsernames.length === 0) {
     return null;
   }
-
-  // Récupérer les noms d'utilisateurs uniques qui tapent
-  const uniqueUsernames = Array.from(
-    new Set(channelTypingEvents.map(event => event.username))
-  );
 
   return (
     <Box 

@@ -153,16 +153,48 @@ export function useUser(userId: string | undefined) {
     enabled,
   });
 
-  // Fetch user status
+  // Fetch user status avec optimisation pour éviter les appels répétés
   const statusQuery = useQuery({
     queryKey: userKeys.status(userId || ''),
     queryFn: async () => {
+      console.log('🔎 Fetching initial status for user:', userId);
+      
+      // Vérifier d'abord si le statut est déjà dans le cache localStorage
+      try {
+        const cachedUsersStr = localStorage.getItem('mattermost_cached_users');
+        if (cachedUsersStr && userId) {
+          const cachedUsers = JSON.parse(cachedUsersStr);
+          if (cachedUsers[userId] && cachedUsers[userId].status) {
+            console.log('✅ Using cached status for user:', userId, '-', cachedUsers[userId].status);
+            return cachedUsers[userId].status;
+          }
+        }
+      } catch (error) {
+        console.error('Error reading status from cache:', error);
+      }
+      
+      // Si pas dans le cache, faire un appel API
       const response = await api.get<UserStatusObject>(`users/${userId}/status`);
-      return response.data.status;
+      const status = response.data.status;
+      
+      // Mettre à jour le cache
+      try {
+        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
+        const cachedUsers = JSON.parse(cachedUsersStr);
+        if (cachedUsers[userId || '']) {
+          cachedUsers[userId || ''].status = status;
+          localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
+          console.log('✅ Cached initial status for user:', userId, '-', status);
+        }
+      } catch (error) {
+        console.error('Error updating status in cache:', error);
+      }
+      
+      return status;
     },
     enabled,
-    // Refresh status every 30 seconds
-    refetchInterval: 30000,
+    // Ne pas rafraîchir automatiquement - les mises à jour se feront via WebSocket
+    // refetchInterval: 30000,
   });
 
   // Update user mutation

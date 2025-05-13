@@ -12,7 +12,8 @@ import {
   InputBase, 
   IconButton, 
   Collapse,
-  Paper
+  Paper,
+  Tooltip
 } from '@mui/material';
 import { 
   Search as SearchIcon, 
@@ -27,6 +28,7 @@ import {
 import { useChannels } from '../../hooks/useChannels';
 import { Channel } from '../../api/types';
 import ChannelTypingIndicator from '../common/ChannelTypingIndicator';
+import StatusIndicator from '../common/StatusIndicator';
 
 export interface ChannelListProps {
   teamId: string;
@@ -45,6 +47,9 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     isLoading,
     getDirectChannelInfo
   } = useChannels(teamId);
+  
+  // Status pour le tri des canaux directs
+  const statusOrder = { online: 0, away: 1, dnd: 2, offline: 3 };
 
   // Local UI state
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,31 +65,35 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     setSearchTerm(event.target.value);
   };
 
-  // Filtrer tous les canaux en fonction du terme de recherche
+  // Filtrer les canaux en fonction du terme de recherche
   const filteredChannels = useMemo(() => {
-    if (!searchTerm) {
-      // Pas de filtrage en dehors de la recherche, on utilise les listes déjà catégorisées
-      return {
-        publicChannels,
-        privateChannels,
-        directChannels,
-        groupChannels
-      };
-    }
-
-    // Filtrer les canaux par le terme de recherche
-    const filterBySearchTerm = (channel: Channel) =>
-      channel.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      channel.name.toLowerCase().includes(searchTerm.toLowerCase());
+    // Filtrer par terme de recherche si nécessaire
+    let filteredPublic = publicChannels;
+    let filteredPrivate = privateChannels;
+    let filteredDirect = directChannels;
+    let filteredGroup = groupChannels;
     
-    // Retourner les canaux filtrés par catégorie
+    if (searchTerm) {
+      // Fonction de filtrage par terme de recherche
+      const filterBySearchTerm = (channel: Channel) =>
+        channel.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        channel.name.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Appliquer le filtre
+      filteredPublic = publicChannels.filter(filterBySearchTerm);
+      filteredPrivate = privateChannels.filter(filterBySearchTerm);
+      filteredDirect = directChannels.filter(filterBySearchTerm);
+      filteredGroup = groupChannels.filter(filterBySearchTerm);
+    }
+    
+    // Retourner les canaux filtrés par catégorie (sans tri par statut)
     return {
-      publicChannels: publicChannels.filter(filterBySearchTerm),
-      privateChannels: privateChannels.filter(filterBySearchTerm),
-      directChannels: directChannels.filter(filterBySearchTerm),
-      groupChannels: groupChannels.filter(filterBySearchTerm)
+      publicChannels: filteredPublic,
+      privateChannels: filteredPrivate,
+      directChannels: filteredDirect,
+      groupChannels: filteredGroup
     };
-  }, [channels, publicChannels, privateChannels, directChannels, groupChannels, searchTerm]);
+  }, [publicChannels, privateChannels, directChannels, groupChannels, searchTerm]);
 
   // Handle channel selection
   const handleChannelClick = (channel: Channel) => {
@@ -105,17 +114,6 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     return channel.display_name || channel.name;
   };
 
-  // Get icon for channel type
-  const getChannelIcon = (channel: Channel) => {
-    switch (channel.type) {
-      case 'O': return <PublicIcon fontSize="small" />;
-      case 'P': return <LockIcon fontSize="small" />;
-      case 'D': return <PersonIcon fontSize="small" />;
-      case 'G': return <GroupIcon fontSize="small" />;
-      default: return <PublicIcon fontSize="small" />;
-    }
-  };
-
   // Fonction pour créer un en-tête de section
   const renderSectionHeader = (
     title: string, 
@@ -129,15 +127,19 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
       sx={{ 
         display: 'flex', 
         alignItems: 'center', 
-        p: 1, 
+        p: 1.2, 
         pl: 2, 
         cursor: 'pointer',
-        bgcolor: 'background.default',
+        bgcolor: theme => theme.palette.mode === 'light' 
+          ? 'rgba(0,0,0,0.03)' 
+          : 'rgba(0,0,0,0.2)',
         borderBottom: '1px solid',
         borderColor: 'divider',
         transition: 'background-color 0.2s',
         '&:hover': {
-          bgcolor: 'action.hover',
+          bgcolor: theme => theme.palette.mode === 'light' 
+            ? 'rgba(0,0,0,0.06)' 
+            : 'rgba(255,255,255,0.05)',
         }
       }}
     >
@@ -150,50 +152,82 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
           flexGrow: 1,
           fontSize: '0.8rem',
           textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          opacity: 0.9
+          letterSpacing: '0.8px',
+          opacity: 0.9,
+          color: theme => theme.palette.mode === 'light' 
+            ? theme.palette.primary.dark 
+            : theme.palette.primary.light
         }}
       >
         {title} ({count})
       </Typography>
-      {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+      {expanded ? <ExpandLessIcon fontSize="small" color="primary" /> : <ExpandMoreIcon fontSize="small" color="primary" />}
     </Box>
   );
 
   // Fonctions pour afficher les canaux d'une catégorie
-  const renderChannelItem = (channel: Channel) => (
-    <ListItem key={channel.id} disablePadding dense>
-      <ListItemButton
-        selected={selectedChannelId === channel.id}
-        onClick={() => handleChannelClick(channel)}
-        sx={{ 
-          py: 0.75,
-          borderRadius: 1,
-          mx: 0.5,
-          '&.Mui-selected': {
-            bgcolor: 'action.selected',
-            '&:hover': {
+  const renderChannelItem = (channel: Channel) => {
+    // Récupérer les infos spécifiques pour les canaux directs
+    const isDirectMsg = channel.type === 'D';
+    const directInfo = isDirectMsg ? getDirectChannelInfo(channel.id) : null;
+    const otherUserId = directInfo?.otherUserId;
+    
+    return (
+      <ListItem key={channel.id} disablePadding dense>
+        <ListItemButton
+          selected={selectedChannelId === channel.id}
+          onClick={() => handleChannelClick(channel)}
+          sx={{ 
+            py: 0.75,
+            borderRadius: 1,
+            mx: 0.5,
+            pl: isDirectMsg ? 1 : 2, // Moins de padding à gauche pour les DM pour l'indicateur de statut
+            '&.Mui-selected': {
               bgcolor: 'action.selected',
-            }
-          }
-        }}
-      >
-      
-        <ListItemText 
-          primary={getChannelDisplayName(channel)} 
-          slotProps={ {
-            primary: {
-              sx: {
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: '0.9rem'
-              }}}}
-        />
-        <ChannelTypingIndicator channelId={channel.id} />
-      </ListItemButton>
-    </ListItem>
-  );
+              '&:hover': {
+                bgcolor: 'action.selected',
+              }
+            },
+            // Ajout d'effet de survol amélioré
+            '&:hover': {
+              backgroundColor: theme => 
+                theme.palette.mode === 'light' 
+                  ? 'rgba(0, 0, 0, 0.04)' 
+                  : 'rgba(255, 255, 255, 0.08)'
+            },
+            transition: 'background-color 0.2s'
+          }}
+        >
+          {/* Indicateur de statut uniquement pour les messages directs */}
+          {isDirectMsg && otherUserId && (
+            <Box sx={{ mr: 1.5, display: 'flex', alignItems: 'center' }}>
+              <StatusIndicator userId={otherUserId} />
+            </Box>
+          )}
+          
+          <ListItemText 
+            primary={getChannelDisplayName(channel)} 
+            slotProps={{
+              primary: {
+                sx: {
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: '0.9rem',
+                  fontWeight: channel.unread_messages_count ? 600 : 400, // Mettre en gras si messages non lus
+                  color: theme => 
+                    channel.unread_messages_count 
+                      ? theme.palette.text.primary 
+                      : theme.palette.text.secondary
+                }
+              }
+            }}
+          />
+          <ChannelTypingIndicator channelId={channel.id} />
+        </ListItemButton>
+      </ListItem>
+    );
+  };
 
   return (
     <Paper 
@@ -201,22 +235,32 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
       sx={{ 
         width: '100%', 
         maxWidth: 360, 
-        bgcolor: 'background.paper',
+        bgcolor: theme => theme.palette.mode === 'light' 
+            ? 'rgba(255,255,255,0.9)' 
+            : 'rgba(30,35,40,0.9)',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        boxShadow: (theme) => theme.palette.mode === 'light' 
-          ? '0 0 10px rgba(0,0,0,0.05)' 
-          : 'none'
+        boxShadow: theme => theme.palette.mode === 'light' 
+          ? '0 4px 20px rgba(0,0,0,0.08)' 
+          : '0 4px 20px rgba(0,0,0,0.2)',
+        borderRadius: 2,
+        overflow: 'hidden',
+        border: theme => `1px solid ${theme.palette.mode === 'light' 
+          ? 'rgba(0,0,0,0.06)' 
+          : 'rgba(255,255,255,0.06)'}`
       }}
     >
       {/* Barre de recherche */}
       <Box 
         sx={{ 
-          p: 1, 
+          p: 1.2, 
           display: 'flex', 
           borderBottom: '1px solid',
-          borderColor: 'divider'
+          borderColor: 'divider',
+          bgcolor: theme => theme.palette.mode === 'light' 
+            ? 'rgba(0,0,0,0.02)'
+            : 'rgba(0,0,0,0.2)'
         }}
       >
         <InputBase
@@ -226,13 +270,28 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
           sx={{ 
             ml: 1, 
             flex: 1,
-            fontSize: '0.9rem'
+            fontSize: '0.9rem',
+            '& input': {
+              transition: 'all 0.2s',
+              '&:focus': {
+                color: 'primary.main'
+              }
+            }
           }}
           inputProps={{ 'aria-label': 'search channels' }}
         />
         <IconButton 
           size="small" 
-          sx={{ p: '8px' }} 
+          sx={{ 
+            p: '8px',
+            color: 'primary.main',
+            opacity: 0.7,
+            '&:hover': {
+              opacity: 1,
+              bgcolor: 'action.hover'
+            },
+            transition: 'all 0.2s'
+          }} 
           aria-label="search"
         >
           <SearchIcon fontSize="small" />
@@ -270,7 +329,7 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
               filteredChannels.publicChannels.length, 
               publicExpanded, 
               setPublicExpanded,
-              <PublicIcon fontSize="small" color="primary" />
+              <PublicIcon fontSize="small" sx={{ color: '#4caf50' }} />
             )}
             <Collapse in={publicExpanded}>
               <List dense disablePadding>
@@ -288,7 +347,7 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
               filteredChannels.privateChannels.length, 
               privateExpanded, 
               setPrivateExpanded,
-              <LockIcon fontSize="small" color="primary" />
+              <LockIcon fontSize="small" sx={{ color: '#ff9800' }} />
             )}
             <Collapse in={privateExpanded}>
               <List dense disablePadding>
@@ -306,7 +365,7 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
               filteredChannels.directChannels.length, 
               directExpanded, 
               setDirectExpanded,
-              <PersonIcon fontSize="small" color="primary" />
+              <PersonIcon fontSize="small" sx={{ color: '#2196f3' }} />
             )}
             <Collapse in={directExpanded}>
               <List dense disablePadding>
@@ -324,7 +383,7 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
               filteredChannels.groupChannels.length, 
               groupExpanded, 
               setGroupExpanded,
-              <GroupIcon fontSize="small" color="primary" />
+              <GroupIcon fontSize="small" sx={{ color: '#9c27b0' }} />
             )}
             <Collapse in={groupExpanded}>
               <List dense disablePadding>

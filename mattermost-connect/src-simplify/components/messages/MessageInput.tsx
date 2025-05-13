@@ -92,35 +92,42 @@ export const MessageInput = React.forwardRef(({
   // Handle text input change
   const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
-    
-    // Send typing event when user is typing
-    if (channelId && sendTypingEvent) {
-      sendTypingEvent(channelId);
-    }
   };
   
   // Debounce typing notifications to avoid spamming
   useEffect(() => {
     let typingTimer: NodeJS.Timeout;
+    let debounceTimer: NodeJS.Timeout;
+    
+    // Fonction pour envoyer l'événement de saisie avec debounce
+    const notifyTyping = () => {
+      if (sendTypingEvent && channelId) {
+        // Annuler le timer précédent
+        if (debounceTimer) clearTimeout(debounceTimer);
+        
+        // Créer un nouveau timer debounce pour limiter les événements
+        debounceTimer = setTimeout(() => {
+          sendTypingEvent(channelId);
+        }, 300); // Debounce de 300ms pour réduire les notifications
+      }
+    };
     
     if (message.trim().length > 0) {
-      // Send initial notification
-      if (sendTypingEvent) {
-        sendTypingEvent(channelId);
-      }
+      // Envoyer la notification avec debounce
+      notifyTyping();
       
-      // Set a timer to send another notification after 2.5 seconds
-      typingTimer = setTimeout(() => {
-        if (sendTypingEvent && message.trim().length > 0) {
-          sendTypingEvent(channelId);
+      // Configurer un intervalle pour envoyer périodiquement des événements
+      typingTimer = setInterval(() => {
+        if (message.trim().length > 0) {
+          notifyTyping();
         }
-      }, 2500);
+      }, 3000); // Réduire la fréquence des mises à jour
     }
     
     return () => {
-      if (typingTimer) {
-        clearTimeout(typingTimer);
-      }
+      // Nettoyer tous les timers
+      if (typingTimer) clearInterval(typingTimer);
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [message, channelId, sendTypingEvent]);
   

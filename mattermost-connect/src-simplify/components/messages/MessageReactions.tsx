@@ -22,6 +22,7 @@ import {
 } from '@mui/icons-material';
 import { useMessages } from '../../hooks/useMessages';
 import { useAuth } from '../../context/AuthContext';
+import { useMessageReactions } from '../../hooks';
 import {
   COMMON_REACTIONS,
   EMOJI_CATEGORIES,
@@ -34,16 +35,39 @@ import {
 export interface MessageReactionsProps {
   messageId: string;
   channelId: string;
-  reactions?: Record<string, string[]>; // emoji_name -> user_ids
+  reactions?: Record<string, string[]>; // emoji_name -> user_ids (conservé pour la compatibilité)
   compact?: boolean;
 }
 
 export function MessageReactions({
   messageId,
   channelId,
-  reactions = {},
+  reactions: propReactions = {},
   compact = false
 }: MessageReactionsProps) {
+  // Utiliser le hook optimisé pour récupérer les réactions en temps réel
+  // Passer channelId pour permettre l'initialisation depuis les données existantes
+  const { groupedReactions, reactions: hookReactions } = useMessageReactions(messageId, channelId);
+  
+  // Convertir les réactions du hook au format attendu par le composant existant
+  // Priorité aux réactions WebSocket, avec fallback sur les props
+  const reactions = React.useMemo(() => {
+    // Si pas de réactions du hook, utiliser celles des props
+    if (hookReactions.length === 0) {
+      return propReactions;
+    }
+    
+    // Convertir les réactions du hook (par utilisateur) au format attendu (par emoji)
+    // Format attendu: { emoji_name: [user_id1, user_id2, ...] }
+    const formattedReactions: Record<string, string[]> = {};
+    
+    // Pour chaque emoji_name, regrouper les user_ids
+    Object.entries(groupedReactions).forEach(([emojiName, reactionsArray]) => {
+      formattedReactions[emojiName] = reactionsArray.map(reaction => reaction.user_id);
+    });
+    
+    return formattedReactions;
+  }, [hookReactions, propReactions, groupedReactions]);
   // Auth context for current user ID
   const { user } = useAuth();
   const currentUserId = user?.id;
@@ -123,12 +147,8 @@ export function MessageReactions({
     return count > 99 ? '99+' : count.toString();
   };
 
-  // Debug reactions format
-  console.debug('Reactions data for message: ', messageId, reactions);
-  
   // Process and prepare reactions for display
   const processedReactions = processReactions(reactions);
-  console.debug('Processed reactions: ', processedReactions);
   
   // Prepare reactions for display
   const reactionItems = processedReactions
@@ -164,8 +184,6 @@ export function MessageReactions({
         reactionItems.map(({ name, emoji, count, userIds }) => {
           const displayEmoji = emoji || name;
           const hasReacted = currentUserId ? userIds.includes(currentUserId) : false;
-          
-          console.debug(`Rendering reaction: ${name} / ${displayEmoji} with count: ${count}`);
           
           return (
             <Tooltip
