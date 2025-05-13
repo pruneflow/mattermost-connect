@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -23,6 +23,109 @@ import {
 import { FileInfo } from '../../api/types';
 import { formatFileSize } from '../../utils/formatters';
 import { api } from '../../api/client';
+
+// Composant pour la prévisualisation d'image avec authentification
+interface AuthenticatedImagePreviewProps {
+  fileId: string;
+  fileName: string;
+  onError?: () => void;
+}
+
+function AuthenticatedImagePreview({ fileId, fileName, onError }: AuthenticatedImagePreviewProps) {
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const token = localStorage.getItem('mattermost_token');
+  
+  // Référence pour stocker l'URL de l'objet blob
+  const objectUrlRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    if (!fileId || !token) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    
+    // Nettoyage de l'URL précédente si elle existe
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    
+    const controller = new AbortController();
+    
+    const fetchImage = async () => {
+      try {
+        const response = await fetch(`${api.getBaseUrl()}/api/v4/files/${fileId}/preview`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          signal: controller.signal
+        });
+        
+        if (!response.ok) throw new Error(`Failed to load preview: ${response.status}`);
+        
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        setImageSrc(url);
+      } catch (error) {
+        // Ignorer les erreurs d'abort qui se produisent lors du nettoyage
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          console.log('Image fetch aborted');
+        } else {
+          console.error('Error loading image preview:', error);
+          if (onError) onError();
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchImage();
+    
+    return () => {
+      controller.abort();
+      // Ne pas nettoyer l'URL ici, elle sera nettoyée lors de la prochaine exécution ou du démontage
+    };
+  }, [fileId, token, onError]);
+  
+  // Effet de nettoyage séparé lors du démontage du composant
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, []);
+  
+  return imageSrc ? (
+    <Box
+      component="img"
+      src={imageSrc}
+      alt={fileName}
+      sx={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        borderRadius: 1,
+        boxShadow: '0 0 1px rgba(0,0,0,0.2)',
+      }}
+    />
+  ) : (
+    <Box sx={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      height: '100%', 
+      width: '100%' 
+    }}>
+      {loading ? <CircularProgress size={16} /> : <Box sx={{ fontSize: '0.75rem' }}>❌</Box>}
+    </Box>
+  );
+}
 
 export interface MessageAttachmentProps {
   fileIds: string[];
@@ -255,6 +358,7 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
           >
             {/* File icon/preview */}
             <Box
+              id={`file-preview-${file.id}`}
               sx={{
                 display: 'flex',
                 justifyContent: 'center',
@@ -268,22 +372,15 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
               }}
             >
               {isDisplayableImage(file.mime_type) ? (
-                <Box
-                  component="img"
-                  src={`${api.getBaseUrl()}/api/v4/files/${file.id}/preview`}
-                  alt={file.name}
-                  sx={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    borderRadius: 1,
-                    boxShadow: '0 0 1px rgba(0,0,0,0.2)',
-                  }}
-                  onError={(e) => {
-                    // If image preview fails, show generic icon
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    target.parentElement!.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%;">${getFileIcon(file.mime_type)}</div>`;
+                <AuthenticatedImagePreview 
+                  fileId={file.id} 
+                  fileName={file.name}
+                  onError={() => {
+                    // Au lieu de manipuler directement le DOM, 
+                    // nous pourrions utiliser un state, mais les modifications
+                    // DOM directes sont risquées en React
+                    console.log(`Failed to load preview for file: ${file.id}`);
+                    // Pas de manipulation DOM ici
                   }}
                 />
               ) : (

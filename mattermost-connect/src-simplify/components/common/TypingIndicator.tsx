@@ -12,8 +12,9 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
   const [isVisible, setIsVisible] = useState(false);
   const [typingMessage, setTypingMessage] = useState('');
   
-  // WebSocket hook
+  // WebSocket hook (utilisation de l'instance partagée en singleton)
   const { typingEvents, sendTypingEvent } = useWebSocket();
+  console.debug("TypingIndicator: typingEvents reçus", typingEvents, "pour le canal", channelId)
   
   // Update typing state based on props
   useEffect(() => {
@@ -41,12 +42,19 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
   
   // Update typing state based on WebSocket events
   useEffect(() => {
-    if (!typingEvents || !channelId) return;
+    if (!typingEvents || !channelId) {
+      return;
+    }
+    
+    // Convert channelId to string to ensure consistent comparison
+    const channelIdStr = String(channelId);
     
     // Filter typing events for this channel
-    const channelTypingEvents = typingEvents.filter(event => 
-      event.channel_id === channelId
-    );
+    const channelTypingEvents = typingEvents.filter(event => {
+      const eventChannelId = String(event.channel_id);
+      const matches = eventChannelId === channelIdStr;
+      return matches;
+    });
     
     // Get unique usernames
     const uniqueUsernames = Array.from(
@@ -63,19 +71,15 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
       } else {
         setTypingMessage('Several people are typing...');
       }
-      
-      // Hide after a period of inactivity (2.5 seconds)
-      const timer = setTimeout(() => {
-        setIsVisible(false);
-      }, 2500);
-      
-      return () => clearTimeout(timer);
+    } else {
+      setIsVisible(false);
     }
   }, [typingEvents, channelId]);
   
   // Send typing event when user is typing in this channel
   const notifyTyping = () => {
     if (channelId && sendTypingEvent) {
+      console.debug("sendTypingEvent", channelId)
       sendTypingEvent(channelId);
     }
   };
@@ -95,28 +99,30 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
   }
   
   return (
-    <Box sx={{ position: 'relative', height: 30, mb: 0.5 }}>
+    <Box sx={{ position: 'relative', height: 30, mb: 0.5, width: '100%' }}>
       <Paper
-        elevation={0}
+        elevation={1}
         sx={{
           position: 'absolute',
           bottom: 0,
           left: 16,
+          right: 16,
           p: 1,
-          borderRadius: 2,
-          bgcolor: 'action.hover',
+          borderRadius: '12px 12px 12px 4px',
           display: 'flex',
           alignItems: 'center',
-          maxWidth: '80%',
+          maxWidth: 'calc(100% - 32px)',
+          transition: 'all 0.2s ease-in-out',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
         }}
       >
         <Box sx={{ display: 'flex', mr: 1 }}>
           <Box
             sx={{
-              width: 4,
-              height: 4,
+              width: 6,
+              height: 6,
               borderRadius: '50%',
-              bgcolor: 'text.secondary',
+              bgcolor: 'primary.main',
               mx: 0.25,
               ...typingAnimation,
               animationDelay: '0s',
@@ -124,10 +130,10 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
           />
           <Box
             sx={{
-              width: 4,
-              height: 4,
+              width: 6,
+              height: 6,
               borderRadius: '50%',
-              bgcolor: 'text.secondary',
+              bgcolor: 'primary.main',
               mx: 0.25,
               ...typingAnimation,
               animationDelay: '0.2s',
@@ -135,17 +141,28 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
           />
           <Box
             sx={{
-              width: 4,
-              height: 4,
+              width: 6,
+              height: 6,
               borderRadius: '50%',
-              bgcolor: 'text.secondary',
+              bgcolor: 'primary.main',
               mx: 0.25,
               ...typingAnimation,
               animationDelay: '0.4s',
             }}
           />
         </Box>
-        <Typography variant="caption" color="text.secondary">
+        <Typography 
+          variant="body2" 
+          color="primary"
+          sx={{ 
+            fontWeight: 500,
+            fontSize: '0.85rem',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s ease'
+          }}
+        >
           {typingMessage}
         </Typography>
       </Paper>

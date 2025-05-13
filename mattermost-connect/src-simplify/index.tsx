@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './context/AuthContext';
 import { api } from './api/client';
+import { WebSocketProvider } from './hooks/useWebSocket';
 
 // Re-export hooks
 export * from './hooks';
@@ -50,8 +51,9 @@ export function MattermostProvider({ children, serverUrl, token }: MattermostPro
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {/* WebSocketProvider would be here if fully implemented */}
-        {children}
+        <WebSocketProvider>
+          {children}
+        </WebSocketProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

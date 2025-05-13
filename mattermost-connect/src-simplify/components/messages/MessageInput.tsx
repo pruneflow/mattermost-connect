@@ -79,7 +79,7 @@ export const MessageInput = React.forwardRef(({
   // Get message actions
   const { createMessage, uploadFile, isCreating } = useMessages(channelId);
   
-  // Get WebSocket for typing indicators
+  // Get WebSocket for typing indicators (utilisation du singleton partagé)
   const { typingEvents, sendTypingEvent } = useWebSocket();
   
   // Get typing users for this channel
@@ -279,12 +279,10 @@ export const MessageInput = React.forwardRef(({
   return (
     <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Show typing indicator if anyone is typing */}
-      {typingUsers.length > 0 && (
-        <TypingIndicator
-          channelId={channelId}
-          typingUsers={typingUsers}
-        />
-      )}
+      <TypingIndicator
+        channelId={channelId}
+        typingUsers={typingUsers}
+      />
 
       {/* Show attachment previews if there are any - différents affichages selon le contexte */}
       {attachments.length > 0 && !isInThread && (
