@@ -197,8 +197,7 @@ export const WebSocketSingleton = (() => {
   // Récupérer le statut d'un utilisateur spécifique
   const getUserStatus = (userId: string) => wsUserStatuses[userId] || 'offline';
   
-  // Initialiser le statut d'un utilisateur via API directe
-  const initializeUserStatus = async (userId: string, serverUrl: string, token: string) => {
+    const initializeUserStatus = async (userId: string, serverUrl: string, token: string) => {
     // Vérifier si l'initialisation a déjà été faite
     if (wsUserStatusesInitialized.has(userId) || !userId || !serverUrl || !token) {
       return;
@@ -234,8 +233,11 @@ export const WebSocketSingleton = (() => {
         // Marquer comme initialisé
         wsUserStatusesInitialized.add(userId);
       }
+      
+      return data;
     } catch (error) {
       console.error(`Error fetching user status for ${userId}:`, error);
+      throw error;
     }
   };
   
@@ -269,6 +271,14 @@ export const WebSocketSingleton = (() => {
   
   // Timestamp du dernier pull pour éviter les requêtes trop fréquentes
   let lastStatusPullTimestamp = 0;
+  
+  // Set pour stocker les utilisateurs dont on a déjà demandé le statut via API, pour éviter les doublons
+  // Cette liste est globale et persistante car le singleton ne se réinitialise pas
+  let apiStatusRequestedUsers = new Set<string>();
+  
+  // Map pour suivre les requêtes de statut par utilisateur
+  // Clé: ID utilisateur, Valeur: timestamp de la dernière requête
+  const userStatusRequestMap = new Map<string, number>();
   
   // Envoyer une requête WebSocket pour obtenir les statuts des utilisateurs
   const requestStatusUpdates = (ws: WebSocket) => {

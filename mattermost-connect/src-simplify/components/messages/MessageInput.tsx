@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Paper, InputBase, IconButton, CircularProgress, Tooltip } from '@mui/material';
+import { Box, Paper, InputBase, IconButton, CircularProgress, Tooltip, Popover } from '@mui/material';
 import { Send as SendIcon, AttachFile as AttachFileIcon, EmojiEmotions as EmojiIcon } from '@mui/icons-material';
 import { useMessages } from '../../hooks/useMessages';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import TypingIndicator from '../common/TypingIndicator';
 import AttachmentPreview from './AttachmentPreview';
+import { EmojiPicker } from '../common/EmojiPicker';
 
 export interface MessageInputProps {
   channelId: string;
@@ -42,6 +43,7 @@ export const MessageInput = React.forwardRef(({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFileIds, setUploadedFileIds] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<FileStatus[]>([]);
+  const [emojiAnchorEl, setEmojiAnchorEl] = useState<null | HTMLElement>(null);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -347,12 +349,42 @@ export const MessageInput = React.forwardRef(({
         multiple
       />
       
-      {/* Emoji button (placeholder) */}
+      {/* Emoji button */}
       <Tooltip title="Add emoji">
-        <IconButton color="primary">
+        <IconButton 
+          color="primary"
+          onClick={(e) => setEmojiAnchorEl(e.currentTarget)}
+        >
           <EmojiIcon />
         </IconButton>
       </Tooltip>
+      
+      {/* Emoji picker popover */}
+      <Popover
+        open={Boolean(emojiAnchorEl)}
+        anchorEl={emojiAnchorEl}
+        onClose={() => setEmojiAnchorEl(null)}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+      >
+        <EmojiPicker 
+          onEmojiSelect={(emoji, emojiName) => {
+            setMessage(prev => prev + emoji);
+            setEmojiAnchorEl(null);
+          }}
+          showCategoryTabs={true}
+          showSearchBar={true}
+          height={350}
+          width={320}
+          waitForLoad={true}
+        />
+      </Popover>
       
       {/* Message input */}
       <InputBase
