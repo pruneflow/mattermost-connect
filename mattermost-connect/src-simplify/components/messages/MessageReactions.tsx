@@ -16,12 +16,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useMessageReactions } from '../../hooks';
 import {
   processReactions,
-  getEmojiImageUrl,
   getEmojiName,
   findEmojiByName,
   EMOJI_BY_SHORT_NAME
 } from '../../utils/emojiUtils';
-import { EmojiPicker } from '../common/EmojiPicker';
+import { api } from '../../api/client';
+import { EmojiPickerMM } from '../common';
 
 export interface MessageReactionsProps {
   messageId: string;
@@ -64,9 +64,9 @@ export function MessageReactions({
       // Find the Mattermost-compatible emoji name from emoji.json
       let mattermostEmojiName = emojiName;
       
-      // Fast O(1) lookup for exact match by short name
-      if (EMOJI_BY_SHORT_NAME[emojiName]) {
-        mattermostEmojiName = EMOJI_BY_SHORT_NAME[emojiName].short_name;
+      // Vérifier que EMOJI_BY_SHORT_NAME existe
+      if (EMOJI_BY_SHORT_NAME && EMOJI_BY_SHORT_NAME[emojiName]) {
+        mattermostEmojiName = EMOJI_BY_SHORT_NAME[emojiName].short_name || emojiName;
       } else {
         // Fallback to more expensive search if needed
         const emojiData = findEmojiByName(emojiName);
@@ -129,7 +129,9 @@ export function MessageReactions({
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
       {/* Display reactions */}
       {reactionItems.length > 0 ? (
-        reactionItems.map(({ name, emoji, unified, count, userIds }) => {
+        reactionItems.map((reactionItem) => {
+          const { name, emoji, unified, count, userIds } = reactionItem;
+          console.debug("reactionItem", reactionItem)
           const hasReacted = currentUserId ? userIds.includes(currentUserId) : false;
           
           return (
@@ -164,7 +166,7 @@ export function MessageReactions({
                     {unified ? (
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <img 
-                          src={getEmojiImageUrl(unified)} 
+                          src={`${api.getBaseUrl()}/static/emoji/${unified.toLowerCase()}.png`} 
                           alt={name}
                           style={{ 
                             width: compact ? '14px' : '16px', 
@@ -237,9 +239,8 @@ export function MessageReactions({
           horizontal: 'left',
         }}
       >
-        <EmojiPicker
+        <EmojiPickerMM
           onEmojiSelect={handleEmojiSelect}
-          waitForLoad={true}
           height={350}
           width={320}
           showSearchBar={true}

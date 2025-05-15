@@ -374,8 +374,20 @@ function checkCategoryProgress(unified: string): void {
   
   // Check if we've completed loading critical smileys
   if (!emojiLoadStatus.smileysCriticalDone) {
-    const smileysEmojis = EMOJIS_BY_CATEGORY['smileys-emotion'] || [];
-    const critical70 = smileysEmojis.slice(0, 70).map(emoji => emoji.unified);
+    // Vérifier que EMOJIS_BY_CATEGORY existe
+    const smileysEmojis = EMOJIS_BY_CATEGORY && EMOJIS_BY_CATEGORY['smileys-emotion'] ? 
+      EMOJIS_BY_CATEGORY['smileys-emotion'] : [];
+    
+    // Vérifier que c'est bien un tableau
+    if (!Array.isArray(smileysEmojis)) {
+      return;
+    }
+    
+    // Sécuriser l'accès aux propriétés
+    const critical70 = smileysEmojis
+      .slice(0, 70)
+      .filter(emoji => emoji && emoji.unified)
+      .map(emoji => emoji.unified);
     
     if (critical70.includes(unified)) {
       loadedSmileysCritical.add(unified);
@@ -390,7 +402,10 @@ function checkCategoryProgress(unified: string): void {
   
   // Check if we've completed loading first page of all categories
   if (!emojiLoadStatus.allCategoriesFirstPageDone) {
-    for (const category of CATEGORY_ORDER) {
+    // Vérifier que CATEGORY_ORDER existe
+    const categories = Array.isArray(CATEGORY_ORDER) ? CATEGORY_ORDER : [];
+    
+    for (const category of categories) {
       if (category === 'recent') continue;
       
       // Initialize set if needed
@@ -398,8 +413,19 @@ function checkCategoryProgress(unified: string): void {
         loadedFirstPageEmojis.set(category, new Set<string>());
       }
       
-      const categoryEmojis = EMOJIS_BY_CATEGORY[category] || [];
-      const first50 = categoryEmojis.slice(0, 50).map(emoji => emoji.unified);
+      // Vérifier que EMOJIS_BY_CATEGORY existe et que la catégorie existe
+      const categoryEmojis = EMOJIS_BY_CATEGORY && EMOJIS_BY_CATEGORY[category] ? EMOJIS_BY_CATEGORY[category] : [];
+      
+      // Sécuriser l'accès aux emojis
+      if (!Array.isArray(categoryEmojis)) {
+        continue;
+      }
+      
+      // Sécuriser l'accès aux propriétés
+      const first50 = categoryEmojis
+        .slice(0, 50)
+        .filter(emoji => emoji && emoji.unified)
+        .map(emoji => emoji.unified);
       
       if (first50.includes(unified)) {
         loadedFirstPageEmojis.get(category)?.add(unified);
@@ -407,11 +433,25 @@ function checkCategoryProgress(unified: string): void {
         // Check if all categories have their first page loaded
         let allDone = true;
         
-        for (const cat of CATEGORY_ORDER) {
+        // Vérifier que CATEGORY_ORDER existe
+        const cats = Array.isArray(CATEGORY_ORDER) ? CATEGORY_ORDER : [];
+        
+        for (const cat of cats) {
           if (cat === 'recent') continue;
           
-          const catEmojis = EMOJIS_BY_CATEGORY[cat] || [];
-          const catFirst50 = catEmojis.slice(0, 50).map(emoji => emoji.unified);
+          // Vérifier que EMOJIS_BY_CATEGORY existe et que la catégorie existe
+          const catEmojis = EMOJIS_BY_CATEGORY && EMOJIS_BY_CATEGORY[cat] ? EMOJIS_BY_CATEGORY[cat] : [];
+          
+          // Vérifier que c'est bien un tableau
+          if (!Array.isArray(catEmojis)) {
+            continue;
+          }
+          
+          // Sécuriser l'accès aux propriétés
+          const catFirst50 = catEmojis
+            .slice(0, 50)
+            .filter(emoji => emoji && emoji.unified)
+            .map(emoji => emoji.unified);
           
           // Skip empty categories
           if (catFirst50.length === 0) continue;

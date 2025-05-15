@@ -12,6 +12,7 @@ import {
   loadSpriteSheet,
   isSpriteSheetLoaded
 } from '../../utils/emojiSpriteSheet';
+import { EMOJI_SPRITE_URL } from '../../utils/emojiMapping';
 
 // Constants
 const EMOJI_SIZE = 28; // Size of each emoji
@@ -210,14 +211,15 @@ const SpriteEmoji = memo(({ emoji, onSelect, serverUrl }: SpriteEmojiProps) => {
                 opacity: 1,
                 transition: 'opacity 0.3s ease-in-out',
                 // Apply sprite CSS
-                backgroundImage: 'inherit',
-                backgroundPosition: 'inherit',
-                backgroundSize: 'inherit',
                 backgroundRepeat: 'no-repeat',
                 transform: 'translateZ(0)',
                 willChange: 'transform',
               }}
-              style={{ backgroundImage: `url(${serverUrl}/assets/emoji-sprites/sprite.png)` }}
+              style={{ 
+                backgroundImage: `url(${EMOJI_SPRITE_URL})`,
+                backgroundPosition: spriteCSS?.split(';')[1]?.split(':')[1]?.trim() || '0 0',
+                backgroundSize: '3828px 3828px'
+              }}
             />
           )}
           

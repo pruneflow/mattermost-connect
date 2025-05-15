@@ -6,6 +6,7 @@
 
 // Import pre-computed emoji data from dedicated file
 import * as EmojiDataModule from './emojiData';
+import { api } from '../api/client';
 
 // Explicitly re-export the interface type
 export type EmojiData = EmojiDataModule.EmojiData;
@@ -22,8 +23,7 @@ export const {
   AVAILABLE_CATEGORIES
 } = EmojiDataModule;
 
-// Default server URL for emoji images
-export const DEFAULT_SERVER_URL = window.location.origin || '';
+// Aucun serveur par défaut - nous utilisons toujours l'API
 
 /**
  * Helper function to convert unified code to emoji character
@@ -46,7 +46,8 @@ export function unifiedToEmoji(unified: string): string {
 export function getEmojiImageUrl(unified: string | undefined, serverUrl?: string): string {
   if (!unified) return '';
   
-  const baseUrl = serverUrl || DEFAULT_SERVER_URL;
+  // Utiliser serverUrl s'il est fourni ou demander à l'API pour la base URL
+  const baseUrl = serverUrl || (typeof api !== 'undefined' ? api.getBaseUrl() : '');
   return `${baseUrl}/static/emoji/${unified.toLowerCase()}.png`;
 }
 
@@ -68,8 +69,11 @@ export function getEmojiName(emoji: string): string {
 export function getEmojiFromName(name: string): string {
   if (!name) return '';
   
+  // Vérifier que la structure existe
+  const emojiByShortName = EMOJI_BY_SHORT_NAME || {};
+  
   // Direct O(1) lookup in pre-computed structure
-  return EMOJI_BY_SHORT_NAME[name]?.emoji || '';
+  return emojiByShortName[name]?.emoji || '';
 }
 
 /**
@@ -100,15 +104,19 @@ export function getEmojiDataFromName(name: string): { emoji: string, unified: st
 export function findEmojiByName(emojiName: string): EmojiDataModule.EmojiData | null {
   if (!emojiName) return null;
   
+  // Vérifier que les structures existent
+  const emojiByShortName = EMOJI_BY_SHORT_NAME || {};
+  const emojiByName = EMOJI_BY_NAME || {};
+  
   // First try with exact short_name match (fastest O(1) lookup)
-  if (EMOJI_BY_SHORT_NAME[emojiName]) {
-    return EMOJI_BY_SHORT_NAME[emojiName];
+  if (emojiByShortName[emojiName]) {
+    return emojiByShortName[emojiName];
   }
   
   // Then try with exact name match (still O(1))
   const lowerName = emojiName.toLowerCase();
-  if (EMOJI_BY_NAME[lowerName]) {
-    return EMOJI_BY_NAME[lowerName];
+  if (emojiByName[lowerName]) {
+    return emojiByName[lowerName];
   }
   
   return null;
@@ -132,16 +140,20 @@ export function processReactions(reactions?: Record<string, string[]>): Array<{
   category?: string;
   short_name?: string;
 }> {
+  console.debug("processReactions", reactions)
   // Return empty array if no reactions
   if (!reactions || typeof reactions !== 'object') return [];
   if (Object.keys(reactions).length === 0) return [];
 
   try {
+    // Vérifier que EMOJI_BY_SHORT_NAME existe
+    const emojiByShortName = EMOJI_BY_SHORT_NAME || {};
+    
     return Object.entries(reactions)
       .filter(([, userIds]) => Array.isArray(userIds) && userIds.length > 0)
       .map(([name, userIds]) => {
-        // Direct O(1) lookup in our static structure
-        const emojiData = EMOJI_BY_SHORT_NAME[name];
+        // Direct O(1) lookup in our static structure, avec vérification
+        const emojiData = emojiByShortName[name];
         
         if (emojiData) {
           // Fast path - emoji found directly in lookup

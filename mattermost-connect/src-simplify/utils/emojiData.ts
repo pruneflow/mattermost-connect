@@ -1,62 +1,275 @@
 /**
- * Pre-computed emoji data for Mattermost
- * All data structures are statically defined and ready to use
- * No runtime calculations needed - 100% optimized for performance
- * NO dependencies on external JSON files - everything is hardcoded
+ * Données simplifiées des emojis avec leurs coordonnées dans le sprite sheet
+ * Basé sur le format utilisé par Mattermost
  */
 
-// Type for emoji data
+// Définition du type d'emoji
 export interface EmojiData {
   name: string;
   unified: string;
   short_name: string;
   short_names: string[];
+  sheet_x: number;
+  sheet_y: number;
   category: string;
-  emoji: string; // Unicode character representation pre-computed
-  text?: string; // Text representation if available
+  subcategory?: string;
+  emoji?: string;
+  text?: string;
 }
 
-// Define emoji categories order and metadata
-export const EMOJI_CATEGORIES = {
-  'recent': { name: 'recent', label: 'Recent' },
-  'smileys-emotion': { name: 'smileys-emotion', label: 'Smileys & Emotion' },
-  'people-body': { name: 'people-body', label: 'People & Body' },
-  'animals-nature': { name: 'animals-nature', label: 'Animals & Nature' },
-  'food-drink': { name: 'food-drink', label: 'Food & Drink' },
-  'travel-places': { name: 'travel-places', label: 'Travel & Places' },
-  'activities': { name: 'activities', label: 'Activities' },
-  'objects': { name: 'objects', label: 'Objects' },
-  'symbols': { name: 'symbols', label: 'Symbols' },
-  'flags': { name: 'flags', label: 'Flags' }
-};
-
-// Category names in display order (for UI rendering)
-export const CATEGORY_ORDER = [
-  'recent',
-  'smileys-emotion',
-  'people-body',
-  'animals-nature',
-  'food-drink',
-  'travel-places',
-  'activities',
-  'objects',
-  'symbols',
-  'flags'
+// Exemple d'émojis populaires avec leurs coordonnées (version réduite)
+export const EMOJI_DATA_SAMPLE: EmojiData[] = [
+  // Catégorie smileys-emotion
+  {
+    name: "GRINNING FACE",
+    unified: "1F600",
+    short_name: "grinning",
+    short_names: ["grinning"],
+    sheet_x: 12,
+    sheet_y: 14,
+    category: "smileys-emotion",
+    subcategory: "face-smiling"
+  },
+  {
+    name: "GRINNING FACE WITH SMILING EYES",
+    unified: "1F601",
+    short_name: "grin",
+    short_names: ["grin"],
+    sheet_x: 12,
+    sheet_y: 15,
+    category: "smileys-emotion",
+    subcategory: "face-smiling"
+  },
+  {
+    name: "FACE WITH TEARS OF JOY",
+    unified: "1F602",
+    short_name: "joy",
+    short_names: ["joy"],
+    sheet_x: 12,
+    sheet_y: 16,
+    category: "smileys-emotion",
+    subcategory: "face-smiling"
+  },
+  {
+    name: "ROLLING ON THE FLOOR LAUGHING",
+    unified: "1F923",
+    short_name: "rofl",
+    short_names: ["rofl"],
+    sheet_x: 24,
+    sheet_y: 48,
+    category: "smileys-emotion",
+    subcategory: "face-smiling"
+  },
+  {
+    name: "SMILING FACE WITH OPEN MOUTH",
+    unified: "1F603",
+    short_name: "smiley",
+    short_names: ["smiley"],
+    sheet_x: 12,
+    sheet_y: 17,
+    category: "smileys-emotion",
+    subcategory: "face-smiling"
+  },
+  {
+    name: "RED HEART",
+    unified: "2764-FE0F",
+    short_name: "heart",
+    short_names: ["heart"],
+    sheet_x: 35,
+    sheet_y: 26,
+    category: "smileys-emotion",
+    subcategory: "emotion"
+  },
+  
+  // Catégorie people-body
+  {
+    name: "THUMBS UP SIGN",
+    unified: "1F44D",
+    short_name: "thumbsup",
+    short_names: ["thumbsup", "+1", "thumbup"],
+    sheet_x: 10,
+    sheet_y: 55,
+    category: "people-body",
+    subcategory: "hand-fingers-closed"
+  },
+  {
+    name: "THUMBS DOWN SIGN",
+    unified: "1F44E",
+    short_name: "thumbsdown",
+    short_names: ["thumbsdown", "-1", "thumbdown"],
+    sheet_x: 10,
+    sheet_y: 56,
+    category: "people-body",
+    subcategory: "hand-fingers-closed"
+  },
+  {
+    name: "CLAPPING HANDS SIGN",
+    unified: "1F44F",
+    short_name: "clap",
+    short_names: ["clap"],
+    sheet_x: 11,
+    sheet_y: 0,
+    category: "people-body",
+    subcategory: "hands"
+  },
+  
+  // Catégorie animals-nature
+  {
+    name: "DOG FACE",
+    unified: "1F436",
+    short_name: "dog",
+    short_names: ["dog"],
+    sheet_x: 9,
+    sheet_y: 12,
+    category: "animals-nature",
+    subcategory: "animal-mammal"
+  },
+  {
+    name: "CAT FACE",
+    unified: "1F431",
+    short_name: "cat",
+    short_names: ["cat"],
+    sheet_x: 9,
+    sheet_y: 6,
+    category: "animals-nature",
+    subcategory: "animal-mammal"
+  },
+  
+  // Catégorie food-drink
+  {
+    name: "RED APPLE",
+    unified: "1F34E",
+    short_name: "apple",
+    short_names: ["apple"],
+    sheet_x: 5,
+    sheet_y: 39,
+    category: "food-drink",
+    subcategory: "food-fruit"
+  },
+  {
+    name: "BANANA",
+    unified: "1F34C",
+    short_name: "banana",
+    short_names: ["banana"],
+    sheet_x: 5,
+    sheet_y: 37,
+    category: "food-drink",
+    subcategory: "food-fruit"
+  },
+  
+  // Catégorie travel-places
+  {
+    name: "FIRE",
+    unified: "1F525",
+    short_name: "fire",
+    short_names: ["fire"],
+    sheet_x: 12,
+    sheet_y: 2,
+    category: "travel-places",
+    subcategory: "sky & weather"
+  },
+  {
+    name: "AUTOMOBILE",
+    unified: "1F697",
+    short_name: "car",
+    short_names: ["car", "automobile"],
+    sheet_x: 18,
+    sheet_y: 50,
+    category: "travel-places",
+    subcategory: "transport-ground"
+  },
+  
+  // Catégorie activities
+  {
+    name: "PARTY POPPER",
+    unified: "1F389",
+    short_name: "tada",
+    short_names: ["tada"],
+    sheet_x: 7,
+    sheet_y: 32,
+    category: "activities",
+    subcategory: "event"
+  },
+  {
+    name: "SOCCER BALL",
+    unified: "26BD",
+    short_name: "soccer",
+    short_names: ["soccer"],
+    sheet_x: 32,
+    sheet_y: 28,
+    category: "activities",
+    subcategory: "sport"
+  },
+  
+  // Catégorie objects
+  {
+    name: "LIGHT BULB",
+    unified: "1F4A1",
+    short_name: "bulb",
+    short_names: ["bulb"],
+    sheet_x: 10,
+    sheet_y: 3,
+    category: "objects",
+    subcategory: "light & video"
+  },
+  {
+    name: "LOCKED WITH KEY",
+    unified: "1F510",
+    short_name: "closed_lock_with_key",
+    short_names: ["closed_lock_with_key"],
+    sheet_x: 11,
+    sheet_y: 41,
+    category: "objects",
+    subcategory: "lock"
+  },
+  
+  // Catégorie symbols
+  {
+    name: "HUNDRED POINTS SYMBOL",
+    unified: "1F4AF",
+    short_name: "100",
+    short_names: ["100"],
+    sheet_x: 10,
+    sheet_y: 15,
+    category: "symbols",
+    subcategory: "alphanum"
+  },
+  {
+    name: "HEAVY BLACK HEART",
+    unified: "2764",
+    short_name: "heart",
+    short_names: ["heart"],
+    sheet_x: 35,
+    sheet_y: 26,
+    category: "symbols",
+    subcategory: "heart"
+  },
+  
+  // Catégorie flags
+  {
+    name: "FLAG OF FRANCE",
+    unified: "1F1EB-1F1F7",
+    short_name: "fr",
+    short_names: ["flag-fr", "fr"],
+    sheet_x: 42,
+    sheet_y: 10,
+    category: "flags",
+    subcategory: "country-flag"
+  },
+  {
+    name: "FLAG OF UNITED STATES",
+    unified: "1F1FA-1F1F8",
+    short_name: "us",
+    short_names: ["flag-us", "us"],
+    sheet_x: 44,
+    sheet_y: 26,
+    category: "flags",
+    subcategory: "country-flag"
+  }
 ];
 
-// Define a list of common reactions with pre-computed emojis
-export const COMMON_REACTIONS = [
-  { emoji: '👍', name: '+1', unified: '1f44d' },
-  { emoji: '❤️', name: 'heart', unified: '2764-fe0f' },
-  { emoji: '😄', name: 'smile', unified: '1f604' },
-  { emoji: '🎉', name: 'tada', unified: '1f389' },
-  { emoji: '👀', name: 'eyes', unified: '1f440' },
-  { emoji: '🚀', name: 'rocket', unified: '1f680' },
-  { emoji: '👎', name: '-1', unified: '1f44e' },
-  { emoji: '😕', name: 'confused', unified: '1f615' }
-];
-
-// Pre-computed emoji data organized by category - ALL DATA HARDCODED
+// Générer les tables de lookup pour une recherche rapide O(1)
+// 1. Mapping des emojis par catégorie
 export const EMOJIS_BY_CATEGORY: Record<string, EmojiData[]> = {
   'smileys-emotion': [
     { emoji: '😀', unified: '1f600', name: 'GRINNING FACE', short_name: 'grinning', short_names: ["grinning"], category: 'smileys-emotion', text: ':D' },
@@ -3375,36 +3588,149 @@ export const EMOJIS_BY_CATEGORY: Record<string, EmojiData[]> = {
     { emoji: '🇿🇦', unified: '1f1ff-1f1e6', name: 'South Africa Flag', short_name: 'flag-za', short_names: ["flag-za","south_africa","za"], category: 'flags' },
     { emoji: '🇿🇲', unified: '1f1ff-1f1f2', name: 'Zambia Flag', short_name: 'flag-zm', short_names: ["flag-zm","zambia"], category: 'flags' },
     { emoji: '🇿🇼', unified: '1f1ff-1f1fc', name: 'Zimbabwe Flag', short_name: 'flag-zw', short_names: ["flag-zw","zimbabwe"], category: 'flags' },
-    { emoji: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', unified: '1f3f4-e0067-e0062-e0065-e006e-e0067-e007f', name: 'England Flag', short_name: 'flag-england', short_names: ["flag-england"], category: 'flags' },
-    { emoji: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', unified: '1f3f4-e0067-e0062-e0073-e0063-e0074-e007f', name: 'Scotland Flag', short_name: 'flag-scotland', short_names: ["flag-scotland"], category: 'flags' },
-    { emoji: '🏴󠁧󠁢󠁷󠁬󠁳󠁿', unified: '1f3f4-e0067-e0062-e0077-e006c-e0073-e007f', name: 'Wales Flag', short_name: 'flag-wales', short_names: ["flag-wales"], category: 'flags' }
+    { emoji: '🏴󠁧󠁢󠁥󠁮󠁧U+E007F', unified: '1f3f4-e0067-e0062-e0065-e006e-e0067-e007f', name: 'England Flag', short_name: 'flag-england', short_names: ["flag-england"], category: 'flags' },
+    { emoji: '🏴󠁧󠁢󠁳󠁣󠁴U+E007F', unified: '1f3f4-e0067-e0062-e0073-e0063-e0074-e007f', name: 'Scotland Flag', short_name: 'flag-scotland', short_names: ["flag-scotland"], category: 'flags' },
+    { emoji: '🏴󠁧󠁢󠁷󠁬󠁳U+E007F', unified: '1f3f4-e0067-e0062-e0077-e006c-e0073-e007f', name: 'Wales Flag', short_name: 'flag-wales', short_names: ["flag-wales"], category: 'flags' }
   ]
 };
 
-// Generate lookup maps for fast access
+// Définition des catégories d'émojis avec l'ordre
+export const EMOJI_CATEGORIES = [
+  'recent',
+  'smileys-emotion',
+  'people-body',
+  'animals-nature',
+  'food-drink',
+  'travel-places',
+  'activities',
+  'objects',
+  'symbols',
+  'flags'
+];
+
+export const CATEGORY_ORDER = EMOJI_CATEGORIES;
+
+// Catégories qui ont des emojis (sans 'recent' si vide)
+export const AVAILABLE_CATEGORIES = Object.keys(EMOJIS_BY_CATEGORY);
+
+// Réactions communes pour l'affichage rapide
+export const COMMON_REACTIONS = [
+  "thumbsup",
+  "smile",
+  "heart",
+  "eyes",
+  "tada",
+  "100"
+];
+
+// 2. Tables de lookup pour une recherche efficace en O(1)
 export const EMOJI_BY_SHORT_NAME: Record<string, EmojiData> = {};
 export const EMOJI_BY_NAME: Record<string, EmojiData> = {};
 export const EMOJI_TO_NAME: Record<string, string> = {};
 
-// Populate lookup maps from category entries
-Object.values(EMOJIS_BY_CATEGORY).forEach(categoryEmojis => {
-  categoryEmojis.forEach(emoji => {
-    // Map by short name
-    EMOJI_BY_SHORT_NAME[emoji.short_name] = emoji;
-    
-    // Map all alternative short names
-    emoji.short_names.forEach(name => {
-      EMOJI_BY_SHORT_NAME[name] = emoji;
+// Fonction pour remplir les tables de lookup à partir de tous les émojis dans toutes les catégories
+export function initializeEmojiLookupTables() {
+  // Parcourir toutes les catégories d'émojis
+  for (const category in EMOJIS_BY_CATEGORY) {
+    // Parcourir tous les émojis de cette catégorie
+    EMOJIS_BY_CATEGORY[category].forEach(emoji => {
+      if (emoji && emoji.short_name) {
+        // Indexer par nom court principal
+        EMOJI_BY_SHORT_NAME[emoji.short_name] = emoji;
+        
+        // Indexer aussi par tous les short_names alternatifs
+        if (Array.isArray(emoji.short_names)) {
+          emoji.short_names.forEach(name => {
+            if (name) {
+              EMOJI_BY_SHORT_NAME[name] = emoji;
+            }
+          });
+        }
+      }
+      
+      // Indexer par nom complet en minuscule
+      if (emoji && emoji.name) {
+        EMOJI_BY_NAME[emoji.name.toLowerCase()] = emoji;
+      }
+      
+      // Créer une correspondance emoji -> nom pour l'affichage
+      if (emoji && emoji.unified) {
+        try {
+          const emojiChar = String.fromCodePoint(...emoji.unified.split('-').map(u => parseInt(`0x${u}`, 16)));
+          if (emojiChar && emoji.short_name) {
+            EMOJI_TO_NAME[emojiChar] = emoji.short_name;
+            
+            // Ajouter également l'emoji à l'objet emoji pour un accès facile
+            if (!emoji.emoji) {
+              Object.defineProperty(emoji, 'emoji', { value: emojiChar });
+            }
+          }
+        } catch (e) {
+          // Ignorer les erreurs de conversion
+          console.warn(`Erreur de conversion pour l'emoji ${emoji.unified}:`, e);
+        }
+      }
     });
-    
-    // Map by full name (lowercase for case-insensitive lookup)
-    EMOJI_BY_NAME[emoji.name.toLowerCase()] = emoji;
-    
-    // Map emoji character to short name
-    EMOJI_TO_NAME[emoji.emoji] = emoji.short_name;
-  });
-});
+  }
+}
 
-// Static list of available categories (excludes 'recent')
-export const AVAILABLE_CATEGORIES = CATEGORY_ORDER
-  .filter(cat => cat !== 'recent' && EMOJIS_BY_CATEGORY[cat]?.length > 0);
+// Initialiser automatiquement les tables de lookup
+initializeEmojiLookupTables();
+
+// Stockage des emojis récents en localStorage
+const RECENT_EMOJIS_KEY = 'recent_emojis';
+const MAX_RECENT_EMOJIS = 36;
+
+/**
+ * Récupère les emojis récents depuis le localStorage
+ */
+export function getRecentEmojis(): EmojiData[] {
+  try {
+    const storedRecent = localStorage.getItem(RECENT_EMOJIS_KEY);
+    if (storedRecent) {
+      const recentUnified = JSON.parse(storedRecent) as string[];
+      // Récupérer les données complètes des emojis à partir des codes unifiés
+      return recentUnified
+        .map(unified => {
+          // Rechercher dans toutes les catégories
+          for (const category in EMOJIS_BY_CATEGORY) {
+            const emoji = EMOJIS_BY_CATEGORY[category].find(e => 
+              e.unified.toLowerCase() === unified.toLowerCase());
+            if (emoji) return emoji;
+          }
+          return undefined;
+        })
+        .filter((emoji): emoji is EmojiData => emoji !== undefined);
+    }
+  } catch (error) {
+    console.error('Erreur lors de la récupération des emojis récents:', error);
+  }
+  return [];
+}
+
+/**
+ * Ajoute un emoji à la liste des récents
+ */
+export function addToRecentEmojis(unified: string): void {
+  try {
+    // Récupérer la liste actuelle
+    const storedRecent = localStorage.getItem(RECENT_EMOJIS_KEY);
+    let recentUnified = storedRecent ? JSON.parse(storedRecent) as string[] : [];
+    
+    // Supprimer l'emoji s'il est déjà dans la liste
+    recentUnified = recentUnified.filter(code => code.toLowerCase() !== unified.toLowerCase());
+    
+    // Ajouter l'emoji au début de la liste
+    recentUnified.unshift(unified);
+    
+    // Limiter la liste à un nombre maximum d'émojis
+    if (recentUnified.length > MAX_RECENT_EMOJIS) {
+      recentUnified = recentUnified.slice(0, MAX_RECENT_EMOJIS);
+    }
+    
+    // Enregistrer la liste mise à jour
+    localStorage.setItem(RECENT_EMOJIS_KEY, JSON.stringify(recentUnified));
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout d\'un emoji aux récents:', error);
+  }
+}

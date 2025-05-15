@@ -25,17 +25,48 @@ import {
   Flag as FlagsIcon,
   EmojiSymbols as SymbolsIcon
 } from '@mui/icons-material';
+// Utiliser les données d'émojis de notre implémentation optimisée
 import { 
-  getEmojiImageUrl,
-  storeRecentEmoji,
-  getRecentEmojis,
-  EMOJIS_BY_CATEGORY,
+  EmojiData, 
+  EMOJI_DATA_SAMPLE,
+  EMOJIS_BY_CATEGORY as EMOJI_SPRITE_DATA,
   EMOJI_CATEGORIES,
-  CATEGORY_ORDER,
-  EMOJI_BY_SHORT_NAME,
-  EMOJI_BY_NAME,
-  EmojiData
-} from '../../utils/emojiUtils';
+  addToRecentEmojis as storeRecentEmoji,
+  getRecentEmojis
+} from '../../utils/emojiData';
+
+// Définir une structure de catégories complète et cohérente
+const CATEGORY_ORDER = [
+  'recent',
+  'smileys-emotion',
+  'people-body',
+  'animals-nature',
+  'food-drink',
+  'travel-places',
+  'activities',
+  'objects',
+  'symbols',
+  'flags'
+];
+
+// Interface pour nos mappages
+interface EmojiByName {
+  [key: string]: EmojiData;
+}
+
+// Construire dynamiquement les mappages d'émojis pour les recherches
+const EMOJI_BY_SHORT_NAME: EmojiByName = {};
+const EMOJI_BY_NAME: EmojiByName = {};
+
+// Remplir les mappages avec les données des émojis
+EMOJI_DATA_SAMPLE.forEach(emoji => {
+  if (emoji.short_name) {
+    EMOJI_BY_SHORT_NAME[emoji.short_name] = emoji;
+  }
+  if (emoji.name) {
+    EMOJI_BY_NAME[emoji.name.toLowerCase()] = emoji;
+  }
+});
 import {
   getEmojiLoadingStatus,
   getEmojiImage,
@@ -257,7 +288,7 @@ export function EmojiPicker({
     preloadInDirection(category, centerIndex, direction, serverUrl);
     
     // Also preload next/previous category if near edge
-    const emojis = EMOJIS_BY_CATEGORY[category] || [];
+    const emojis = EMOJI_SPRITE_DATA[category] || [];
     const categoryIndex = CATEGORY_ORDER.indexOf(category);
     
     // If scrolling down and near end of category, preload next category
@@ -272,7 +303,7 @@ export function EmojiPicker({
     if (direction === 'up' && centerIndex < 50 && categoryIndex > 0) {
       const prevCategory = CATEGORY_ORDER[categoryIndex - 1];
       if (prevCategory !== 'recent') {
-        const prevCategoryEmojis = EMOJIS_BY_CATEGORY[prevCategory] || [];
+        const prevCategoryEmojis = EMOJI_SPRITE_DATA[prevCategory] || [];
         if (prevCategoryEmojis.length > 0) {
           preloadEmojisAround(prevCategory, Math.max(0, prevCategoryEmojis.length - 1), serverUrl);
         }
@@ -342,27 +373,81 @@ export function EmojiPicker({
   
   // Get all emoji sections (categories with their emojis)
   const allEmojiSections = useMemo(() => {
-    const sections: Array<{
-      category: string;
-      emojis: Array<EmojiData | { emoji: string, name: string, unified: string }>;
-    }> = [];
-    
-    // Add recent emojis if available
-    if (recentEmojis.length > 0) {
-      sections.push({ category: 'recent', emojis: recentEmojis });
-    }
-    
-    // Add all other categories
-    for (const category of CATEGORY_ORDER) {
-      if (category === 'recent') continue;
+    try {
+      // Initialiser un tableau pour les sections
+      const sections: Array<{
+        category: string;
+        emojis: Array<EmojiData | { emoji: string, name: string, unified: string }>;
+      }> = [];
       
-      const emojis = EMOJIS_BY_CATEGORY[category] || [];
-      if (emojis.length > 0) {
-        sections.push({ category, emojis });
+      // Ajouter les émojis récents s'ils existent
+      if (recentEmojis && recentEmojis.length > 0) {
+        sections.push({ category: 'recent', emojis: recentEmojis });
       }
+      
+      // Ajouter toutes les autres catégories
+      for (const category of CATEGORY_ORDER) {
+        if (category === 'recent') continue;
+        
+        // Utiliser EMOJI_SPRITE_DATA pour récupérer les émojis
+        const emojis = EMOJI_SPRITE_DATA[category] || [];
+        
+        if (emojis.length > 0) {
+          sections.push({ category, emojis });
+        } else if (category === 'smileys-emotion') {
+          // S'assurer que la catégorie smileys-emotion existe toujours
+          sections.push({
+            category,
+            emojis: [{
+              name: "GRINNING FACE",
+              unified: "1F600",
+              short_name: "grinning",
+              short_names: ["grinning"],
+              sheet_x: 12,
+              sheet_y: 14,
+              category: "smileys-emotion",
+              emoji: '😀'
+            }]
+          });
+        }
+      }
+      
+      // Protection ultime : s'assurer qu'il y a au moins une section
+      if (sections.length === 0) {
+        console.warn('Aucune section d\'emoji trouvée, utilisation du fallback');
+        sections.push({
+          category: 'smileys-emotion',
+          emojis: [{
+            name: "GRINNING FACE",
+            unified: "1F600",
+            short_name: "grinning",
+            short_names: ["grinning"],
+            sheet_x: 12,
+            sheet_y: 14,
+            category: "smileys-emotion",
+            emoji: '😀'
+          }]
+        });
+      }
+      
+      return sections;
+    } catch (error) {
+      console.error('Erreur lors de la création des sections d\'émojis:', error);
+      // Retourner une section minimale pour éviter les erreurs
+      return [{
+        category: 'smileys-emotion',
+        emojis: [{
+          name: "GRINNING FACE",
+          unified: "1F600",
+          short_name: "grinning",
+          short_names: ["grinning"],
+          sheet_x: 12,
+          sheet_y: 14,
+          category: "smileys-emotion",
+          emoji: '😀'
+        }]
+      }];
     }
-    
-    return sections;
   }, [recentEmojis]);
   
   // Calculate the row data from the sections
@@ -451,7 +536,7 @@ export function EmojiPicker({
     // Load STRICTLY only visible emojis (42 max) with ZERO adjacent preloading
     if (category !== 'recent') {
       // Prepare to load ONLY the visible viewport
-      const categoryEmojis = EMOJIS_BY_CATEGORY[category] || [];
+      const categoryEmojis = EMOJI_SPRITE_DATA[category] || [];
       
       // First, cancel ALL existing emoji loads to ensure resources focus on visible area
       stopEmojiLoading();
@@ -730,7 +815,7 @@ export function EmojiPicker({
     for (const category of CATEGORY_ORDER) {
       if (category === 'recent') continue;
       
-      const categoryEmojis = EMOJIS_BY_CATEGORY[category] || [];
+      const categoryEmojis = EMOJI_SPRITE_DATA[category] || [];
       for (const emoji of categoryEmojis) {
         // Skip already found emojis
         if (seenUnified.has(emoji.unified)) continue;
@@ -835,7 +920,7 @@ export function EmojiPicker({
         // Aggressively load emojis in both directions around current point
         if (visibleEmojiIndexRef.current) {
           const { category, index } = visibleEmojiIndexRef.current;
-          const emojis = EMOJIS_BY_CATEGORY[category] || [];
+          const emojis = EMOJI_SPRITE_DATA[category] || [];
           
           // Load a smaller area around current position (3 rows total for better performance)
           const centerRowIndex = Math.floor(index / EMOJIS_PER_ROW);
@@ -968,7 +1053,7 @@ export function EmojiPicker({
             const visibleEnd = finalStart + VISIBLE_EMOJI_COUNT; // Exactly what's visible
             
             if (currentCategory !== 'recent') {
-              const categoryEmojis = EMOJIS_BY_CATEGORY[currentCategory] || [];
+              const categoryEmojis = EMOJI_SPRITE_DATA[currentCategory] || [];
               const finalEnd = Math.min(categoryEmojis.length, visibleEnd);
               
               // Cancel all other loading by requesting ONLY EXACTLY what's visible
@@ -1047,7 +1132,7 @@ export function EmojiPicker({
           if (isInDirectionChangePeriod) {
             // When direction just changed, load EXACTLY what's visible at the new position
             // This prevents the "disappearing emoji" effect when changing scroll direction
-            const categoryEmojis = EMOJIS_BY_CATEGORY[currentCategory] || [];
+            const categoryEmojis = EMOJI_SPRITE_DATA[currentCategory] || [];
             
             // Get exact visible area - ONLY what's visible (7 rows of 6 = 42 emojis)
             const centerRowStart = Math.floor(approxEmojiIndex / EMOJIS_PER_ROW) * EMOJIS_PER_ROW;
@@ -1107,7 +1192,7 @@ export function EmojiPicker({
           } else {
             // For normal scrolling, just load what's exactly visible - no extra preloading
             // This loads EXACTLY the emoji rows on screen
-            const categoryEmojis = EMOJIS_BY_CATEGORY[currentCategory] || [];
+            const categoryEmojis = EMOJI_SPRITE_DATA[currentCategory] || [];
             const visibleStart = Math.max(0, approxEmojiIndex - 18); // 3 rows above (18 emojis)
             const visibleEnd = Math.min(categoryEmojis.length, approxEmojiIndex + 24); // 4 rows below (24 emojis)
             
@@ -1121,7 +1206,7 @@ export function EmojiPicker({
           }
           
           // If we're near the edge of a category, prepare the next/prev
-          const currentEmojis = EMOJIS_BY_CATEGORY[currentCategory] || [];
+          const currentEmojis = EMOJI_SPRITE_DATA[currentCategory] || [];
           
           // No adjacent category preloading to minimize HTTP requests
           // We only load emojis when they become visible

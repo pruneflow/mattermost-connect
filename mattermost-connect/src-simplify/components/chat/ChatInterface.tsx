@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Box, Grid, Paper, Typography, Divider, CircularProgress } from '@mui/material';
 import { ChannelList } from '../channels/ChannelList';
 import { MessageList } from '../messages/MessageList';
-import { MessageInput } from '../messages/MessageInput';
+import MessageInput from '../messages/MessageInput';
 import { MessageThread } from '../messages/MessageThread';
 import { useAuth } from '../../context/AuthContext';
 import { Channel } from '../../api/types';
