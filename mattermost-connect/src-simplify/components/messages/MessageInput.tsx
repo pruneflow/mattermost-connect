@@ -122,7 +122,6 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
         width: '100%', 
         alignItems: 'center',
         p: 1,
-        borderTop: '1px solid',
         borderColor: 'divider'
       }}
     >
