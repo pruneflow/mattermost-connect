@@ -6,6 +6,7 @@ import MessageInput from '../messages/MessageInput';
 import { MessageThread } from '../messages/MessageThread';
 import { useAuth } from '../../context/AuthContext';
 import { Channel } from '../../api/types';
+import { useMessages } from '../../hooks/useMessages';
 
 export interface ChatInterfaceProps {
   teamId: string;
@@ -41,6 +42,26 @@ export function ChatInterface({ teamId }: ChatInterfaceProps) {
   const handleCancelReply = useCallback(() => {
     setReplyToMessageId(undefined);
   }, []);
+  
+  // Get messaging service for this channel
+  const { createMessage } = useMessages(selectedChannel?.id);
+  
+  // Handle sending a message
+  const handleSendMessage = useCallback((message: string) => {
+    if (!selectedChannel) return;
+    
+    console.log(`Sending message to channel ${selectedChannel.id}: ${message}`);
+    createMessage({
+      channel_id: selectedChannel.id,
+      message: message,
+      root_id: replyToMessageId // Include root_id if replying to a message
+    }).then(() => {
+      // Clear reply after sending
+      handleCancelReply();
+    }).catch(error => {
+      console.error('Error sending message:', error);
+    });
+  }, [selectedChannel, createMessage, replyToMessageId, handleCancelReply]);
   
   // Handle opening thread
   const handleOpenThread = useCallback((messageId: string) => {
@@ -180,6 +201,7 @@ export function ChatInterface({ teamId }: ChatInterfaceProps) {
                   channelId={selectedChannel.id}
                   replyToMessageId={replyToMessageId}
                   placeholder={`Message ${selectedChannel.display_name || selectedChannel.name}`}
+                  onSendMessage={handleSendMessage}
                   onMessageSent={handleCancelReply}
                   onCancelReply={handleCancelReply}
                 />

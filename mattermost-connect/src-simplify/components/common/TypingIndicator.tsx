@@ -1,20 +1,23 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useTypingEventsForChannel } from '../../hooks/useTypingEventsForChannel';
 
 export interface TypingIndicatorProps {
   channelId: string;
   typingUsers?: string[]; // Array of usernames who are typing
 }
 
-export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicatorProps) {
+export function TypingIndicator({ channelId, typingUsers: typingUsersProp }: TypingIndicatorProps) {
   // State for typing status
   const [isVisible, setIsVisible] = useState(false);
   const [typingMessage, setTypingMessage] = useState('');
   
-  // WebSocket hook (utilisation de l'instance partagée en singleton)
-  const { typingEvents, sendTypingEvent } = useWebSocket();
-  
+
+  // Get typing events for this channel
+  const { typingEvents = []  } = useTypingEventsForChannel(channelId);
+  const typingUsers = typingUsersProp || typingEvents.map(event => event.username);
+    
   // Update typing state based on props
   useEffect(() => {
     if (typingUsers.length > 0) {
@@ -88,13 +91,6 @@ export function TypingIndicator({ channelId, typingUsers = [] }: TypingIndicator
     return () => clearInterval(interval);
   }, [uniqueUsernames.length]);
   
-  // Send typing event when user is typing in this channel
-  const notifyTyping = () => {
-    if (channelId && sendTypingEvent) {
-      console.debug("sendTypingEvent", channelId)
-      sendTypingEvent(channelId);
-    }
-  };
   
   // Animation style for typing indicator
   const typingAnimation = {

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { AuthProvider } from './context/AuthContext';
 import { api } from './api/client';
 import { WebSocketProvider } from './hooks/useWebSocket';
@@ -30,14 +31,28 @@ const queryClient = new QueryClient({
   },
 });
 
-// Provider component that wraps the app with auth and query providers
+// Créer un thème par défaut pour Material-UI
+const theme = createTheme({
+  shape: {
+    borderRadius: 4,
+  },
+  // Vous pouvez personnaliser d'autres aspects du thème ici si nécessaire
+});
+
 export interface MattermostProviderProps {
   children: React.ReactNode;
   serverUrl?: string;
   token?: string;
+  // Optionnellement, vous pourriez permettre de passer un thème personnalisé
+  theme?: ReturnType<typeof createTheme>;
 }
 
-export function MattermostProvider({ children, serverUrl, token }: MattermostProviderProps) {
+export function MattermostProvider({ 
+  children, 
+  serverUrl, 
+  token,
+  theme: customTheme 
+}: MattermostProviderProps) {
   // Configure API client if serverUrl and token are provided
   useEffect(() => {
     if (serverUrl) {
@@ -48,14 +63,19 @@ export function MattermostProvider({ children, serverUrl, token }: MattermostPro
     }
   }, [serverUrl, token]);
   
+  // Utiliser le thème personnalisé si fourni, sinon utiliser le thème par défaut
+  const appliedTheme = customTheme || theme;
+  
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <WebSocketProvider>
-          {children}
-        </WebSocketProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider theme={appliedTheme}>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <WebSocketProvider>
+            {children}
+          </WebSocketProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

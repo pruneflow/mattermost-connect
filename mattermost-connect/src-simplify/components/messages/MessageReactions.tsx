@@ -21,7 +21,7 @@ import {
   EMOJI_BY_SHORT_NAME
 } from '../../utils/emojiUtils';
 import { api } from '../../api/client';
-import { EmojiPickerMM } from '../common';
+import { EmojiPickerMart } from '../common';
 
 export interface MessageReactionsProps {
   messageId: string;
@@ -239,12 +239,11 @@ export function MessageReactions({
           horizontal: 'left',
         }}
       >
-        <EmojiPickerMM
+        <EmojiPickerMart
           onEmojiSelect={handleEmojiSelect}
-          height={350}
+          showSearch={true}
           width={320}
-          showSearchBar={true}
-          showCategoryTabs={true}
+          height={350}
         />
       </Popover>
     </Box>

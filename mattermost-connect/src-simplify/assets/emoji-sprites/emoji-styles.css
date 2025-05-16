@@ -4,15 +4,23 @@
  */
 
 .emojisprite {
+    /* Retour aux dimensions originales pour maintenir la compatibilité avec les positions du sprite */
     width: 66px;
-    max-width: none;
     height: 66px;
     background-repeat: no-repeat;
-    border-radius: 18px;
+    /* Arrondir légèrement les emojis */
+    border-radius: 12px;
     cursor: pointer;
-    -moz-transform: scale(0.35);
-    zoom: 0.35;
+    /* Transformations fixes pour tous les navigateurs */
+    transform: scale(0.35);
+    /* Utiliser l'image PNG */
     background-image: url('../sprite_mm.png');
+    /* Optimisations de performance */
+    will-change: transform;
+    /* Transition fluide pour l'effet de survol */
+    transition: transform 0.1s ease-in-out;
+    /* S'assurer que l'élément reste stable */
+    display: inline-block;
 }
 
 /* Common category classes */

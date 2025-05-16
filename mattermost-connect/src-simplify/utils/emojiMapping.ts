@@ -51,9 +51,8 @@ export const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
  * @returns L'objet avec les positions CSS pour le background-position
  */
 export function getEmojiPosition(sheetX: number, sheetY: number): string {
-  // Formule basée sur le fichier SCSS de Mattermost
-  // Les valeurs sont exprimées en pixels et sont directement tirées du fichier SCSS généré
-  // Utiliser les valeurs du fichier sprite_mm.scss pour une précision parfaite
+  // Formule adaptée pour notre CSS avec background-size: 1320px 1320px
+  // Calcul basé sur la nouvelle taille du sprite (1320px = 20 colonnes * 66px)
   const x = -66 * sheetX;
   const y = -66 * sheetY; 
   
@@ -81,11 +80,15 @@ export function getEmojiStyle(sheetX: number, sheetY: number): React.CSSProperti
   return {
     backgroundImage: `url(${EMOJI_SPRITE_URL})`,
     backgroundPosition: getEmojiPosition(sheetX, sheetY),
-    backgroundSize: '3828px 3828px', // Taille exacte du sprite pour s'assurer du positionnement correct
     backgroundRepeat: 'no-repeat',
     width: `${EMOJI_SIZE}px`,
     height: `${EMOJI_SIZE}px`,
     display: 'inline-block',
+    transform: 'scale(0.35)',
+    transformOrigin: 'center',
+    // Optimisations de performance
+    willChange: 'transform',
+    transition: 'transform 0.1s ease-in-out',
   };
 }
 

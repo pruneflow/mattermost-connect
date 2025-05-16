@@ -7,6 +7,7 @@ import { messageKeys } from './useMessages';
 import { channelKeys } from './useChannels';
 import { userKeys } from './useUsers';
 import { teamKeys } from './useTeams';
+import { formatUserName } from '../utils/formatters';
 
 // Définition de l'interface pour le contexte WebSocket
 interface WebSocketContextValue {
@@ -537,7 +538,7 @@ export const WebSocketSingleton = (() => {
  */
 export function useWebSocket() {
   // Get auth state
-  const { isAuthenticated, token, serverUrl } = useAuth();
+  const { isAuthenticated, token, serverUrl, user } = useAuth();
   
   // Query client for cache updates
   const queryClient = useQueryClient();
@@ -726,18 +727,41 @@ export function useWebSocket() {
   
   // Send typing event
   const sendTypingEvent = useCallback((channelId: string) => {
-    if (!wsRef.current || !isConnected) return;
+    // Utiliser la référence au singleton pour l'instance WebSocket
+    const ws = WebSocketSingleton.getWebSocket();
     
+    if (!ws || ws.readyState !== WebSocket.OPEN || !isAuthenticated || !user) {
+      console.log('Cannot send typing event: WebSocket not connected or not open', {
+        wsExists: !!ws,
+        readyState: ws ? ws.readyState : 'none',
+        isConnected
+      });
+      return;
+    }
+    
+    
+    if (!user.id) {
+      console.log('Cannot send typing event: User ID not available');
+      return;
+    }
+    
+    console.log(`Sending typing event for channel ${channelId} and user ${user.id}`);
     const typingEvent = {
       action: 'user_typing',
-      seq: 1,
+      seq: Date.now(), 
       data: {
         channel_id: channelId,
-      },
+        parent_id: ''
+      }
     };
     
-    wsRef.current.send(JSON.stringify(typingEvent));
-  }, [isConnected]);
+    try {
+      ws.send(JSON.stringify(typingEvent));
+      console.log('Typing event sent successfully');
+    } catch (error) {
+      console.error('Error sending typing event:', error);
+    }
+  }, [isConnected, isAuthenticated, token]);
   
   // Clean up old typing events via le singleton
   useEffect(() => {
@@ -861,7 +885,7 @@ export function useWebSocket() {
             const user = cachedUsers[userId];
             if (user) {
               // Utiliser formatUserName pour respecter les conventions existantes
-              username = user.first_name || user.username || 'Someone';
+              username = formatUserName(user);
             }
           }
           

@@ -28,10 +28,16 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@emoji-mart/data": "1.2.1",
+    "@emoji-mart/react": "1.1.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^7.0.1",
-    "@mui/material": "^7.0.1"
+    "@mui/material": "^7.0.1",
+    "emoji-datasource": "15.1.2",
+    "emoji-datasource-apple": "15.1.2",
+    "emoji-datasource-google": "15.1.2",
+    "emoji-mart": "5.6.0"
   },
   "peerDependencies": {
     "react": "^17.0.0 || ^18.0.0",
@@ -61,6 +67,7 @@
     "@types/react-window": "^1.8.8",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
+    "canvas": "3.1.0",
     "check-password-strength": "3.0.0",
     "date-fns": "4.1.0",
     "eslint": "^8.49.0",
@@ -76,6 +83,7 @@
     "jest-environment-jsdom": "^29.6.4",
     "lodash-es": "4.17.21",
     "normalizr": "3.6.2",
+    "pixelmatch": "7.1.0",
     "prettier": "^3.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

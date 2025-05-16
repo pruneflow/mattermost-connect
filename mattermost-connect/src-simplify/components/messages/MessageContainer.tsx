@@ -4,6 +4,8 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import MessageThread from './MessageThread';
 import { useMessages } from '../../hooks/useMessages';
+import { TypingIndicator } from '../common/TypingIndicator';
+import { useTypingEventsForChannel } from '../../hooks/useTypingEventsForChannel';
 
 export interface MessageContainerProps {
   channelId: string;
@@ -51,6 +53,22 @@ export function MessageContainer({
   const handleCancelReply = useCallback(() => {
     setReplyToMessageId(undefined);
   }, []);
+  
+  // Handle sending a message
+  const handleSendMessage = useCallback((message: string) => {
+    // Create the new message using the service
+    console.log(`Sending message to channel ${channelId}: ${message}`);
+    messageService.createMessage({
+      channel_id: channelId,
+      message: message,
+      root_id: replyToMessageId // Include root_id if replying to a message
+    }).then(() => {
+      // Clear reply after sending
+      handleCancelReply();
+    }).catch(error => {
+      console.error('Error sending message:', error);
+    });
+  }, [channelId, messageService, replyToMessageId, handleCancelReply]);
 
   // Handle thread message sent - refresh main message list to update thread counts
   const handleThreadMessageSent = useCallback((message?: any) => {
@@ -154,11 +172,17 @@ export function MessageContainer({
             borderColor: 'divider',
             zIndex: 10,
           }}>
+              
+            <TypingIndicator 
+              channelId={channelId} 
+            />
+            
             <MessageInput
               ref={mainInputRef}
               channelId={channelId}
               replyToMessageId={replyToMessageId}
               placeholder={`Type a message...`}
+              onSendMessage={handleSendMessage}
               onMessageSent={handleCancelReply}
               onCancelReply={handleCancelReply}
             />
