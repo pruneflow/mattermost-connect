@@ -32,6 +32,7 @@ type AuthMode = "direct" | "proxy" | "demo";
 interface AuthenticationProps {
   onSuccess: (result: any) => void;
   onError: (error: Error) => void;
+  initialMode?: AuthMode;
 }
 
 /**
@@ -83,13 +84,21 @@ const AuthProvider: React.FC<{
           // Marquer le succès pour éviter de rappeler onSuccess
           setSuccessReported(true);
 
+          // Essayer de récupérer le token, mais continuer même si non disponible
+          let token;
+          try {
+            token = localStorage.getItem("mattermost_token");
+          } catch (e) {
+            console.warn("Could not retrieve token from localStorage, but continuing anyway");
+          }
+          
           // Passer les informations d'authentification au parent
           onSuccess({
             mode,
             serverUrl: mode === "direct" ? serverUrl : undefined,
             proxyUrl: mode === "proxy" ? proxyUrl : undefined,
             clientId: mode === "proxy" ? clientId : undefined,
-            token: localStorage.getItem("mattermost_token"),
+            token: token || user.id, // Utiliser user.id comme fallback si token non disponible
             user,
           });
         } catch (err) {
@@ -110,12 +119,20 @@ const AuthProvider: React.FC<{
       console.log("Already authenticated, reporting success");
       setSuccessReported(true);
 
+      // Essayer de récupérer le token, mais continuer même si non disponible
+      let token;
+      try {
+        token = localStorage.getItem("mattermost_token");
+      } catch (e) {
+        console.warn("Could not retrieve token from localStorage, but continuing anyway");
+      }
+      
       onSuccess({
         mode,
         serverUrl: mode === "direct" ? serverUrl : undefined,
         proxyUrl: mode === "proxy" ? proxyUrl : undefined,
         clientId: mode === "proxy" ? clientId : undefined,
-        token: localStorage.getItem("mattermost_token"),
+        token: token || currentUser.id, // Utiliser currentUser.id comme fallback
         user: currentUser,
       });
     }
@@ -124,8 +141,16 @@ const AuthProvider: React.FC<{
   // Afficher une erreur si l'authentification a échoué
   React.useEffect(() => {
     if (error && !successReported) {
-      console.error("Auth error detected:", error);
-      onError(error);
+      // Vérifier si c'est une erreur de token manquant (que nous pouvons ignorer)
+      if (error.message && error.message.includes("No token found")) {
+        console.warn("Token not found error detected but continuing...", error);
+        // Ne pas propager cette erreur car elle est généralement temporaire
+        // pendant le processus d'authentification
+      } else {
+        // Pour toutes les autres erreurs, les propager normalement
+        console.error("Auth error detected:", error);
+        onError(error);
+      }
     }
   }, [error, successReported, onError]);
 
@@ -153,15 +178,34 @@ const AuthProvider: React.FC<{
 const AuthenticationUI: React.FC<AuthenticationProps> = ({
   onSuccess,
   onError,
+  initialMode = "direct"
 }) => {
-  // État
-  const [activeTab, setActiveTab] = useState<number>(0);
-  const [authMode, setAuthMode] = useState<AuthMode>("direct");
-  const [serverUrl, setServerUrl] = useState<string>("http://localhost:8065");
-  const [username, setUsername] = useState<string>("");
+  // Déterminer l'onglet initial en fonction du mode
+  const getInitialTabIndex = () => {
+    switch (initialMode) {
+      case "direct": return 0;
+      case "proxy": return 1;
+      case "demo": return 2;
+      default: return 0;
+    }
+  };
+
+  // État - avec récupération des valeurs sauvegardées dans localStorage
+  const [activeTab, setActiveTab] = useState<number>(getInitialTabIndex());
+  const [authMode, setAuthMode] = useState<AuthMode>(initialMode);
+  const [serverUrl, setServerUrl] = useState<string>(() => {
+    return localStorage.getItem("mm_serverUrl") || "http://localhost:8065";
+  });
+  const [username, setUsername] = useState<string>(() => {
+    return localStorage.getItem("mm_username") || "";
+  });
   const [password, setPassword] = useState<string>("");
-  const [proxyUrl, setProxyUrl] = useState<string>("");
-  const [clientId, setClientId] = useState<string>("");
+  const [proxyUrl, setProxyUrl] = useState<string>(() => {
+    return localStorage.getItem("mm_proxyUrl") || "";
+  });
+  const [clientId, setClientId] = useState<string>(() => {
+    return localStorage.getItem("mm_clientId") || "";
+  });
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -214,6 +258,12 @@ const AuthenticationUI: React.FC<AuthenticationProps> = ({
           "Proxy URL, client ID, username, and password are required",
         );
       }
+      
+      // Sauvegarder les valeurs des champs dans localStorage (sauf le mot de passe)
+      if (serverUrl) localStorage.setItem("mm_serverUrl", serverUrl);
+      if (username) localStorage.setItem("mm_username", username);
+      if (proxyUrl) localStorage.setItem("mm_proxyUrl", proxyUrl);
+      if (clientId) localStorage.setItem("mm_clientId", clientId);
 
       // Mode démo
       if (authMode === "demo") {
@@ -287,22 +337,22 @@ const AuthenticationUI: React.FC<AuthenticationProps> = ({
         </Tabs>
 
         <Box sx={{ p: 3 }}>
+          <Typography variant="h5" gutterBottom fontWeight="medium">
+            {activeTab === 0
+              ? "Connect to Mattermost Server"
+              : activeTab === 1
+                ? "Connect via Proxy"
+                : "Launch Demo Mode"}
+          </Typography>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
           {!showAuth ? (
             <>
-              <Typography variant="h5" gutterBottom fontWeight="medium">
-                {activeTab === 0
-                  ? "Connect to Mattermost Server"
-                  : activeTab === 1
-                    ? "Connect via Proxy"
-                    : "Launch Demo Mode"}
-              </Typography>
-
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
-
               <form onSubmit={handleSubmit}>
                 {/* Champs pour le mode direct */}
                 {activeTab === 0 && (

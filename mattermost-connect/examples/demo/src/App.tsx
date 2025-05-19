@@ -113,7 +113,10 @@ const ConnectedApp: React.FC<{
   }
 
   // Si nous arrivons ici, c'est que l'authentification est complète et l'utilisateur est authentifié
-  return <MattermostDemo onLogout={handleLogout} />;
+  return <MattermostDemo onLogout={() => {
+    console.log("Logout requested from MattermostDemo");
+    handleLogout();
+  }} />;
 };
 
 /**
@@ -168,27 +171,66 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Effet pour récupérer les informations d'authentification du localStorage
+  useEffect(() => {
+    try {
+      const savedAuth = localStorage.getItem("mattermost_auth");
+      if (savedAuth) {
+        const authData = JSON.parse(savedAuth) as ConnectionDetails;
+        // Vérifier que les données essentielles sont présentes
+        if (authData.mode && 
+            ((authData.mode === "direct" && authData.serverUrl && authData.token) || 
+             (authData.mode === "proxy" && authData.proxyUrl && authData.clientId && authData.token) ||
+             authData.mode === "demo")) {
+          
+          console.log("Restoring saved authentication for mode:", authData.mode);
+          setConnectionDetails(authData);
+          setAuthenticated(true);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading saved authentication:", err);
+    }
+  }, []);
+
   // Gérer l'authentification réussie
   const handleAuthSuccess = (result: any) => {
     console.log("Authentication successful:", result);
-    setAuthenticated(true);
-    setConnectionDetails({
+    
+    // Créer l'objet de détails de connexion
+    const details: ConnectionDetails = {
       mode: result.mode,
       serverUrl: result.serverUrl,
       proxyUrl: result.proxyUrl,
       clientId: result.clientId,
       token: result.token,
       user: result.user,
-    });
+    };
+    
+    // Sauvegarder dans localStorage pour persistance
+    localStorage.setItem("mattermost_auth", JSON.stringify(details));
+    
+    // Mettre à jour l'état
+    setAuthenticated(true);
+    setConnectionDetails(details);
   };
 
   // Gérer la déconnexion
   const handleLogout = () => {
     console.log("Logging out");
     
-    // Réinitialiser l'état
+    // Effacer uniquement les données d'authentification (token) de localStorage
+    localStorage.removeItem("mattermost_auth");
+    
+    // Réinitialiser l'état pour retourner à la page d'authentification
     setAuthenticated(false);
-    setConnectionDetails({ mode: "direct" });
+    // Conserver le mode actuel pour que l'utilisateur reste sur le même onglet du formulaire d'authentification
+    setConnectionDetails((prevDetails) => ({ 
+      mode: prevDetails.mode 
+    }));
+    
+    // Les autres données (serverUrl, proxyUrl, clientId, username) sont conservées
+    // dans localStorage sous les clés mm_* et seront restaurées par AuthenticationUI
   };
 
   // Gérer les erreurs
@@ -206,7 +248,11 @@ function App() {
   const renderProvider = () => {
     if (!authenticated) {
       return (
-        <AuthenticationUI onSuccess={handleAuthSuccess} onError={handleError} />
+        <AuthenticationUI 
+          initialMode={connectionDetails.mode}
+          onSuccess={handleAuthSuccess} 
+          onError={handleError} 
+        />
       );
     }
 
@@ -266,7 +312,10 @@ function App() {
       default:
         // Pour le mode démo, nous utilisons des données simulées
         console.log("Initializing demo mode");
-        return <DemoApp onLogout={handleLogout} mockService={mockService} />;
+        return <DemoApp onLogout={() => {
+          console.log("Logout requested from DemoApp");
+          handleLogout();
+        }} mockService={mockService} />;
     }
   };
 

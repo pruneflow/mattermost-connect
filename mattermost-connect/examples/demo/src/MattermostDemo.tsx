@@ -40,7 +40,7 @@ function MattermostDemo({ onLogout, mockService }: MattermostDemoProps) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <MattermostProvider>
-        <MainContent />
+        <MainContent onLogout={onLogout} />
       </MattermostProvider>
     </ThemeProvider>
   );
@@ -141,14 +141,25 @@ function LoginForm({ onLogin }: { onLogin: (credentials: any) => Promise<any> })
 }
 
 // Main content with authentication handling
-function MainContent() {
+function MainContent({ onLogout }: { onLogout?: () => void }) {
   // Get auth state from context
   const { isAuthenticated, isInitialized, isLoading, user, login, logout, status, updateStatus } = useAuth();
   
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   
-  // If still initializing auth, show loading
+  // Gérer la déconnexion 
+  const handleLogout = () => {
+    // D'abord on appelle logout() du contexte auth pour se déconnecter de Mattermost
+    logout();
+    
+    // Puis on appelle la fonction onLogout passée par le parent pour revenir à la page principale
+    if (onLogout) {
+      onLogout();
+    }
+  };
+  
+  // Si chargement, afficher l'indicateur
   if (!isInitialized || isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -160,28 +171,31 @@ function MainContent() {
     );
   }
   
-  // If not authenticated, show login form
+  // Si non authentifié, utiliser la fonction onLogout pour retourner à la page d'authentification principale
   if (!isAuthenticated || !user) {
+    // Si la fonction onLogout est définie, appeler pour revenir à la page principale
+    if (onLogout) {
+      setTimeout(onLogout, 0); // Utiliser setTimeout pour éviter les problèmes de rendu
+    }
+    
+    // En attendant, afficher un indicateur de chargement
     return (
-      <Container maxWidth="sm" sx={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
-          <Typography variant="h4" align="center" gutterBottom>
-            Mattermost Connect Demo
-          </Typography>
-          <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 4 }}>
-            Sign in to your Mattermost server
-          </Typography>
-          
-          <LoginForm onLogin={login} />
-        </Paper>
-      </Container>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress size={40} />
+        <Typography variant="h6" sx={{ ml: 2 }}>
+          Redirecting to login...
+        </Typography>
+      </Box>
     );
   }
   
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>                
-        {/* Main chat component */}
-          <MattermostChat />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>           
+        {/* Main chat component with custom logout handler */}
+        <MattermostChat 
+          // Surcharger la fonction de déconnexion pour utiliser notre handler personnalisé
+          onLogout={handleLogout}
+        />
     </Box>
   );
 }
