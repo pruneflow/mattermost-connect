@@ -1,62 +1,40 @@
 import React from 'react';
-import { Box, Tooltip } from '@mui/material';
+import { UserStatus } from '../../api/types';
 import { useUserStatus } from '../../hooks';
-
-// Status options with colors - matches UserProfile.tsx
-const statusColors = {
-  online: '#4caf50',
-  away: '#ff9800',
-  dnd: '#f44336',
-  offline: '#9e9e9e'
-};
-
-// Status labels for tooltips
-const statusLabels = {
-  online: 'Online',
-  away: 'Away',
-  dnd: 'Do Not Disturb',
-  offline: 'Offline'
-};
+import { UserStatusBadge } from './UserStatusBadge';
 
 export interface StatusIndicatorProps {
   userId: string;
-  size?: number;
+  size?: 'small' | 'medium' | 'large' | number;
+  variant?: 'dot' | 'icon' | 'both';
+  showTooltip?: boolean;
 }
 
 /**
- * Indicateur de statut utilisateur simple
- * Récupère le statut via le hook useUserStatus optimisé pour les mises à jour en temps réel
+ * Indicateur de statut utilisateur
+ * Récupère le statut via le hook useUserStatus puis l'affiche avec UserStatusBadge
  */
-export function StatusIndicator({ userId, size = 10 }: StatusIndicatorProps) {
+export function StatusIndicator({ 
+  userId, 
+  size = 'medium', 
+  variant = 'dot',
+  showTooltip = true
+}: StatusIndicatorProps) {
   // Utiliser le hook spécialisé useUserStatus qui ne s'abonne qu'aux changements pour cet utilisateur
-  const status = useUserStatus(userId);
+  const status = useUserStatus(userId) as UserStatus;
   
-  // Le statut est déjà 'offline' par défaut si absent
-  const currentStatus = status;
+  // Si pas de statut ou pas d'utilisateur, ne rien afficher
+  if (!status || !userId) return null;
   
-  // Obtenir la couleur correspondant au statut
-  const statusColor = statusColors[currentStatus as keyof typeof statusColors] || statusColors.offline;
-  
-  // Obtenir le libellé du statut pour le tooltip
-  const statusLabel = statusLabels[currentStatus as keyof typeof statusLabels] || statusLabels.offline;
-  
+  // Utiliser le composant UserStatusBadge pour afficher le statut
   return (
-    <Tooltip title={statusLabel} arrow placement="top">
-      <Box
-        sx={{
-          width: size,
-          height: size,
-          borderRadius: '50%',
-          bgcolor: statusColor,
-          border: '2px solid',
-          borderColor: 'background.paper',
-          boxShadow: '0 0 3px rgba(0,0,0,0.2)',
-          transition: 'all 0.2s ease-in-out',
-          display: 'inline-block',
-          flexShrink: 0
-        }}
-      />
-    </Tooltip>
+    <UserStatusBadge
+      status={status}
+      size={size}
+      variant={variant}
+      showTooltip={showTooltip}
+      bordered={true}
+    />
   );
 }
 

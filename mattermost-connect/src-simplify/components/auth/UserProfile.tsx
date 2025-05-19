@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   Box, 
   Paper, 
-  Avatar, 
   Typography, 
   CircularProgress, 
   Button, 
@@ -31,6 +30,7 @@ import { useUser } from '../../hooks/useUsers';
 import { useAuth } from '../../context/AuthContext';
 import { User } from '../../api/types';
 import { api } from '../../api/client';
+import { UserAvatar } from '../common/UserAvatar';
 
 // Status options with colors
 const statusOptions = [
@@ -293,19 +293,25 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
             ) : null
           }
         >
-          <Avatar 
-            sx={{ 
-              width: 100, 
-              height: 100, 
-              bgcolor: getAvatarColor(),
-              fontSize: '2rem',
-              border: '3px solid',
-              borderColor: getStatusColor()
-            }}
-            src={user?.id ? `${api.getBaseUrl()}/api/v4/users/${user.id}/image?${new Date().getTime()}` : undefined}
-          >
-            {getUserInitials()}
-          </Avatar>
+          {/* Use the new centralized UserAvatar component with custom styling */}
+          <Box sx={{ 
+            width: 100, 
+            height: 100, 
+            border: '3px solid',
+            borderColor: getStatusColor(),
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden'
+          }}>
+            <UserAvatar 
+              user={user}
+              size={94}
+              showStatus={false}
+              showTooltip={false}
+            />
+          </Box>
           
           {/* Hidden file input for profile picture upload */}
           <input

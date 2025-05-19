@@ -1,6 +1,5 @@
 /**
  * Auth components exports
  */
-export * from './UserAvatar';
+export * from './UserMenu';
 export * from './UserProfile';
-export * from './UserStatusMenu';

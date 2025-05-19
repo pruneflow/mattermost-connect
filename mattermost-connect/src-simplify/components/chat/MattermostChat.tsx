@@ -27,8 +27,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import TeamList from '../teams/TeamList';
 import ChannelList from '../channels/ChannelList';
 import MessageContainer from '../messages/MessageContainer';
-import { Team, Channel, UserStatus } from '../../api/types';
-import UserAvatar from '../auth/UserAvatar';
+import { Team, Channel } from '../../api/types';
+import { UserMenu } from '../auth/UserMenu';
 
 // Sidebar width
 const SIDEBAR_WIDTH = 280;
@@ -201,9 +201,8 @@ export function MattermostChat({
           </Typography>
           
           {/* User avatar with menu and profile capabilities */}
-          <UserAvatar 
+          <UserMenu 
             user={user}
-            status={status}
             size="medium"
             showStatus={true}
             showMenu={true}

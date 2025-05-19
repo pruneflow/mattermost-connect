@@ -7,3 +7,4 @@ export * from './useWebSocket';
 export * from './useUserStatus';
 export * from './useMessageReactions';
 export * from './useTypingEventsForChannel';
+export * from './useUserAvatar';
