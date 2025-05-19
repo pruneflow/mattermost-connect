@@ -2,6 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { User, UserStatus, UserStatusObject } from '../api/types';
 
+// Cache global pour les utilisateurs
+export const userCache: Record<string, User> = {};
+
+// Requêtes en cours pour éviter les requêtes dupliquées
+export const pendingRequests: Record<string, Promise<User>> = {};
+
 // Query keys
 export const userKeys = {
   all: ['users'] as const,
@@ -12,6 +18,39 @@ export const userKeys = {
   statuses: () => [...userKeys.all, 'status'] as const,
   status: (id: string) => [...userKeys.statuses(), id] as const,
 };
+
+/**
+ * Récupère un utilisateur par son ID - garantie de 1 seul appel API par ID
+ */
+export async function getUser(userId: string): Promise<User> {
+  // Si l'utilisateur est déjà dans le cache, le retourner immédiatement
+  if (userCache[userId]) {
+    return userCache[userId];
+  }
+  
+  // Si une requête est déjà en cours, la réutiliser
+  if (pendingRequests[userId]) {
+    return pendingRequests[userId];
+  }
+  
+  // Sinon, faire un appel API et mettre en cache le résultat
+  const promise = api.get<User>(`users/${userId}`)
+    .then(response => {
+      const user = response.data;
+      userCache[userId] = user;
+      delete pendingRequests[userId];
+      return user;
+    })
+    .catch(error => {
+      delete pendingRequests[userId];
+      throw error;
+    });
+  
+  // Stocker la promesse pour éviter les appels dupliqués
+  pendingRequests[userId] = promise;
+  
+  return promise;
+}
 
 /**
  * Hook for fetching multiple users by ID
@@ -30,28 +69,10 @@ export function useUsers(userIds: string[] = []) {
       const response = await api.post<User[]>('users/ids', userIds);
       const users = response.data;
       
-      // Store users in localStorage cache for quicker access
-      try {
-        // Get existing cached users
-        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
-        const cachedUsers = JSON.parse(cachedUsersStr);
-        
-        // Update cache with new users
-        let cacheUpdated = false;
-        users.forEach(user => {
-          if (!cachedUsers[user.id] || cachedUsers[user.id].update_at < user.update_at) {
-            cachedUsers[user.id] = user;
-            cacheUpdated = true;
-          }
-        });
-        
-        // Save updated cache
-        if (cacheUpdated) {
-          localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
-        }
-      } catch (error) {
-        console.error('Error updating user cache:', error);
-      }
+      // Mettre en cache tous les utilisateurs
+      users.forEach(user => {
+        userCache[user.id] = user;
+      });
       
       return users;
     },
@@ -108,93 +129,31 @@ export function useUser(userId: string | undefined) {
   const userQuery = useQuery({
     queryKey: userKeys.detail(userId || ''),
     queryFn: async () => {
-      // Try to get from cache first
-      try {
-        const cachedUsersStr = localStorage.getItem('mattermost_cached_users');
-        if (cachedUsersStr && userId) {
-          const cachedUsers = JSON.parse(cachedUsersStr);
-          if (cachedUsers[userId]) {
-            // Use cached user but still fetch fresh data
-            setTimeout(() => {
-              api.get<User>(`users/${userId}`).then(response => {
-                // Update cache with fresh data
-                const cachedUsers = JSON.parse(localStorage.getItem('mattermost_cached_users') || '{}');
-                cachedUsers[userId] = response.data;
-                localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
-                
-                // Update query cache
-                queryClient.setQueryData(userKeys.detail(userId), response.data);
-              }).catch(err => console.error(`Error refreshing user ${userId}:`, err));
-            }, 100);
-            
-            return cachedUsers[userId];
-          }
-        }
-      } catch (error) {
-        console.error('Error reading from user cache:', error);
+      if (!userId) {
+        throw new Error("User ID is required");
       }
       
-      // Fetch from API if not in cache
-      const response = await api.get<User>(`users/${userId}`);
-      const user = response.data;
-      
-      // Update cache
-      try {
-        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
-        const cachedUsers = JSON.parse(cachedUsersStr);
-        cachedUsers[user.id] = user;
-        localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
-      } catch (error) {
-        console.error('Error updating user cache:', error);
+      // Si l'utilisateur est déjà dans le cache, l'utiliser
+      if (userCache[userId]) {
+        return userCache[userId];
       }
       
-      return user;
+      // Sinon, faire l'appel API
+      return getUser(userId);
     },
     enabled,
   });
 
-  // Fetch user status avec optimisation pour éviter les appels répétés
+  // Fetch user status
   const statusQuery = useQuery({
     queryKey: userKeys.status(userId || ''),
     queryFn: async () => {
-      console.log('🔎 Fetching initial status for user:', userId);
+      if (!userId) return null;
       
-      // Vérifier d'abord si le statut est déjà dans le cache localStorage
-      try {
-        const cachedUsersStr = localStorage.getItem('mattermost_cached_users');
-        if (cachedUsersStr && userId) {
-          const cachedUsers = JSON.parse(cachedUsersStr);
-          if (cachedUsers[userId] && cachedUsers[userId].status) {
-            console.log('✅ Using cached status for user:', userId, '-', cachedUsers[userId].status);
-            return cachedUsers[userId].status;
-          }
-        }
-      } catch (error) {
-        console.error('Error reading status from cache:', error);
-      }
-      
-      // Si pas dans le cache, faire un appel API
       const response = await api.get<UserStatusObject>(`users/${userId}/status`);
-      const status = response.data.status;
-      
-      // Mettre à jour le cache
-      try {
-        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
-        const cachedUsers = JSON.parse(cachedUsersStr);
-        if (cachedUsers[userId || '']) {
-          cachedUsers[userId || ''].status = status;
-          localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
-          console.log('✅ Cached initial status for user:', userId, '-', status);
-        }
-      } catch (error) {
-        console.error('Error updating status in cache:', error);
-      }
-      
-      return status;
+      return response.data.status;
     },
     enabled,
-    // Ne pas rafraîchir automatiquement - les mises à jour se feront via WebSocket
-    // refetchInterval: 30000,
   });
 
   // Update user mutation
@@ -214,6 +173,11 @@ export function useUser(userId: string | undefined) {
           ...updates,
           user_id: userId,
         });
+      }
+      
+      // Update cache
+      if (response.data && response.data.id) {
+        userCache[response.data.id] = response.data;
       }
       
       return response.data;
@@ -306,14 +270,6 @@ export function useUser(userId: string | undefined) {
           return oldData;
         }
       );
-      
-      // Invalidate queries to ensure UI updates
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: userKeys.status(effectiveUserId || '') });
-        if (userId === 'me' || userId === currentUserId) {
-          queryClient.invalidateQueries({ queryKey: userKeys.status('me') });
-        }
-      }, 500);
     },
   });
 

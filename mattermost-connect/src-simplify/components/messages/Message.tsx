@@ -188,8 +188,8 @@ export function Message({
             {content}
           </Typography>
           
-          {/* Message reactions */}
-          {messageId && channelId && (
+          {/* Message reactions - ne rendre que s'il y a des réactions ou un message valide */}
+          {messageId && channelId && (Object.keys(reactions).length > 0 || isCurrentUser) && (
             <MessageReactions
               messageId={messageId}
               channelId={channelId}

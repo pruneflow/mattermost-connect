@@ -1,9 +1,83 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { Channel, ChannelMember, User, DirectChannelInfo } from '../api/types';
 import { useChannelUtils } from './useChannelUtils';
 import { formatUserName } from '../utils/formatters';
-import { userKeys } from './useUsers';
+import { userKeys, getUser, userCache } from './useUsers';
+
+// Cache global pour les canaux par équipe
+export const channelsCache: Record<string, Channel[]> = {};
+
+// Date d'actualisation pour chaque équipe - pour déterminer si le cache est frais
+export const channelsLastUpdate: Record<string, number> = {};
+
+// Requêtes en cours pour éviter les requêtes dupliquées
+export const pendingChannelsRequests: Record<string, Promise<Channel[]>> = {};
+
+// Liste des équipes dont les canaux ont été modifiés pendant qu'on n'y était pas
+export const dirtyTeams = new Set<string>();
+
+/**
+ * Marque une équipe comme "sale" (nécessitant une actualisation)
+ * Utile quand des événements WebSocket indiquent des changements
+ * alors qu'on n'est pas sur cette équipe
+ */
+export function markTeamAsDirty(teamId: string): void {
+  if (teamId) {
+    dirtyTeams.add(teamId);
+  }
+}
+
+/**
+ * Récupère les canaux d'une équipe avec déduplication des requêtes
+ * Ne fait qu'un seul appel API par équipe, sauf si force=true
+ * 
+ * @param teamId ID de l'équipe
+ * @param force Forcer un rafraîchissement même si en cache
+ */
+export async function getChannels(teamId: string, force: boolean = false): Promise<Channel[]> {
+  // Si l'équipe est "sale" (modifiée par événement), forcer le rafraîchissement
+  if (dirtyTeams.has(teamId)) {
+    force = true;
+    dirtyTeams.delete(teamId); // Nettoyer après usage
+  }
+  
+  // 1. Si les canaux sont déjà en cache et on ne force pas le rafraîchissement, les retourner
+  if (!force && channelsCache[teamId]) {
+    return channelsCache[teamId];
+  }
+  
+  // 2. Si une requête est déjà en cours pour cette équipe, la réutiliser
+  if (pendingChannelsRequests[teamId]) {
+    return pendingChannelsRequests[teamId];
+  }
+  
+  // 3. Sinon, faire l'appel API et mettre en cache le résultat
+  const promise = api.get<Channel[]>(`users/me/teams/${teamId}/channels`)
+    .then(response => {
+      const channels = response.data;
+      
+      // Mettre à jour le cache
+      channelsCache[teamId] = channels;
+      channelsLastUpdate[teamId] = Date.now();
+      
+      // Nettoyer la promesse en cours
+      delete pendingChannelsRequests[teamId];
+      
+      return channels;
+    })
+    .catch(error => {
+      // Nettoyer la promesse en cours en cas d'erreur
+      delete pendingChannelsRequests[teamId];
+      throw error;
+    });
+  
+  // Stocker la promesse pour éviter les appels dupliqués
+  pendingChannelsRequests[teamId] = promise;
+  
+  return promise;
+}
 
 // Query keys
 export const channelKeys = {
@@ -30,6 +104,9 @@ export interface CreateChannelParams {
  */
 export function useChannels(teamId: string | undefined) {
   const queryClient = useQueryClient();
+  // Référence au dernier teamId traité pour détecter les changements d'équipe
+  const previousTeamIdRef = useRef<string | undefined>(undefined);
+  
   const { 
     isDirectChannel, 
     isGroupChannel, 
@@ -40,7 +117,21 @@ export function useChannels(teamId: string | undefined) {
   // Skip query if teamId is undefined
   const enabled = !!teamId;
 
-  // Fetch channels for team
+  // Effet pour gérer les changements d'équipe
+  useEffect(() => {
+    // Si l'ID d'équipe a changé
+    if (teamId && previousTeamIdRef.current !== teamId) {
+      console.log(`Team changed from ${previousTeamIdRef.current} to ${teamId}`);
+      
+      // Si l'équipe est marquée comme "dirty", on forcera un rechargement
+      // lors de la prochaine exécution du queryFn
+      
+      // Mettre à jour la référence
+      previousTeamIdRef.current = teamId;
+    }
+  }, [teamId]);
+
+  // Fetch channels for team with optimized caching
   const channelsQuery = useQuery({
     queryKey: channelKeys.list(teamId || ''),
     queryFn: async () => {
@@ -48,10 +139,18 @@ export function useChannels(teamId: string | undefined) {
         return [];
       }
       
-      const response = await api.get<Channel[]>(`users/me/teams/${teamId}/channels`);
-      return response.data;
+      // Déterminer si on doit forcer un rechargement (changement d'équipe)
+      const forceRefresh = dirtyTeams.has(teamId);
+      
+      // Utiliser notre fonction optimisée qui gère la déduplication et le cache
+      return getChannels(teamId, forceRefresh);
     },
     enabled,
+    // Paramètres de cache optimisés - ne refetch pas automatiquement
+    staleTime: Infinity,         // Ne jamais considérer les données comme obsolètes
+    cacheTime: Infinity,         // Garder les données en cache indéfiniment
+    refetchOnWindowFocus: false, // Pas de refetch au focus
+    refetchOnReconnect: false,   // Pas de refetch à la reconnexion
   });
 
   // Fetch users for direct/group channels
@@ -186,62 +285,53 @@ export function useChannels(teamId: string | undefined) {
       const otherUserId = userIds.find(id => id !== currentUserId);
       if (!otherUserId) return null;
       
-      // Find user details
+      // Essayer d'abord de trouver l'utilisateur dans les données chargées
       const otherUser = users.find(u => u.id === otherUserId);
-      
-      // Use formatUserName for direct channels
       let displayName;
       
+      // 1. Vérifier si l'utilisateur est déjà dans les données React Query
       if (otherUser) {
-        // Use formatUserName for proper display name formatting
         displayName = formatUserName(otherUser);
-      } else {
-        // If user not found, try to fetch it first before fallback to Unknown User
-        try {
-          // We'll request the user data and update the cache
-          api.get<User>(`users/${otherUserId}`).then(response => {
-            if (response.data) {
-              // Add this user to the cache
-              const users = usersQuery.data || [];
-              queryClient.setQueryData(
-                ['users', 'directChannels', { teamId }],
-                [...users, response.data]
-              );
-              
-              // Optionally also add to individual user cache
-              queryClient.setQueryData(
-                userKeys.detail(otherUserId),
-                response.data
-              );
-            }
-          }).catch(err => {
-            console.error(`Failed to fetch direct channel user ${otherUserId}:`, err);
-          });
-        } catch (error) {
-          console.error(`Error fetching direct channel user ${otherUserId}:`, error);
-        }
-        
-        // Attempt to immediately fetch user to avoid "Loading..." display
-        let userId = otherUserId;
-        
-        // Use a synchronous approach to get user data already in localStorage if available
-        try {
-          const cachedUsersStr = localStorage.getItem('mattermost_cached_users');
-          if (cachedUsersStr) {
-            const cachedUsers = JSON.parse(cachedUsersStr);
-            if (cachedUsers[userId]) {
-              const user = cachedUsers[userId];
-              return formatUserName(user);
-            }
+      } 
+      // 2. Sinon, essayer de récupérer depuis notre cache global simple
+      else {
+        const cachedUser = userCache[otherUserId];
+        if (cachedUser) {
+          displayName = formatUserName(cachedUser);
+          
+          // Mettre à jour les données React Query pour cohérence
+          const currentUsers = queryClient.getQueryData<User[]>(['users', 'directChannels', { teamId }]) || [];
+          if (!currentUsers.some(u => u.id === cachedUser.id)) {
+            queryClient.setQueryData(
+              ['users', 'directChannels', { teamId }],
+              [...currentUsers, cachedUser]
+            );
           }
-        } catch (e) {
-          console.error('Error parsing cached users:', e);
+        } 
+        // 3. Si pas en cache non plus, faire la requête et afficher un placeholder en attendant
+        else {
+          // Lancer l'appel API (un seul appel sera fait par utilisateur grâce à notre système)
+          getUser(otherUserId)
+            .then(user => {
+              // Mettre à jour React Query pour la prochaine fois
+              const currentUsers = queryClient.getQueryData<User[]>(['users', 'directChannels', { teamId }]) || [];
+              if (!currentUsers.some(u => u.id === user.id)) {
+                queryClient.setQueryData(
+                  ['users', 'directChannels', { teamId }],
+                  [...currentUsers, user]
+                );
+              }
+              
+              // Forcer la mise à jour de l'affichage
+              queryClient.invalidateQueries({ queryKey: channelKeys.list(teamId || '') });
+            })
+            .catch(err => console.error(`Error fetching user ${otherUserId}:`, err));
+          
+          // Utiliser un placeholder en attendant
+          displayName = channel.display_name && channel.display_name !== 'Direct Channel' 
+            ? channel.display_name 
+            : `Loading...`;
         }
-         
-        // Fallback if user not found - use channel display_name if it's not the default
-        displayName = channel.display_name && channel.display_name !== 'Direct Channel' 
-          ? channel.display_name 
-          : `${userId.substring(0, 6)}...`; // Just show user ID prefix without "Loading..."
       }
       
       return {

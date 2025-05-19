@@ -15,6 +15,7 @@ import { handleError } from "../core/store/errorStore";
 import { ErrorSource } from "../types";
 import { useAuthStore } from "../core/store/authStore";
 import { useUserStore } from "../core/store";
+import { ensureChannelEventHandlers } from "../core/services/channelWebSocketHandler";
 
 /**
  * Hook for WebSocket connection management
@@ -58,6 +59,9 @@ export function useWebSocket() {
             maxReconnectAttempts: 5,
           },
         );
+        
+        // Initialize channel event handlers when WebSocket connects
+        ensureChannelEventHandlers();
       } catch (error) {
         handleError(error as Error, ErrorSource.WEBSOCKET);
         throw error;
@@ -84,6 +88,9 @@ export function useWebSocket() {
   const reconnectWebSocket = useCallback(async () => {
     try {
       await reconnect();
+      
+      // Re-initialize channel event handlers on reconnect
+      ensureChannelEventHandlers();
     } catch (error) {
       handleError(error as Error, ErrorSource.WEBSOCKET);
       throw error;

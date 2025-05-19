@@ -140,7 +140,7 @@ export function processReactions(reactions?: Record<string, string[]>): Array<{
   category?: string;
   short_name?: string;
 }> {
-  console.debug("processReactions", reactions)
+  console.debug("process reactions", reactions)
   // Return empty array if no reactions
   if (!reactions || typeof reactions !== 'object') return [];
   if (Object.keys(reactions).length === 0) return [];

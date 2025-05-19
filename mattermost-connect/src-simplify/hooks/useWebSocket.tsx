@@ -184,6 +184,18 @@ export const WebSocketSingleton = (() => {
     if (wsUserStatuses[userId] !== status) {
       wsUserStatuses = { ...wsUserStatuses, [userId]: status };
       
+      // Mettre à jour le cache centralisé d'utilisateurs
+      try {
+        // Vérifier si le module userCache est disponible
+        // (éviter les erreurs d'importation circulaires)
+        const userCacheModule = require('../api/userCache');
+        if (userCacheModule && userCacheModule.userCache) {
+          userCacheModule.userCache.setUserStatus(userId, status);
+        }
+      } catch (error) {
+        // Ignorer les erreurs pour éviter les problèmes au démarrage
+      }
+      
       // Notifier uniquement les abonnés de cet utilisateur spécifique
       notifyUserStatusSubscribers(userId);
       
@@ -230,6 +242,16 @@ export const WebSocketSingleton = (() => {
       if (data && data.status) {
         console.log(`Status API response for ${userId}: ${data.status}`);
         updateUserStatus(userId, data.status);
+        
+        // Mettre à jour également le cache centralisé
+        try {
+          const userCacheModule = require('../api/userCache');
+          if (userCacheModule && userCacheModule.userCache) {
+            userCacheModule.userCache.setUserStatus(userId, data.status);
+          }
+        } catch (error) {
+          // Ignorer les erreurs pour éviter les problèmes au démarrage
+        }
         
         // Marquer comme initialisé
         wsUserStatusesInitialized.add(userId);
@@ -813,9 +835,32 @@ export function useWebSocket() {
       handle: (event, queryClient) => {
         console.log('Handling channel event:', event);
         const { team_id, channel_id } = event.data || {};
+        
         if (team_id) {
-          queryClient.invalidateQueries({ queryKey: channelKeys.list(team_id) });
+          try {
+            // Importer dynamiquement pour éviter les dépendances circulaires
+            const { markTeamAsDirty, channelsCache } = require('./useChannels');
+            
+            // Obtenir l'ID d'équipe actuellement affichée
+            // Nous détectons l'équipe active en regardant les données actuellement en cache
+            const activeTeamIds = Object.keys(channelsCache);
+            
+            if (activeTeamIds.includes(team_id)) {
+              // Si c'est l'équipe actuelle, invalider les requêtes immédiatement
+              console.log(`Channel event on current team ${team_id}, invalidating queries`);
+              queryClient.invalidateQueries({ queryKey: channelKeys.list(team_id) });
+            } else {
+              // Si c'est une autre équipe, marquer comme "dirty" pour refetch futur
+              console.log(`Channel event on other team ${team_id}, marking team as dirty`);
+              markTeamAsDirty(team_id);
+            }
+          } catch (error) {
+            // Fallback au comportement précédent en cas d'erreur
+            console.error('Error in channel event handler:', error);
+            queryClient.invalidateQueries({ queryKey: channelKeys.list(team_id) });
+          }
         }
+        
         if (channel_id) {
           queryClient.invalidateQueries({ queryKey: channelKeys.detail(channel_id) });
         }

@@ -657,78 +657,32 @@ export function useMessageReactions(messageId: string | undefined) {
 
 /**
  * Hook for file information
+ * @deprecated Use useFile hook instead which offers better caching and performance
  * @param fileId File ID
  * @returns File information
  */
 export function useFileInfo(fileId: string | undefined) {
-  // Get file info query
-  const fileInfoQuery = useFileInfoQuery(fileId);
-
-  /**
-   * Gets the download URL for a file
-   */
-  const getDownloadUrl = useCallback((): string => {
-    if (!fileId) return "";
-    return messageService.getFileDownloadUrl(fileId);
-  }, [fileId]);
-
-  /**
-   * Gets the preview URL for a file
-   */
-  const getPreviewUrl = useCallback((): string => {
-    if (!fileId) return "";
-    return messageService.getFilePreviewUrl(fileId);
-  }, [fileId]);
-
-  /**
-   * Checks if file is an image
-   */
-  const isImage = useCallback((): boolean => {
-    if (!fileInfoQuery.data?.mime_type) return false;
-    return messageService.isImageFile(fileInfoQuery.data.mime_type);
-  }, [fileInfoQuery.data]);
-
-  /**
-   * Checks if file is a video
-   */
-  const isVideo = useCallback((): boolean => {
-    if (!fileInfoQuery.data?.mime_type) return false;
-    return messageService.isVideoFile(fileInfoQuery.data.mime_type);
-  }, [fileInfoQuery.data]);
-
-  /**
-   * Checks if file is an audio
-   */
-  const isAudio = useCallback((): boolean => {
-    if (!fileInfoQuery.data?.mime_type) return false;
-    return messageService.isAudioFile(fileInfoQuery.data.mime_type);
-  }, [fileInfoQuery.data]);
-
-  /**
-   * Checks if file is a PDF
-   */
-  const isPdf = useCallback((): boolean => {
-    if (!fileInfoQuery.data?.mime_type) return false;
-    return messageService.isPdfFile(fileInfoQuery.data.mime_type);
-  }, [fileInfoQuery.data]);
-
+  // Import from 'useFile' and re-export for backwards compatibility
+  const { useFile } = require('./useFile');
+  const fileHook = useFile(fileId);
+  
   return {
     // Data
-    fileInfo: fileInfoQuery.data,
+    fileInfo: fileHook.fileInfo,
 
     // State
-    isLoading: fileInfoQuery.isLoading,
-    error: fileInfoQuery.error,
+    isLoading: fileHook.isInfoLoading,
+    error: null,
 
     // Actions
-    refreshFileInfo: fileInfoQuery.refetch,
+    refreshFileInfo: fileHook.fetchFileInfo,
 
     // Helpers
-    getDownloadUrl,
-    getPreviewUrl,
-    isImage,
-    isVideo,
-    isAudio,
-    isPdf,
+    getDownloadUrl: () => fileHook.getDownloadUrl(),
+    getPreviewUrl: () => fileHook.getPreviewUrl(),
+    isImage: () => fileHook.isImage(),
+    isVideo: () => fileHook.isVideo(),
+    isAudio: () => fileHook.isAudio(),
+    isPdf: () => fileHook.isPdf(),
   };
 }

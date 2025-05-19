@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { 
   Box, 
   AppBar, 
@@ -19,8 +19,9 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import { useTeams } from '../../hooks/useTeams';
-import { useChannels } from '../../hooks/useChannels';
+import { useChannels, useChannel } from '../../hooks/useChannels';
 import { useUser } from '../../hooks/useUsers';
+import { useChannelUtils } from '../../hooks/useChannelUtils';
 import { useQueryClient } from '@tanstack/react-query';
 
 // Import components
@@ -72,6 +73,34 @@ export function MattermostChat({
     setSelectedTeam(team);
     setSelectedChannel(null);
   }, []);
+  
+  // Récupérer les fonctions utilitaires pour les canaux directs
+  const { 
+    getDirectChannelDisplayName, 
+    isDirectChannel, 
+    isGroupChannel 
+  } = useChannelUtils();
+  
+  // Récupérer les fonctions spécifiques aux canaux pour l'équipe actuelle
+  const { getDirectChannelInfo } = useChannels(selectedTeam?.id);
+  
+  /**
+   * Get proper display name for a channel, especially handling direct message channels
+   */
+  const getChannelDisplayName = useCallback((channel: Channel): string => {
+    // Pour les canaux de messages directs ou de groupe
+    if (channel.type === 'D' || channel.type === 'G') {
+      if (getDirectChannelInfo) {
+        const directInfo = getDirectChannelInfo(channel.id);
+        if (directInfo && directInfo.displayName) {
+          return directInfo.displayName;
+        }
+      }
+    }
+    
+    // Par défaut, utiliser le nom standard du canal
+    return channel.display_name || channel.name;
+  }, [getDirectChannelInfo]);
   
   // Handle channel selection
   const handleChannelSelect = useCallback((channel: Channel) => {
@@ -144,15 +173,7 @@ export function MattermostChat({
     }
   }, [channels, initialChannelId, selectedTeam, selectedChannel, isLoadingChannels]);
   
-  // Handle opening thread
-  const handleOpenThread = useCallback((messageId: string) => {
-    setThreadMessageId(messageId);
-  }, []);
   
-  // Handle closing thread
-  const handleCloseThread = useCallback(() => {
-    setThreadMessageId(undefined);
-  }, []);
   
   // Toggle sidebar for mobile view
   const toggleSidebar = () => {
@@ -194,10 +215,10 @@ export function MattermostChat({
           
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             {selectedChannel 
-              ? selectedChannel.display_name || selectedChannel.name 
+              ? getChannelDisplayName(selectedChannel)
               : selectedTeam 
                 ? selectedTeam.display_name || selectedTeam.name 
-                : 'Mattermost Chat'}
+                : 'Mattermost Connect'}
           </Typography>
           
           {/* User avatar with menu and profile capabilities */}
@@ -379,8 +400,6 @@ export function MattermostChat({
                 currentUserId={user?.id}
                 showInput={true}
                 showThread={true}
-                threadMessageId={threadMessageId}
-                onThreadClose={handleCloseThread}
               />
             </Box>
           )}

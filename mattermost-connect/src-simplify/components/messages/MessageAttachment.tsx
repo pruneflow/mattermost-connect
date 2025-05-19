@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -10,7 +10,6 @@ import {
   CircularProgress
 } from '@mui/material';
 import {
-  Download as DownloadIcon,
   FileCopy as FileCopyIcon,
   InsertDriveFile as FileIcon,
   Image as ImageIcon,
@@ -24,6 +23,10 @@ import { FileInfo } from '../../api/types';
 import { formatFileSize } from '../../utils/formatters';
 import { api } from '../../api/client';
 
+// Importation du hook useFile et du bouton de téléchargement
+import { useFile } from '../../hooks';
+import FileDownloadButton from './FileDownloadButton';
+
 // Composant pour la prévisualisation d'image avec authentification
 interface AuthenticatedImagePreviewProps {
   fileId: string;
@@ -32,79 +35,23 @@ interface AuthenticatedImagePreviewProps {
 }
 
 function AuthenticatedImagePreview({ fileId, fileName, onError }: AuthenticatedImagePreviewProps) {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const token = localStorage.getItem('mattermost_token');
+  // Utilisation du hook useFile qui gère le cache et les requêtes API
+  const { previewUrl, isPreviewLoading, fetchPreview } = useFile(fileId);
   
-  // Référence pour stocker l'URL de l'objet blob
-  const objectUrlRef = useRef<string | null>(null);
-  
+  // Effet pour charger la prévisualisation si nécessaire
   useEffect(() => {
-    if (!fileId || !token) {
-      setLoading(false);
-      return;
+    if (!previewUrl) {
+      fetchPreview().catch(error => {
+        console.error('Error loading image preview:', error);
+        if (onError) onError();
+      });
     }
-    
-    setLoading(true);
-    
-    // Nettoyage de l'URL précédente si elle existe
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-    
-    const controller = new AbortController();
-    
-    const fetchImage = async () => {
-      try {
-        const response = await fetch(`${api.getBaseUrl()}/api/v4/files/${fileId}/preview`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          signal: controller.signal
-        });
-        
-        if (!response.ok) throw new Error(`Failed to load preview: ${response.status}`);
-        
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        objectUrlRef.current = url;
-        setImageSrc(url);
-      } catch (error) {
-        // Ignorer les erreurs d'abort qui se produisent lors du nettoyage
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          console.log('Image fetch aborted');
-        } else {
-          console.error('Error loading image preview:', error);
-          if (onError) onError();
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchImage();
-    
-    return () => {
-      controller.abort();
-      // Ne pas nettoyer l'URL ici, elle sera nettoyée lors de la prochaine exécution ou du démontage
-    };
-  }, [fileId, token, onError]);
+  }, [fileId, previewUrl, fetchPreview, onError]);
   
-  // Effet de nettoyage séparé lors du démontage du composant
-  useEffect(() => {
-    return () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-    };
-  }, []);
-  
-  return imageSrc ? (
+  return previewUrl ? (
     <Box
       component="img"
-      src={imageSrc}
+      src={previewUrl}
       alt={fileName}
       sx={{
         width: '100%',
@@ -122,7 +69,7 @@ function AuthenticatedImagePreview({ fileId, fileName, onError }: AuthenticatedI
       height: '100%', 
       width: '100%' 
     }}>
-      {loading ? <CircularProgress size={16} /> : <Box sx={{ fontSize: '0.75rem' }}>❌</Box>}
+      {isPreviewLoading ? <CircularProgress size={16} /> : <Box sx={{ fontSize: '0.75rem' }}>❌</Box>}
     </Box>
   );
 }
@@ -149,11 +96,74 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
         try {
           const fetchedFiles: FileInfo[] = [];
           
-          // Fetch each file info
+          // On doit encore faire des appels directs à l'API,
+          // mais maintenant ces appels seront gérés par les mécanismes de cache
+          // et de déduplication mis en place dans le singleton FileCacheService
           for (const fileId of fileIds) {
             try {
-              const response = await api.get<FileInfo>(`files/${fileId}/info`);
-              fetchedFiles.push(response.data);
+              // Vérifier si les infos sont déjà en cache global (variable window)
+              const pendingInfoRequests = (window as any).__pendingFileInfoRequests;
+              const fileCache = (window as any).__fileInfoCache;
+              
+              let info;
+              
+              // Si une requête est déjà en cours pour ce fileId, attendre son résultat
+              if (pendingInfoRequests && pendingInfoRequests.has(fileId)) {
+                console.log(`MessageAttachment: Reusing pending request for file info: ${fileId}`);
+                info = await pendingInfoRequests.get(fileId);
+              } 
+              // Si l'info est déjà en cache, l'utiliser directement
+              else if (fileCache && fileCache.has(fileId)) {
+                console.log(`MessageAttachment: Using cached file info: ${fileId}`);
+                info = fileCache.get(fileId);
+              } 
+              // Sinon, faire l'appel API normalement
+              else {
+                const token = localStorage.getItem('mattermost_token');
+                
+                // Créer une promesse de requête
+                const fetchPromise = (async () => {
+                  const response = await fetch(`${api.getBaseUrl()}/api/v4/files/${fileId}/info`, {
+                    headers: {
+                      'Authorization': `Bearer ${token}`
+                    }
+                  });
+                  
+                  if (!response.ok) {
+                    throw new Error(`Failed to fetch file info: ${response.status}`);
+                  }
+                  
+                  return await response.json();
+                })();
+                
+                // Stocker la promesse pour déduplication
+                if (!pendingInfoRequests) {
+                  (window as any).__pendingFileInfoRequests = new Map();
+                  (window as any).__pendingFileInfoRequests.set(fileId, fetchPromise);
+                } else {
+                  pendingInfoRequests.set(fileId, fetchPromise);
+                }
+                
+                // Attendre le résultat
+                info = await fetchPromise;
+                
+                // Nettoyer la promesse en cours
+                if (pendingInfoRequests) {
+                  pendingInfoRequests.delete(fileId);
+                }
+                
+                // Mettre en cache pour les utilisations futures
+                if (!fileCache) {
+                  (window as any).__fileInfoCache = new Map();
+                  (window as any).__fileInfoCache.set(fileId, info);
+                } else {
+                  fileCache.set(fileId, info);
+                }
+              }
+              
+              if (info) {
+                fetchedFiles.push(info);
+              }
             } catch (err) {
               console.error(`Failed to fetch file info for ${fileId}:`, err);
               // Continue with other files even if one fails
@@ -170,6 +180,9 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
       };
       
       void fetchFiles();
+    } else if (propFiles) {
+      // Si les fichiers sont fournis en props, les utiliser directement
+      setFiles(propFiles);
     }
   }, [fileIds, propFiles]);
 
@@ -447,21 +460,17 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
                   <FileCopyIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Download">
-                <IconButton 
-                  size="small" 
-                  onClick={() => handleDownload(file.id, file.name)}
-                  aria-label="download file"
-                  sx={{ 
-                    p: { xs: 0.75, md: 0.5 },
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                    }
-                  }}
-                >
-                  <DownloadIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+              <FileDownloadButton 
+                fileId={file.id} 
+                size="small"
+                tooltip="Download" 
+                sx={{ 
+                  p: { xs: 0.75, md: 0.5 },
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                  }
+                }}
+              />
             </Box>
           </Paper>
         ))}

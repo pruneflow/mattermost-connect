@@ -16,6 +16,7 @@ import { queryClient } from "../core/api/queryClient";
 import { emitEvent } from "../core/api/eventUtils";
 import { EventType } from "../types";
 import { DialogProvider } from "../internal/providers/DialogProvider";
+import { ensureChannelEventHandlers } from "../core/services/channelWebSocketHandler";
 
 // Using hooks instead of directly accessing stores
 import {
@@ -264,7 +265,7 @@ const WebSocketInitializer: React.FC<{
     onError,
   ]);
 
-  // Update connection tracking status
+  // Update connection tracking status and initialize event handlers
   useEffect(() => {
     if (isConnected) {
       // Determine if this is a reconnection
@@ -284,6 +285,9 @@ const WebSocketInitializer: React.FC<{
         hasDisconnected: false,
         lastConnectedAt: Date.now(),
       };
+      
+      // Initialize channel WebSocket event handlers
+      ensureChannelEventHandlers();
     } else if (wsConnectionStatusRef.current.hadSuccessfulConnection) {
       wsConnectionStatusRef.current.hasDisconnected = true;
 

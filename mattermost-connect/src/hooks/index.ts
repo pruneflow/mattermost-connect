@@ -27,8 +27,11 @@ export {
   useMessages,
   useThread,
   useMessageReactions,
-  useFileInfo,
+  useFileInfo, // Maintenu pour compatibilité, mais useFile est préféré
 } from "./useMessages";
+
+// File hooks
+export { useFile } from "./useFile";
 
 // Unread count hooks
 export {

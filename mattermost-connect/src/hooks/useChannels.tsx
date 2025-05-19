@@ -18,6 +18,7 @@ import {
   useRemoveChannelFromFavoritesMutation,
   useToggleChannelMutedMutation,
 } from "../core/api/queries/channelQueries";
+import { queryClient, QUERY_KEYS } from "../core/api/queryClient";
 import { useUsersQuery } from "../core/api/queries/userQueries";
 import { useChannelStore } from "../core/store/channelStore";
 import { useDirectChannelStore } from "../core/store/directChannelStore";
@@ -318,6 +319,38 @@ export function useChannels(teamId: string | undefined) {
     return channelsQuery.isLoading || storeLoading || isPreloadingUsers;
   }, [channelsQuery.isLoading, storeLoading, isPreloadingUsers]);
 
+  /**
+   * Invalidates the channel cache when a channel is explicitly modified
+   * @param channelId ID of the channel to invalidate
+   */
+  const invalidateChannelCache = useCallback((channelId: string) => {
+    // Invalidate specific channel query
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.channels.byId(channelId),
+    });
+
+    // Get the channel to find its team
+    const channel = useChannelStore.getState().getChannelById(channelId);
+    if (channel?.team_id) {
+      // Invalidate team channels query
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byTeam(channel.team_id),
+      });
+      
+      // Invalidate team unread counts if needed
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+      });
+    }
+    
+    // Invalidate unread count for this channel
+    queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.channels.unreadCount(channelId),
+    });
+    
+    console.log(`[useChannels] Invalidated cache for channel ${channelId}`);
+  }, []);
+
   return {
     // Data
     channels: teamId ? getChannelsByTeam(teamId) : [],
@@ -338,6 +371,7 @@ export function useChannels(teamId: string | undefined) {
     selectChannel,
     refreshChannels,
     setActiveChannel,
+    invalidateChannelCache,
 
     // Helper methods
     hasUnreads,
@@ -356,6 +390,26 @@ export function useChannels(teamId: string | undefined) {
 export function useChannel(channelId: string | undefined) {
   // Current user ID for filtering
   const { currentUser } = useAuthStore();
+  
+  // Access the invalidate function from useChannels
+  const invalidateCache = useCallback(() => {
+    if (channelId) {
+      // Directly call the invalidation logic since we don't want to depend on useChannels
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.channels.byId(channelId),
+      });
+      
+      // Get the channel to find its team
+      const channel = useChannelStore.getState().getChannelById(channelId);
+      if (channel?.team_id) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.channels.byTeam(channel.team_id),
+        });
+      }
+      
+      console.log(`[useChannel] Invalidated cache for channel ${channelId}`);
+    }
+  }, [channelId]);
 
   // Get specific channel using React Query
   const channelQuery = useChannelQuery(channelId);
@@ -594,6 +648,7 @@ export function useChannel(channelId: string | undefined) {
     toggleMutedStatus,
     refreshChannel,
     refreshMembers,
+    invalidateCache,
 
     // Mutations state
     isUpdating: updateMutation.isPending,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Chip,
@@ -30,7 +30,7 @@ export interface MessageReactionsProps {
   compact?: boolean;
 }
 
-export function MessageReactions({
+function MessageReactions({
   messageId,
   channelId,
   reactions = {},
@@ -104,25 +104,33 @@ export function MessageReactions({
     return count > 99 ? '99+' : count.toString();
   };
 
-  // Process and prepare reactions for display
-  const processedReactions = processReactions(reactions);
+  // Process and prepare reactions for display avec mémoisation
+  const processedReactions = useMemo(() => {
+    // N'effectuer le traitement que s'il y a des réactions
+    if (!reactions || Object.keys(reactions).length === 0) {
+      return [];
+    }
+    return processReactions(reactions);
+  }, [reactions]);
   
-  // Prepare reactions for display
-  const reactionItems = processedReactions
-    .filter(({ count }) => count > 0)
-    .sort((a, b) => {
-      // Sort by whether current user has reacted, then by count, then by name
-      const aHasReacted = currentUserId ? a.userIds.includes(currentUserId) : false;
-      const bHasReacted = currentUserId ? b.userIds.includes(currentUserId) : false;
-      
-      if (aHasReacted !== bHasReacted) {
-        return aHasReacted ? -1 : 1;
-      }
-      if (a.count !== b.count) {
-        return b.count - a.count;
-      }
-      return a.name.localeCompare(b.name);
-    });
+  // Prepare reactions for display avec mémoisation
+  const reactionItems = useMemo(() => {
+    return processedReactions
+      .filter(({ count }) => count > 0)
+      .sort((a, b) => {
+        // Sort by whether current user has reacted, then by count, then by name
+        const aHasReacted = currentUserId ? a.userIds.includes(currentUserId) : false;
+        const bHasReacted = currentUserId ? b.userIds.includes(currentUserId) : false;
+        
+        if (aHasReacted !== bHasReacted) {
+          return aHasReacted ? -1 : 1;
+        }
+        if (a.count !== b.count) {
+          return b.count - a.count;
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [processedReactions, currentUserId]);
 
 
   return (
@@ -131,7 +139,6 @@ export function MessageReactions({
       {reactionItems.length > 0 ? (
         reactionItems.map((reactionItem) => {
           const { name, emoji, unified, count, userIds } = reactionItem;
-          console.debug("reactionItem", reactionItem)
           const hasReacted = currentUserId ? userIds.includes(currentUserId) : false;
           
           return (
@@ -250,4 +257,38 @@ export function MessageReactions({
   );
 }
 
-export default MessageReactions;
+// Utilisons React.memo pour éviter les rendus inutiles
+export default React.memo(MessageReactions, (prevProps, nextProps) => {
+  // Ne re-rendre que si les propriétés importantes ont changé
+  if (prevProps.messageId !== nextProps.messageId || 
+      prevProps.channelId !== nextProps.channelId ||
+      prevProps.compact !== nextProps.compact) {
+    return false; // Les props ont changé, re-rendre
+  }
+  
+  // Vérifier si les réactions ont changé
+  const prevReactionsKeys = Object.keys(prevProps.reactions || {});
+  const nextReactionsKeys = Object.keys(nextProps.reactions || {});
+  
+  // Si le nombre de types de réactions est différent, re-rendre
+  if (prevReactionsKeys.length !== nextReactionsKeys.length) {
+    return false;
+  }
+  
+  // Pour chaque réaction, vérifier si les utilisateurs ont changé
+  for (const key of prevReactionsKeys) {
+    const prevUsers = prevProps.reactions?.[key] || [];
+    const nextUsers = nextProps.reactions?.[key] || [];
+    
+    if (prevUsers.length !== nextUsers.length) {
+      return false; // Nombre d'utilisateurs différent, re-rendre
+    }
+    
+    // Vérification approfondie des utilisateurs pour cette réaction
+    if (prevUsers.length > 0 && !prevUsers.every(userId => nextUsers.includes(userId))) {
+      return false; // La liste des utilisateurs a changé, re-rendre
+    }
+  }
+  
+  return true; // Aucun changement significatif, ne pas re-rendre
+});
