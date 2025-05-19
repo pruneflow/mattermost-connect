@@ -21,8 +21,7 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 
 // Import des hooks de MattermostConnect pour l'authentification
 import {
-  MattermostDirectProvider,
-  MattermostProxyProvider,
+  MattermostProvider,
   useAuth,
   User,
 } from "mattermost-connect";
@@ -533,43 +532,25 @@ const AuthenticationUI: React.FC<AuthenticationProps> = ({
             </>
           ) : (
             // Mode d'authentification en cours
-            <>
-              {authMode === "direct" && (
-                <MattermostDirectProvider
-                  serverUrl={serverUrl}
-                  enableWebSocket={false}
-                  onAuthError={handleAuthError}
-                >
-                  <AuthProvider
-                    mode="direct"
-                    serverUrl={serverUrl}
-                    username={username}
-                    password={password}
-                    onSuccess={onSuccess}
-                    onError={handleAuthError}
-                  />
-                </MattermostDirectProvider>
-              )}
-
-              {authMode === "proxy" && (
-                <MattermostProxyProvider
-                  proxyUrl={proxyUrl}
-                  clientId={clientId}
-                  enableWebSocket={false}
-                  onAuthError={handleAuthError}
-                >
-                  <AuthProvider
-                    mode="proxy"
-                    proxyUrl={proxyUrl}
-                    clientId={clientId}
-                    username={username}
-                    password={password}
-                    onSuccess={onSuccess}
-                    onError={handleAuthError}
-                  />
-                </MattermostProxyProvider>
-              )}
-            </>
+            <MattermostProvider
+              mode={authMode === "direct" ? "direct" : "proxy"}
+              serverUrl={authMode === "direct" ? serverUrl : undefined}
+              proxyUrl={authMode === "proxy" ? proxyUrl : undefined}
+              clientId={authMode === "proxy" ? clientId : undefined}
+              enableWebSocket={false}
+              onAuthError={handleAuthError}
+            >
+              <AuthProvider
+                mode={authMode === "direct" ? "direct" : "proxy"}
+                serverUrl={authMode === "direct" ? serverUrl : undefined}
+                proxyUrl={authMode === "proxy" ? proxyUrl : undefined}
+                clientId={authMode === "proxy" ? clientId : undefined}
+                username={username}
+                password={password}
+                onSuccess={onSuccess}
+                onError={handleAuthError}
+              />
+            </MattermostProvider>
           )}
         </Box>
       </Paper>

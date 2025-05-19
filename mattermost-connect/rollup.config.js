@@ -16,7 +16,7 @@ const pkg = JSON.parse(
 export default [
   // JavaScript/TypeScript build
   {
-    input: "src/index.ts",
+    input: "src/index.tsx",
     output: [
       {
         file: pkg.main,

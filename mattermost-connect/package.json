@@ -37,7 +37,8 @@
     "emoji-datasource": "15.1.2",
     "emoji-datasource-apple": "15.1.2",
     "emoji-datasource-google": "15.1.2",
-    "emoji-mart": "5.6.0"
+    "emoji-mart": "5.6.0",
+    "tslib": "^2.8.1"
   },
   "peerDependencies": {
     "react": "^17.0.0 || ^18.0.0",

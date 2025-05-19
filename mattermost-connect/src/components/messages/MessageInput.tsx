@@ -1,108 +1,192 @@
-// src/components/messages/MessageInput.tsx
-/**
- * Component for composing and sending messages
- */
-import React from "react";
-import { SxProps, Theme } from "@mui/material/styles";
-import MessageInputContainer from "../../internal/containers/messages/MessageInputContainer";
-import { Message } from "../../types";
+import React, { useState, useRef, useCallback } from 'react';
+import { Box, IconButton, TextField, Popover } from '@mui/material';
+import { useAuth } from '../../context/AuthContext';
+import { useWebSocket, WebSocketSingleton } from '../../hooks/useWebSocket';
+import { EmojiPickerMart } from '../common';
+import SendIcon from '@mui/icons-material/Send';
+import InsertEmoticonIcon from '@mui/icons-material/InsertEmoticon';
+
 
 export interface MessageInputProps {
-  /** Channel ID to send messages to */
   channelId: string;
-  /** Initial value for the input */
-  initialValue?: string;
-  /** Whether to allow file attachments */
-  allowAttachments?: boolean;
-  /** Whether to allow emoji reactions */
-  allowEmojis?: boolean;
-  /** Message being edited (if any) */
-  editingMessage?: Message | null;
-  /** Whether to show the reply UI */
-  showReply?: boolean;
-  /** Message being replied to (if any) */
-  replyToMessage?: Message | null;
-  /** Maximum number of files that can be attached */
-  maxAttachments?: number;
-  /** Maximum file size in bytes */
-  maxFileSize?: number;
-  /** Custom emoji picker component */
-  emojiPickerComponent?: React.ReactNode;
-  /** Callback when a message is sent */
-  onMessageSent?: (message: Message) => void;
-  /** Callback when a message is edited */
-  onMessageEdited?: (message: Message) => void;
-  /** Callback when editing is cancelled */
-  onEditCancel?: () => void;
-  /** Callback when reply is cancelled */
-  onReplyCancel?: () => void;
-  /** Custom CSS class name */
-  className?: string;
-  /** MUI system props for custom styling */
-  sx?: SxProps<Theme>;
-  /** ID attribute for the component */
-  id?: string;
+  onSendMessage?: (message: string) => void;
+  onMessageSent?: (message: string) => void;
+  replyToMessageId?: string;
+  onCancelReply?: () => void;
+  placeholder?: string;
+  disabled?: boolean;
 }
 
-/**
- * Message input component for composing and sending messages
- *
- * This component provides a rich text input area with support for attachments,
- * emoji, message editing, and replying.
- *
- * @example
- * ```tsx
- * // Basic usage
- * <MessageInput channelId="channel123" />
- *
- * // With editing functionality
- * <MessageInput
- *   channelId="channel123"
- *   editingMessage={messageToEdit}
- *   onMessageEdited={(message) => console.log('Edited:', message)}
- *   onEditCancel={() => console.log('Edit cancelled')}
- * />
- *
- * // With reply functionality
- * <MessageInput
- *   channelId="channel123"
- *   showReply={true}
- *   replyToMessage={messageToReplyTo}
- *   onMessageSent={(message) => console.log('Reply sent:', message)}
- *   onReplyCancel={() => console.log('Reply cancelled')}
- * />
- * ```
- */
-const MessageInput: React.FC<MessageInputProps> = ({
+const MessageInput = React.forwardRef<any, MessageInputProps>(({
   channelId,
-  initialValue = "",
-  allowAttachments = true,
-  allowEmojis = true,
-  editingMessage = null,
-  showReply = false,
-  replyToMessage = null,
-  maxAttachments = 10,
-  maxFileSize = 50 * 1024 * 1024, // 50MB
-  emojiPickerComponent,
-  onMessageSent,
-  onMessageEdited,
-  onEditCancel,
-  onReplyCancel,
-  className,
-  sx,
-  id,
-}) => {
-  return (
-    <MessageInputContainer
-      channelId={channelId}
-      editingMessage={editingMessage}
-      replyToMessage={replyToMessage}
-      onMessageSent={onMessageSent}
-      className={className}
-      sx={sx}
-      id={id}
-    />
-  );
-};
+  onSendMessage,
+  placeholder = 'Écrivez un message...',
+  disabled = false
+}, ref) => {
+  const [message, setMessage] = useState('');
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { isAuthenticated } = useAuth();
+  const { sendTypingEvent } = useWebSocket();
 
-export default React.memo(MessageInput);
+  // Handler pour l'envoi du message
+  const handleSendMessage = useCallback(() => {
+    const trimmedMessage = message.trim();
+    if (trimmedMessage && onSendMessage) {
+      onSendMessage(trimmedMessage);
+      setMessage('');
+      
+      // Reset typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    }
+  }, [message, onSendMessage]);
+
+  // Handler pour les changements dans l'input
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(e.target.value);
+    
+    // Envoyer événement de frappe seulement si authentifié et dans un canal
+    if (isAuthenticated && channelId) {
+      // Si premier caractère ou après un délai
+      if (e.target.value.length === 1 || !typingTimeoutRef.current) {
+        // Envoyer événement de frappe
+        sendTypingEvent(channelId);
+        
+        // Configurer timeout pour éviter spam d'événements
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        
+        // Réinitialiser après 5 secondes
+        typingTimeoutRef.current = setTimeout(() => {
+          typingTimeoutRef.current = null;
+        }, 5000);
+      }
+    }
+  }, [isAuthenticated, channelId, sendTypingEvent]);
+
+  // Handler pour la touche Entrée
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  }, [handleSendMessage]);
+
+  // Handler pour la sélection d'emoji
+  const handleEmojiSelect = useCallback((emoji: string, emojiName: string) => {
+    if (inputRef.current) {
+      const start = inputRef.current.selectionStart || 0;
+      const end = inputRef.current.selectionEnd || 0;
+      const newMessage = message.substring(0, start) + emoji + message.substring(end);
+      
+      setMessage(newMessage);
+      
+      // Focus l'input et positionne le curseur après l'emoji
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          const newCursorPos = start + emoji.length;
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 10);
+    }
+    
+    // Fermer le picker
+    setIsEmojiPickerOpen(false);
+  }, [message]);
+
+  // Toggle le picker d'emoji
+  const toggleEmojiPicker = useCallback(() => {
+    setIsEmojiPickerOpen(prev => !prev);
+  }, []);
+
+  // Exposer des méthodes via la ref
+  React.useImperativeHandle(ref, () => ({
+    resetAttachments: () => {
+    },
+    focusInput: () => {
+      inputRef.current?.focus();
+    }
+  }));
+
+  return (
+    <Box 
+      sx={{ 
+        display: 'flex', 
+        width: '100%', 
+        alignItems: 'center',
+        p: 1,
+        borderColor: 'divider'
+      }}
+    >
+      <TextField
+        inputRef={inputRef}
+        fullWidth
+        multiline
+        maxRows={3}
+        placeholder={placeholder}
+        value={message}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        variant="outlined"
+        size="small"
+        slotProps={{
+          input: {
+            endAdornment: (
+              <Box sx={{ display: 'flex' }}>
+                <IconButton 
+                  ref={emojiButtonRef}
+                  onClick={toggleEmojiPicker}
+                  color={isEmojiPickerOpen ? 'primary' : 'default'}
+                  size="small"
+                >
+                  <InsertEmoticonIcon />
+                </IconButton>
+              </Box>
+            ),
+          },
+        }}
+        sx={{ mr: 1 }}
+      />
+      
+      <IconButton 
+        onClick={handleSendMessage} 
+        color="primary"
+        disabled={!message.trim() || disabled}
+      >
+        <SendIcon />
+      </IconButton>
+      
+      <Popover
+        open={isEmojiPickerOpen}
+        anchorEl={emojiButtonRef.current}
+        onClose={() => setIsEmojiPickerOpen(false)}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'center',
+        }}
+        transformOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+      >
+        <EmojiPickerMart 
+          onEmojiSelect={handleEmojiSelect}
+          showSearch={true}
+          width={320}
+          height={350}
+        />
+      </Popover>
+    </Box>
+  );
+});
+
+export { MessageInput };
+export default MessageInput;

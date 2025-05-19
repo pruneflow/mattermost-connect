@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, CssBaseline, ThemeProvider, createTheme, Button, Container, Paper, Typography, TextField, CircularProgress } from '@mui/material';
-import { MattermostProvider, useAuth } from '../../../src-simplify';
-import { MattermostChat, UserAvatar, MessageContainer } from '../../../src-simplify/components';
+import { MattermostProvider, useAuth, MattermostChat, UserAvatar, MessageContainer } from 'mattermost-connect';
 
 // Create theme
 const theme = createTheme({
@@ -31,7 +30,12 @@ const theme = createTheme({
   },
 });
 
-function SimplifiedDemo() {
+interface MattermostDemoProps {
+  onLogout?: () => void;
+  mockService?: any; // Service de mock pour le mode démo
+}
+
+function MattermostDemo({ onLogout, mockService }: MattermostDemoProps) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -182,4 +186,4 @@ function MainContent() {
   );
 }
 
-export default SimplifiedDemo;
+export default MattermostDemo;

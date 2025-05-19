@@ -12,16 +12,15 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  MattermostDirectProvider,
-  MattermostProxyProvider,
+  MattermostProvider,
   useAuth,
   User,
 } from "mattermost-connect";
 
 // Composants de l'interface démo
-import ClassicInterface from "./components/ClassicInterface";
 import AuthenticationUI from "./components/AuthenticationUI";
 import createMockService from "./mockService";
+import MattermostDemo from "./MattermostDemo";
 
 // Définir le type de détails de connexion
 interface ConnectionDetails {
@@ -73,13 +72,15 @@ const ConnectedApp: React.FC<{
 }> = ({ onLogout }) => {
   const { isAuthenticated, isAuthenticating, error, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-
+  
   useEffect(() => {
     if (!isAuthenticating || isAuthenticated) {
       setIsLoading(false);
     }
   }, [isAuthenticating, isAuthenticated]);
+  
 
+  // Gérer les erreurs d'authentification
   useEffect(() => {
     if (error) {
       console.error("Authentication error:", error);
@@ -112,7 +113,7 @@ const ConnectedApp: React.FC<{
   }
 
   // Si nous arrivons ici, c'est que l'authentification est complète et l'utilisateur est authentifié
-  return <ClassicInterface onLogout={handleLogout} />;
+  return <MattermostDemo onLogout={handleLogout} />;
 };
 
 /**
@@ -146,7 +147,7 @@ const DemoApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     );
   }
 
-  return <ClassicInterface onLogout={onLogout} mockService={mockService} />;
+  return <MattermostDemo onLogout={onLogout} mockService={mockService} />;
 };
 
 function App() {
@@ -154,13 +155,11 @@ function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>(
-    {
-      mode: "demo",
-    },
-  );
+  const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>({
+    mode: "demo"
+  });
 
-  // Effet démo - simuler le chargement initial
+  // Effet pour simuler un court délai de chargement
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
@@ -186,8 +185,10 @@ function App() {
   // Gérer la déconnexion
   const handleLogout = () => {
     console.log("Logging out");
+    
+    // Réinitialiser l'état
     setAuthenticated(false);
-    setConnectionDetails({ mode: "demo" });
+    setConnectionDetails({ mode: "direct" });
   };
 
   // Gérer les erreurs
@@ -219,17 +220,19 @@ function App() {
         }
 
         return (
-          <MattermostDirectProvider
+          <MattermostProvider
+            mode="direct"
             serverUrl={connectionDetails.serverUrl}
             token={connectionDetails.token}
             enableWebSocket={true}
             onAuthError={(err) => {
+              console.error("Auth error in provider:", err);
               handleError(err);
               handleLogout();
             }}
           >
             <ConnectedApp onLogout={handleLogout} />
-          </MattermostDirectProvider>
+          </MattermostProvider>
         );
 
       case "proxy":
@@ -243,24 +246,27 @@ function App() {
           return null;
         }
         return (
-          <MattermostProxyProvider
+          <MattermostProvider
+            mode="proxy"
             proxyUrl={connectionDetails.proxyUrl}
             clientId={connectionDetails.clientId}
             token={connectionDetails.token}
             enableWebSocket={true}
             onAuthError={(err) => {
+              console.error("Auth error in provider:", err);
               handleError(err);
               handleLogout();
             }}
           >
             <ConnectedApp onLogout={handleLogout} />
-          </MattermostProxyProvider>
+          </MattermostProvider>
         );
 
       case "demo":
       default:
         // Pour le mode démo, nous utilisons des données simulées
-        return <DemoApp onLogout={handleLogout} />;
+        console.log("Initializing demo mode");
+        return <DemoApp onLogout={handleLogout} mockService={mockService} />;
     }
   };
 

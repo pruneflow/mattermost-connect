@@ -1,14 +1,12 @@
-// src/components/messages/index.ts
 /**
- * Exports all message-related components
+ * Message components exports
  */
-
-export { default as MessageList } from "./MessageList";
-export { default as MessageInput } from "./MessageInput";
-export { default as MessageThread } from "./MessageThread";
-export { default as FileUpload } from "./FileUpload";
-
-export type { MessageListProps } from "./MessageList";
-export type { MessageInputProps } from "./MessageInput";
-export type { MessageThreadProps } from "./MessageThread";
-export type { FileUploadProps } from "./FileUpload";
+export * from './AttachmentPreview';
+export * from './Message';
+export * from './MessageAttachment';
+export * from './MessageContainer';
+export * from './MessageContent';
+export * from './MessageInput';
+export * from './MessageList';
+export * from './MessageReactions';
+export * from './MessageThread';

@@ -1,723 +1,485 @@
-// src/hooks/useChannels.tsx
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef } from 'react';
+import { api } from '../api/client';
+import { Channel, ChannelMember, User, DirectChannelInfo } from '../api/types';
+import { useChannelUtils } from './useChannelUtils';
+import { formatUserName } from '../utils/formatters';
+import { userKeys, getUser, userCache } from './useUsers';
+
+// Cache global pour les canaux par équipe
+export const channelsCache: Record<string, Channel[]> = {};
+
+// Date d'actualisation pour chaque équipe - pour déterminer si le cache est frais
+export const channelsLastUpdate: Record<string, number> = {};
+
+// Requêtes en cours pour éviter les requêtes dupliquées
+export const pendingChannelsRequests: Record<string, Promise<Channel[]>> = {};
+
+// Liste des équipes dont les canaux ont été modifiés pendant qu'on n'y était pas
+export const dirtyTeams = new Set<string>();
+
 /**
- * Channel hooks
- * Provides access to channel functionality
+ * Marque une équipe comme "sale" (nécessitant une actualisation)
+ * Utile quand des événements WebSocket indiquent des changements
+ * alors qu'on n'est pas sur cette équipe
  */
-import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  useChannelsQuery,
-  useChannelQuery,
-  useCreateChannelMutation,
-  useUpdateChannelMutation,
-  useDeleteChannelMutation,
-  useJoinChannelMutation,
-  useLeaveChannelMutation,
-  useViewChannelMutation,
-  useChannelMembersQuery,
-  useAddChannelToFavoritesMutation,
-  useRemoveChannelFromFavoritesMutation,
-  useToggleChannelMutedMutation,
-} from "../core/api/queries/channelQueries";
-import { queryClient, QUERY_KEYS } from "../core/api/queryClient";
-import { useUsersQuery } from "../core/api/queries/userQueries";
-import { useChannelStore } from "../core/store/channelStore";
-import { useDirectChannelStore } from "../core/store/directChannelStore";
-import { useUserSettingsStore } from "../core/store/userSettingsStore";
-import { useUnreadStore } from "../core/store/unreadStore";
-import { useUserStore } from "../core/store/userStore";
-import { channelService } from "../core/services/channelService";
-import { channelLoadingService } from "../core/services/channelLoadingService";
-import { userService } from "../core/services/userService";
-import {
-  Channel,
-  ChannelMember,
-  ChannelGroupType,
-  CreateChannelParams,
-  UpdateChannelParams,
-  DirectChannelInfo,
-} from "../types";
-import { useAuthStore } from "../core/store/authStore";
-import { handleError } from "../core/store/errorStore";
-import { ErrorSource } from "../types";
-
-type LoadingPhase = "idle" | "channels" | "users" | "complete";
+export function markTeamAsDirty(teamId: string): void {
+  if (teamId) {
+    dirtyTeams.add(teamId);
+  }
+}
 
 /**
- * Hook for channel management functionality
- * @param teamId Team ID
- * @returns Channel operations and data
+ * Récupère les canaux d'une équipe avec déduplication des requêtes
+ * Ne fait qu'un seul appel API par équipe, sauf si force=true
+ * 
+ * @param teamId ID de l'équipe
+ * @param force Forcer un rafraîchissement même si en cache
+ */
+export async function getChannels(teamId: string, force: boolean = false): Promise<Channel[]> {
+  // Si l'équipe est "sale" (modifiée par événement), forcer le rafraîchissement
+  if (dirtyTeams.has(teamId)) {
+    force = true;
+    dirtyTeams.delete(teamId); // Nettoyer après usage
+  }
+  
+  // 1. Si les canaux sont déjà en cache et on ne force pas le rafraîchissement, les retourner
+  if (!force && channelsCache[teamId]) {
+    return channelsCache[teamId];
+  }
+  
+  // 2. Si une requête est déjà en cours pour cette équipe, la réutiliser
+  if (pendingChannelsRequests[teamId]) {
+    return pendingChannelsRequests[teamId];
+  }
+  
+  // 3. Sinon, faire l'appel API et mettre en cache le résultat
+  const promise = api.get<Channel[]>(`users/me/teams/${teamId}/channels`)
+    .then(response => {
+      const channels = response.data;
+      
+      // Mettre à jour le cache
+      channelsCache[teamId] = channels;
+      channelsLastUpdate[teamId] = Date.now();
+      
+      // Nettoyer la promesse en cours
+      delete pendingChannelsRequests[teamId];
+      
+      return channels;
+    })
+    .catch(error => {
+      // Nettoyer la promesse en cours en cas d'erreur
+      delete pendingChannelsRequests[teamId];
+      throw error;
+    });
+  
+  // Stocker la promesse pour éviter les appels dupliqués
+  pendingChannelsRequests[teamId] = promise;
+  
+  return promise;
+}
+
+// Query keys
+export const channelKeys = {
+  all: ['channels'] as const,
+  lists: () => [...channelKeys.all, 'list'] as const,
+  list: (teamId: string) => [...channelKeys.lists(), { teamId }] as const,
+  details: () => [...channelKeys.all, 'detail'] as const,
+  detail: (id: string) => [...channelKeys.details(), id] as const,
+  members: (channelId: string) => [...channelKeys.detail(channelId), 'members'] as const,
+};
+
+// Create channel parameters
+export interface CreateChannelParams {
+  team_id: string;
+  name: string;
+  display_name: string;
+  type: 'O' | 'P';
+  purpose?: string;
+  header?: string;
+}
+
+/**
+ * Hook for working with channels in a team
  */
 export function useChannels(teamId: string | undefined) {
-  // Current user ID for filtering
-  const { currentUser } = useAuthStore();
+  const queryClient = useQueryClient();
+  // Référence au dernier teamId traité pour détecter les changements d'équipe
+  const previousTeamIdRef = useRef<string | undefined>(undefined);
+  
+  const { 
+    isDirectChannel, 
+    isGroupChannel, 
+    getUserIdsFromGroupChannel,
+    getGroupChannelDisplayName 
+  } = useChannelUtils();
+  
+  // Skip query if teamId is undefined
+  const enabled = !!teamId;
 
-  // Then use it in useState
-  const [isPreloadingUsers, setIsPreloadingUsers] = useState(false);
-
-  // State for tracking preload status
-  const [hasPreloadedUsers, setHasPreloadedUsers] = useState(false);
-
-  // Get channels using React Query
-  const channelsQuery = useChannelsQuery(teamId);
-
-  // Get channel state from store
-  const {
-    getChannelsByTeam,
-    getChannelsByType,
-    activeChannel,
-    isLoading: storeLoading,
-    error: storeError,
-  } = useChannelStore();
-
-  // Get direct channel store for preloading
-  const { preloadDirectChannelsInfo, refreshDirectChannelInfo } =
-    useDirectChannelStore();
-
-  // Get user store for preloading with additional batch loading capability
-  const { loadUsersBatch, setLoadingUsersBatch, isLoadingUserBatch } =
-    useUserStore();
-
-  // Update the setActiveChannel to use the store's function directly
-  const setActiveChannel = useCallback((channel: Channel) => {
-    return useChannelStore.getState().setActiveChannel(channel);
-  }, []);
-
-  // Favorites and muted channels
-  const { getFavorites, isFavorite, getMutedChannels, isChannelMuted } =
-    useUserSettingsStore();
-
-  // Unread store
-  const { unreadCounts } = useUnreadStore();
-
-  // Get channels by type using memo to avoid recalculation
-  const publicChannels = useMemo(() => {
-    if (!teamId) return [];
-    return getChannelsByType(teamId, "public");
-  }, [teamId, getChannelsByType]);
-
-  const privateChannels = useMemo(() => {
-    if (!teamId) return [];
-    return getChannelsByType(teamId, "private");
-  }, [teamId, getChannelsByType]);
-
-  const directChannels = useMemo(() => {
-    if (!teamId) return [];
-    return getChannelsByType(teamId, "direct");
-  }, [teamId, getChannelsByType]);
-
-  const groupChannels = useMemo(() => {
-    if (!teamId) return [];
-    return getChannelsByType(teamId, "group");
-  }, [teamId, getChannelsByType]);
-
-  const favoriteChannels = useMemo(() => {
-    if (!teamId) return [];
-    return getChannelsByType(teamId, "favorite");
-  }, [teamId, getChannelsByType]);
-
-  // Preload direct channel users
+  // Effet pour gérer les changements d'équipe
   useEffect(() => {
-    // Skip if no channels or no current user
-    if (!teamId || !currentUser || hasPreloadedUsers || isPreloadingUsers) {
-      return;
-    }
-
-    const allDirectAndGroupChannels = [...directChannels, ...groupChannels];
-    if (allDirectAndGroupChannels.length === 0) {
-      setHasPreloadedUsers(true);
-      return;
-    }
-
-    setIsPreloadingUsers(true);
-
-    // Immediately collect user IDs to load
-    const userIdsToLoad = preloadDirectChannelsInfo(
-      allDirectAndGroupChannels,
-      currentUser.id,
-    );
-
-    if (userIdsToLoad.length === 0) {
-      setHasPreloadedUsers(true);
-      setIsPreloadingUsers(false);
-      return;
-    }
-
-    // Track which users we're attempting to load
-    console.log(`[useChannels] Loading ${userIdsToLoad.length} users for direct channels`);
-    setLoadingUsersBatch(userIdsToLoad, true);
-
-    // Enhanced error handling for user loading
-    useUsersQuery({
-      userIds: userIdsToLoad,
-      withStatuses: true,
-    })
-      .refetch()
-      .then(users => {
-        // Log success/failure status
-        if (users && users.length > 0) {
-          console.log(`[useChannels] Successfully loaded ${users.length}/${userIdsToLoad.length} users`);
-          
-          // Check for missing users
-          if (users.length < userIdsToLoad.length) {
-            const loadedIds = users.map(u => u.id);
-            const missingIds = userIdsToLoad.filter(id => !loadedIds.includes(id));
-            console.warn(`[useChannels] Failed to load some users: ${missingIds.join(', ')}`);
-          }
-        } else {
-          console.warn(`[useChannels] Failed to load any users from the requested ${userIdsToLoad.length}`);
-        }
-      })
-      .catch(error => {
-        console.error('[useChannels] Error loading users:', error);
-      })
-      .finally(() => {
-        // Always update channel info with any loaded user data
-        allDirectAndGroupChannels.forEach((channel) => {
-          refreshDirectChannelInfo(channel.id, currentUser.id);
-        });
-
-        // Mark as completed
-        setLoadingUsersBatch(userIdsToLoad, false);
-        setHasPreloadedUsers(true);
-        setIsPreloadingUsers(false);
-      });
-  }, [
-    teamId,
-    currentUser,
-    directChannels,
-    groupChannels,
-    hasPreloadedUsers,
-    isPreloadingUsers,
-  ]);
-
-  // Reset preload status when team changes
-  useEffect(() => {
-    if (teamId) {
-      setHasPreloadedUsers(false);
-      setIsPreloadingUsers(false);
+    // Si l'ID d'équipe a changé
+    if (teamId && previousTeamIdRef.current !== teamId) {
+      console.log(`Team changed from ${previousTeamIdRef.current} to ${teamId}`);
+      
+      // Si l'équipe est marquée comme "dirty", on forcera un rechargement
+      // lors de la prochaine exécution du queryFn
+      
+      // Mettre à jour la référence
+      previousTeamIdRef.current = teamId;
     }
   }, [teamId]);
 
-  // View channel mutation
-  const viewMutation = useViewChannelMutation();
-
-  /**
-   * Sets the active channel and marks as viewed
-   * @param channel Channel to make active
-   */
-  const selectChannel = useCallback(
-    async (channel: Channel) => {
-      // Set as active channel
-      setActiveChannel(channel);
-
-      // Mark as viewed
-      try {
-        await viewMutation.mutateAsync(channel.id);
-      } catch (error) {
-        handleError(error as Error, ErrorSource.API);
-      }
-    },
-    [setActiveChannel, viewMutation],
-  );
-
-  /**
-   * Refreshes channel data with safeguards against loops
-   */
-  const refreshChannels = useCallback(() => {
-    if (isPreloadingUsers) {
-      return channelsQuery.refetch();
-    }
-
-    setHasPreloadedUsers(false);
-    setIsPreloadingUsers(false);
-
-    return channelsQuery.refetch();
-  }, [channelsQuery, isPreloadingUsers]);
-
-  /**
-   * Checks if a channel has unreads
-   * @param channelId Channel ID
-   */
-  const hasUnreads = useCallback(
-    (channelId: string): boolean => {
-      const unreadCount = unreadCounts[channelId];
-      if (!unreadCount) return false;
-      return unreadCount.msg_count > 0 || unreadCount.mention_count > 0;
-    },
-    [unreadCounts],
-  );
-
-  /**
-   * Checks if a channel has mentions
-   * @param channelId Channel ID
-   */
-  const hasMentions = useCallback(
-    (channelId: string): boolean => {
-      const unreadCount = unreadCounts[channelId];
-      if (!unreadCount) return false;
-      return unreadCount.mention_count > 0;
-    },
-    [unreadCounts],
-  );
-
-  /**
-   * Gets display info for a direct channel
-   * @param channelId Channel ID
-   */
-  const getDirectChannelInfo = useCallback(
-    (channelId: string): DirectChannelInfo | null => {
-      const { getDirectChannelInfo } = useDirectChannelStore.getState();
-      const { getUserById } = useUserStore.getState();
-      
-      // Get basic info from direct channel store
-      const channelInfo = getDirectChannelInfo(channelId);
-      
-      if (!channelInfo) {
-        return null;
+  // Fetch channels for team with optimized caching
+  const channelsQuery = useQuery({
+    queryKey: channelKeys.list(teamId || ''),
+    queryFn: async () => {
+      if (!teamId) {
+        return [];
       }
       
-      // Handle error states with user ID - attempt to recover user data
-      if (channelInfo.otherUserId) {
-        const otherUser = getUserById(channelInfo.otherUserId);
-        
-        if (otherUser) {
-          // We have the user, so return improved info with properly formatted name
-          return {
-            ...channelInfo,
-            displayName: userService.formatUserName(otherUser),
-            userStatus: channelInfo.userStatus || 'offline',
-            status: "complete"
-          };
+      // Déterminer si on doit forcer un rechargement (changement d'équipe)
+      const forceRefresh = dirtyTeams.has(teamId);
+      
+      // Utiliser notre fonction optimisée qui gère la déduplication et le cache
+      return getChannels(teamId, forceRefresh);
+    },
+    enabled,
+    // Paramètres de cache optimisés - ne refetch pas automatiquement
+    staleTime: Infinity,         // Ne jamais considérer les données comme obsolètes
+    cacheTime: Infinity,         // Garder les données en cache indéfiniment
+    refetchOnWindowFocus: false, // Pas de refetch au focus
+    refetchOnReconnect: false,   // Pas de refetch à la reconnexion
+  });
+
+  // Fetch users for direct/group channels
+  const usersQuery = useQuery({
+    queryKey: ['users', 'directChannels', { teamId }],
+    queryFn: async () => {
+      // Get all channels
+      const channels = channelsQuery.data || [];
+      
+      // If no channels or team, return empty array
+      if (channels.length === 0) {
+        return [];
+      }
+      
+      // Find direct and group channels
+      const directAndGroupChannels = channels.filter(
+        channel => isDirectChannel(channel) || isGroupChannel(channel)
+      );
+      
+      // If no direct/group channels, return empty array
+      if (directAndGroupChannels.length === 0) {
+        return [];
+      }
+      
+      // Collect unique user IDs from direct and group channels
+      const userIds = new Set<string>();
+      
+      directAndGroupChannels.forEach(channel => {
+        if (isDirectChannel(channel)) {
+          // Extract user ID from channel name
+          const parts = channel.name.split('__');
+          parts.forEach(id => userIds.add(id));
+        } else if (isGroupChannel(channel)) {
+          // Get user IDs from group channel name
+          getUserIdsFromGroupChannel(channel).forEach(id => userIds.add(id));
         }
-        
-        // If we're in error state, provide a better fallback name
-        if (channelInfo.status === "error") {
-          // Use a more user-friendly display name format
-          return {
-            ...channelInfo,
-            displayName: `User-${channelInfo.otherUserId.substring(0, 6)}`,
-          };
-        }
-      }
-      
-      // For group channels in error state, improve the display name
-      if (channelInfo.isGroup && channelInfo.status === "error") {
-        return {
-          ...channelInfo,
-          displayName: channelInfo.displayName || "Group Message",
-        };
-      }
-      
-      return channelInfo;
-    },
-    [],
-  );
-
-  // Calculate loading state, with safeguards against unnecessary renders
-  const isLoading = useMemo(() => {
-    // Consider loading if channel query is loading, store is loading, or user preloading is in progress
-    return channelsQuery.isLoading || storeLoading || isPreloadingUsers;
-  }, [channelsQuery.isLoading, storeLoading, isPreloadingUsers]);
-
-  /**
-   * Invalidates the channel cache when a channel is explicitly modified
-   * @param channelId ID of the channel to invalidate
-   */
-  const invalidateChannelCache = useCallback((channelId: string) => {
-    // Invalidate specific channel query
-    queryClient.invalidateQueries({
-      queryKey: QUERY_KEYS.channels.byId(channelId),
-    });
-
-    // Get the channel to find its team
-    const channel = useChannelStore.getState().getChannelById(channelId);
-    if (channel?.team_id) {
-      // Invalidate team channels query
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.channels.byTeam(channel.team_id),
       });
       
-      // Invalidate team unread counts if needed
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.channels.unreadCounts(channel.team_id),
+      // Fetch users
+      if (userIds.size === 0) {
+        return [];
+      }
+      
+      const response = await api.post<User[]>('users/ids', Array.from(userIds));
+      return response.data;
+    },
+    // Always enable this query, but it will effectively do nothing when no channels are available
+    enabled: true,
+  });
+
+  // Create channel mutation
+  const createChannelMutation = useMutation({
+    mutationFn: async (channelData: CreateChannelParams) => {
+      const response = await api.post<Channel>('channels', channelData);
+      return response.data;
+    },
+    onSuccess: (newChannel) => {
+      // Invalidate channel list for this team
+      queryClient.invalidateQueries({ queryKey: channelKeys.list(newChannel.team_id) });
+    },
+  });
+
+  // Join channel mutation
+  const joinChannelMutation = useMutation({
+    mutationFn: async (channelId: string) => {
+      const response = await api.post<Channel>(`channels/${channelId}/members`, {
+        user_id: 'me',
       });
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate channel list for this team
+      if (teamId) {
+        queryClient.invalidateQueries({ queryKey: channelKeys.list(teamId) });
+      }
+    },
+  });
+
+  // Leave channel mutation
+  const leaveChannelMutation = useMutation({
+    mutationFn: async (channelId: string) => {
+      await api.delete(`channels/${channelId}/members/me`);
+      return channelId;
+    },
+    onSuccess: (channelId) => {
+      // Remove channel from queries
+      if (teamId) {
+        // Update channel list
+        queryClient.setQueryData<Channel[]>(
+          channelKeys.list(teamId),
+          (old = []) => old.filter(channel => channel.id !== channelId)
+        );
+      }
+    },
+  });
+
+  // Get channels by type
+  const getChannelsByType = (type: 'public' | 'private' | 'direct' | 'group') => {
+    const channels = channelsQuery.data || [];
+    
+    switch (type) {
+      case 'public':
+        return channels.filter(channel => channel.type === 'O');
+      case 'private':
+        return channels.filter(channel => channel.type === 'P');
+      case 'direct':
+        return channels.filter(channel => isDirectChannel(channel));
+      case 'group':
+        return channels.filter(channel => isGroupChannel(channel));
+      default:
+        return [];
+    }
+  };
+
+  // Format direct channel info
+  const getDirectChannelInfo = (channelId: string): DirectChannelInfo | null => {
+    const channels = channelsQuery.data || [];
+    const users = usersQuery.data || [];
+    const currentUser = queryClient.getQueryData<User>(['users', 'me']);
+    const currentUserId = currentUser?.id;
+    
+    // Find channel
+    const channel = channels.find(c => c.id === channelId);
+    if (!channel) return null;
+    
+    // Check if direct channel
+    if (isDirectChannel(channel)) {
+      // Get user IDs
+      const userIds = channel.name.split('__');
+      
+      // Find other user
+      const otherUserId = userIds.find(id => id !== currentUserId);
+      if (!otherUserId) return null;
+      
+      // Essayer d'abord de trouver l'utilisateur dans les données chargées
+      const otherUser = users.find(u => u.id === otherUserId);
+      let displayName;
+      
+      // 1. Vérifier si l'utilisateur est déjà dans les données React Query
+      if (otherUser) {
+        displayName = formatUserName(otherUser);
+      } 
+      // 2. Sinon, essayer de récupérer depuis notre cache global simple
+      else {
+        const cachedUser = userCache[otherUserId];
+        if (cachedUser) {
+          displayName = formatUserName(cachedUser);
+          
+          // Mettre à jour les données React Query pour cohérence
+          const currentUsers = queryClient.getQueryData<User[]>(['users', 'directChannels', { teamId }]) || [];
+          if (!currentUsers.some(u => u.id === cachedUser.id)) {
+            queryClient.setQueryData(
+              ['users', 'directChannels', { teamId }],
+              [...currentUsers, cachedUser]
+            );
+          }
+        } 
+        // 3. Si pas en cache non plus, faire la requête et afficher un placeholder en attendant
+        else {
+          // Lancer l'appel API (un seul appel sera fait par utilisateur grâce à notre système)
+          getUser(otherUserId)
+            .then(user => {
+              // Mettre à jour React Query pour la prochaine fois
+              const currentUsers = queryClient.getQueryData<User[]>(['users', 'directChannels', { teamId }]) || [];
+              if (!currentUsers.some(u => u.id === user.id)) {
+                queryClient.setQueryData(
+                  ['users', 'directChannels', { teamId }],
+                  [...currentUsers, user]
+                );
+              }
+              
+              // Forcer la mise à jour de l'affichage
+              queryClient.invalidateQueries({ queryKey: channelKeys.list(teamId || '') });
+            })
+            .catch(err => console.error(`Error fetching user ${otherUserId}:`, err));
+          
+          // Utiliser un placeholder en attendant
+          displayName = channel.display_name && channel.display_name !== 'Direct Channel' 
+            ? channel.display_name 
+            : `Loading...`;
+        }
+      }
+      
+      return {
+        isDirect: true,
+        isGroup: false,
+        displayName,
+        userIds,
+        otherUserId,
+      };
+    } 
+    // Check if group channel
+    else if (isGroupChannel(channel)) {
+      // Get user IDs
+      const userIds = getUserIdsFromGroupChannel(channel);
+      
+      // Find all users in the group 
+      const groupUsers = users.filter(u => userIds.includes(u.id));
+      
+      // Create a display name with the list of users
+      let displayName = channel.display_name;
+      
+      // If no display name or it's the default, use the proper format with user names
+      if (!displayName || displayName === 'Group Message' || displayName === 'Group Channel') {
+        displayName = getGroupChannelDisplayName(groupUsers, 'Group Message');
+      }
+      
+      return {
+        isDirect: false,
+        isGroup: true,
+        displayName,
+        userIds,
+      };
     }
     
-    // Invalidate unread count for this channel
-    queryClient.invalidateQueries({
-      queryKey: QUERY_KEYS.channels.unreadCount(channelId),
-    });
-    
-    console.log(`[useChannels] Invalidated cache for channel ${channelId}`);
-  }, []);
+    return null;
+  };
 
   return {
     // Data
-    channels: teamId ? getChannelsByTeam(teamId) : [],
-    publicChannels,
-    privateChannels,
-    directChannels,
-    groupChannels,
-    favoriteChannels,
-    activeChannel,
-
-    // State
-    isLoading,
-    isFetching: channelsQuery.isFetching,
-    error: channelsQuery.error || storeError,
-    hasPreloadedUsers,
-
+    channels: channelsQuery.data || [],
+    publicChannels: getChannelsByType('public'),
+    privateChannels: getChannelsByType('private'),
+    directChannels: getChannelsByType('direct'),
+    groupChannels: getChannelsByType('group'),
+    
+    // Loading states
+    isLoading: channelsQuery.isLoading || usersQuery.isLoading,
+    isError: channelsQuery.isError,
+    error: channelsQuery.error,
+    
     // Actions
-    selectChannel,
-    refreshChannels,
-    setActiveChannel,
-    invalidateChannelCache,
-
-    // Helper methods
-    hasUnreads,
-    hasMentions,
-    isFavorite,
-    isChannelMuted,
+    refetch: channelsQuery.refetch,
+    createChannel: createChannelMutation.mutateAsync,
+    joinChannel: joinChannelMutation.mutateAsync,
+    leaveChannel: leaveChannelMutation.mutateAsync,
+    
+    // Helpers
     getDirectChannelInfo,
   };
 }
 
 /**
- * Hook for a specific channel
- * @param channelId Channel ID
- * @returns Channel data and operations
+ * Hook for working with a specific channel
  */
 export function useChannel(channelId: string | undefined) {
-  // Current user ID for filtering
-  const { currentUser } = useAuthStore();
+  const queryClient = useQueryClient();
   
-  // Access the invalidate function from useChannels
-  const invalidateCache = useCallback(() => {
-    if (channelId) {
-      // Directly call the invalidation logic since we don't want to depend on useChannels
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.channels.byId(channelId),
-      });
-      
-      // Get the channel to find its team
-      const channel = useChannelStore.getState().getChannelById(channelId);
-      if (channel?.team_id) {
-        queryClient.invalidateQueries({
-          queryKey: QUERY_KEYS.channels.byTeam(channel.team_id),
-        });
-      }
-      
-      console.log(`[useChannel] Invalidated cache for channel ${channelId}`);
-    }
-  }, [channelId]);
+  // Skip query if channelId is undefined
+  const enabled = !!channelId;
 
-  // Get specific channel using React Query
-  const channelQuery = useChannelQuery(channelId);
-
-  // Get channel members
-  const membersQuery = useChannelMembersQuery(channelId);
-
-  // Channel store access
-  const { getChannelById, updateChannel, removeChannel } = useChannelStore();
-
-  // Direct channel info
-  const { getDirectChannelInfo, refreshDirectChannelInfo } =
-    useDirectChannelStore();
-
-  // Favorites and muted channels
-  const { isFavorite, toggleFavorite, isChannelMuted, toggleMuted } =
-    useUserSettingsStore();
-
-  // Channel mutations
-  const updateMutation = useUpdateChannelMutation();
-  const deleteMutation = useDeleteChannelMutation();
-  const viewMutation = useViewChannelMutation();
-  const joinMutation = useJoinChannelMutation();
-  const leaveMutation = useLeaveChannelMutation();
-  const addToFavoritesMutation = useAddChannelToFavoritesMutation();
-  const removeFromFavoritesMutation = useRemoveChannelFromFavoritesMutation();
-  const toggleMutedMutation = useToggleChannelMutedMutation();
-
-  // Current channel from store or query
-  const channel = useMemo(() => {
-    if (!channelId) return null;
-    return getChannelById(channelId) || channelQuery.data || null;
-  }, [channelId, getChannelById, channelQuery.data]);
-
-  // Direct channel info if this is a DM/GM
-  const directInfo = useMemo(() => {
-    if (!channelId || !channel) return null;
-
-    if (channelService.isDirectOrGroupChannel(channel)) {
-      return getDirectChannelInfo(channelId);
-    }
-
-    return null;
-  }, [channelId, channel, getDirectChannelInfo]);
-
-  // Refresh direct channel info when needed, with safeguards against loops
-  useEffect(() => {
-    if (
-      channel &&
-      currentUser &&
-      channelService.isDirectOrGroupChannel(channel) &&
-      (!directInfo || directInfo.status === "loading")
-    ) {
-      // Check if channel is already loading to avoid loops
-      if (!channelLoadingService.isChannelLoading(channelId!)) {
-        // Mark as loading in the service before refreshing to prevent loops
-        channelLoadingService.setChannelLoading(channelId!, true);
-
-        // Request refresh
-        refreshDirectChannelInfo(channelId!, currentUser.id);
-
-        // Clear loading state after a short delay to prevent locking
-        setTimeout(() => {
-          channelLoadingService.setChannelLoading(channelId!, false);
-        }, 100);
-      }
-    }
-  }, [channel, currentUser, directInfo, channelId, refreshDirectChannelInfo]);
-
-  // Channel type helpers
-  const isPublic = useMemo(() => {
-    return channel ? channelService.isPublicChannel(channel) : false;
-  }, [channel]);
-
-  const isPrivate = useMemo(() => {
-    return channel ? channelService.isPrivateChannel(channel) : false;
-  }, [channel]);
-
-  const isDirect = useMemo(() => {
-    return channel ? channelService.isDirectChannel(channel) : false;
-  }, [channel]);
-
-  const isGroup = useMemo(() => {
-    return channel ? channelService.isGroupChannel(channel) : false;
-  }, [channel]);
-
-  /**
-   * Updates the channel
-   * @param updateData Channel update data
-   */
-  const update = useCallback(
-    async (updateData: UpdateChannelParams) => {
-      if (!channelId) return null;
-      try {
-        return await updateMutation.mutateAsync({
-          channelId,
-          channelData: updateData,
-        });
-      } catch (error) {
-        handleError(error as Error, ErrorSource.API);
-        throw error;
-      }
+  // Fetch channel details
+  const channelQuery = useQuery({
+    queryKey: channelKeys.detail(channelId || ''),
+    queryFn: async () => {
+      const response = await api.get<Channel>(`channels/${channelId}`);
+      return response.data;
     },
-    [channelId, updateMutation],
-  );
+    enabled,
+  });
 
-  /**
-   * Deletes the channel
-   */
-  const deleteChannel = useCallback(async () => {
-    if (!channelId) return;
-    try {
-      await deleteMutation.mutateAsync(channelId);
-    } catch (error) {
-      handleError(error as Error, ErrorSource.API);
-      throw error;
-    }
-  }, [channelId, deleteMutation]);
+  // Fetch channel members
+  const membersQuery = useQuery({
+    queryKey: channelKeys.members(channelId || ''),
+    queryFn: async () => {
+      const response = await api.get<ChannelMember[]>(`channels/${channelId}/members`);
+      return response.data;
+    },
+    enabled,
+  });
 
-  /**
-   * Marks the channel as viewed
-   */
-  const markAsViewed = useCallback(async () => {
-    if (!channelId) return;
-    try {
-      await viewMutation.mutateAsync(channelId);
-    } catch (error) {
-      handleError(error as Error, ErrorSource.API);
-      throw error;
-    }
-  }, [channelId, viewMutation]);
-
-  /**
-   * Joins the channel
-   */
-  const joinChannel = useCallback(async () => {
-    if (!channelId || !channel?.team_id) return;
-    try {
-      await joinMutation.mutateAsync({ channelId, teamId: channel.team_id });
-    } catch (error) {
-      handleError(error as Error, ErrorSource.API);
-      throw error;
-    }
-  }, [channelId, channel, joinMutation]);
-
-  /**
-   * Leaves the channel
-   */
-  const leaveChannel = useCallback(async () => {
-    if (!channelId) return;
-    try {
-      await leaveMutation.mutateAsync(channelId);
-    } catch (error) {
-      handleError(error as Error, ErrorSource.API);
-      throw error;
-    }
-  }, [channelId, leaveMutation]);
-
-  /**
-   * Toggles favorite status
-   */
-  const toggleFavoriteStatus = useCallback(async () => {
-    if (!channelId) return;
-    try {
-      const isFav = isFavorite(channelId);
-      if (isFav) {
-        await removeFromFavoritesMutation.mutateAsync(channelId);
-      } else {
-        await addToFavoritesMutation.mutateAsync(channelId);
+  // Update channel mutation
+  const updateChannelMutation = useMutation({
+    mutationFn: async (updates: Partial<Channel>) => {
+      if (!channelId) {
+        throw new Error('Channel ID is required to update a channel');
       }
-    } catch (error) {
-      handleError(error as Error, ErrorSource.API);
-      throw error;
-    }
-  }, [
-    channelId,
-    isFavorite,
-    addToFavoritesMutation,
-    removeFromFavoritesMutation,
-  ]);
+      
+      const response = await api.put<Channel>(`channels/${channelId}`, updates);
+      return response.data;
+    },
+    onSuccess: (updatedChannel) => {
+      // Update channel in cache
+      queryClient.setQueryData(
+        channelKeys.detail(updatedChannel.id),
+        updatedChannel
+      );
 
-  /**
-   * Toggles muted status
-   */
-  const toggleMutedStatus = useCallback(async () => {
-    if (!channelId) return;
-    try {
-      const muted = isChannelMuted(channelId);
-      await toggleMutedMutation.mutateAsync({ channelId, muted: !muted });
-    } catch (error) {
-      handleError(error as Error, ErrorSource.API);
-      throw error;
-    }
-  }, [channelId, isChannelMuted, toggleMutedMutation]);
+      // Update channel in list cache if it exists
+      queryClient.setQueryData<Channel[]>(
+        channelKeys.list(updatedChannel.team_id),
+        (oldChannels = []) => {
+          return oldChannels.map(channel => 
+            channel.id === updatedChannel.id ? updatedChannel : channel
+          );
+        }
+      );
+    },
+  });
 
-  /**
-   * Refreshes channel data
-   */
-  const refreshChannel = useCallback(() => {
-    return channelQuery.refetch();
-  }, [channelQuery]);
-
-  /**
-   * Refreshes channel members
-   */
-  const refreshMembers = useCallback(() => {
-    return membersQuery.refetch();
-  }, [membersQuery]);
+  // View channel/mark as read
+  const viewChannelMutation = useMutation({
+    mutationFn: async () => {
+      if (!channelId) {
+        throw new Error('Channel ID is required to view a channel');
+      }
+      
+      // Use the correct API endpoint
+      await api.post(`channels/members/me/view`, {
+        channel_id: channelId
+      });
+      return channelId;
+    },
+  });
 
   return {
     // Data
-    channel,
+    channel: channelQuery.data,
     members: membersQuery.data || [],
-    directInfo,
-    isFavorite: channelId ? isFavorite(channelId) : false,
-    isMuted: channelId ? isChannelMuted(channelId) : false,
-
-    // Type helpers
-    isPublic,
-    isPrivate,
-    isDirect,
-    isGroup,
-
-    // State
+    
+    // Loading states
     isLoading: channelQuery.isLoading || membersQuery.isLoading,
-    isLoadingMembers: membersQuery.isLoading,
-    error: channelQuery.error || membersQuery.error,
-
+    isError: channelQuery.isError,
+    error: channelQuery.error,
+    
     // Actions
-    update,
-    deleteChannel,
-    markAsViewed,
-    joinChannel,
-    leaveChannel,
-    toggleFavoriteStatus,
-    toggleMutedStatus,
-    refreshChannel,
-    refreshMembers,
-    invalidateCache,
-
-    // Mutations state
-    isUpdating: updateMutation.isPending,
-    isDeleting: deleteMutation.isPending,
-    isJoining: joinMutation.isPending,
-    isLeaving: leaveMutation.isPending,
-    updateError: updateMutation.error,
-    deleteError: deleteMutation.error,
-  };
-}
-
-/**
- * Hook for channel creation
- * @param teamId Team ID
- * @returns Channel creation functionality
- */
-export function useChannelCreation(teamId: string | undefined) {
-  // Create channel mutation
-  const createMutation = useCreateChannelMutation();
-
-  /**
-   * Creates a new channel
-   * @param channelData Channel creation data
-   */
-  const createChannel = useCallback(
-    async (
-      channelData: Omit<CreateChannelParams, "team_id">,
-    ): Promise<Channel> => {
-      if (!teamId) {
-        throw new Error("Team ID is required to create a channel");
-      }
-
-      try {
-        return await createMutation.mutateAsync({
-          ...channelData,
-          team_id: teamId,
-        });
-      } catch (error) {
-        handleError(error as Error, ErrorSource.API);
-        throw error;
-      }
-    },
-    [teamId, createMutation],
-  );
-
-  /**
-   * Validates channel name for creation
-   * @param name Channel name to validate
-   */
-  const validateChannelName = useCallback((name: string): boolean => {
-    return channelService.validateChannelName(name);
-  }, []);
-
-  /**
-   * Creates URL-friendly channel name from display name
-   * @param displayName Display name
-   */
-  const sanitizeChannelName = useCallback((displayName: string): string => {
-    return channelService.sanitizeChannelName(displayName);
-  }, []);
-
-  return {
-    // Actions
-    createChannel,
-    validateChannelName,
-    sanitizeChannelName,
-
-    // State
-    isCreating: createMutation.isPending,
-    error: createMutation.error,
+    updateChannel: updateChannelMutation.mutateAsync,
+    viewChannel: viewChannelMutation.mutateAsync,
+    refetch: channelQuery.refetch,
+    refetchMembers: membersQuery.refetch,
   };
 }
