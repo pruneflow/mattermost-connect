@@ -16,10 +16,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useMessageReactions } from '../../hooks';
 import {
   processReactions,
-  getEmojiName,
   findEmojiByName,
-  EMOJI_BY_SHORT_NAME
-} from '../../utils/emojiUtils';
+  getEmojiImageUrl
+} from '../../utils/emojiMartAdapter';
 import { api } from '../../api/client';
 import { EmojiPickerMart } from '../common';
 
@@ -61,20 +60,13 @@ function MessageReactions({
     if (!currentUserId || !messageId) return;
 
     try {
-      // Find the Mattermost-compatible emoji name from emoji.json
-      let mattermostEmojiName = emojiName;
+      // Note: emojiName contient déjà le modificateur de teinte si nécessaire
+      // car il est construit par createEmojiNameWithTone dans EmojiPickerMart
+      const mattermostEmojiName = emojiName;
       
-      // Vérifier que EMOJI_BY_SHORT_NAME existe
-      if (EMOJI_BY_SHORT_NAME && EMOJI_BY_SHORT_NAME[emojiName]) {
-        mattermostEmojiName = EMOJI_BY_SHORT_NAME[emojiName].short_name || emojiName;
-      } else {
-        // Fallback to more expensive search if needed
-        const emojiData = findEmojiByName(emojiName);
-        if (emojiData) {
-          // Use the short_name from emoji.json, which is the Mattermost compatible name
-          mattermostEmojiName = emojiData.short_name;
-        }
-      }
+      // Cette recherche peut encore être utile pour récupérer d'autres infos
+      // comme le code unified, mais on préserve le nom avec la teinte
+      const emojiData = findEmojiByName(emojiName);
       
       // Check if user has already added this reaction
       const hasReacted = reactions[mattermostEmojiName]?.includes(currentUserId);
@@ -95,7 +87,8 @@ function MessageReactions({
   };
 
   // Handle emoji selection from the EmojiPicker
-  const handleEmojiSelect = (emoji: string, emojiName: string) => {
+  // Note: emojiName inclut déjà le modificateur de teinte si applicable
+  const handleEmojiSelect = (emoji: string, emojiName: string, skinTone?: number) => {
     void toggleReaction(emoji, emojiName);
   };
 
@@ -140,7 +133,8 @@ function MessageReactions({
         reactionItems.map((reactionItem) => {
           const { name, emoji, unified, count, userIds } = reactionItem;
           const hasReacted = currentUserId ? userIds.includes(currentUserId) : false;
-          
+          console.log('reactionItem', reactionItem);
+          console.log('url', getEmojiImageUrl(unified));
           return (
             <Tooltip
               key={name}
@@ -173,7 +167,7 @@ function MessageReactions({
                     {unified ? (
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <img 
-                          src={`${api.getBaseUrl()}/static/emoji/${unified.toLowerCase()}.png`} 
+                          src={getEmojiImageUrl(unified)} 
                           alt={name}
                           style={{ 
                             width: compact ? '14px' : '16px', 
