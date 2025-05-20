@@ -115,7 +115,7 @@ export function UserMenu({
   const displayName = user ? 
     `${user.first_name} ${user.last_name}`.trim() || user.username || 'User' 
     : 'User';
-  
+  console.debug("UserMenu");
   return (
     <>
       {/* Use the UserAvatar without status */}

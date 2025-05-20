@@ -5,24 +5,40 @@ import { useTypingEventsForChannel } from '../../hooks/useTypingEventsForChannel
 
 export interface TypingIndicatorProps {
   channelId: string;
-  typingUsers?: string[]; // Array of usernames who are typing
 }
 
-export function TypingIndicator({ channelId, typingUsers: typingUsersProp }: TypingIndicatorProps) {
+export function TypingIndicator({ channelId }: TypingIndicatorProps) {
   // State for typing status
   const [isVisible, setIsVisible] = useState(false);
   const [typingMessage, setTypingMessage] = useState('');
   
-
   // Get typing events for this channel
-  const { typingEvents = []  } = useTypingEventsForChannel(channelId);
-  const typingUsers = typingUsersProp || typingEvents.map(event => event.username);
+  const { typingEvents = [] } = useTypingEventsForChannel(channelId);
+  
+  // Mémoiser le filtrage des événements de saisie pour ce canal
+  const typingUsers = useMemo(() => {
+    // Convertir channelId en string pour une comparaison cohérente
+    const channelIdStr = String(channelId);
     
-  // Update typing state based on props
+    // Filtrer les événements pour ce canal uniquement
+    const channelEvents = typingEvents.filter(event => 
+      String(event.channel_id) === channelIdStr
+    );
+    
+    // Obtenir des noms d'utilisateurs uniques et filtrer "Someone"
+    return Array.from(
+      new Set(
+        channelEvents
+          .filter(event => event.username !== 'Someone')
+          .map(event => event.username)
+      )
+    );
+  }, [typingEvents, channelId]);
+  
+  // Mettre à jour l'état de l'indicateur
   useEffect(() => {
     if (typingUsers.length > 0) {
-      setIsVisible(true);
-      
+      // Mettre à jour le message en fonction du nombre d'utilisateurs
       if (typingUsers.length === 1) {
         setTypingMessage(`${typingUsers[0]} is typing...`);
       } else if (typingUsers.length === 2) {
@@ -31,65 +47,20 @@ export function TypingIndicator({ channelId, typingUsers: typingUsersProp }: Typ
         setTypingMessage('Several people are typing...');
       }
       
-      // Hide after a period of inactivity (5 seconds)
+      // Montrer l'indicateur
+      setIsVisible(true);
+      
+      // Cacher après une période d'inactivité (5 secondes)
       const timer = setTimeout(() => {
         setIsVisible(false);
       }, 5000);
       
       return () => clearTimeout(timer);
     } else {
+      // Aucun utilisateur ne tape
       setIsVisible(false);
     }
-  }, [typingUsers]);
-  
-  // Mémoiser le filtrage des événements de saisie pour ce canal
-  const uniqueUsernames = useMemo(() => {
-    if (!typingEvents || !channelId) {
-      return [];
-    }
-    
-    // Convert channelId to string to ensure consistent comparison
-    const channelIdStr = String(channelId);
-    
-    // Filter typing events for this channel
-    const channelTypingEvents = typingEvents.filter(event => {
-      const eventChannelId = String(event.channel_id);
-      return eventChannelId === channelIdStr;
-    });
-    
-    // Get unique usernames
-    return Array.from(
-      new Set(channelTypingEvents.map(event => event.username))
-    );
-  }, [typingEvents, channelId]);
-  
-  // Mettre à jour l'état de l'indicateur périodiquement plutôt qu'à chaque changement
-  useEffect(() => {
-    // Mettre à jour l'état seulement si nécessaire
-    const updateTypingStatus = () => {
-      if (uniqueUsernames.length > 0) {
-        setIsVisible(true);
-        
-        if (uniqueUsernames.length === 1) {
-          setTypingMessage(`${uniqueUsernames[0]} is typing...`);
-        } else if (uniqueUsernames.length === 2) {
-          setTypingMessage(`${uniqueUsernames[0]} and ${uniqueUsernames[1]} are typing...`);
-        } else {
-          setTypingMessage('Several people are typing...');
-        }
-      } else {
-        setIsVisible(false);
-      }
-    };
-    
-    // Exécuter immédiatement
-    updateTypingStatus();
-    
-    // Configurer un intervalle pour actualiser périodiquement, pas à chaque rendu
-    const interval = setInterval(updateTypingStatus, 1000);
-    
-    return () => clearInterval(interval);
-  }, [uniqueUsernames.length]);
+  }, [typingUsers]); // Se rafraîchit uniquement quand typingUsers change
   
   
   // Animation style for typing indicator

@@ -39,6 +39,17 @@ export async function getUser(userId: string): Promise<User> {
       const user = response.data;
       userCache[userId] = user;
       delete pendingRequests[userId];
+      
+      // Mettre à jour le localStorage pour assurer la synchronisation 
+      try {
+        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
+        const cachedUsers = JSON.parse(cachedUsersStr);
+        cachedUsers[userId] = user;
+        localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
+      } catch (error) {
+        console.error('Error updating localStorage user cache:', error);
+      }
+      
       return user;
     })
     .catch(error => {
@@ -73,6 +84,22 @@ export function useUsers(userIds: string[] = []) {
       users.forEach(user => {
         userCache[user.id] = user;
       });
+      
+      // Mettre à jour le localStorage pour assurer la synchronisation avec d'autres composants
+      try {
+        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
+        const cachedUsers = JSON.parse(cachedUsersStr);
+        
+        // Ajouter les nouveaux utilisateurs au cache
+        users.forEach(user => {
+          cachedUsers[user.id] = user;
+        });
+        
+        // Sauvegarder dans localStorage
+        localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
+      } catch (error) {
+        console.error('Error updating localStorage user cache:', error);
+      }
       
       return users;
     },

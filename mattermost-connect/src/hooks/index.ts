@@ -9,3 +9,4 @@ export * from './useMessageReactions';
 export * from './useTypingEventsForChannel';
 export * from './useUserAvatar';
 export * from './useFile';
+export * from './useLayout';

@@ -200,6 +200,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('mattermost_token', token);
       if (credentials.serverUrl) {
         localStorage.setItem('mattermost_server', credentials.serverUrl);
+        
+        // Set auth cookie for direct mode to allow image loading
+        // This cookie will be used by the browser to authenticate image requests
+        document.cookie = `MMAUTHTOKEN=${token}; path=/; SameSite=Lax`;
+        
+        // Set user ID cookie if user object is available
+        if (user && user.id) {
+          document.cookie = `MMUSERID=${user.id}; path=/; SameSite=Lax`;
+        }
       }
       
       // Update state
@@ -228,6 +237,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Clear token
     localStorage.removeItem('mattermost_token');
     localStorage.removeItem('mattermost_server');
+    
+    // Clear auth cookies
+    document.cookie = 'MMAUTHTOKEN=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'MMUSERID=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     
     // Reset API client
     api.setToken(null);

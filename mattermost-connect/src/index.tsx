@@ -11,7 +11,7 @@ export * from './hooks';
 // Re-export API types - handle ambiguity with Message type
 import * as ApiTypes from './api/types';
 // Explicitly re-export everything except Message to avoid name conflicts
-export {
+export type {
   WithId,
   WithTimestamps,
   User,

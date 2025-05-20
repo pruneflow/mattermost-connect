@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { api } from '../api/client';
 import { Channel, ChannelMember, User, DirectChannelInfo } from '../api/types';
 import { useChannelUtils } from './useChannelUtils';
@@ -117,14 +117,16 @@ export function useChannels(teamId: string | undefined) {
   // Skip query if teamId is undefined
   const enabled = !!teamId;
 
-  // Effet pour gérer les changements d'équipe
+  // Utiliser useEffect au lieu de useMemo pour les effets secondaires
+  // et ne logger qu'une seule fois le changement d'équipe
   useEffect(() => {
     // Si l'ID d'équipe a changé
     if (teamId && previousTeamIdRef.current !== teamId) {
-      console.log(`Team changed from ${previousTeamIdRef.current} to ${teamId}`);
-      
-      // Si l'équipe est marquée comme "dirty", on forcera un rechargement
-      // lors de la prochaine exécution du queryFn
+      // Journaliser le changement d'équipe (for debugging)
+      // La condition unique évite les logs dupliqués de différents composants
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Team changed from ${previousTeamIdRef.current} to ${teamId}`);
+      }
       
       // Mettre à jour la référence
       previousTeamIdRef.current = teamId;
@@ -148,7 +150,7 @@ export function useChannels(teamId: string | undefined) {
     enabled,
     // Paramètres de cache optimisés - ne refetch pas automatiquement
     staleTime: Infinity,         // Ne jamais considérer les données comme obsolètes
-    cacheTime: Infinity,         // Garder les données en cache indéfiniment
+    gcTime: Infinity,            // Garder les données en cache indéfiniment (cacheTime est déprécié)
     refetchOnWindowFocus: false, // Pas de refetch au focus
     refetchOnReconnect: false,   // Pas de refetch à la reconnexion
   });
@@ -247,26 +249,34 @@ export function useChannels(teamId: string | undefined) {
     },
   });
 
-  // Get channels by type
-  const getChannelsByType = (type: 'public' | 'private' | 'direct' | 'group') => {
-    const channels = channelsQuery.data || [];
-    
-    switch (type) {
-      case 'public':
-        return channels.filter(channel => channel.type === 'O');
-      case 'private':
-        return channels.filter(channel => channel.type === 'P');
-      case 'direct':
-        return channels.filter(channel => isDirectChannel(channel));
-      case 'group':
-        return channels.filter(channel => isGroupChannel(channel));
-      default:
-        return [];
-    }
-  };
+  // Get channels by type - mémoiser pour éviter des recalculs lors des re-renders
+  const getChannelsByType = useMemo(() => {
+    return (type: 'public' | 'private' | 'direct' | 'group') => {
+      const channels = channelsQuery.data || [];
+      
+      switch (type) {
+        case 'public':
+          return channels.filter(channel => channel.type === 'O');
+        case 'private':
+          return channels.filter(channel => channel.type === 'P');
+        case 'direct':
+          return channels.filter(channel => isDirectChannel(channel));
+        case 'group':
+          return channels.filter(channel => isGroupChannel(channel));
+        default:
+          return [];
+      }
+    };
+  }, [channelsQuery.data, isDirectChannel, isGroupChannel]);
 
-  // Format direct channel info
-  const getDirectChannelInfo = (channelId: string): DirectChannelInfo | null => {
+  // Mémoriser les canaux par type pour éviter des recalculs inutiles
+  const publicChannels = useMemo(() => getChannelsByType('public'), [getChannelsByType]);
+  const privateChannels = useMemo(() => getChannelsByType('private'), [getChannelsByType]);
+  const directChannels = useMemo(() => getChannelsByType('direct'), [getChannelsByType]);
+  const groupChannels = useMemo(() => getChannelsByType('group'), [getChannelsByType]);
+
+  // Format direct channel info - mémoiser pour éviter des recalculs lors des re-renders
+  const getDirectChannelInfo = useCallback((channelId: string): DirectChannelInfo | null => {
     const channels = channelsQuery.data || [];
     const users = usersQuery.data || [];
     const currentUser = queryClient.getQueryData<User>(['users', 'me']);
@@ -367,15 +377,15 @@ export function useChannels(teamId: string | undefined) {
     }
     
     return null;
-  };
+  }, [channelsQuery.data, usersQuery.data, queryClient, teamId, isDirectChannel, isGroupChannel, getUserIdsFromGroupChannel, getGroupChannelDisplayName]);
 
   return {
     // Data
     channels: channelsQuery.data || [],
-    publicChannels: getChannelsByType('public'),
-    privateChannels: getChannelsByType('private'),
-    directChannels: getChannelsByType('direct'),
-    groupChannels: getChannelsByType('group'),
+    publicChannels,
+    privateChannels,
+    directChannels,
+    groupChannels,
     
     // Loading states
     isLoading: channelsQuery.isLoading || usersQuery.isLoading,

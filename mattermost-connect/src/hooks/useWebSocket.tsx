@@ -50,6 +50,10 @@ export const WebSocketSingleton = (() => {
   // Instance WebSocket et état
   let wsInstance: WebSocket | null = null;
   
+  // Référence à l'instance API pour une utilisation directe
+  // Cette référence sera remplie lors de la première connexion
+  let apiInstance = api;
+  
   // Tableau global des événements de frappe
   let wsTypingEvents: Array<{
     username: string;
@@ -492,6 +496,9 @@ export const WebSocketSingleton = (() => {
       notifySubscribers();
     },
     
+    // Accès à l'API
+    getApiInstance: () => apiInstance,
+    
     // API globale pour les événements de frappe
     getTypingEvents: () => wsTypingEvents,
     updateTypingEvents,
@@ -791,11 +798,27 @@ export function useWebSocket() {
       const now = Date.now();
       const currentEvents = WebSocketSingleton.getTypingEvents();
       
-      // Filtrer les événements périmés
-      const filtered = currentEvents.filter(event => now - event.timestamp < 10000);
+      // Dédoublonner les événements par utilisateur/canal et filtrer les périmés
+      // 1. Créer un objet temporaire pour stocker le dernier événement de chaque utilisateur par canal
+      const latestEventsByUserAndChannel: Record<string, typeof currentEvents[0]> = {};
+      
+      // 2. Pour chaque événement, ne conserver que le plus récent pour chaque paire utilisateur/canal
+      currentEvents.forEach(event => {
+        const key = `${event.username}_${event.channel_id}`;
+        
+        // Si cet événement est plus récent ou si c'est le premier pour cette paire
+        if (!latestEventsByUserAndChannel[key] || 
+            event.timestamp > latestEventsByUserAndChannel[key].timestamp) {
+          latestEventsByUserAndChannel[key] = event;
+        }
+      });
+      
+      // 3. Convertir l'objet en tableau et filtrer les événements périmés
+      const uniqueEvents = Object.values(latestEventsByUserAndChannel)
+        .filter(event => now - event.timestamp < 10000);
       
       // Utiliser updateTypingEvents qui vérifiera lui-même si une mise à jour est nécessaire
-      WebSocketSingleton.updateTypingEvents(filtered);
+      WebSocketSingleton.updateTypingEvents(uniqueEvents);
     }, 1000);
     
     return () => clearInterval(interval);
@@ -923,30 +946,96 @@ export function useWebSocket() {
           const now = Date.now();
           let username = 'Someone';
           
-          // Tenter de récupérer le nom d'utilisateur depuis le cache
-          const cachedUsersStr = localStorage.getItem('mattermost_cached_users');
-          if (cachedUsersStr) {
-            const cachedUsers = JSON.parse(cachedUsersStr);
-            const user = cachedUsers[userId];
-            if (user) {
-              // Utiliser formatUserName pour respecter les conventions existantes
-              username = formatUserName(user);
-            }
+          // Récupérer le nom d'utilisateur à partir des différentes sources de cache
+          // Afficher l'ID utilisateur pour faciliter le débogage
+          console.log(`Typing event received from user ID: ${userId}`);
+          
+          // 1. Essayer d'abord le cache en mémoire de useUsers.ts qui est plus fiable
+          try {
+            // Importer dynamiquement pour éviter les dépendances circulaires
+            // Sans utiliser require pour respecter les contraintes de React client
+            import('../hooks/useUsers').then(useUsersModule => {
+              if (useUsersModule.userCache[userId]) {
+                username = formatUserName(useUsersModule.userCache[userId]);
+                console.log(`Found user ${userId} in useUsers cache, username: ${username}`);
+                
+                // Mettre à jour directement le singleton
+                const updatedEvents = [...WebSocketSingleton.getTypingEvents().filter(e => 
+                  !(e.channel_id === channelId && e.username === 'Someone')), 
+                  { username, channel_id: channelId, timestamp: now }
+                ];
+                WebSocketSingleton.updateTypingEvents(updatedEvents);
+                return; // Exit early since we found the user
+              } else {
+                console.warn(`User ${userId} not found in useUsers cache`);
+              }
+            }).catch(error => {
+              console.error('Error accessing useUsers module:', error);
+            });
+          } catch (error) {
+            console.error('Error with dynamic import:', error);
           }
           
-          // Mettre à jour l'état des événements de saisie via le singleton
+          // 2. Fallback au localStorage
+          const cachedUsersStr = localStorage.getItem('mattermost_cached_users');
+          if (cachedUsersStr) {
+            try {
+              const cachedUsers = JSON.parse(cachedUsersStr);
+              const user = cachedUsers[userId];
+              if (user) {
+                // Utiliser formatUserName pour respecter les conventions existantes
+                username = formatUserName(user);
+                console.log(`Successfully resolved username: ${username} for user ${userId}`);
+              } else {
+                console.warn(`User ${userId} not found in localStorage cache`);
+              }
+            } catch (error) {
+              console.error('Error parsing cached users from localStorage:', error);
+            }
+          } else {
+            console.warn('No cached users found in localStorage');
+          }
+          
+          // 3. Si nous avons toujours "Someone", essayer de charger l'utilisateur
+          if (username === 'Someone') {
+            console.log(`Attempting to load user ${userId} from API`);
+            // Utiliser une IIFE pour pouvoir utiliser await
+            (async () => {
+              try {
+                // Utiliser l'API client directement
+                const response = await api.get(`users/${userId}`);
+                if (response.data) {
+                  username = formatUserName(response.data);
+                  console.log(`Loaded user ${userId} from API, username: ${username}`);
+                  
+                  // Mettre à jour directement le singleton
+                  const updatedEvents = [...WebSocketSingleton.getTypingEvents().filter(e => 
+                    !(e.channel_id === channelId && e.username === 'Someone')), 
+                    { username, channel_id: channelId, timestamp: now }
+                  ];
+                  WebSocketSingleton.updateTypingEvents(updatedEvents);
+                }
+              } catch (error) {
+                console.error(`Error loading user ${userId} from API:`, error);
+              }
+            })();
+          }
+          
+          // Mettre à jour l'état des événements de saisie via le singleton de façon optimisée
           const currentEvents = WebSocketSingleton.getTypingEvents();
+          
+          // 1. Filtrer les événements périmés et ceux du même utilisateur pour le même canal
           const filtered = currentEvents.filter(event => 
-            // Garder les événements de moins de 10 secondes (augmenté pour plus de visibilité)
+            // Garder les événements de moins de 10 secondes
             now - event.timestamp < 10000 && 
-            // Supprimer les événements du même utilisateur dans le même canal
-            !(event.username === username && event.channel_id === channelId)
+            // Filtrer TOUS les événements de cet utilisateur dans ce canal spécifique
+            !(event.channel_id === channelId && event.username === username)
           );
           
-          // Ajouter le nouvel événement de saisie
+          // 2. Ajouter un nouvel événement unique pour cet utilisateur
           const updatedEvents = [...filtered, { username, channel_id: channelId, timestamp: now }];
           
-          // Mettre à jour le singleton
+          // 3. Mettre à jour le singleton
           WebSocketSingleton.updateTypingEvents(updatedEvents);
         } catch (error) {
           console.error('Error processing typing event:', error);
