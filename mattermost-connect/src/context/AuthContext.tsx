@@ -203,7 +203,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Set auth cookie for direct mode to allow image loading
         // This cookie will be used by the browser to authenticate image requests
-        document.cookie = `MMAUTHTOKEN=${token}; path=/; SameSite=Lax`;
+        const now = new Date();
+        const time = now.getTime();
+        const expireTime = time + 1000*3600*24*30; // 30 jours
+        now.setTime(expireTime);
+        document.cookie = `MMAUTHTOKEN=${token}; path=/; expires=${now.toUTCString()}`;
         
         // Set user ID cookie if user object is available
         if (user && user.id) {

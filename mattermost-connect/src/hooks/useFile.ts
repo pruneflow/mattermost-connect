@@ -134,7 +134,6 @@ export function useFile(fileId: string | undefined) {
     try {
       // Vérifier si une requête est déjà en cours pour ce fichier
       if (!force && pendingInfoRequests.has(fileId)) {
-        console.log(`Reusing pending request for file info: ${fileId}`);
         // Réutiliser la requête en cours
         const data = await pendingInfoRequests.get(fileId);
         setFileInfo(data);
@@ -215,7 +214,6 @@ export function useFile(fileId: string | undefined) {
     try {
       // Vérifier si une requête est déjà en cours pour ce fichier
       if (!force && pendingPreviewRequests.has(fileId)) {
-        console.log(`Reusing pending request for file preview: ${fileId}`);
         // Réutiliser la requête en cours
         const url = await pendingPreviewRequests.get(fileId);
         setPreviewUrl(url);

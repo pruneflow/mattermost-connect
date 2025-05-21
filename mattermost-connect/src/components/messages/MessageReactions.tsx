@@ -133,8 +133,6 @@ function MessageReactions({
         reactionItems.map((reactionItem) => {
           const { name, emoji, unified, count, userIds } = reactionItem;
           const hasReacted = currentUserId ? userIds.includes(currentUserId) : false;
-          console.log('reactionItem', reactionItem);
-          console.log('url', getEmojiImageUrl(unified));
           return (
             <Tooltip
               key={name}

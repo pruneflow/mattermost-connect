@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { WebSocketSingleton } from './useWebSocket';
 import { useAuth } from '../context/AuthContext';
 import { userCache } from '../api/userCache';
@@ -31,13 +31,41 @@ export function useUserStatus(userId: string): UserStatus {
   // Récupérer les informations d'authentification pour l'appel API
   const { token, serverUrl, user } = useAuth();
   
-  // Référence pour savoir si c'est l'utilisateur connecté
-  const isCurrentUser = user?.id === userId;
+  // Utiliser des refs pour éviter que les changements dans ces valeurs ne déclenchent des re-rendus
+  const tokenRef = useRef(token);
+  const serverUrlRef = useRef(serverUrl);
+  const userIdRef = useRef(userId);
+  
+  // Mettre à jour les refs si les valeurs changent
+  useEffect(() => {
+    tokenRef.current = token;
+    serverUrlRef.current = serverUrl;
+    userIdRef.current = userId;
+  }, [token, serverUrl, userId]);
+  
+  // Référence pour savoir si c'est l'utilisateur connecté (mémorisée)
+  const isCurrentUserRef = useRef(user?.id === userId);
+  
+  // Mettre à jour isCurrentUserRef si user?.id change
+  useEffect(() => {
+    isCurrentUserRef.current = user?.id === userId;
+  }, [user?.id, userId]);
   
   // Référence pour déterminer si c'est le premier montage
   const isFirstMount = useRef(true);
   
+  // Fonction mémorisée pour mettre à jour le statut
+  const updateStatus = useCallback((newStatus: UserStatus | null) => {
+    if (newStatus) {
+      userCache.setUserStatus(userIdRef.current, newStatus);
+      setStatus(newStatus);
+    } else {
+      setStatus('offline');
+    }
+  }, []);
+  
   // S'abonner uniquement aux changements de statut pour cet utilisateur spécifique
+  // avec moins de dépendances pour réduire les re-rendus
   useEffect(() => {
     if (!userId) return;
     
@@ -46,50 +74,37 @@ export function useUserStatus(userId: string): UserStatus {
     
     // Ne logger qu'au premier montage pour éviter les logs excessifs
     if (isFirstMount.current) {
-      console.log(`Setting up status tracking for user: ${userId}${isCurrentUser ? ' (current user)' : ''} (refs: ${activeStatusSubscriptions[userId]})`);
+      console.log(`Setting up status tracking for user: ${userId}${isCurrentUserRef.current ? ' (current user)' : ''} (refs: ${activeStatusSubscriptions[userId]})`);
       isFirstMount.current = false;
     }
-    
-    // Fonction pour mettre à jour l'état local quand le statut change
-    const handleStatusChange = (newStatus: UserStatus) => {
-      setStatus(newStatus);
-    };
     
     // S'abonner aux changements pour cet utilisateur spécifique
     const unsubscribe = WebSocketSingleton.subscribeToUserStatus(userId, () => {
       // Quand le statut change, récupérer depuis le singleton de WebSocket
       const newStatus = WebSocketSingleton.getUserStatus(userId);
-      
-      // Mettre à jour notre cache centralisé
-      if (newStatus) {
-        userCache.setUserStatus(userId, newStatus);
-      }
-      
-      // Mettre à jour l'état local
-      setStatus(newStatus || 'offline');
+      updateStatus(newStatus);
     });
     
     // Pour l'utilisateur courant, initialiser son statut via API directe (une seule fois)
-    if (isCurrentUser && token && serverUrl && !WebSocketSingleton.isUserStatusInitialized(userId)) {
-      WebSocketSingleton.initializeUserStatus(userId, serverUrl, token)
+    if (isCurrentUserRef.current && tokenRef.current && serverUrlRef.current && 
+        !WebSocketSingleton.isUserStatusInitialized(userId)) {
+      WebSocketSingleton.initializeUserStatus(userId, serverUrlRef.current, tokenRef.current)
         .then(status => {
-          // Mettre à jour le cache quand on reçoit le statut initial
-          userCache.setUserStatus(userId, status);
-          setStatus(status);
+          updateStatus(status);
         })
         .catch(err => console.error(`Failed to initialize status for current user ${userId}:`, err));
     }
     
     // Pour les autres utilisateurs, ajouter à la liste de surveillance pour le pull périodique
     // Mais seulement si c'est la première référence à cet utilisateur
-    if (!isCurrentUser && activeStatusSubscriptions[userId] === 1) {
+    if (!isCurrentUserRef.current && activeStatusSubscriptions[userId] === 1) {
       // Récupérer le statut via API (forceRefresh=true pour le premier chargement)
-      if (token && serverUrl) {
+      if (tokenRef.current && serverUrlRef.current) {
         // Utiliser notre système centralisé pour récupérer le statut
         const forceRefresh = !userCache.hasUserStatus(userId);
         userCache.getUserStatus(userId, forceRefresh)
           .then(newStatus => {
-            setStatus(newStatus);
+            updateStatus(newStatus);
           })
           .catch(err => console.error(`Error fetching status for user ${userId}:`, err));
       }
@@ -111,12 +126,12 @@ export function useUserStatus(userId: string): UserStatus {
       activeStatusSubscriptions[userId] = activeStatusSubscriptions[userId] - 1;
       
       // Retirer l'utilisateur de la liste de surveillance seulement si plus aucun composant ne l'utilise
-      if (!isCurrentUser && activeStatusSubscriptions[userId] <= 0) {
+      if (!isCurrentUserRef.current && activeStatusSubscriptions[userId] <= 0) {
         delete activeStatusSubscriptions[userId]; // Nettoyer la référence
         WebSocketSingleton.removeUserFromStatusWatch(userId);
       }
     };
-  }, [userId, token, serverUrl, isCurrentUser, user?.id]);
+  }, [userId, updateStatus]); // Dépendances réduites pour éviter les re-rendus inutiles
   
   return status;
 }

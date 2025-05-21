@@ -65,6 +65,18 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     setSearchTerm(event.target.value);
   };
 
+  // Get channel display name (handling direct channels specially)
+  const getChannelDisplayName = (channel: Channel): string => {
+    if (channel.type === 'D') {
+      const directInfo = getDirectChannelInfo(channel.id);
+      if (directInfo) {
+        return directInfo.displayName;
+      }
+    }
+    
+    return channel.display_name || channel.name;
+  };
+
   // Filtrer les canaux en fonction du terme de recherche
   const filteredChannels = useMemo(() => {
     // Filtrer par terme de recherche si nécessaire
@@ -75,9 +87,10 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     
     if (searchTerm) {
       // Fonction de filtrage par terme de recherche
-      const filterBySearchTerm = (channel: Channel) =>
-        channel.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        channel.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const filterBySearchTerm = (channel: Channel) => {
+        const displayName = getChannelDisplayName(channel);
+        return displayName.toLowerCase().includes(searchTerm.toLowerCase());
+      }
       
       // Appliquer le filtre
       filteredPublic = publicChannels.filter(filterBySearchTerm);
@@ -102,17 +115,6 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     }
   };
 
-  // Get channel display name (handling direct channels specially)
-  const getChannelDisplayName = (channel: Channel): string => {
-    if (channel.type === 'D') {
-      const directInfo = getDirectChannelInfo(channel.id);
-      if (directInfo) {
-        return directInfo.displayName;
-      }
-    }
-    
-    return channel.display_name || channel.name;
-  };
 
   // Fonction pour créer un en-tête de section
   const renderSectionHeader = (

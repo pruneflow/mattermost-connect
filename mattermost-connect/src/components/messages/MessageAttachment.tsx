@@ -109,12 +109,10 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
               
               // Si une requête est déjà en cours pour ce fileId, attendre son résultat
               if (pendingInfoRequests && pendingInfoRequests.has(fileId)) {
-                console.log(`MessageAttachment: Reusing pending request for file info: ${fileId}`);
                 info = await pendingInfoRequests.get(fileId);
               } 
               // Si l'info est déjà en cache, l'utiliser directement
               else if (fileCache && fileCache.has(fileId)) {
-                console.log(`MessageAttachment: Using cached file info: ${fileId}`);
                 info = fileCache.get(fileId);
               } 
               // Sinon, faire l'appel API normalement

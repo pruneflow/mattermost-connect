@@ -221,7 +221,7 @@ export const WebSocketSingleton = (() => {
     }
     
     try {
-      console.log(`Initializing status for user ${userId} via direct API call`);
+      
       
       // Construire l'URL pour l'API de statut
       const statusUrl = `${serverUrl}/api/v4/users/${userId}/status`;
@@ -244,7 +244,7 @@ export const WebSocketSingleton = (() => {
       
       // Mettre à jour le statut si la réponse contient un statut valide
       if (data && data.status) {
-        console.log(`Status API response for ${userId}: ${data.status}`);
+        
         updateUserStatus(userId, data.status);
         
         // Mettre à jour également le cache centralisé
@@ -328,7 +328,7 @@ export const WebSocketSingleton = (() => {
     lastStatusPullTimestamp = now;
     
     // Log simplifié
-    console.log(`Requesting status updates for ${userIds.length} users`);
+    
     
     // Préparer la requête WebSocket get_statuses
     const getStatusesMessage = {
@@ -355,7 +355,7 @@ export const WebSocketSingleton = (() => {
       requestStatusUpdates(ws);
     }, 60000); // 60 secondes
     
-    console.log('Status pull system initialized (60s interval)');
+    
   };
   
   // Arrêter le timer de pull périodique
@@ -624,7 +624,7 @@ export function useWebSocket() {
       const baseUrl = serverUrl.replace(/^https?:\/\//, '');
       const wsUrl = `${wsProtocol}://${baseUrl}/api/v4/websocket`;
       
-      console.log('Attempting WebSocket connection to:', wsUrl);
+      
       
       // Create WebSocket connection
       const ws = new WebSocket(wsUrl);
@@ -633,7 +633,7 @@ export function useWebSocket() {
       
       // Connection opened
       ws.onopen = () => {
-        console.log('WebSocket connected successfully');
+        
         WebSocketSingleton.setIsConnected(true);
         WebSocketSingleton.setIsConnecting(false);
         setRetryCount(0);
@@ -646,7 +646,7 @@ export function useWebSocket() {
         };
         
         ws.send(JSON.stringify(authMessage));
-        console.log('WebSocket authentication sent');
+        
         
         // Délai pour s'assurer que l'authentification est traitée
         setTimeout(() => {
@@ -760,21 +760,14 @@ export function useWebSocket() {
     const ws = WebSocketSingleton.getWebSocket();
     
     if (!ws || ws.readyState !== WebSocket.OPEN || !isAuthenticated || !user) {
-      console.log('Cannot send typing event: WebSocket not connected or not open', {
-        wsExists: !!ws,
-        readyState: ws ? ws.readyState : 'none',
-        isConnected
-      });
       return;
     }
     
     
     if (!user.id) {
-      console.log('Cannot send typing event: User ID not available');
       return;
     }
     
-    console.log(`Sending typing event for channel ${channelId} and user ${user.id}`);
     const typingEvent = {
       action: 'user_typing',
       seq: Date.now(), 
@@ -786,7 +779,6 @@ export function useWebSocket() {
     
     try {
       ws.send(JSON.stringify(typingEvent));
-      console.log('Typing event sent successfully');
     } catch (error) {
       console.error('Error sending typing event:', error);
     }
@@ -1313,13 +1305,15 @@ export function useWebSocket() {
       // Mark that we've attempted to reconnect for this mount cycle
       connectionStateRef.current.reconnectAttempted = true;
       
-      // Add a delay to avoid rapid connection attempts
+      // Add a longer initial delay (3 seconds) to ensure the server is ready
+      // This gives more time for the authentication to be fully processed
+      // and for the server to be ready to accept WebSocket connections
       timer = setTimeout(() => {
         if (isAuthenticated && !connectionStateRef.current.isConnected && 
             !connectionStateRef.current.isConnecting) {
           connect();
         }
-      }, 1000);
+      }, 3000); // Increased from 1000ms to 3000ms
     }
     
     // Disconnect if no longer authenticated
