@@ -545,7 +545,7 @@ export function MessageThread({
           )}
 
           {/* Actual input with fixed height for stability */}
-          <Box sx={{ p: 2, height: '76px' }}>
+          <Box sx={{  height: '76px' }}>
             <MessageInput
               ref={messageInputRef}
               channelId={channelId}

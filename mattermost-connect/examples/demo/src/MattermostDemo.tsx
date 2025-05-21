@@ -37,12 +37,7 @@ interface MattermostDemoProps {
 
 function MattermostDemo({ onLogout, mockService }: MattermostDemoProps) {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <MattermostProvider>
         <MainContent onLogout={onLogout} />
-      </MattermostProvider>
-    </ThemeProvider>
   );
 }
 

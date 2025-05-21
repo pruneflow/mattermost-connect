@@ -1,11 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Box, IconButton, TextField, Popover } from '@mui/material';
+import { Box, IconButton, TextField } from '@mui/material';
 import { useAuth } from '../../context/AuthContext';
-import { useWebSocket, WebSocketSingleton } from '../../hooks/useWebSocket';
-import { EmojiPickerMart } from '../common';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import { EmojiPickerButton } from '../common';
 import SendIcon from '@mui/icons-material/Send';
-import InsertEmoticonIcon from '@mui/icons-material/InsertEmoticon';
-
 
 export interface MessageInputProps {
   channelId: string;
@@ -24,9 +22,7 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
   disabled = false
 }, ref) => {
   const [message, setMessage] = useState('');
-  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isAuthenticated } = useAuth();
   const { sendTypingEvent } = useWebSocket();
@@ -37,7 +33,7 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
     if (trimmedMessage && onSendMessage) {
       onSendMessage(trimmedMessage);
       setMessage('');
-      
+
       // Reset typing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -49,19 +45,19 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
   // Handler pour les changements dans l'input
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
-    
+
     // Envoyer événement de frappe seulement si authentifié et dans un canal
     if (isAuthenticated && channelId) {
       // Si premier caractère ou après un délai
       if (e.target.value.length === 1 || !typingTimeoutRef.current) {
         // Envoyer événement de frappe
         sendTypingEvent(channelId);
-        
+
         // Configurer timeout pour éviter spam d'événements
         if (typingTimeoutRef.current) {
           clearTimeout(typingTimeoutRef.current);
         }
-        
+
         // Réinitialiser après 5 secondes
         typingTimeoutRef.current = setTimeout(() => {
           typingTimeoutRef.current = null;
@@ -84,9 +80,9 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
       const start = inputRef.current.selectionStart || 0;
       const end = inputRef.current.selectionEnd || 0;
       const newMessage = message.substring(0, start) + emoji + message.substring(end);
-      
+
       setMessage(newMessage);
-      
+
       // Focus l'input et positionne le curseur après l'emoji
       setTimeout(() => {
         if (inputRef.current) {
@@ -96,15 +92,12 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
         }
       }, 10);
     }
-    
-    // Fermer le picker
-    setIsEmojiPickerOpen(false);
+
+    // Note: Le picker se ferme automatiquement via EmojiPickerButton
   }, [message]);
 
-  // Toggle le picker d'emoji
-  const toggleEmojiPicker = useCallback(() => {
-    setIsEmojiPickerOpen(prev => !prev);
-  }, []);
+
+
 
   // Exposer des méthodes via la ref
   React.useImperativeHandle(ref, () => ({
@@ -116,10 +109,10 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
   }));
 
   return (
-    <Box 
-      sx={{ 
-        display: 'flex', 
-        width: '100%', 
+    <Box
+      sx={{
+        display: 'flex',
+        width: '100%',
         alignItems: 'center',
         p: 1,
         borderColor: 'divider'
@@ -141,49 +134,26 @@ const MessageInput = React.forwardRef<any, MessageInputProps>(({
           input: {
             endAdornment: (
               <Box sx={{ display: 'flex' }}>
-                <IconButton 
-                  ref={emojiButtonRef}
-                  onClick={toggleEmojiPicker}
-                  color={isEmojiPickerOpen ? 'primary' : 'default'}
-                  size="small"
-                >
-                  <InsertEmoticonIcon />
-                </IconButton>
+                <EmojiPickerButton
+                  onEmojiSelect={handleEmojiSelect}
+                  buttonSize="small"
+                  placement="left-end"
+                />
               </Box>
             ),
           },
         }}
         sx={{ mr: 1 }}
       />
-      
-      <IconButton 
-        onClick={handleSendMessage} 
+
+      <IconButton
+        onClick={handleSendMessage}
         color="primary"
         disabled={!message.trim() || disabled}
       >
         <SendIcon />
       </IconButton>
-      
-      <Popover
-        open={isEmojiPickerOpen}
-        anchorEl={emojiButtonRef.current}
-        onClose={() => setIsEmojiPickerOpen(false)}
-        anchorOrigin={{
-          vertical: 'top',
-          horizontal: 'center',
-        }}
-        transformOrigin={{
-          vertical: 'bottom',
-          horizontal: 'center',
-        }}
-      >
-        <EmojiPickerMart 
-          onEmojiSelect={handleEmojiSelect}
-          showSearch={true}
-          width={320}
-          height={350}
-        />
-      </Popover>
+
     </Box>
   );
 });

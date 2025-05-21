@@ -2,25 +2,20 @@ import React, { useState, useMemo } from 'react';
 import {
   Box,
   Chip,
-  IconButton,
-  Popover,
-  Tooltip,
-  CircularProgress,
-  Paper,Grid
+  Tooltip
 } from '@mui/material';
-import { 
-  AddReaction as AddReactionIcon
+import {
+  AddReaction as AddReactionIcon,
 } from '@mui/icons-material';
+
 import { useMessages } from '../../hooks/useMessages';
 import { useAuth } from '../../context/AuthContext';
-import { useMessageReactions } from '../../hooks';
 import {
   processReactions,
   findEmojiByName,
   getEmojiImageUrl
 } from '../../utils/emojiMartAdapter';
-import { api } from '../../api/client';
-import { EmojiPickerMart } from '../common';
+import { EmojiPickerButton } from '../common';
 
 export interface MessageReactionsProps {
   messageId: string;
@@ -39,21 +34,8 @@ function MessageReactions({
   const { user } = useAuth();
   const currentUserId = user?.id;
 
-  // Local state
-  const [emojiAnchorEl, setEmojiAnchorEl] = useState<null | HTMLElement>(null);
-
   // Messages hook for reaction actions
   const { addReaction, removeReaction, isLoading } = useMessages(channelId);
-
-  // Open emoji picker
-  const handleOpenEmojiPicker = (event: React.MouseEvent<HTMLElement>) => {
-    setEmojiAnchorEl(event.currentTarget);
-  };
-
-  // Close emoji picker
-  const handleCloseEmojiPicker = () => {
-    setEmojiAnchorEl(null);
-  };
 
   // Toggle reaction
   const toggleReaction = async (emoji: string, emojiName: string) => {
@@ -63,11 +45,11 @@ function MessageReactions({
       // Note: emojiName contient déjà le modificateur de teinte si nécessaire
       // car il est construit par createEmojiNameWithTone dans EmojiPickerMart
       const mattermostEmojiName = emojiName;
-      
+
       // Cette recherche peut encore être utile pour récupérer d'autres infos
       // comme le code unified, mais on préserve le nom avec la teinte
       const emojiData = findEmojiByName(emojiName);
-      
+
       // Check if user has already added this reaction
       const hasReacted = reactions[mattermostEmojiName]?.includes(currentUserId);
 
@@ -79,8 +61,7 @@ function MessageReactions({
         await addReaction({ messageId, emojiName: mattermostEmojiName });
       }
 
-      // Close emoji picker
-      handleCloseEmojiPicker();
+      // Le picker se ferme automatiquement
     } catch (error) {
       console.error('Failed to toggle reaction:', error);
     }
@@ -105,7 +86,7 @@ function MessageReactions({
     }
     return processReactions(reactions);
   }, [reactions]);
-  
+
   // Prepare reactions for display avec mémoisation
   const reactionItems = useMemo(() => {
     return processedReactions
@@ -114,7 +95,7 @@ function MessageReactions({
         // Sort by whether current user has reacted, then by count, then by name
         const aHasReacted = currentUserId ? a.userIds.includes(currentUserId) : false;
         const bHasReacted = currentUserId ? b.userIds.includes(currentUserId) : false;
-        
+
         if (aHasReacted !== bHasReacted) {
           return aHasReacted ? -1 : 1;
         }
@@ -124,6 +105,7 @@ function MessageReactions({
         return a.name.localeCompare(b.name);
       });
   }, [processedReactions, currentUserId]);
+
 
 
   return (
@@ -164,18 +146,18 @@ function MessageReactions({
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     {unified ? (
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <img 
-                          src={getEmojiImageUrl(unified)} 
+                        <img
+                          src={getEmojiImageUrl(unified)}
                           alt={name}
-                          style={{ 
-                            width: compact ? '14px' : '16px', 
-                            height: compact ? '14px' : '16px' 
+                          style={{
+                            width: compact ? '14px' : '16px',
+                            height: compact ? '14px' : '16px'
                           }}
                           onError={(e) => {
                             // Fallback to Unicode emoji on image load error
                             (e.target as HTMLImageElement).style.display = 'none';
                             (e.target as HTMLImageElement).insertAdjacentHTML(
-                              'afterend', 
+                              'afterend',
                               `<span style="font-size: ${compact ? '12px' : '14px'}">${emoji}</span>`
                             );
                           }}
@@ -184,7 +166,7 @@ function MessageReactions({
                       </Box>
                     ) : (
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <span style={{ 
+                        <span style={{
                           fontSize: compact ? '12px' : '14px',
                           marginRight: '4px'
                         }}>{emoji}</span>
@@ -202,14 +184,8 @@ function MessageReactions({
         <Box sx={{ display: 'none' }}>No reactions to display</Box>
       )}
 
-      {/* Add reaction button */}
-      <Chip
-        size="small"
-        icon={isLoading ? <CircularProgress size={14} /> : <AddReactionIcon sx={{ fontSize: 14 }} />}
-        label=""
-        onClick={handleOpenEmojiPicker}
-        sx={{ 
-          ml: 0.5, 
+      <Box sx={{
+          ml: 0.5,
           height: compact ? 24 : 28,
           bgcolor: 'action.hover',
           borderRadius: 16,
@@ -220,31 +196,21 @@ function MessageReactions({
           boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
           border: '1px solid',
           borderColor: 'action.hover',
-        }}
-        disabled={isLoading}
-      />
-
-      {/* Emoji picker popover */}
-      <Popover
-        open={Boolean(emojiAnchorEl)}
-        anchorEl={emojiAnchorEl}
-        onClose={handleCloseEmojiPicker}
-        anchorOrigin={{
-          vertical: 'top',
-          horizontal: 'left',
-        }}
-        transformOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}
       >
-        <EmojiPickerMart
+        <EmojiPickerButton
           onEmojiSelect={handleEmojiSelect}
-          showSearch={true}
-          width={320}
-          height={350}
+          buttonSize="small"
+          icon={<AddReactionIcon />}
+          placement="left-end"
+          buttonProps={{
+            sx: { p: compact ? '2px' : '4px' }
+          }}
         />
-      </Popover>
+      </Box>
     </Box>
   );
 }
@@ -252,35 +218,35 @@ function MessageReactions({
 // Utilisons React.memo pour éviter les rendus inutiles
 export default React.memo(MessageReactions, (prevProps, nextProps) => {
   // Ne re-rendre que si les propriétés importantes ont changé
-  if (prevProps.messageId !== nextProps.messageId || 
-      prevProps.channelId !== nextProps.channelId ||
-      prevProps.compact !== nextProps.compact) {
+  if (prevProps.messageId !== nextProps.messageId ||
+    prevProps.channelId !== nextProps.channelId ||
+    prevProps.compact !== nextProps.compact) {
     return false; // Les props ont changé, re-rendre
   }
-  
+
   // Vérifier si les réactions ont changé
   const prevReactionsKeys = Object.keys(prevProps.reactions || {});
   const nextReactionsKeys = Object.keys(nextProps.reactions || {});
-  
+
   // Si le nombre de types de réactions est différent, re-rendre
   if (prevReactionsKeys.length !== nextReactionsKeys.length) {
     return false;
   }
-  
+
   // Pour chaque réaction, vérifier si les utilisateurs ont changé
   for (const key of prevReactionsKeys) {
     const prevUsers = prevProps.reactions?.[key] || [];
     const nextUsers = nextProps.reactions?.[key] || [];
-    
+
     if (prevUsers.length !== nextUsers.length) {
       return false; // Nombre d'utilisateurs différent, re-rendre
     }
-    
+
     // Vérification approfondie des utilisateurs pour cette réaction
     if (prevUsers.length > 0 && !prevUsers.every(userId => nextUsers.includes(userId))) {
       return false; // La liste des utilisateurs a changé, re-rendre
     }
   }
-  
+
   return true; // Aucun changement significatif, ne pas re-rendre
 });

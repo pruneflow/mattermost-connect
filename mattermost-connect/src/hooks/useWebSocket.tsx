@@ -353,7 +353,7 @@ export const WebSocketSingleton = (() => {
     // Créer un nouveau timer qui s'exécute toutes les 60 secondes
     wsStatusPullTimer = setInterval(() => {
       requestStatusUpdates(ws);
-    }, 60000); // 60 secondes
+    }, 30000); // 30 secondes
     
     
   };
