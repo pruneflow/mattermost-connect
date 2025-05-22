@@ -49,9 +49,11 @@ export function MessageList({
   const {
     messages,
     isLoading,
-    hasMore,
+    hasOlderMessages,
+    hasNewerMessages,
     loadingMore,
     loadMore,
+    loadNewer,
     refetch,
     updateMessage,
     deleteMessage,
@@ -184,7 +186,7 @@ export function MessageList({
     const { scrollTop } = e.currentTarget;
 
     // Load more when scrolled near the top
-    if (scrollTop < 50 && hasMore && !loadingMore && !isLoading) {
+    if (scrollTop < 50 && hasOlderMessages && !loadingMore && !isLoading) {
       void loadMore();
     }
   };
@@ -209,11 +211,11 @@ export function MessageList({
         </Box>
       )}
 
-      {/* Load More button */}
-      {hasMore && !loadingMore && messages.length > 0 && (
+      {/* Load More (older messages) button */}
+      {hasOlderMessages && !loadingMore && messages.length > 0 && (
         <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
           <Button variant="outlined" size="small" onClick={() => loadMore()}>
-            Load More Messages
+            Load Older Messages
           </Button>
         </Box>
       )}
@@ -335,6 +337,15 @@ export function MessageList({
             })}
         </Box>
       ))}
+
+      {/* Load Newer Messages button at bottom */}
+      {hasNewerMessages && !loadingMore && messages.length > 0 && (
+        <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
+          <Button variant="outlined" size="small" onClick={() => loadNewer()}>
+            Load Newer Messages
+          </Button>
+        </Box>
+      )}
 
       {/* Ref for auto-scrolling */}
       <div ref={messagesEndRef} />

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { Message, FileInfo } from '../api/types';
+import { useAuth } from '../context/AuthContext';
 
 // Query keys
 export const messageKeys = {
@@ -34,6 +35,59 @@ interface CreateMessageParams {
   props?: Record<string, any>;
 }
 
+// Utility function to process message response and avoid code duplication
+const processMessageResponse = (responseData: any, existingMessages: Message[] = []) => {
+  const { order = [], posts = {} } = responseData;
+  
+  // Convert to array of messages
+  const allMessages = order
+    .map((postId: any) => posts[postId])
+    .filter((post: any) => !!post);
+  
+  // Filter out thread replies for main message list
+  const filteredMessages = allMessages.filter((message: any) => !message.root_id);
+  
+  // Calculate reply counts for messages
+  const replyCountMap = new Map<string, number>();
+  allMessages.forEach((message: any) => {
+    if (message.root_id) {
+      const rootId = message.root_id;
+      replyCountMap.set(rootId, (replyCountMap.get(rootId) || 0) + 1);
+    }
+  });
+  
+  // Enhance messages with reply count data
+  filteredMessages.forEach((message: any) => {
+    if (replyCountMap.has(message.id)) {
+      // @ts-ignore - We're adding a dynamic property
+      message.reply_count = replyCountMap.get(message.id);
+      // @ts-ignore - We're adding a dynamic property
+      message.has_replies = true;
+    }
+  });
+  
+  // Merge with existing messages, avoiding duplicates
+  const messageMap = new Map<string, Message>();
+  [...existingMessages, ...filteredMessages].forEach(msg => {
+    messageMap.set(msg.id, msg);
+  });
+  
+  const mergedMessages = Array.from(messageMap.values());
+  
+  // Extract pagination info
+  const paginationInfo = {
+    hasNext: responseData.has_next || false,
+    hasPrev: responseData.prev_post_id ? true : false,
+    nextPostId: responseData.next_post_id,
+    prevPostId: responseData.prev_post_id
+  };
+  
+  return {
+    messages: mergedMessages,
+    pagination: paginationInfo
+  };
+};
+
 /**
  * Hook for working with messages in a channel
  */
@@ -61,28 +115,11 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
           timestamp: new Date().toISOString()
         });
         
-        // Use direct fetch to ensure we hit the right endpoint
-        const baseUrl = api.getBaseUrl();
-        const token = localStorage.getItem('mattermost_token');
+        // Use api.get instead of direct fetch
+        console.debug(`Thread URL: posts/${rootId}/thread`);
         
-        // Correctly construct the thread API URL
-        const threadUrl = `${baseUrl}/api/v4/posts/${rootId}/thread`;
-        console.debug(`Thread URL: ${threadUrl}`);
-        
-        const fetchResponse = await fetch(threadUrl, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        if (!fetchResponse.ok) {
-          console.error(`Thread fetch failed: ${fetchResponse.status} ${fetchResponse.statusText}`);
-          throw new Error(`Failed to fetch thread: ${fetchResponse.status}`);
-        }
-        
-        const data = await fetchResponse.json();
+        const response = await api.get(`posts/${rootId}/thread`);
+        const data = response.data;
         console.debug(`Thread data received with ${Object.keys(data.posts || {}).length} posts`, {
           timestamp: new Date().toISOString()
         });
@@ -266,6 +303,7 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
 
 export function useMessages(channelId: string | undefined, params: MessageParams = {}) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   // Default params
   const defaultParams = {
@@ -275,8 +313,9 @@ export function useMessages(channelId: string | undefined, params: MessageParams
     ...params,
   };
   
-  // State for infinite query
-  const [hasMore, setHasMore] = useState(true);
+  // State for bidirectional pagination
+  const [hasOlderMessages, setHasOlderMessages] = useState(true);
+  const [hasNewerMessages, setHasNewerMessages] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   
   // Skip query if channelId is undefined
@@ -286,15 +325,68 @@ export function useMessages(channelId: string | undefined, params: MessageParams
   const messagesQuery = useQuery({
     queryKey: messageKeys.list(channelId || ''),
     queryFn: async () => {
-      // Build query parameters
-      const queryParams: Record<string, any> = {
-        page: defaultParams.page,
-        per_page: defaultParams.perPage,
-      };
-      
-      if (defaultParams.since) {
-        queryParams.since = defaultParams.since;
+      // If this is for thread messages, handle separately
+      if (defaultParams.root_id) {
+        // Use thread endpoint for thread messages
+        try {
+          console.debug(`useMessages: Fetching thread for root_id=${defaultParams.root_id}`);
+          
+          const response = await api.get(`posts/${defaultParams.root_id}/thread`);
+          const data = response.data;
+          
+          console.debug(`useMessages: Thread fetch successful for root_id=${defaultParams.root_id}`, 
+            { responseStatus: response.status, responseData: data });
+            
+          const { order = [], posts = {} } = data;
+          
+          // Convert to array of messages
+          const messages = order
+            .map(postId => posts[postId])
+            .filter(post => !!post);
+            
+          // Find parent message
+          let parentMessage;
+          if (data.posts && data.posts[defaultParams.root_id]) {
+            parentMessage = data.posts[defaultParams.root_id];
+          } else {
+            parentMessage = messages.find(message => message.id === defaultParams.root_id);
+          }
+          
+          // Filter thread messages (exclude parent)
+          const threadMessages = messages.filter(
+            message => message.id !== defaultParams.root_id
+          );
+          
+          // Attach parent message as non-enumerable property
+          if (parentMessage) {
+            Object.defineProperty(threadMessages, 'parentMessage', {
+              value: parentMessage,
+              enumerable: false,
+              configurable: true
+            });
+          }
+          
+          setHasOlderMessages(false);
+          setHasNewerMessages(false);
+          return threadMessages;
+        } catch (error) {
+          console.error(`useMessages: Error fetching thread for root_id=${defaultParams.root_id}`, error);
+          throw error;
+        }
       }
+      
+      // For channel messages, use the unread endpoint
+      if (!user?.id || !channelId) {
+        throw new Error('User ID and channel ID are required');
+      }
+      
+      const queryParams: Record<string, any> = {
+        limit_before: 30,
+        limit_after: 30,
+        skipFetchThreads: false,
+        collapsedThreads: true,
+        collapsedThreadsExtended: false
+      };
       
       if (defaultParams.before) {
         queryParams.before = defaultParams.before;
@@ -304,181 +396,26 @@ export function useMessages(channelId: string | undefined, params: MessageParams
         queryParams.after = defaultParams.after;
       }
       
-      if (defaultParams.includeDeleted) {
-        queryParams.include_deleted = true;
-      }
+      // Fetch unread messages for the channel
+      console.debug(`useMessages: Fetching unread messages for channelId=${channelId}`, queryParams);
+      const response = await api.get(`users/${user.id}/channels/${channelId}/posts/unread`, queryParams);
       
-      // Add root_id if specified for thread messages
-      if (defaultParams.root_id) {
-        queryParams.root_id = defaultParams.root_id;
-      }
+      // Process the response using utility function
+      const { messages: processedMessages, pagination } = processMessageResponse(response.data);
       
-      // Either fetch messages for the channel or get thread messages
-      let response;
-      if (defaultParams.root_id) {
-        // Fetch thread messages using the thread endpoint
-        // Important: Use the correct API URL format WITHOUT /api/v4/ prefix
-        console.debug(`useMessages: Fetching thread for root_id=${defaultParams.root_id}`);
-        try {
-          // IMPORTANT: Force a direct call to the thread endpoint
-          // We're avoiding any caching or interceptors by making a direct fetch
-          // This is critical for thread functionality
-          const baseUrl = api.getBaseUrl();
-          const token = localStorage.getItem('mattermost_token');
-          
-          console.debug(`useMessages: Attempting direct fetch of thread with URL: ${baseUrl}/api/v4/posts/${defaultParams.root_id}/thread`);
-          
-          // Make a direct fetch call to ensure we hit the right endpoint
-          const fetchResponse = await fetch(`${baseUrl}/api/v4/posts/${defaultParams.root_id}/thread`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            }
-          });
-          
-          if (!fetchResponse.ok) {
-            throw new Error(`Failed to fetch thread: ${fetchResponse.status} ${fetchResponse.statusText}`);
-          }
-          
-          // Parse the response as JSON
-          const data = await fetchResponse.json();
-          response = { data, status: fetchResponse.status };
-          
-          console.debug(`useMessages: Thread fetch successful for root_id=${defaultParams.root_id}`, 
-            { responseStatus: response.status, responseData: response.data });
-        } catch (error) {
-          console.error(`useMessages: Error fetching thread for root_id=${defaultParams.root_id}`, error);
-          throw error;
-        }
-      } else {
-        // Fetch channel messages
-        console.debug(`useMessages: Fetching channel messages for channelId=${channelId}`, queryParams);
-        response = await api.get(`channels/${channelId}/posts`, queryParams);
-      }
+      // Set pagination states separately
+      setHasOlderMessages(pagination.hasPrev);
+      setHasNewerMessages(pagination.hasNext);
       
-      // Mattermost API returns posts in a different structure
-      // { order: string[], posts: { [messageId]: Message } }
-      const { order = [], posts = {} } = response.data;
-      
-      // Convert to array of messages
-      const messages = order
-        .map(postId => posts[postId])
-        .filter(post => !!post);
-      
-      // For thread messages, we want all the replies excluding the parent message
-      if (defaultParams.root_id) {
-        console.debug(`useMessages: Processing thread data for root_id=${defaultParams.root_id}`, 
-          { 
-            messagesLength: messages.length, 
-            messageIds: messages.map(m => m.id),
-            responseStructure: {
-              hasOrder: Array.isArray(response.data.order),
-              orderLength: Array.isArray(response.data.order) ? response.data.order.length : 0,
-              hasPosts: !!response.data.posts,
-              postsCount: response.data.posts ? Object.keys(response.data.posts).length : 0
-            }
-          });
-          
-        // Fix: Better handling for parent message in thread responses
-        // Check if we received a valid response with the parent post
-        let parentMessage;
-        
-        // First try to find the parent message by ID in the posts object
-        if (response.data.posts && response.data.posts[defaultParams.root_id]) {
-          parentMessage = response.data.posts[defaultParams.root_id];
-          console.debug(`useMessages: Found parent message in response.data.posts by ID match`, 
-            { parentId: parentMessage.id });
-        } 
-        // If not found, try to find it in the messages array
-        else {
-          parentMessage = messages.find(message => message.id === defaultParams.root_id);
-          if (parentMessage) {
-            console.debug(`useMessages: Found parent message in messages array`, 
-              { parentId: parentMessage.id });
-          } else {
-            console.warn(`useMessages: Parent message not found in response for root_id=${defaultParams.root_id}`);
-          }
-        }
-        
-        // Exclude the parent message from the thread messages (it will be displayed separately)
-        const threadMessages = messages.filter(
-          message => message.id !== defaultParams.root_id
-        );
-        
-        console.debug(`useMessages: Found parent message for thread?`, 
-          { found: !!parentMessage, parentMessageId: parentMessage?.id });
-        
-        // Attach the parent message as a non-enumerable property for components that need it
-        if (parentMessage) {
-          Object.defineProperty(threadMessages, 'parentMessage', {
-            value: parentMessage,
-            enumerable: false,
-            configurable: true
-          });
-          console.debug(`useMessages: Attached parent message to threadMessages`);
-        } else {
-          console.warn(`useMessages: No parent message found with id=${defaultParams.root_id}`);
-        }
-        
-        // For thread messages, we generally don't need to handle pagination
-        setHasMore(false);
-        
-        console.debug(`useMessages: Returning ${threadMessages.length} thread messages`);
-        // Return just the thread replies
-        return threadMessages;
-      }
-      
-      // For normal channel messages:
-      // We need to preserve thread reply information while filtering for display
-      
-      // Before filtering, calculate reply counts for each message
-      const replyCountMap = new Map<string, number>();
-      
-      // Count replies for each parent message
-      messages.forEach(message => {
-        if (message.root_id) {
-          // This is a reply, increment count for parent
-          const rootId = message.root_id;
-          replyCountMap.set(rootId, (replyCountMap.get(rootId) || 0) + 1);
-        }
-      });
-      
-      // Filter out messages that are replies in threads
-      const filteredMessages = messages.filter(message => !message.root_id);
-      
-      // Enhance messages with reply count data
-      filteredMessages.forEach(message => {
-        // Add reply_count property if it doesn't exist
-        if (replyCountMap.has(message.id)) {
-          // @ts-ignore - We're adding a dynamic property
-          message.reply_count = replyCountMap.get(message.id);
-          
-          // Also add a hasReplies flag for easier checks
-          // @ts-ignore - We're adding a dynamic property
-          message.has_replies = true;
-          
-          console.debug(`Enhanced message ${message.id} with reply_count=${replyCountMap.get(message.id)}`);
-        }
-      });
-      
-      console.debug(`Filtered ${messages.length - filteredMessages.length} thread replies from main message list`);
-      
-      // If we got less than perPage, there are no more messages
-      if (filteredMessages.length < defaultParams.perPage) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-      }
-      
-      return filteredMessages;
+      // Return the processed messages
+      return processedMessages;
     },
     enabled,
   });
   
-  // Function to load more messages
+  // Function to load more messages (older)
   const loadMore = async () => {
-    if (!channelId || !hasMore || loadingMore || messagesQuery.isLoading) {
+    if (!channelId || !hasOlderMessages || loadingMore || messagesQuery.isLoading || !user?.id) {
       return;
     }
     
@@ -493,43 +430,28 @@ export function useMessages(channelId: string | undefined, params: MessageParams
         const sortedMessages = [...currentMessages].sort((a, b) => a.create_at - b.create_at);
         const oldestMessage = sortedMessages[0];
         
-        // Build query parameters for older messages
+        // Build query parameters for older messages using unread endpoint
         const queryParams: Record<string, any> = {
           before: oldestMessage.id,
-          per_page: defaultParams.perPage,
+          limit_before: 30,
+          limit_after: 0,
+          skipFetchThreads: false,
+          collapsedThreads: true,
+          collapsedThreadsExtended: false
         };
         
-        if (defaultParams.includeDeleted) {
-          queryParams.include_deleted = true;
-        }
-        
-        // Fetch older messages
+        // Fetch older messages using unread endpoint
         const response = await api.get(
-          `channels/${channelId}/posts`,
+          `users/${user.id}/channels/${channelId}/posts/unread`,
           queryParams
         );
         
-        // Mattermost API returns posts in a different structure
-        // { order: string[], posts: { [messageId]: Message } }
-        const { order = [], posts = {} } = response.data;
+        // Process the response using utility function
+        const { messages: mergedMessages, pagination } = processMessageResponse(response.data, currentMessages);
         
-        // Convert to array of messages
-        const olderMessages = order
-          .map(postId => posts[postId])
-          .filter(post => !!post);
-        
-        // If we got less than perPage, there are no more messages
-        if (olderMessages.length < defaultParams.perPage) {
-          setHasMore(false);
-        }
-        
-        // Merge old and new messages, avoiding duplicates
-        const messageMap = new Map<string, Message>();
-        [...currentMessages, ...olderMessages].forEach(msg => {
-          messageMap.set(msg.id, msg);
-        });
-        
-        const mergedMessages = Array.from(messageMap.values());
+        // Update pagination states
+        setHasOlderMessages(pagination.hasPrev);
+        // Don't change hasNewerMessages state when loading older messages
         
         // Update messages in cache
         queryClient.setQueryData(
@@ -539,6 +461,59 @@ export function useMessages(channelId: string | undefined, params: MessageParams
       }
     } catch (error) {
       console.error('Failed to load more messages:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+  
+  // Function to load newer messages
+  const loadNewer = async () => {
+    if (!channelId || !hasNewerMessages || loadingMore || messagesQuery.isLoading || !user?.id) {
+      return;
+    }
+    
+    setLoadingMore(true);
+    
+    try {
+      const currentMessages = messagesQuery.data || [];
+      
+      // Find the newest message to use as 'after' parameter
+      if (currentMessages.length > 0) {
+        // Sort by creation time to find newest
+        const sortedMessages = [...currentMessages].sort((a, b) => b.create_at - a.create_at);
+        const newestMessage = sortedMessages[0];
+        
+        // Build query parameters for newer messages using unread endpoint
+        const queryParams: Record<string, any> = {
+          after: newestMessage.id,
+          limit_before: 0,
+          limit_after: 30,
+          skipFetchThreads: false,
+          collapsedThreads: true,
+          collapsedThreadsExtended: false
+        };
+        
+        // Fetch newer messages using unread endpoint
+        const response = await api.get(
+          `users/${user.id}/channels/${channelId}/posts/unread`,
+          queryParams
+        );
+        
+        // Process the response using utility function
+        const { messages: mergedMessages, pagination } = processMessageResponse(response.data, currentMessages);
+        
+        // Update pagination states
+        setHasNewerMessages(pagination.hasNext);
+        // Don't change hasOlderMessages state when loading newer messages
+        
+        // Update messages in cache
+        queryClient.setQueryData(
+          messageKeys.list(channelId),
+          mergedMessages
+        );
+      }
+    } catch (error) {
+      console.error('Failed to load newer messages:', error);
     } finally {
       setLoadingMore(false);
     }
@@ -866,10 +841,12 @@ export function useMessages(channelId: string | undefined, params: MessageParams
     isError: messagesQuery.isError,
     error: messagesQuery.error,
     
-    // Pagination
-    hasMore,
+    // Pagination - separate states for each direction
+    hasOlderMessages,
+    hasNewerMessages,
     loadingMore,
     loadMore,
+    loadNewer,
     
     // Actions
     refetch: messagesQuery.refetch,
