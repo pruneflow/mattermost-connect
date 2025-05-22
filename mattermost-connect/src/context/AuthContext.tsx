@@ -265,9 +265,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       return user;
     } catch (error) {
-      // If authentication error, logout
-      if ((error as Error).message.includes('401')) {
-        logout();
+      // Vérifier spécifiquement si le token est expiré
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        const isTokenExpired = (
+          message.includes('token is expired') || 
+          message.includes('token has expired') || 
+          message.includes('invalid token') || 
+          message.includes('token invalid') ||
+          message.includes('session expirée') ||
+          message.includes('session expiré')
+        );
+        
+        if (message.includes('401') && isTokenExpired) {
+          console.log('Token expiré, déconnexion de l\'utilisateur');
+          logout();
+        } else {
+          // Pour toutes les autres erreurs, simplement logger
+          console.error('Error refreshing user, continuing without logout:', error);
+        }
       }
       
       return null;

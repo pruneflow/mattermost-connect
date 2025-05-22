@@ -65,8 +65,8 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   sx,
   showSearch = true,
   showSkinTones = true,
-  height = isMobile ? 280 : 350,
-  width = isMobile ? '100%' : 280,
+  height = 350,
+  width = 280,
   placement = "left-end",
   mobileBreakpoint = "sm"
 }) => {

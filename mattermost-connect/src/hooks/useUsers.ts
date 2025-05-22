@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { User, UserStatus, UserStatusObject } from '../api/types';
 
 // Cache global pour les utilisateurs
@@ -21,8 +21,9 @@ export const userKeys = {
 
 /**
  * Récupère un utilisateur par son ID - garantie de 1 seul appel API par ID
+ * @returns User ou null si l'utilisateur n'est pas trouvé ou en cas d'erreur
  */
-export async function getUser(userId: string): Promise<User> {
+export async function getUser(userId: string): Promise<User | null> {
   // Si l'utilisateur est déjà dans le cache, le retourner immédiatement
   if (userCache[userId]) {
     return userCache[userId];
@@ -30,7 +31,13 @@ export async function getUser(userId: string): Promise<User> {
   
   // Si une requête est déjà en cours, la réutiliser
   if (pendingRequests[userId]) {
-    return pendingRequests[userId];
+    try {
+      return await pendingRequests[userId];
+    } catch (error) {
+      // En cas d'erreur sur une requête en cours, on continue en ignorant l'erreur
+      console.warn(`Error on pending request for user ${userId}:`, error);
+      return null;
+    }
   }
   
   // Sinon, faire un appel API et mettre en cache le résultat
@@ -54,7 +61,20 @@ export async function getUser(userId: string): Promise<User> {
     })
     .catch(error => {
       delete pendingRequests[userId];
-      throw error;
+      
+      // Gérer les erreurs spécifiquement plutôt que de les propager
+      if (error instanceof ApiError) {
+        if (error.status === 404) {
+          console.warn(`User ${userId} not found, returning null`);
+        } else {
+          console.error(`Error fetching user ${userId}:`, error);
+        }
+      } else {
+        console.error(`Unexpected error fetching user ${userId}:`, error);
+      }
+      
+      // Retourner null au lieu de propager l'erreur
+      return null;
     });
   
   // Stocker la promesse pour éviter les appels dupliqués
@@ -77,31 +97,37 @@ export function useUsers(userIds: string[] = []) {
         return [];
       }
       
-      const response = await api.post<User[]>('users/ids', userIds);
-      const users = response.data;
-      
-      // Mettre en cache tous les utilisateurs
-      users.forEach(user => {
-        userCache[user.id] = user;
-      });
-      
-      // Mettre à jour le localStorage pour assurer la synchronisation avec d'autres composants
       try {
-        const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
-        const cachedUsers = JSON.parse(cachedUsersStr);
+        const response = await api.post<User[]>('users/ids', userIds);
+        const users = response.data;
         
-        // Ajouter les nouveaux utilisateurs au cache
+        // Mettre en cache tous les utilisateurs
         users.forEach(user => {
-          cachedUsers[user.id] = user;
+          userCache[user.id] = user;
         });
         
-        // Sauvegarder dans localStorage
-        localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
+        // Mettre à jour le localStorage pour assurer la synchronisation avec d'autres composants
+        try {
+          const cachedUsersStr = localStorage.getItem('mattermost_cached_users') || '{}';
+          const cachedUsers = JSON.parse(cachedUsersStr);
+          
+          // Ajouter les nouveaux utilisateurs au cache
+          users.forEach(user => {
+            cachedUsers[user.id] = user;
+          });
+          
+          // Sauvegarder dans localStorage
+          localStorage.setItem('mattermost_cached_users', JSON.stringify(cachedUsers));
+        } catch (error) {
+          console.error('Error updating localStorage user cache:', error);
+        }
+        
+        return users;
       } catch (error) {
-        console.error('Error updating localStorage user cache:', error);
+        // Capturer les erreurs et retourner un tableau vide plutôt que de propager
+        console.error('Error fetching users by IDs:', error);
+        return [];
       }
-      
-      return users;
     },
     enabled,
   });
@@ -157,7 +183,9 @@ export function useUser(userId: string | undefined) {
     queryKey: userKeys.detail(userId || ''),
     queryFn: async () => {
       if (!userId) {
-        throw new Error("User ID is required");
+        // Retourner null plutôt que de lancer une exception
+        console.warn("User ID is required but was not provided");
+        return null;
       }
       
       // Si l'utilisateur est déjà dans le cache, l'utiliser
@@ -165,10 +193,29 @@ export function useUser(userId: string | undefined) {
         return userCache[userId];
       }
       
-      // Sinon, faire l'appel API
-      return getUser(userId);
+      try {
+        // Sinon, faire l'appel API
+        const user = await getUser(userId);
+        
+        // Retourner l'utilisateur ou null (jamais d'erreur)
+        return user || null;
+      } catch (error) {
+        // Double protection contre les erreurs
+        if (error instanceof ApiError && error.status === 404) {
+          console.warn(`User ${userId} not found, returning null`);
+        } else {
+          console.warn(`Error in userQuery for ${userId}:`, error);
+        }
+        return null;
+      }
     },
     enabled,
+    // Gérer les erreurs sans arrêter l'application
+    retry: false,
+    // Ne pas invalider le cache si l'erreur est simplement que l'utilisateur n'existe pas
+    gcTime: 1000 * 60 * 5, // 5 minutes
+    // Ne jamais considérer une réponse null comme une erreur
+    useErrorBoundary: false
   });
 
   // Fetch user status
@@ -177,37 +224,52 @@ export function useUser(userId: string | undefined) {
     queryFn: async () => {
       if (!userId) return null;
       
-      const response = await api.get<UserStatusObject>(`users/${userId}/status`);
-      return response.data.status;
+      try {
+        const response = await api.get<UserStatusObject>(`users/${userId}/status`);
+        return response.data.status;
+      } catch (error) {
+        // En cas d'erreur, retourner 'offline' plutôt que de propager l'erreur
+        console.warn(`Error fetching status for user ${userId}, defaulting to offline:`, error);
+        return 'offline' as UserStatus;
+      }
     },
     enabled,
+    // Toujours retourner une valeur, donc pas besoin de gérer les erreurs
+    retry: false,
   });
 
   // Update user mutation
   const updateUserMutation = useMutation({
     mutationFn: async (updates: Partial<User>) => {
       if (!userId) {
-        throw new Error('User ID is required to update a user');
+        console.warn('User ID is required to update a user');
+        return null;
       }
       
-      let response;
-      // Use different endpoint depending on whether it's the current user or not
-      if (userId === 'me' || userId === queryClient.getQueryData<User>(['users', 'me'])?.id) {
-        response = await api.put<User>('users/me/patch', updates);
-      } else {
-        // For other users, use the standard endpoint with user_id
-        response = await api.put<User>(`users/${userId}`, {
-          ...updates,
-          user_id: userId,
-        });
+      try {
+        let response;
+        // Use different endpoint depending on whether it's the current user or not
+        if (userId === 'me' || userId === queryClient.getQueryData<User>(['users', 'me'])?.id) {
+          response = await api.put<User>('users/me/patch', updates);
+        } else {
+          // For other users, use the standard endpoint with user_id
+          response = await api.put<User>(`users/${userId}`, {
+            ...updates,
+            user_id: userId,
+          });
+        }
+        
+        // Update cache
+        if (response.data && response.data.id) {
+          userCache[response.data.id] = response.data;
+        }
+        
+        return response.data;
+      } catch (error) {
+        // Ne pas propager les erreurs
+        console.error(`Error updating user ${userId}:`, error);
+        return null;
       }
-      
-      // Update cache
-      if (response.data && response.data.id) {
-        userCache[response.data.id] = response.data;
-      }
-      
-      return response.data;
     },
     onSuccess: (updatedUser) => {
       // Update user in cache
@@ -228,33 +290,41 @@ export function useUser(userId: string | undefined) {
   const updateStatusMutation = useMutation({
     mutationFn: async (status: UserStatus) => {
       if (!userId) {
-        throw new Error('User ID is required to update status');
+        console.warn('User ID is required to update status');
+        return null;
       }
       
-      // Get the current user ID
-      // First, try to get it from the current user in cache
-      let effectiveUserId = userId;
-      
-      // If userId is 'me', we need to find the actual user ID
-      if (userId === 'me') {
-        const currentUser = queryClient.getQueryData<User>(['users', 'me']);
-        if (currentUser?.id) {
-          effectiveUserId = currentUser.id;
+      try {
+        // Get the current user ID
+        // First, try to get it from the current user in cache
+        let effectiveUserId = userId;
+        
+        // If userId is 'me', we need to find the actual user ID
+        if (userId === 'me') {
+          const currentUser = queryClient.getQueryData<User>(['users', 'me']);
+          if (currentUser?.id) {
+            effectiveUserId = currentUser.id;
+          }
         }
+        
+        // Make sure we have a valid user ID
+        if (!effectiveUserId || effectiveUserId === 'me') {
+          console.warn('Valid user ID is required to update status');
+          return null;
+        }
+        
+        // Use the PUT endpoint with correct format: /users/{user_id}/status
+        const response = await api.put<UserStatusObject>(`users/${effectiveUserId}/status`, {
+          user_id: effectiveUserId,
+          status,
+        });
+        
+        return response.data.status;
+      } catch (error) {
+        // Ne pas propager les erreurs
+        console.error(`Error updating status for user ${userId}:`, error);
+        return null;
       }
-      
-      // Make sure we have a valid user ID
-      if (!effectiveUserId || effectiveUserId === 'me') {
-        throw new Error('Valid user ID is required to update status');
-      }
-      
-      // Use the PUT endpoint with correct format: /users/{user_id}/status
-      const response = await api.put<UserStatusObject>(`users/${effectiveUserId}/status`, {
-        user_id: effectiveUserId,
-        status,
-      });
-      
-      return response.data.status;
     },
     onSuccess: (newStatus, variables) => {
       // Get the effective user ID (resolving 'me' if needed)

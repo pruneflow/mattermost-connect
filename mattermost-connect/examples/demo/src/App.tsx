@@ -83,8 +83,37 @@ const ConnectedApp: React.FC<{
   // Gérer les erreurs d'authentification
   useEffect(() => {
     if (error) {
-      console.error("Authentication error:", error);
-      onLogout();
+      console.error("Authentication error in ConnectedApp:", error);
+      
+      // Check if there's an error message
+      if (error.message) {
+        const message = error.message.toLowerCase();
+        const isTokenExpired = (
+          message.includes('token is expired') || 
+          message.includes('token has expired') || 
+          message.includes('invalid token') || 
+          message.includes('token invalid') ||
+          message.includes('session expirée') ||
+          message.includes('session expiré')
+        );
+        
+        // Only logout if token is expired or it's a 401 error
+        if (isTokenExpired || (error as any).status === 401) {
+          console.log("Token expired or unauthorized, logging out from ConnectedApp");
+          onLogout();
+        } else if ((error as any).status === 404 || 
+                   message.includes('not found') || 
+                   message.includes('introuvable')) {
+          console.log("Resource not found error (404), but not logging out from ConnectedApp");
+          // Just show the error but don't logout
+        } else {
+          // For unexpected auth errors, log but don't automatically logout
+          console.log("Other auth error in ConnectedApp, but not automatically logging out");
+        }
+      } else {
+        // If there's no error message, log but don't logout as a precaution
+        console.log("Error with no message in ConnectedApp, continuing without logout");
+      }
     }
   }, [error, onLogout]);
 
@@ -168,7 +197,9 @@ function App() {
       setLoading(false);
     }, 1000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
 
   // Effet pour récupérer les informations d'authentification du localStorage
@@ -233,6 +264,23 @@ function App() {
     // dans localStorage sous les clés mm_* et seront restaurées par AuthenticationUI
   };
 
+  // Vérifie si l'erreur est due à un token expiré
+  const isTokenExpiredError = (error: Error): boolean => {
+    if ((error as any).status !== 401) return false;
+    
+    // Vérifier les messages d'erreur courants pour les tokens expirés
+    const message = error.message.toLowerCase();
+    
+    return (
+      message.includes('token is expired') || 
+      message.includes('token has expired') || 
+      message.includes('invalid token') || 
+      message.includes('token invalid') ||
+      message.includes('session expirée') ||
+      message.includes('session expiré')
+    );
+  };
+
   // Gérer les erreurs
   const handleError = (err: Error) => {
     console.error("Error:", err);
@@ -273,8 +321,24 @@ function App() {
             enableWebSocket={true}
             onAuthError={(err) => {
               console.error("Auth error in provider:", err);
+              
+              // Always show the error
               handleError(err);
-              handleLogout();
+              
+              // Check if this is a token expiration error
+              if (isTokenExpiredError(err)) {
+                console.log("Token expired, logging out");
+                handleLogout();
+              } else if ((err as any).status === 401) {
+                console.log("Unauthorized (401), logging out");
+                handleLogout();
+              } else if ((err as any).status === 404 || err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('introuvable')) {
+                console.log("Resource not found error (404), but not logging out");
+                // Just show the error but don't logout
+              } else {
+                // For unexpected auth errors, log but don't automatically logout
+                console.log("Other auth error, but not automatically logging out");
+              }
             }}
           >
             <ConnectedApp onLogout={handleLogout} />
@@ -300,8 +364,24 @@ function App() {
             enableWebSocket={true}
             onAuthError={(err) => {
               console.error("Auth error in provider:", err);
+              
+              // Always show the error
               handleError(err);
-              handleLogout();
+              
+              // Check if this is a token expiration error
+              if (isTokenExpiredError(err)) {
+                console.log("Token expired, logging out");
+                handleLogout();
+              } else if ((err as any).status === 401) {
+                console.log("Unauthorized (401), logging out");
+                handleLogout();
+              } else if ((err as any).status === 404 || err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('introuvable')) {
+                console.log("Resource not found error (404), but not logging out");
+                // Just show the error but don't logout
+              } else {
+                // For unexpected auth errors, log but don't automatically logout
+                console.log("Other auth error, but not automatically logging out");
+              }
             }}
           >
             <ConnectedApp onLogout={handleLogout} />

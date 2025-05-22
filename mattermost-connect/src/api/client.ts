@@ -39,6 +39,25 @@ class ApiClient {
   private token: string | null = null;
   private clientId: string | null = null;
   private onErrorHandler?: (error: any) => void;
+  
+  /**
+   * Vérifie si l'erreur est due à un token expiré
+   */
+  isTokenExpiredError(error: ApiError): boolean {
+    if (error.status !== 401) return false;
+    
+    // Vérifier les messages d'erreur courants pour les tokens expirés
+    const message = (error.data?.message || error.message || '').toLowerCase();
+    
+    return (
+      message.includes('token is expired') || 
+      message.includes('token has expired') || 
+      message.includes('invalid token') || 
+      message.includes('token invalid') ||
+      message.includes('session expirée') ||
+      message.includes('session expiré')
+    );
+  }
 
   /**
    * Configure the API client
@@ -179,8 +198,8 @@ class ApiClient {
           errorData
         );
         
-        // Call error handler if provided
-        if (this.onErrorHandler) {
+        // N'appeler le gestionnaire d'erreur global que si ce n'est pas une erreur de token expiré
+        if (this.onErrorHandler && !this.isTokenExpiredError(error)) {
           this.onErrorHandler(error);
         }
         

@@ -221,8 +221,6 @@ export const WebSocketSingleton = (() => {
     }
     
     try {
-      
-      
       // Construire l'URL pour l'API de statut
       const statusUrl = `${serverUrl}/api/v4/users/${userId}/status`;
       
@@ -236,7 +234,19 @@ export const WebSocketSingleton = (() => {
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch status: ${response.status} ${response.statusText}`);
+        // Si l'utilisateur n'est pas trouvé (404), ne pas propager l'erreur
+        if (response.status === 404) {
+          console.warn(`User ${userId} status not found, setting as offline`);
+          // Supposer que l'utilisateur est hors ligne par défaut
+          updateUserStatus(userId, 'offline');
+          // Marquer comme initialisé malgré l'erreur
+          wsUserStatusesInitialized.add(userId);
+          return { status: 'offline' };
+        }
+        
+        // Pour les autres erreurs, juste logger sans propager
+        console.error(`Failed to fetch status: ${response.status} ${response.statusText}`);
+        return null;
       }
       
       // Extraire les données
@@ -244,7 +254,6 @@ export const WebSocketSingleton = (() => {
       
       // Mettre à jour le statut si la réponse contient un statut valide
       if (data && data.status) {
-        
         updateUserStatus(userId, data.status);
         
         // Mettre à jour également le cache centralisé
@@ -263,8 +272,10 @@ export const WebSocketSingleton = (() => {
       
       return data;
     } catch (error) {
+      // Capturer toutes les erreurs, ne jamais les propager
       console.error(`Error fetching user status for ${userId}:`, error);
-      throw error;
+      // Retourner null au lieu de propager
+      return null;
     }
   };
   
@@ -994,18 +1005,24 @@ export function useWebSocket() {
             // Utiliser une IIFE pour pouvoir utiliser await
             (async () => {
               try {
-                // Utiliser l'API client directement
-                const response = await api.get(`users/${userId}`);
-                if (response.data) {
-                  username = formatUserName(response.data);
-                  console.log(`Loaded user ${userId} from API, username: ${username}`);
-                  
-                  // Mettre à jour directement le singleton
-                  const updatedEvents = [...WebSocketSingleton.getTypingEvents().filter(e => 
-                    !(e.channel_id === channelId && e.username === 'Someone')), 
-                    { username, channel_id: channelId, timestamp: now }
-                  ];
-                  WebSocketSingleton.updateTypingEvents(updatedEvents);
+                try {
+                  // Utiliser l'API client directement
+                  const response = await api.get(`users/${userId}`);
+                  if (response.data) {
+                    username = formatUserName(response.data);
+                    console.log(`Loaded user ${userId} from API, username: ${username}`);
+                    
+                    // Mettre à jour directement le singleton
+                    const updatedEvents = [...WebSocketSingleton.getTypingEvents().filter(e => 
+                      !(e.channel_id === channelId && e.username === 'Someone')), 
+                      { username, channel_id: channelId, timestamp: now }
+                    ];
+                    WebSocketSingleton.updateTypingEvents(updatedEvents);
+                  }
+                } catch (apiError) {
+                  // Si l'API renvoie une erreur (comme 404), simplement continuer
+                  console.warn(`Error loading user ${userId}, will use default name:`, apiError);
+                  // Conserver le nom par défaut 'Someone'
                 }
               } catch (error) {
                 console.error(`Error loading user ${userId} from API:`, error);

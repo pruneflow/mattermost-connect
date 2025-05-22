@@ -107,8 +107,9 @@ class UserCacheService {
    * Récupère les informations d'un utilisateur depuis l'API
    * avec déduplication forte pour éviter les appels multiples
    * @param forceRefresh forcer un rafraîchissement depuis l'API même si en cache
+   * @returns User ou null si l'utilisateur n'est pas trouvé ou en cas d'erreur
    */
-  public async getUserInfo(userId: string, forceRefresh: boolean = false): Promise<User> {
+  public async getUserInfo(userId: string, forceRefresh: boolean = false): Promise<User | null> {
     // 1. Vérifier d'abord le cache en mémoire (sauf si forceRefresh)
     if (!forceRefresh && this.hasUser(userId)) {
       console.log(`Using cached user data for: ${userId}`);
@@ -141,6 +142,7 @@ class UserCacheService {
    * Récupère le statut d'un utilisateur depuis l'API
    * avec déduplication forte
    * @param forceRefresh forcer un rafraîchissement depuis l'API même si en cache
+   * @returns UserStatus ou 'offline' par défaut en cas d'erreur
    */
   public async getUserStatus(userId: string, forceRefresh: boolean = false): Promise<UserStatus> {
     // 1. Vérifier d'abord le cache (sauf si forceRefresh)
@@ -217,8 +219,9 @@ class UserCacheService {
   
   /**
    * Fait l'appel API pour récupérer les informations d'un utilisateur
+   * @returns User ou null si l'utilisateur n'est pas trouvé ou en cas d'erreur
    */
-  private async fetchUserInfo(userId: string): Promise<User> {
+  private async fetchUserInfo(userId: string): Promise<User | null> {
     try {
       const response = await api.get<User>(`users/${userId}`);
       const user = response.data;
@@ -228,13 +231,25 @@ class UserCacheService {
       
       return user;
     } catch (error) {
-      console.error(`Error fetching user ${userId}:`, error);
-      throw error;
+      // Si l'utilisateur n'existe pas (404) ou autre erreur, retourner null
+      if (error instanceof ApiError) {
+        if (error.status === 404) {
+          console.warn(`User ${userId} not found, returning null`);
+        } else {
+          console.error(`Error fetching user ${userId}:`, error);
+        }
+      } else {
+        console.error(`Unexpected error fetching user ${userId}:`, error);
+      }
+      
+      // Ne pas propager l'erreur, simplement retourner null
+      return null;
     }
   }
   
   /**
    * Fait l'appel API pour récupérer le statut d'un utilisateur
+   * @returns UserStatus ou 'offline' par défaut en cas d'erreur
    */
   private async fetchUserStatus(userId: string): Promise<UserStatus> {
     try {
@@ -246,8 +261,19 @@ class UserCacheService {
       
       return status;
     } catch (error) {
-      console.error(`Error fetching status for user ${userId}:`, error);
-      throw error;
+      // Si l'utilisateur n'existe pas ou autre erreur, retourner 'offline' par défaut
+      if (error instanceof ApiError) {
+        if (error.status === 404) {
+          console.warn(`Status for user ${userId} not found, returning 'offline'`);
+        } else {
+          console.error(`Error fetching status for user ${userId}:`, error);
+        }
+      } else {
+        console.error(`Unexpected error fetching status for user ${userId}:`, error);
+      }
+      
+      // Par défaut, un utilisateur est considéré comme hors ligne
+      return 'offline' as UserStatus;
     }
   }
   
@@ -280,8 +306,9 @@ export const userCache = UserCacheService.getInstance();
 /**
  * Hook simplifié pour récupérer les données d'un utilisateur
  * avec déduplication forte
+ * @returns User ou null si l'utilisateur n'est pas trouvé ou en cas d'erreur
  */
-export async function getUserWithCache(userId: string): Promise<User> {
+export async function getUserWithCache(userId: string): Promise<User | null> {
   return userCache.getUserInfo(userId);
 }
 
