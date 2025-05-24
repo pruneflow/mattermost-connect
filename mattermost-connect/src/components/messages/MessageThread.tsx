@@ -6,7 +6,6 @@ import {
   IconButton,
   Divider,
   CircularProgress,
-  Avatar,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -16,12 +15,12 @@ import {
 } from '@mui/icons-material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useThreadMessages } from '../../hooks/useMessages';
-import { useUser } from '../../hooks/useUsers';
-import { formatRelativeTime, formatUserName, getUserInitials, formatFileSize } from '../../utils/formatters';
+import { formatRelativeTime, formatFileSize } from '../../utils/formatters';
 import MessageInput from './MessageInput';
 import MessageList from './MessageList';
 import MessageAttachment from './MessageAttachment';
 import AttachmentPreview from './AttachmentPreview';
+import { UserAvatar } from '../common';
 import Markdown from '../common/Markdown';
 import { Message } from '../../api/types';
 
@@ -85,8 +84,7 @@ export function MessageThread({
     setCurrentAttachments([]);
   }, [channelId, rootMessageId]);
   
-  // Get parent message author
-  const { user: parentAuthor } = useUser(parentMessage?.user_id);
+  // Note: We'll use UserAvatar component which handles user loading internally
   
   // Scroll to bottom when new messages arrive or thread is loaded
   useEffect(() => {
@@ -120,23 +118,7 @@ export function MessageThread({
     }
   }, [rootMessageId, isLoading, parentMessage]);
   
-  // Generate avatar color based on username
-  const getAvatarColor = (username?: string): string => {
-    if (!username) return '#909090';
-    
-    let hash = 0;
-    for (let i = 0; i < username.length; i++) {
-      hash = username.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    
-    let color = '#';
-    for (let i = 0; i < 3; i++) {
-      const value = (hash >> (i * 8)) & 0xff;
-      color += `00${value.toString(16)}`.slice(-2);
-    }
-    
-    return color;
-  };
+  // Avatar color generation is now handled by UserAvatar component
 
   // State pour suivre les pièces jointes en temps réel
   const [currentAttachments, setCurrentAttachments] = useState<any[]>([]);
@@ -393,21 +375,14 @@ export function MessageThread({
             >
               {/* Author info with avatar */}
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Avatar
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    mr: 1,
-                    bgcolor: getAvatarColor(parentAuthor?.username)
-                  }}
-                  src={parentAuthor?.profile_picture}
-                >
-                  {getUserInitials(parentAuthor)}
-                </Avatar>
-                <Box>
-                  <Typography variant="subtitle2">
-                    {formatUserName(parentAuthor)}
-                  </Typography>
+                <UserAvatar
+                  userId={parentMessage.user_id}
+                  size={32}
+                  showName={true}
+                  namePosition="right"
+                  sx={{ mr: 1 }}
+                />
+                <Box sx={{ ml: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     {formatRelativeTime(parentMessage.create_at)}
                   </Typography>

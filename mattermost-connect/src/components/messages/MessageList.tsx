@@ -11,6 +11,8 @@ import {
   MenuItem,
   SxProps,
   Theme,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   MoreVert as MoreVertIcon,
@@ -20,10 +22,15 @@ import {
 } from "@mui/icons-material";
 import { useMessages } from "../../hooks/useMessages";
 import { useUser } from "../../hooks/useUsers";
-import { formatRelativeTime, formatUserName } from "../../utils/formatters";
+import {
+  formatRelativeTime,
+  formatUserName,
+  formatTime,
+} from "../../utils/formatters";
 import Message from "./Message";
 import MessageReactions from "./MessageReactions";
 import MessageAttachment from "./MessageAttachment";
+import MessageHeader from "./MessageHeader";
 import Markdown from "../common/Markdown";
 
 export interface MessageListProps {
@@ -301,16 +308,17 @@ export function MessageList({
                       (message.reply_count && message.reply_count > 0)
                     }
                     replyCount={
-                      // First try to use the known reply_count from message metadata if available
-                      message.reply_count ||
-                      // Otherwise, count replies manually from the messages array
-                      messages.reduce(
-                        (count, m) =>
-                          m.root_id === message.id && m.id !== message.id
-                            ? count + 1
-                            : count,
-                        0,
-                      )
+                      // Use reply_count from message metadata if available (preferred)
+                      message.reply_count && message.reply_count > 0
+                        ? message.reply_count
+                        : // Otherwise, count replies manually from the messages array
+                          messages.reduce(
+                            (count, m) =>
+                              m.root_id === message.id && m.id !== message.id
+                                ? count + 1
+                                : count,
+                            0,
+                          )
                     }
                     fileIds={message.file_ids}
                     onReply={handleReply}
@@ -400,12 +408,17 @@ function MessageItem({
   onDelete,
   sx = {},
 }: MessageItemProps) {
+  // Theme for responsive design
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
   // Get user data for the message author
   const { user, isLoading } = useUser(userId);
 
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
+  const [actionsVisible, setActionsVisible] = useState(false);
 
   // Menu state
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -467,122 +480,66 @@ function MessageItem({
   return (
     <Box
       sx={{
-        maxWidth: "80%",
+        maxWidth: isMobile ? "90%" : "80%",
         ml: isCurrentUser ? "auto" : 0,
         mr: isCurrentUser ? 0 : "auto",
         mb: 2,
         ...sx,
       }}
+      onMouseEnter={() => !isMobile && setActionsVisible(true)}
+      onMouseLeave={() => !isMobile && setActionsVisible(false)}
     >
       <Paper
         elevation={0}
         sx={{
-          p: 2,
+          p: isMobile ? "4px" : 2,
+          px: isMobile ? "4px" : 2,
           maxWidth: "100%",
           bgcolor: isCurrentUser
             ? "rgba(140, 180, 255, 0.15)"
             : "rgba(0, 0, 0, 0.03)",
           borderRadius: 2,
+          position: "relative",
         }}
       >
-        {/* Message header with author and time */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-          <Typography variant="subtitle2">
-            {isLoading ? "Loading..." : formatUserName(user)}
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center" }}>
-            <Typography variant="caption" color="text.secondary">
-              {formatRelativeTime(timestamp)}
-            </Typography>
+        {/* Message header - using new MessageHeader component */}
+        <MessageHeader
+          messageId={messageId}
+          channelId={channelId}
+          username={isLoading ? "Loading..." : formatUserName(user)}
+          userId={userId}
+          timestamp={timestamp.toString()}
+          messageText={content}
+          reactions={reactions}
+          showDate={!isMobile}
+          showAvatar={true}
+          showActions={true}
+          actionsVisible={actionsVisible || isMobile}
+          onReply={onReply}
+          onEdit={onEdit ? (newText) => onEdit(messageId, newText) : undefined}
+          onDelete={onDelete ? () => onDelete(messageId) : undefined}
+        />
 
-            {/* Menu button */}
-            {(onReply || (isCurrentUser && (onEdit || onDelete))) && (
-              <IconButton size="small" onClick={handleMenuClick} sx={{ ml: 1 }}>
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-            )}
-
-            {/* Action menu */}
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleMenuClose}
-            >
-              {onReply && (
-                <MenuItem
-                  onClick={() => {
-                    onReply();
-                    handleMenuClose();
-                  }}
-                >
-                  <ReplyIcon fontSize="small" sx={{ mr: 1 }} />
-                  Reply
-                </MenuItem>
-              )}
-              {isCurrentUser && onEdit && (
-                <MenuItem onClick={handleEditClick}>
-                  <EditIcon fontSize="small" sx={{ mr: 1 }} />
-                  Edit
-                </MenuItem>
-              )}
-              {isCurrentUser && onDelete && (
-                <MenuItem onClick={handleDeleteClick}>
-                  <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-                  Delete
-                </MenuItem>
-              )}
-            </Menu>
-          </Box>
+        {/* Message content - always readonly, editing handled by MessageHeader */}
+        <Box sx={{ wordBreak: "break-word", mt: isMobile ? 0.5 : 1 }}>
+          <Markdown content={content} />
         </Box>
 
-        {/* Message content - editable or readonly */}
-        {isEditing ? (
-          <Box sx={{ mt: 1 }}>
-            <textarea
-              value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
-              onKeyDown={handleKeyPress}
-              autoFocus
-              style={{
-                width: "100%",
-                minHeight: "60px",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #ccc",
-                resize: "vertical",
-                fontFamily: "inherit",
-                fontSize: "inherit",
-              }}
-            />
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "flex-end",
-                mt: 1,
-                gap: 1,
-              }}
-            >
-              <Button
-                size="small"
-                onClick={handleCancelEdit}
-                variant="outlined"
-              >
-                Cancel
-              </Button>
-              <Button
-                size="small"
-                onClick={handleSaveEdit}
-                variant="contained"
-                disabled={editedContent.trim() === ""}
-              >
-                Save
-              </Button>
-            </Box>
-          </Box>
-        ) : (
-          <Box sx={{ wordBreak: "break-word" }}>
-            <Markdown content={content} />
-          </Box>
+        {/* Time display for mobile (bottom right) */}
+        {isMobile && (
+          <Typography
+            variant="caption"
+            sx={{
+              position: "absolute",
+              bottom: 4,
+              right: 8,
+              color: "text.secondary",
+              fontSize: "0.75rem",
+              lineHeight: 1,
+            }}
+          >
+            {formatTime(timestamp)}
+          </Typography>
         )}
       </Paper>
 

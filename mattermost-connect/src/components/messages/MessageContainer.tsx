@@ -116,12 +116,7 @@ export function MessageContainer({
     setThreadMessageId(externalThreadMessageId);
   }, [externalThreadMessageId]);
 
-  // Mark channel as viewed when component mounts
-  useEffect(() => {
-    if (channelId) {
-      viewChannel();
-    }
-  }, [channelId, viewChannel]);
+  // Note: Channel viewing is handled automatically by useMessages hook
 
   useEffect(() => {
     console.debug("MessageContainer: useEffect",)
