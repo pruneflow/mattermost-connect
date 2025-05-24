@@ -28,7 +28,7 @@ import {
 } from '@mui/icons-material';
 import { useUser } from '../../hooks/useUsers';
 import { useAuth } from '../../context/AuthContext';
-import { User } from '../../api/types';
+import { User, UserStatus } from '../../api/types';
 import { api } from '../../api/client';
 import { UserAvatar } from '../common/UserAvatar';
 
@@ -56,7 +56,10 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   const isCurrentUser = profileUserId === currentUserId;
   
   // Get user data
-  const { user, status, updateUserStatus, isLoading, error, updateUser, refetch } = useUser(profileUserId || '');
+  const { user, status, isLoading, error, updateUser, updateStatus, refetch } = useUser(profileUserId || '');
+  
+  // Type-safe user access
+  const typedUser = (user && typeof user === 'object' && 'id' in user) ? user as User : null;
   
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -77,13 +80,13 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   
   // Start editing
   const handleEditClick = () => {
-    if (user) {
+    if (typedUser) {
       setFormData({
-        first_name: user.first_name,
-        last_name: user.last_name,
-        nickname: user.nickname,
-        position: user.position,
-        email: user.email
+        first_name: typedUser.first_name,
+        last_name: typedUser.last_name,
+        nickname: typedUser.nickname,
+        position: typedUser.position,
+        email: typedUser.email
       });
       setIsEditing(true);
     }
@@ -97,7 +100,7 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   
   // Save changes
   const handleSaveProfile = async () => {
-    if (!user) return;
+    if (!typedUser) return;
     
     try {
       // Choose the right update function based on whether this is current user
@@ -113,7 +116,7 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
       setFormData({});
       
       // Force refetch user to get the latest data
-      if (user) {
+      if (typedUser) {
         await refetch();
       }
     } catch (error) {
@@ -123,9 +126,9 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   
   // Update status
   const handleStatusChange = async (newStatus: string) => {
-    if (updateUserStatus && isCurrentUser) {
+    if (updateStatus && isCurrentUser) {
       try {
-        await updateUserStatus(newStatus);
+        await updateStatus(newStatus as UserStatus);
         setShowStatusMenu(false);
       } catch (error) {
         console.error('Failed to update status:', error);
@@ -135,7 +138,7 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   
   // Handle profile image upload
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files || event.target.files.length === 0 || !user) {
+    if (!event.target.files || event.target.files.length === 0 || !typedUser) {
       return;
     }
     
@@ -152,12 +155,12 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
       const formData = new FormData();
       formData.append('image', file);
       
-      // Get authentication token - first try from auth context, then fallback to localStorage
-      const token = currentUser?.token || localStorage.getItem('mattermost_token');
+      // Get authentication token - from localStorage
+      const token = localStorage.getItem('mattermost_token');
       
       // Get the base URL from api
       const apiBaseUrl = api.getBaseUrl();
-      const url = `${apiBaseUrl}/api/v4/users/${user.id}/image`;
+      const url = `${apiBaseUrl}/api/v4/users/${typedUser.id}/image`;
       
       // Use fetch directly to properly handle multipart/form-data
       const response = await fetch(url, {
@@ -171,13 +174,6 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
       
       if (!response.ok) {
         throw new Error(`Failed to upload image: ${response.status} ${response.statusText}`);
-      }
-      
-      // Refresh user data to get updated profile picture
-      if (updateCurrentUser) {
-        await updateCurrentUser({});
-      } else if (updateUser) {
-        await updateUser({});
       }
       
       // Force refetch to update the UI with the new image
@@ -197,10 +193,10 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   
   // Get user initials for avatar
   const getUserInitials = (): string => {
-    if (!user) return '?';
+    if (!typedUser) return '?';
     
-    const firstName = user.first_name || '';
-    const lastName = user.last_name || '';
+    const firstName = typedUser.first_name || '';
+    const lastName = typedUser.last_name || '';
     
     if (firstName && lastName) {
       return `${firstName[0]}${lastName[0]}`;
@@ -210,8 +206,8 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
       return firstName[0];
     }
     
-    if (user.username) {
-      return user.username[0].toUpperCase();
+    if (typedUser.username) {
+      return typedUser.username[0].toUpperCase();
     }
     
     return '?';
@@ -219,11 +215,11 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   
   // Generate avatar color from username
   const getAvatarColor = (): string => {
-    if (!user?.username) return '#1976d2';
+    if (!typedUser?.username) return '#1976d2';
     
     let hash = 0;
-    for (let i = 0; i < user.username.length; i++) {
-      hash = user.username.charCodeAt(i) + ((hash << 5) - hash);
+    for (let i = 0; i < typedUser.username.length; i++) {
+      hash = typedUser.username.charCodeAt(i) + ((hash << 5) - hash);
     }
     
     let color = '#';
@@ -252,7 +248,7 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
   }
   
   // Error state
-  if (error || !user) {
+  if (error || !typedUser) {
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography color="error">
@@ -306,7 +302,7 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
             overflow: 'hidden'
           }}>
             <UserAvatar 
-              user={user}
+              user={typedUser}
               size={94}
               showStatus={false}
               showTooltip={false}
@@ -349,12 +345,12 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
           ) : (
             <Box>
               <Typography variant="h5">
-                {`${user.first_name} ${user.last_name}`.trim() || user.username}
+                {`${typedUser.first_name} ${typedUser.last_name}`.trim() || typedUser.username}
               </Typography>
               
               <Typography variant="body2" color="text.secondary">
-                @{user.username}
-                {user.nickname && ` (${user.nickname})`}
+                @{typedUser.username}
+                {typedUser.nickname && ` (${typedUser.nickname})`}
               </Typography>
               
               {isCurrentUser && (
@@ -388,7 +384,7 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
                 onClick={() => setShowStatusMenu(true)}
                 sx={{ cursor: 'pointer' }}
               >
-                {status?.charAt(0).toUpperCase() + status?.slice(1) || 'Set status'}
+                {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Set status'}
               </Typography>
             </Box>
           )}
@@ -463,22 +459,22 @@ export function UserProfile({ userId, editable = false, onClose }: UserProfilePr
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <EmailIcon color="action" sx={{ mr: 2 }} />
-              <Typography>{user.email}</Typography>
+              <Typography>{typedUser.email}</Typography>
             </Box>
             
-            {user.position && (
+            {typedUser.position && (
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <WorkIcon color="action" sx={{ mr: 2 }} />
-                <Typography>{user.position}</Typography>
+                <Typography>{typedUser.position}</Typography>
               </Box>
             )}
             
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <LanguageIcon color="action" sx={{ mr: 2 }} />
-              <Typography>{user.locale || 'English (US)'}</Typography>
+              <Typography>{typedUser.locale || 'English (US)'}</Typography>
             </Box>
             
-            {user.is_bot && (
+            {typedUser.is_bot && (
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <VerifiedIcon color="primary" sx={{ mr: 2 }} />
                 <Typography>Bot Account</Typography>

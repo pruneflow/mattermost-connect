@@ -3,10 +3,10 @@ import { api, ApiError } from '../api/client';
 import { User, UserStatus, UserStatusObject } from '../api/types';
 
 // Cache global pour les utilisateurs
-export const userCache: Record<string, User> = {};
+export const userCache: Record<string, User | undefined> = {};
 
 // Requêtes en cours pour éviter les requêtes dupliquées
-export const pendingRequests: Record<string, Promise<User>> = {};
+export const pendingRequests: Record<string, Promise<User | null> | undefined> = {};
 
 // Query keys
 export const userKeys = {
@@ -179,7 +179,7 @@ export function useUser(userId: string | undefined) {
   const enabled = !!userId;
   
   // Fetch user by ID with caching
-  const userQuery = useQuery({
+  const userQuery = useQuery<User | null>({
     queryKey: userKeys.detail(userId || ''),
     queryFn: async () => {
       if (!userId) {
@@ -213,13 +213,11 @@ export function useUser(userId: string | undefined) {
     // Gérer les erreurs sans arrêter l'application
     retry: false,
     // Ne pas invalider le cache si l'erreur est simplement que l'utilisateur n'existe pas
-    gcTime: 1000 * 60 * 5, // 5 minutes
-    // Ne jamais considérer une réponse null comme une erreur
-    useErrorBoundary: false
+    gcTime: 1000 * 60 * 5 // 5 minutes
   });
 
   // Fetch user status
-  const statusQuery = useQuery({
+  const statusQuery = useQuery<UserStatus | null>({
     queryKey: userKeys.status(userId || ''),
     queryFn: async () => {
       if (!userId) return null;
@@ -272,16 +270,18 @@ export function useUser(userId: string | undefined) {
       }
     },
     onSuccess: (updatedUser) => {
-      // Update user in cache
-      queryClient.setQueryData(
-        userKeys.detail(updatedUser.id),
-        updatedUser
-      );
-      
-      // If the updated user is the current user, also update the me cache
-      const currentUserId = queryClient.getQueryData<User>(['users', 'me'])?.id;
-      if (updatedUser.id === currentUserId) {
-        queryClient.setQueryData(['users', 'me'], updatedUser);
+      // Update user in cache only if update was successful
+      if (updatedUser) {
+        queryClient.setQueryData(
+          userKeys.detail(updatedUser.id),
+          updatedUser
+        );
+        
+        // If the updated user is the current user, also update the me cache
+        const currentUserId = queryClient.getQueryData<User>(['users', 'me'])?.id;
+        if (updatedUser.id === currentUserId) {
+          queryClient.setQueryData(['users', 'me'], updatedUser);
+        }
       }
     },
   });

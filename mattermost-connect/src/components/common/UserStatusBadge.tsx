@@ -100,7 +100,7 @@ export const UserStatusBadge: React.FC<UserStatusBadgeProps> = ({
   }
   
   // Ajouter le tooltip si nécessaire
-  if (showTooltip) {
+  if (showTooltip && content) {
     return (
       <Tooltip title={statusLabel} arrow placement="top">
         {content}
@@ -108,7 +108,7 @@ export const UserStatusBadge: React.FC<UserStatusBadgeProps> = ({
     );
   }
   
-  return content;
+  return content || null;
 };
 
 export default UserStatusBadge;

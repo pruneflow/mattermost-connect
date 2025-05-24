@@ -23,6 +23,7 @@ import { useChannels, useChannel } from '../../hooks/useChannels';
 import { useUser } from '../../hooks/useUsers';
 import { useChannelUtils } from '../../hooks/useChannelUtils';
 import { useQueryClient } from '@tanstack/react-query';
+import { UserStatus } from '../../api/types';
 
 // Import components
 import TeamList from '../teams/TeamList';
@@ -228,7 +229,9 @@ export function MattermostChat({
             showStatus={true}
             showMenu={true}
             showProfile={true}
-            onStatusChange={updateStatus}
+            onStatusChange={async (status: UserStatus) => {
+              await updateStatus(status);
+            }}
             isUpdatingStatus={isUpdatingStatus}
             onLogout={logout}
           />

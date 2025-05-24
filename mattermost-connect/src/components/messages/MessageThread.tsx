@@ -380,9 +380,9 @@ export function MessageThread({
                   size={32}
                   showName={true}
                   namePosition="right"
-                  sx={{ mr: 1 }}
+                  sx={{ marginRight: 1 }}
                 />
-                <Box sx={{ ml: 1 }}>
+                <Box sx={{ marginLeft: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     {formatRelativeTime(parentMessage.create_at)}
                   </Typography>
@@ -527,8 +527,6 @@ export function MessageThread({
               replyToMessageId={rootMessageId}
               placeholder="Reply to thread..."
               onMessageSent={handleReplySent}
-              isInThread={true}
-              onAttachmentsChange={handleAttachmentsChange}
             />
           </Box>
         </Box>

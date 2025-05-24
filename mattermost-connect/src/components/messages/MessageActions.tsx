@@ -109,7 +109,7 @@ export function MessageActions({
 
   const handleEditSave = async () => {
     try {
-      await updateMessage({ messageId, message: editText, id: messageId });
+      await updateMessage({ id: messageId, message: editText });
       onEdit?.(editText);
       setEditMode(false);
     } catch (error) {

@@ -15,6 +15,8 @@ import { Team, Channel, User } from '../../api/types';
 import { TeamList } from '../teams';
 import { UserMenu } from '../auth/UserMenu';
 import { useChannelUtils } from '../../hooks/useChannelUtils';
+import { useAuth } from '../../context/AuthContext';
+import { useUser } from '../../hooks/useUsers';
 
 export interface AppBarProps {
   /**
@@ -85,13 +87,34 @@ export function AppBar({
 }: AppBarProps) {
   // Get channel utils for display name formatting
   const { getDirectChannelDisplayName } = useChannelUtils();
+  const { user: currentUser } = useAuth();
+  
+  // For direct channels, extract the other user's ID
+  const getOtherUserId = (directChannel: Channel): string | undefined => {
+    if (directChannel.type !== 'D' || !currentUser?.id) return undefined;
+    
+    // Direct channel names are in format "user1id__user2id"
+    const userIds = directChannel.name.split('__');
+    if (userIds.length !== 2) return undefined;
+    
+    // Return the ID that's not the current user
+    return userIds[0] === currentUser.id ? userIds[1] : userIds[0];
+  };
+  
+  const otherUserId = selectedChannel?.type === 'D' ? getOtherUserId(selectedChannel) : undefined;
+  const { user: otherUser } = useUser(otherUserId || '');
   
   // Determine display title
   const getTitle = () => {
     if (selectedChannel) {
       // For direct or group channels, use special formatting
-      if (selectedChannel.type === 'D' || selectedChannel.type === 'G') {
-        return selectedChannel.display_name || getDirectChannelDisplayName(selectedChannel) || selectedChannel.name;
+      if (selectedChannel.type === 'D') {
+        // For direct channels, use the other user's formatted name
+        return selectedChannel.display_name || getDirectChannelDisplayName(otherUser) || selectedChannel.name;
+      }
+      if (selectedChannel.type === 'G') {
+        // For group channels, use display_name or fallback
+        return selectedChannel.display_name || selectedChannel.name;
       }
       return selectedChannel.display_name || selectedChannel.name;
     }

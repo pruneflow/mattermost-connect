@@ -150,7 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Initialize successful
         dispatch({
           type: 'INITIALIZE_SUCCESS',
-          payload: { user, token, serverUrl: serverUrl || null },
+          payload: { user, token, serverUrl: serverUrl || undefined },
         });
       } catch (error) {
         // Clear invalid credentials

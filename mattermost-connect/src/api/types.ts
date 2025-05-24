@@ -99,6 +99,11 @@ export interface Message extends WithId, WithTimestamps {
   hashtags: string;
   file_ids: string[];
   metadata?: MessageMetadata;
+  // Thread properties
+  reply_count?: number;
+  has_replies?: boolean;
+  // Reactions
+  reactions?: Record<string, string[]>;
 }
 
 // Message metadata
@@ -210,7 +215,9 @@ export interface LoginResponse {
 
 // WebSocket Event
 export interface WebSocketEvent {
-  event: string;
+  event?: string;
+  status?: string;
+  seq_reply?: number;
   data?: {
     channel_id?: string;
     team_id?: string;

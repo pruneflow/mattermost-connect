@@ -19,6 +19,8 @@ import {
 import { Channel } from '../../api/types';
 import { useChannel } from '../../hooks/useChannels';
 import { useChannelUtils } from '../../hooks/useChannelUtils';
+import { useAuth } from '../../context/AuthContext';
+import { useUser } from '../../hooks/useUsers';
 import ChannelTypingIndicator from '../common/ChannelTypingIndicator';
 
 export interface ChannelHeaderProps {
@@ -113,9 +115,25 @@ export function ChannelHeader({
   // Use our hooks to get channel data and utils
   const { channel: channelData } = useChannel(isChannelId ? channelId : undefined);
   const { getDirectChannelDisplayName, isDirectChannel, isGroupChannel } = useChannelUtils();
+  const { user: currentUser } = useAuth();
   
   // Determine which channel object to use
   const channelObj = isChannelId ? channelData : channel as Channel | undefined;
+  
+  // For direct channels, extract the other user's ID
+  const getOtherUserId = (directChannel: Channel): string | undefined => {
+    if (!isDirectChannel(directChannel) || !currentUser?.id) return undefined;
+    
+    // Direct channel names are in format "user1id__user2id"
+    const userIds = directChannel.name.split('__');
+    if (userIds.length !== 2) return undefined;
+    
+    // Return the ID that's not the current user
+    return userIds[0] === currentUser.id ? userIds[1] : userIds[0];
+  };
+  
+  const otherUserId = channelObj && isDirectChannel(channelObj) ? getOtherUserId(channelObj) : undefined;
+  const { user: otherUser } = useUser(otherUserId || '');
   
   if (!channelObj) {
     return null;
@@ -123,8 +141,13 @@ export function ChannelHeader({
   
   // Get channel name based on type
   const getChannelDisplayName = () => {
-    if (isDirectChannel(channelObj) || isGroupChannel(channelObj)) {
-      return channelObj.display_name || getDirectChannelDisplayName(channelObj) || channelObj.name;
+    if (isDirectChannel(channelObj)) {
+      // For direct channels, use the other user's formatted name
+      return channelObj.display_name || getDirectChannelDisplayName(otherUser) || channelObj.name;
+    }
+    if (isGroupChannel(channelObj)) {
+      // For group channels, use display_name or fallback
+      return channelObj.display_name || channelObj.name;
     }
     return channelObj.display_name || channelObj.name;
   };

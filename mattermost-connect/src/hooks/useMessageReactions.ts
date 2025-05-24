@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { WebSocketSingleton } from './useWebSocket';
 import { useMessages } from './useMessages';
+import { Message } from '../api/types';
 
 /**
  * Type représentant une réaction à un message
@@ -39,12 +40,12 @@ export function useMessageReactions(postId: string, channelId?: string) {
     const unsubscribe = WebSocketSingleton.subscribeToMessageReactions(postId, forceRender);
     
     // Initialiser les réactions depuis les données existantes si disponibles
-    if (messages?.data && channelId) {
-      const message = messages.data.find(msg => msg.id === postId);
+    if (messages?.messages && channelId) {
+      const message = messages.messages.find((msg: Message) => msg.id === postId);
       if (message?.reactions) {
         // Convertir les réactions du format Mattermost vers notre format
         Object.entries(message.reactions).forEach(([emojiName, userIds]) => {
-          userIds.forEach(userId => {
+          (userIds as string[]).forEach((userId: string) => {
             WebSocketSingleton.updateMessageReactions(postId, {
               emoji_name: emojiName,
               post_id: postId,
@@ -60,7 +61,7 @@ export function useMessageReactions(postId: string, channelId?: string) {
     return () => {
       unsubscribe();
     };
-  }, [postId, channelId, messages?.data]);
+  }, [postId, channelId, messages?.messages]);
   
   // Récupérer uniquement les réactions pour ce message spécifique
   const reactions = WebSocketSingleton.getMessageReactions(postId);

@@ -5,7 +5,7 @@ import { MessageList } from '../messages/MessageList';
 import MessageInput from '../messages/MessageInput';
 import { MessageThread } from '../messages/MessageThread';
 import { useAuth } from '../../context/AuthContext';
-import { Channel } from '../../api/types';
+import { Channel, Message } from '../../api/types';
 import { useMessages } from '../../hooks/useMessages';
 
 export interface ChatInterfaceProps {
@@ -34,8 +34,8 @@ export function ChatInterface({ teamId }: ChatInterfaceProps) {
   }, []);
   
   // Handle reply to message
-  const handleReplyMessage = useCallback((messageId: string) => {
-    setReplyToMessageId(messageId);
+  const handleReplyMessage = useCallback((message: Message) => {
+    setReplyToMessageId(message.id);
   }, []);
   
   // Handle cancel reply
@@ -91,7 +91,7 @@ export function ChatInterface({ teamId }: ChatInterfaceProps) {
   return (
     <Grid container sx={{ height: '100vh' }}>
       {/* Channels sidebar */}
-      <Grid item xs={12} sm={3} md={3} lg={3} sx={{ borderRight: 1, borderColor: 'divider' }}>
+      <Grid size={{ xs: 12, sm: 3, md: 3, lg: 3 }} sx={{ borderRight: 1, borderColor: 'divider' }}>
         <Paper 
           elevation={0} 
           square 
@@ -116,7 +116,7 @@ export function ChatInterface({ teamId }: ChatInterfaceProps) {
       </Grid>
       
       {/* Chat area */}
-      <Grid item xs={12} sm={9} md={9} lg={9} sx={{ height: '100%' }}>
+      <Grid size={{ xs: 12, sm: 9, md: 9, lg: 9 }} sx={{ height: '100%' }}>
         {!selectedChannel ? (
           // No channel selected state
           <Box 

@@ -463,10 +463,7 @@ export function MessageAttachment({ fileIds, files: propFiles }: MessageAttachme
                 size="small"
                 tooltip="Download" 
                 sx={{ 
-                  p: { xs: 0.75, md: 0.5 },
-                  '&:hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                  }
+                  padding: '6px'
                 }}
               />
             </Box>

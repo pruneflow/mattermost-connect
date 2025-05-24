@@ -4,7 +4,7 @@
  */
 
 import { User, UserStatus, UserStatusObject } from './types';
-import { api } from './client';
+import { api, ApiError } from './client';
 
 /**
  * Classe qui implémente un cache d'utilisateurs et une déduplication des requêtes
@@ -16,7 +16,7 @@ class UserCacheService {
   private userStatusCache: Map<string, UserStatus> = new Map();
   
   // Requêtes en cours pour la déduplication
-  private pendingUserRequests: Map<string, Promise<User>> = new Map();
+  private pendingUserRequests: Map<string, Promise<User | null>> = new Map();
   private pendingStatusRequests: Map<string, Promise<UserStatus>> = new Map();
   
   // Singleton
@@ -30,7 +30,7 @@ class UserCacheService {
         (window as any).__mattermostUserCache = {
           users: new Map<string, User>(),
           statuses: new Map<string, UserStatus>(),
-          pendingUsers: new Map<string, Promise<User>>(),
+          pendingUsers: new Map<string, Promise<User | null>>(),
           pendingStatuses: new Map<string, Promise<UserStatus>>()
         };
       }
@@ -230,7 +230,7 @@ class UserCacheService {
       this.setUser(userId, user);
       
       return user;
-    } catch (error) {
+    } catch (error: unknown) {
       // Si l'utilisateur n'existe pas (404) ou autre erreur, retourner null
       if (error instanceof ApiError) {
         if (error.status === 404) {
@@ -260,7 +260,7 @@ class UserCacheService {
       this.setUserStatus(userId, status);
       
       return status;
-    } catch (error) {
+    } catch (error: unknown) {
       // Si l'utilisateur n'existe pas ou autre erreur, retourner 'offline' par défaut
       if (error instanceof ApiError) {
         if (error.status === 404) {

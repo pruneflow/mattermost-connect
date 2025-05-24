@@ -247,5 +247,17 @@ class ApiClient {
   }
 }
 
-// Export singleton instance
-export const api = new ApiClient();
+// Create singleton instance
+const apiInstance = new ApiClient();
+
+// Export only public interface to avoid private property exposure
+export const api = {
+  configure: (config: ApiClientConfig) => apiInstance.configure(config),
+  setToken: (token: string | null) => apiInstance.setToken(token),
+  getBaseUrl: () => apiInstance.getBaseUrl(),
+  isTokenExpiredError: (error: ApiError) => apiInstance.isTokenExpiredError(error),
+  get: <T>(endpoint: string, params?: Record<string, any>) => apiInstance.get<T>(endpoint, params),
+  post: <T>(endpoint: string, data?: any, params?: Record<string, any>) => apiInstance.post<T>(endpoint, data, params),
+  put: <T>(endpoint: string, data?: any, params?: Record<string, any>) => apiInstance.put<T>(endpoint, data, params),
+  delete: <T>(endpoint: string, params?: Record<string, any>) => apiInstance.delete<T>(endpoint, params),
+} as const;

@@ -588,7 +588,8 @@ export function useWebSocket() {
       if (query.state.dataUpdatedAt > mostRecentTime && query.state.data) {
         mostRecentTime = query.state.dataUpdatedAt;
         // Extract channel ID from query key
-        const channelId = query.queryKey[2]?.channelId;
+        const queryParams = query.queryKey[2] as { channelId?: string } | undefined;
+        const channelId = queryParams?.channelId;
         if (channelId) {
           mostRecentChannel = channelId;
         }
@@ -1349,7 +1350,7 @@ export function useWebSocket() {
         console.log('Handling team_member event:', event);
         const teamId = event.data?.team_id;
         if (teamId) {
-          queryClient.invalidateQueries({ queryKey: teamKeys.members(teamId) });
+          queryClient.invalidateQueries({ queryKey: [...teamKeys.detail(teamId), 'members'] });
         }
       }
     },
@@ -1380,7 +1381,7 @@ export function useWebSocket() {
         const teamId = event.data?.team_id;
         if (teamId) {
           queryClient.invalidateQueries({ queryKey: teamKeys.detail(teamId) });
-          queryClient.invalidateQueries({ queryKey: teamKeys.list });
+          queryClient.invalidateQueries({ queryKey: teamKeys.list({}) });
         }
       }
     },
@@ -1393,7 +1394,7 @@ export function useWebSocket() {
     preferences_changed: {
       handle: (event, queryClient) => {
         console.log('Handling preferences_changed event:', event);
-        queryClient.invalidateQueries({ queryKey: userKeys.preferences });
+        queryClient.invalidateQueries({ queryKey: userKeys.all });
       }
     },
     
@@ -1403,7 +1404,7 @@ export function useWebSocket() {
         console.log('Handling mention_received event:', event);
         const channelId = event.data?.channel_id;
         if (channelId) {
-          queryClient.invalidateQueries({ queryKey: unreadKeys.counts });
+          queryClient.invalidateQueries({ queryKey: unreadKeys.counts() });
           queryClient.invalidateQueries({ queryKey: messageKeys.list(channelId) });
         }
       }

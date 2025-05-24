@@ -94,18 +94,18 @@ export default function Markdown({ content }: MarkdownProps) {
     <MarkdownContainer>
       <ReactMarkdown
         components={{
-          h1: ({ node, ...props }) => <Typography variant="h5" {...props} component="h1" gutterBottom />,
-          h2: ({ node, ...props }) => <Typography variant="h6" {...props} component="h2" gutterBottom />,
-          h3: ({ node, ...props }) => <Typography variant="subtitle1" {...props} component="h3" gutterBottom />,
-          h4: ({ node, ...props }) => <Typography variant="subtitle2" {...props} component="h4" gutterBottom />,
-          h5: ({ node, ...props }) => <Typography variant="body1" {...props} component="h5" gutterBottom sx={{ fontWeight: 'bold' }} />,
-          h6: ({ node, ...props }) => <Typography variant="body2" {...props} component="h6" gutterBottom sx={{ fontWeight: 'bold' }} />,
-          p: ({ node, ...props }) => <Typography variant="body1" {...props} component="p" paragraph />,
-          a: ({ node, ...props }) => <Link {...props} target="_blank" rel="noopener" />,
-          ul: ({ node, ...props }) => <Box component="ul" {...props} sx={{ my: 1 }} />,
-          ol: ({ node, ...props }) => <Box component="ol" {...props} sx={{ my: 1 }} />,
-          li: ({ node, ...props }) => <Box component="li" {...props} />,
-          blockquote: ({ node, ...props }) => (
+          h1: ({ node, ref, ...props }) => <Typography variant="h5" {...props} component="h1" gutterBottom />,
+          h2: ({ node, ref, ...props }) => <Typography variant="h6" {...props} component="h2" gutterBottom />,
+          h3: ({ node, ref, ...props }) => <Typography variant="subtitle1" {...props} component="h3" gutterBottom />,
+          h4: ({ node, ref, ...props }) => <Typography variant="subtitle2" {...props} component="h4" gutterBottom />,
+          h5: ({ node, ref, ...props }) => <Typography variant="body1" {...props} component="h5" gutterBottom sx={{ fontWeight: 'bold' }} />,
+          h6: ({ node, ref, ...props }) => <Typography variant="body2" {...props} component="h6" gutterBottom sx={{ fontWeight: 'bold' }} />,
+          p: ({ node, ref, ...props }) => <Typography variant="body1" {...props} component="p" paragraph />,
+          a: ({ node, ref, ...props }) => <Link {...props} target="_blank" rel="noopener" />,
+          ul: ({ node, ref, ...props }) => <Box component="ul" {...props} sx={{ my: 1 }} />,
+          ol: ({ node, ref, ...props }) => <Box component="ol" {...props} sx={{ my: 1 }} />,
+          li: ({ node, ref, ...props }) => <Box component="li" {...props} />,
+          blockquote: ({ node, ref, ...props }) => (
             <Paper 
               elevation={0} 
               {...props} 
@@ -113,7 +113,7 @@ export default function Markdown({ content }: MarkdownProps) {
               sx={{ my: 1, borderLeft: 4, borderColor: 'divider', pl: 2, py: 0.5, bgcolor: 'background.default' }} 
             />
           ),
-          code: ({ node, inline, ...props }) => (
+          code: ({ node, inline, ref, ...props }: any) => (
             inline ? (
               <Box 
                 component="code" 
@@ -152,7 +152,7 @@ export default function Markdown({ content }: MarkdownProps) {
               </Paper>
             )
           ),
-          img: ({ node, ...props }) => (
+          img: ({ node, ref, ...props }) => (
             <Box 
               component="img" 
               {...props} 

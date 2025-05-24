@@ -274,7 +274,7 @@ class UserStatusService {
     // S'abonner aux changements pour cet utilisateur spécifique via WebSocketSingleton
     const unsubscribe = WebSocketSingleton.subscribeToUserStatus(userId, () => {
       // Quand le statut change, récupérer depuis le singleton de WebSocket
-      const newStatus = WebSocketSingleton.getUserStatus(userId);
+      const newStatus = WebSocketSingleton.getUserStatus(userId) as UserStatus;
       this.updateStatus(userId, newStatus);
     });
     

@@ -13,7 +13,7 @@ export const channelsCache: Record<string, Channel[]> = {};
 export const channelsLastUpdate: Record<string, number> = {};
 
 // Requêtes en cours pour éviter les requêtes dupliquées
-export const pendingChannelsRequests: Record<string, Promise<Channel[]>> = {};
+export const pendingChannelsRequests: Record<string, Promise<Channel[]> | undefined> = {};
 
 // Cache global pour mapping channelId -> teamId
 export const channelToTeamMapping: Record<string, string> = {};
@@ -345,6 +345,9 @@ export function useChannels(teamId: string | undefined) {
           // Lancer l'appel API (un seul appel sera fait par utilisateur grâce à notre système)
           getUser(otherUserId)
             .then(user => {
+              // Vérifier que l'utilisateur existe
+              if (!user) return;
+              
               // Mettre à jour React Query pour la prochaine fois
               const currentUsers = queryClient.getQueryData<User[]>(['users', 'directChannels', { teamId }]) || [];
               if (!currentUsers.some(u => u.id === user.id)) {

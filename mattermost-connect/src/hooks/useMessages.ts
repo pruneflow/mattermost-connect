@@ -4,6 +4,14 @@ import { api } from "../api/client";
 import { Message, FileInfo } from "../api/types";
 import { useAuth } from "../context/AuthContext";
 
+// Types for API responses
+interface PostsResponse {
+  order: string[];
+  posts: Record<string, Message>;
+  next_post_id?: string;
+  prev_post_id?: string;
+}
+
 // Query keys
 export const messageKeys = {
   all: ["messages"] as const,
@@ -131,7 +139,7 @@ export function useThreadMessages(
         // Use api.get instead of direct fetch
         console.debug(`Thread URL: posts/${rootId}/thread`);
 
-        const response = await api.get(`posts/${rootId}/thread`);
+        const response = await api.get<PostsResponse>(`posts/${rootId}/thread`);
         const data = response.data;
         console.debug(
           `Thread data received with ${Object.keys(data.posts || {}).length} posts`,
@@ -145,8 +153,8 @@ export function useThreadMessages(
 
         // Convert to array of messages
         const messages = order
-          .map((postId) => posts[postId])
-          .filter((post) => !!post);
+          .map((postId: string) => posts[postId])
+          .filter((post: Message) => !!post);
 
         // Find the parent message
         const parentMessage = posts[rootId];
@@ -159,9 +167,7 @@ export function useThreadMessages(
           console.debug(`Found parent message with id ${parentMessage.id}`);
 
           // Add or update reply count on parent message
-          // @ts-ignore - We're adding a dynamic property
           parentMessage.reply_count = messages.length - 1; // All messages minus parent
-          // @ts-ignore - We're adding a dynamic property
           parentMessage.has_replies = messages.length > 1;
 
           console.debug(
@@ -171,8 +177,8 @@ export function useThreadMessages(
 
         // Exclude the parent message from thread messages and sort by creation date
         const threadMessages = messages
-          .filter((message) => message.id !== rootId)
-          .sort((a, b) => a.create_at - b.create_at); // Sort chronologically (oldest first)
+          .filter((message: Message) => message.id !== rootId)
+          .sort((a: Message, b: Message) => a.create_at - b.create_at); // Sort chronologically (oldest first)
 
         console.debug(`Thread messages count: ${threadMessages.length}`, {
           messagesCount: messages.length,
@@ -196,7 +202,10 @@ export function useThreadMessages(
   });
 
   // Function to create a reply in the thread
-  const createReplyMutation = useMutation({
+  const createReplyMutation = useMutation<Message, Error, {
+    message: string;
+    fileIds?: string[];
+  }>({
     mutationFn: async ({
       message,
       fileIds,
@@ -204,7 +213,7 @@ export function useThreadMessages(
       message: string;
       fileIds?: string[];
     }) => {
-      const response = await api.post("posts", {
+      const response = await api.post<Message>("posts", {
         channel_id: channelId,
         message,
         root_id: rootId,
@@ -236,7 +245,7 @@ export function useThreadMessages(
 
           // Check if message already exists to prevent duplicates
           const messageExists = threadMessages.some(
-            (m: any) => m.id === newMessage.id,
+            (m: Message) => m.id === newMessage.id,
           );
 
           if (!messageExists) {
@@ -246,7 +255,7 @@ export function useThreadMessages(
             return {
               ...oldData,
               threadMessages: [...threadMessages, newMessage].sort(
-                (a, b) => a.create_at - b.create_at,
+                (a: Message, b: Message) => a.create_at - b.create_at,
               ), // Sort chronologically (oldest first)
             };
           }
@@ -337,7 +346,7 @@ export function useMessages(
             `useMessages: Fetching thread for root_id=${defaultParams.root_id}`,
           );
 
-          const response = await api.get(
+          const response = await api.get<PostsResponse>(
             `posts/${defaultParams.root_id}/thread`,
           );
           const data = response.data;
@@ -351,8 +360,8 @@ export function useMessages(
 
           // Convert to array of messages
           const messages = order
-            .map((postId) => posts[postId])
-            .filter((post) => !!post);
+            .map((postId: string) => posts[postId])
+            .filter((post: Message) => !!post);
 
           // Find parent message
           let parentMessage;
@@ -360,13 +369,13 @@ export function useMessages(
             parentMessage = data.posts[defaultParams.root_id];
           } else {
             parentMessage = messages.find(
-              (message) => message.id === defaultParams.root_id,
+              (message: Message) => message.id === defaultParams.root_id,
             );
           }
 
           // Filter thread messages (exclude parent)
           const threadMessages = messages.filter(
-            (message) => message.id !== defaultParams.root_id,
+            (message: Message) => message.id !== defaultParams.root_id,
           );
 
           // Attach parent message as non-enumerable property

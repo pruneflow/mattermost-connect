@@ -1,8 +1,14 @@
 import React from "react";
 import { Box, IconButton, Typography } from "@mui/material";
 import CloseIcon from '@mui/icons-material/Close';
+import { Message } from "../../api/types";
 
-export const MessageReply = ({message, handleClose}) => {
+interface MessageReplyProps {
+  message: Message;
+  handleClose: () => void;
+}
+
+export const MessageReply = ({ message, handleClose }: MessageReplyProps) => {
 
     if(!message) return null
   return (

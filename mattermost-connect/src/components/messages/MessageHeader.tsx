@@ -92,7 +92,6 @@ export function MessageHeader({
         {showAvatar && (
           <UserAvatar
             userId={userId}
-            username={username}
             size={32}
             sx={{ flexShrink: 0 }}
           />
@@ -161,9 +160,8 @@ export function MessageHeader({
       {showAvatar && (
         <UserAvatar
           userId={userId}
-          username={username}
           size={36}
-          sx={{ flexShrink: 0, mr: 1 }}
+          sx={{ flexShrink: 0, marginRight: 1 }}
         />
       )}
 

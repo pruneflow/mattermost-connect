@@ -72,6 +72,19 @@ export const UserMenu = React.memo(function UserMenu({
       onClick(event);
     }
   }, [showMenu, onClick]);
+
+  // Wrapper for UserAvatar onClick (no parameters)
+  const handleAvatarClick = useCallback(() => {
+    if (showMenu) {
+      // Create a synthetic event for setMenuAnchor
+      const element = document.createElement('div');
+      setMenuAnchor(element);
+    } else if (onClick) {
+      // Create a synthetic event for onClick
+      const syntheticEvent = {} as unknown as React.MouseEvent<HTMLElement>;
+      onClick(syntheticEvent);
+    }
+  }, [showMenu, onClick]);
   
   const handleCloseMenu = useCallback(() => {
     setMenuAnchor(null);
@@ -115,7 +128,7 @@ export const UserMenu = React.memo(function UserMenu({
       <Box sx={{ position: 'relative' }}>
         <UserAvatar
           size={size}
-          onClick={handleOpenMenu}
+          onClick={handleAvatarClick}
           showTooltip={false}
           showStatus={false}
         />
@@ -223,7 +236,7 @@ export const UserMenu = React.memo(function UserMenu({
         <UserAvatar
           user={user}
           size={size}
-          onClick={handleOpenMenu}
+          onClick={handleAvatarClick}
           showTooltip={false}
           showStatus={false}
         />

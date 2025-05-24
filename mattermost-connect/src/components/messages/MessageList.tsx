@@ -22,6 +22,7 @@ import {
 } from "@mui/icons-material";
 import { useMessages } from "../../hooks/useMessages";
 import { useUser } from "../../hooks/useUsers";
+import { Message as MessageType, MessageReaction } from "../../api/types";
 import {
   formatRelativeTime,
   formatUserName,
@@ -36,7 +37,7 @@ import Markdown from "../common/Markdown";
 export interface MessageListProps {
   channelId: string;
   currentUserId?: string;
-  onReplyMessage?: (message) => void;
+  onReplyMessage?: (message: MessageType) => void;
   onOpenThread?: (messageId: string) => void;
 }
 
@@ -282,7 +283,7 @@ export function MessageList({
                       message.metadata?.reactions
                         ? // Convert from metadata.reactions array to Record<string, string[]> format
                           message.metadata.reactions.reduce(
-                            (acc, reaction) => {
+                            (acc: Record<string, string[]>, reaction: MessageReaction) => {
                               if (!acc[reaction.emoji_name]) {
                                 acc[reaction.emoji_name] = [];
                               }

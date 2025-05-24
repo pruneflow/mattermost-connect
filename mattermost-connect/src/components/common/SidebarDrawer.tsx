@@ -121,8 +121,7 @@ export function SidebarDrawer({
       {showTeams && (
         <>
           <TeamList
-            variant="list"
-            density="compact"
+            layout="vertical"
             onSelectTeam={handleTeamSelect}
           />
           <Divider />
