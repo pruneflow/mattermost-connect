@@ -22,7 +22,9 @@ import {
   MoreVert as MoreVertIcon
 } from '@mui/icons-material';
 import { useTeams } from '../../hooks/useTeams';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import { Team } from '../../api/types';
+import { UnreadBadge } from '../common/UnreadBadge';
 
 // Initial for team avatar
 function getTeamInitials(team: Team): string {
@@ -67,6 +69,9 @@ export function TeamList({
 }: TeamListProps) {
   // Get teams
   const { teams, isLoading, error } = useTeams();
+  
+  // Get unread counts for all teams
+  const { getTeamUnreadCount } = useUnreadCounts();
   
   // Local state
   const [searchTerm, setSearchTerm] = useState('');
@@ -140,28 +145,39 @@ export function TeamList({
           minHeight: 48
         }}
       >
-        {filteredTeams.map(team => (
-          <Box
-            key={team.id}
-            sx={{
-              px: 3,
-              py: 1.5,
-              minWidth: 'fit-content',
-              textAlign: 'center',
-              color: 'white',
-              cursor: 'pointer',
-              borderBottom: selectedTeamId === team.id ? '3px solid' : '3px solid transparent',
-              fontWeight: selectedTeamId === team.id ? 'bold' : 'normal',
-              bgcolor: selectedTeamId === team.id ? 'rgba(255,255,255,0.1)' : 'transparent',
-              '&:hover': {
-                bgcolor: 'rgba(255,255,255,0.2)',
-              }
-            }}
-            onClick={() => handleTeamClick(team)}
-          >
-            {team.display_name || team.name}
-          </Box>
-        ))}
+        {filteredTeams.map(team => {
+          const unreadCount = getTeamUnreadCount(team.id);
+          const showBadge = team.id !== selectedTeamId && unreadCount > 0;
+          
+          return (
+            <Box
+              key={team.id}
+              sx={{
+                px: 3,
+                py: 1.5,
+                minWidth: 'fit-content',
+                display: 'flex',
+                alignItems: 'center',
+                color: 'white',
+                cursor: 'pointer',
+                borderBottom: selectedTeamId === team.id ? '3px solid' : '3px solid transparent',
+                fontWeight: selectedTeamId === team.id ? 'bold' : 'normal',
+                bgcolor: selectedTeamId === team.id ? 'rgba(255,255,255,0.1)' : 'transparent',
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                }
+              }}
+              onClick={() => handleTeamClick(team)}
+            >
+              {team.display_name || team.name}
+              {showBadge && (
+                <Box sx={{ ml: 1 }}>
+                  <UnreadBadge count={unreadCount} />
+                </Box>
+              )}
+            </Box>
+          );
+        })}
         
         {onCreateTeam && (
           <Box
@@ -190,22 +206,33 @@ export function TeamList({
   if (layout === 'horizontal') {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', p: 1, overflowX: 'auto' }}>
-        {filteredTeams.map(team => (
-          <Tooltip key={team.id} title={team.display_name}>
-            <Avatar 
-              sx={{ 
-                bgcolor: stringToColor(team.name),
-                m: 0.5,
-                cursor: 'pointer',
-                border: selectedTeamId === team.id ? '2px solid' : 'none',
-                borderColor: 'primary.main'
-              }}
-              onClick={() => handleTeamClick(team)}
-            >
-              {getTeamInitials(team)}
-            </Avatar>
-          </Tooltip>
-        ))}
+        {filteredTeams.map(team => {
+          const unreadCount = getTeamUnreadCount(team.id);
+          const showBadge = team.id !== selectedTeamId && unreadCount > 0;
+          
+          return (
+            <Box key={team.id} sx={{ display: 'flex', alignItems: 'center', m: 0.5 }}>
+              <Tooltip title={team.display_name}>
+                <Avatar 
+                  sx={{ 
+                    bgcolor: stringToColor(team.name),
+                    cursor: 'pointer',
+                    border: selectedTeamId === team.id ? '2px solid' : 'none',
+                    borderColor: 'primary.main'
+                  }}
+                  onClick={() => handleTeamClick(team)}
+                >
+                  {getTeamInitials(team)}
+                </Avatar>
+              </Tooltip>
+              {showBadge && (
+                <Box sx={{ ml: 0.5 }}>
+                  <UnreadBadge count={unreadCount} />
+                </Box>
+              )}
+            </Box>
+          );
+        })}
         
         {onCreateTeam && (
           <Tooltip title="Create new team">
@@ -249,44 +276,57 @@ export function TeamList({
       
       {/* Teams list */}
       <List sx={{ width: '100%' }}>
-        {filteredTeams.map(team => (
-          <ListItem 
-            key={team.id} 
-            disablePadding 
-            secondaryAction={
-              <IconButton 
-                edge="end" 
-                aria-label="team options"
-                onClick={(e) => handleMenuOpen(e, team)}
-              >
-                <MoreVertIcon />
-              </IconButton>
-            }
-          >
-            <ListItemButton 
-              selected={selectedTeamId === team.id}
-              onClick={() => handleTeamClick(team)}
+        {filteredTeams.map(team => {
+          const unreadCount = getTeamUnreadCount(team.id);
+          const showBadge = team.id !== selectedTeamId && unreadCount > 0;
+          
+          return (
+            <ListItem 
+              key={team.id} 
+              disablePadding 
+              secondaryAction={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  {showBadge && (
+                    <Box sx={{ mr: 1 }}>
+                      <UnreadBadge count={unreadCount} />
+                    </Box>
+                  )}
+                  <IconButton 
+                    edge="end" 
+                    aria-label="team options"
+                    onClick={(e) => handleMenuOpen(e, team)}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                </Box>
+              }
             >
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: stringToColor(team.name) }}>
-                  {getTeamInitials(team)}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText 
-                primary={team.display_name} 
-                secondary={team.description || 'No description'}
-                primaryTypographyProps={{
-                  noWrap: true,
-                  style: { maxWidth: '180px' }
-                }}
-                secondaryTypographyProps={{
-                  noWrap: true,
-                  style: { maxWidth: '180px' }
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
+              <ListItemButton 
+                selected={selectedTeamId === team.id}
+                onClick={() => handleTeamClick(team)}
+                sx={{ width: '100%' }}
+              >
+                <ListItemAvatar>
+                  <Avatar sx={{ bgcolor: stringToColor(team.name) }}>
+                    {getTeamInitials(team)}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText 
+                  primary={team.display_name} 
+                  secondary={team.description || 'No description'}
+                  primaryTypographyProps={{
+                    noWrap: true,
+                    style: { maxWidth: '180px' }
+                  }}
+                  secondaryTypographyProps={{
+                    noWrap: true,
+                    style: { maxWidth: '180px' }
+                  }}
+                />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
         
         {/* Create team item */}
         {onCreateTeam && (

@@ -44,6 +44,7 @@ export function MessageList({
   const [editingMessage, setEditingMessage] = useState<EditingMessage | null>(
     null,
   );
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Get messages for this channel
   const {
@@ -62,12 +63,11 @@ export function MessageList({
   // État pour suivre si nous avons récemment changé de canal
   const [recentChannelChange, setRecentChannelChange] = useState(false);
 
-  // Auto-scroll seulement quand les messages changent ET que nous ne sommes pas en train de charger
+  // Smart auto-scroll: only when user is at bottom of conversation
   useEffect(() => {
-    // On ne scrolle automatiquement que si on n'est pas en chargement
-    // et si nous avons des messages à afficher
-    if (!isLoading && !loadingMore && messages.length > 0) {
-      // Attendre que le rendu soit complet
+    // Only auto-scroll if user is at bottom AND we have messages AND not loading more older messages
+    if (!isLoading && !loadingMore && messages.length > 0 && isAtBottom) {
+      // Wait for render to complete
       const timeoutId = setTimeout(() => {
         if (messagesEndRef.current) {
           messagesEndRef.current.scrollIntoView({
@@ -75,20 +75,21 @@ export function MessageList({
             block: "end",
           });
         }
-      }, 200); // Légèrement plus long pour s'assurer que les images sont rendues
+      }, 200);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [messages.length, isLoading, loadingMore]);
+  }, [messages.length, isLoading, loadingMore, isAtBottom]);
 
-  // Effet spécifique pour le chargement initial après changement de canal
+  // Channel change effect: always scroll to bottom when switching channels
   useEffect(() => {
     if (channelId) {
       setRecentChannelChange(true);
+      setIsAtBottom(true); // Reset to bottom when changing channels
 
-      // Défiler au bas immédiatement quand le canal change, mais seulement après le chargement
+      // Scroll to bottom immediately when channel changes, but only after loading
       if (!isLoading && messages.length > 0) {
-        // Première tentative immédiate
+        // Immediate scroll
         if (messagesEndRef.current) {
           messagesEndRef.current.scrollIntoView({
             behavior: "instant",
@@ -96,7 +97,7 @@ export function MessageList({
           });
         }
 
-        // Puis plusieurs tentatives avec délai croissant pour s'assurer que tout est rendu
+        // Multiple attempts with increasing delay to ensure everything is rendered
         [300, 600, 1000].forEach((delay) => {
           setTimeout(() => {
             if (messagesEndRef.current) {
@@ -108,7 +109,7 @@ export function MessageList({
           }, delay);
         });
 
-        // Réinitialiser le drapeau après un délai
+        // Reset flag after delay
         setTimeout(() => setRecentChannelChange(false), 2000);
       }
     }
@@ -181,9 +182,13 @@ export function MessageList({
     });
   };
 
-  // Handle scroll to top to load more messages
+  // Handle scroll to track position and load more messages
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop } = e.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+
+    // Check if user is at or near bottom (within 100px)
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setIsAtBottom(isNearBottom);
 
     // Load more when scrolled near the top
     if (scrollTop < 50 && hasOlderMessages && !loadingMore && !isLoading) {

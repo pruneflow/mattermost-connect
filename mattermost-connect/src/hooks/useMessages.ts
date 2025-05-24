@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../api/client';
 import { Message, FileInfo } from '../api/types';
 import { useAuth } from '../context/AuthContext';
@@ -97,7 +97,7 @@ export function useThreadMessages(rootId: string | undefined, channelId: string 
   const [hasMore, setHasMore] = useState(false);
   
   // Define a specific query key for thread messages
-  const threadQueryKey = [...messageKeys.all, 'thread', rootId || ''];
+  const threadQueryKey = messageKeys.thread(rootId || '');
   
   // Fetch thread messages using a direct request to the thread endpoint
   const threadQuery = useQuery({
@@ -305,6 +305,26 @@ export function useMessages(channelId: string | undefined, params: MessageParams
   const queryClient = useQueryClient();
   const { user } = useAuth();
   
+  // Auto mark channel as read when channelId changes
+  React.useEffect(() => {
+    if (channelId && user?.id) {
+      // Import useUnreadCounts dynamically to avoid circular dependencies
+      import('./useUnreadCounts').then(({ unreadKeys }) => {
+        // Trigger channel_viewed to mark as read
+        const markAsRead = async () => {
+          try {
+            await api.post(`channels/members/me/view`, { channel_id: channelId });
+            console.debug(`Auto-marked channel ${channelId} as read`);
+          } catch (error) {
+            console.error(`Failed to auto-mark channel ${channelId} as read:`, error);
+          }
+        };
+        
+        markAsRead();
+      });
+    }
+  }, [channelId, user?.id]);
+  
   // Default params
   const defaultParams = {
     page: 0,
@@ -415,7 +435,7 @@ export function useMessages(channelId: string | undefined, params: MessageParams
   
   // Function to load more messages (older)
   const loadMore = async () => {
-    if (!channelId || !hasOlderMessages || loadingMore || messagesQuery.isLoading || !user?.id) {
+    if (!channelId || !hasOlderMessages || loadingMore || messagesQuery.isLoading) {
       return;
     }
     
@@ -430,19 +450,19 @@ export function useMessages(channelId: string | undefined, params: MessageParams
         const sortedMessages = [...currentMessages].sort((a, b) => a.create_at - b.create_at);
         const oldestMessage = sortedMessages[0];
         
-        // Build query parameters for older messages using unread endpoint
+        // Build query parameters for older messages using posts endpoint
         const queryParams: Record<string, any> = {
           before: oldestMessage.id,
-          limit_before: 30,
-          limit_after: 0,
+          page: 0,
+          per_page: 30,
           skipFetchThreads: false,
           collapsedThreads: true,
           collapsedThreadsExtended: false
         };
         
-        // Fetch older messages using unread endpoint
+        // Fetch older messages using posts endpoint
         const response = await api.get(
-          `users/${user.id}/channels/${channelId}/posts/unread`,
+          `channels/${channelId}/posts`,
           queryParams
         );
         
@@ -468,7 +488,7 @@ export function useMessages(channelId: string | undefined, params: MessageParams
   
   // Function to load newer messages
   const loadNewer = async () => {
-    if (!channelId || !hasNewerMessages || loadingMore || messagesQuery.isLoading || !user?.id) {
+    if (!channelId || !hasNewerMessages || loadingMore || messagesQuery.isLoading) {
       return;
     }
     
@@ -483,19 +503,19 @@ export function useMessages(channelId: string | undefined, params: MessageParams
         const sortedMessages = [...currentMessages].sort((a, b) => b.create_at - a.create_at);
         const newestMessage = sortedMessages[0];
         
-        // Build query parameters for newer messages using unread endpoint
+        // Build query parameters for newer messages using posts endpoint
         const queryParams: Record<string, any> = {
           after: newestMessage.id,
-          limit_before: 0,
-          limit_after: 30,
+          page: 0,
+          per_page: 30,
           skipFetchThreads: false,
           collapsedThreads: true,
           collapsedThreadsExtended: false
         };
         
-        // Fetch newer messages using unread endpoint
+        // Fetch newer messages using posts endpoint
         const response = await api.get(
-          `users/${user.id}/channels/${channelId}/posts/unread`,
+          `channels/${channelId}/posts`,
           queryParams
         );
         
@@ -589,7 +609,7 @@ export function useMessages(channelId: string | undefined, params: MessageParams
         );
 
         // Also update the thread query cache directly
-        const threadKey = [...messageKeys.all, 'thread', newMessage.root_id];
+        const threadKey = messageKeys.thread(newMessage.root_id);
         queryClient.setQueryData(
           threadKey,
           (oldData: any = { threadMessages: [] }) => {

@@ -7,6 +7,8 @@ import { messageKeys } from './useMessages';
 import { channelKeys } from './useChannels';
 import { userKeys } from './useUsers';
 import { teamKeys } from './useTeams';
+import { unreadKeys } from './useUnreadCounts';
+import { getTeamIdFromChannelId, markTeamAsDirty, channelsCache } from './useChannels';
 import { formatUserName } from '../utils/formatters';
 
 // Définition de l'interface pour le contexte WebSocket
@@ -29,10 +31,7 @@ interface WebSocketContextValue {
 // Création du contexte WebSocket
 const WebSocketContext = createContext<WebSocketContextValue | null>(null);
 
-// Constantes pour les clés d'invalidation de requêtes
-const unreadKeys = {
-  counts: ['unread', 'counts'],
-};
+// Note: unreadKeys is now imported from useUnreadCounts
 
 // Extraction des informations du post à partir de l'événement
 const parseEventPost = (event: WebSocketEvent) => {
@@ -188,17 +187,7 @@ export const WebSocketSingleton = (() => {
     if (wsUserStatuses[userId] !== status) {
       wsUserStatuses = { ...wsUserStatuses, [userId]: status };
       
-      // Mettre à jour le cache centralisé d'utilisateurs
-      try {
-        // Vérifier si le module userCache est disponible
-        // (éviter les erreurs d'importation circulaires)
-        const userCacheModule = require('../api/userCache');
-        if (userCacheModule && userCacheModule.userCache) {
-          userCacheModule.userCache.setUserStatus(userId, status);
-        }
-      } catch (error) {
-        // Ignorer les erreurs pour éviter les problèmes au démarrage
-      }
+      // Note: Le cache centralisé sera mis à jour via les autres hooks si nécessaire
       
       // Notifier uniquement les abonnés de cet utilisateur spécifique
       notifyUserStatusSubscribers(userId);
@@ -256,15 +245,7 @@ export const WebSocketSingleton = (() => {
       if (data && data.status) {
         updateUserStatus(userId, data.status);
         
-        // Mettre à jour également le cache centralisé
-        try {
-          const userCacheModule = require('../api/userCache');
-          if (userCacheModule && userCacheModule.userCache) {
-            userCacheModule.userCache.setUserStatus(userId, data.status);
-          }
-        } catch (error) {
-          // Ignorer les erreurs pour éviter les problèmes au démarrage
-        }
+        // Note: Le cache centralisé sera mis à jour via les autres hooks si nécessaire
         
         // Marquer comme initialisé
         wsUserStatusesInitialized.add(userId);
@@ -591,6 +572,31 @@ export function useWebSocket() {
     const forceRender = () => setRenderKey(prev => prev + 1);
     return WebSocketSingleton.subscribe(forceRender);
   }, []);
+
+  // Hook to get current active channel (from MattermostChat component state)
+  // Since there's no global state, we'll need to determine active channel from cache
+  const getCurrentActiveChannel = useCallback(() => {
+    // Try to find the most recently accessed channel from React Query cache
+    const queryCache = queryClient.getQueryCache();
+    const messageQueries = queryCache.findAll({ queryKey: ['messages', 'list'] });
+    
+    // Find the most recently fetched channel (likely the active one)
+    let mostRecentChannel = null;
+    let mostRecentTime = 0;
+    
+    messageQueries.forEach(query => {
+      if (query.state.dataUpdatedAt > mostRecentTime && query.state.data) {
+        mostRecentTime = query.state.dataUpdatedAt;
+        // Extract channel ID from query key
+        const channelId = query.queryKey[2]?.channelId;
+        if (channelId) {
+          mostRecentChannel = channelId;
+        }
+      }
+    });
+    
+    return mostRecentChannel;
+  }, [queryClient]);
   
   // États locaux synchronisés avec le singleton
   const typingEvents = WebSocketSingleton.getTypingEvents();
@@ -840,20 +846,239 @@ export function useWebSocket() {
         console.log('Handling posted event:', event);
         const post = parseEventPost(event);
         if (post?.channel_id) {
-          queryClient.invalidateQueries({ queryKey: messageKeys.list(post.channel_id) });
-          if (post.root_id) {
-            queryClient.invalidateQueries({ queryKey: messageKeys.thread(post.root_id) });
+          const currentActiveChannel = getCurrentActiveChannel();
+          
+          // Si c'est la channel active, utiliser setQueryData comme avant (pas d'incrémentation)
+          if (post.channel_id === currentActiveChannel) {
+            // Pour messages normaux (non-thread) : ajouter au cache direct
+            if (!post.root_id) {
+              queryClient.setQueryData(
+                messageKeys.list(post.channel_id),
+                (oldMessages: any[] = []) => {
+                  // Déduplication : éviter les doublons
+                  if (oldMessages.some((msg: any) => msg.id === post.id)) {
+                    return oldMessages;
+                  }
+                  // Ajouter le nouveau message et trier par date de création
+                  const updatedMessages = [...oldMessages, post];
+                  return updatedMessages.sort((a: any, b: any) => a.create_at - b.create_at);
+                }
+              );
+            } else {
+              // Pour thread replies : ajouter au cache thread ET mettre à jour le parent
+              queryClient.setQueryData(
+                messageKeys.thread(post.root_id),
+                (oldData: any = { threadMessages: [], parentMessage: null }) => {
+                  const threadMessages = oldData.threadMessages || [];
+                  if (threadMessages.some((msg: any) => msg.id === post.id)) {
+                    return oldData;
+                  }
+                  return {
+                    ...oldData,
+                    threadMessages: [...threadMessages, post].sort((a: any, b: any) => a.create_at - b.create_at)
+                  };
+                }
+              );
+              
+              // Mettre à jour le reply count du message parent dans la liste principale
+              queryClient.setQueryData(
+                messageKeys.list(post.channel_id),
+                (oldMessages: any[] = []) => {
+                  return oldMessages.map((msg: any) => {
+                    if (msg.id === post.root_id) {
+                      const updatedMsg = { ...msg };
+                      // @ts-ignore - We're adding a dynamic property
+                      updatedMsg.reply_count = ((updatedMsg.reply_count || 0) + 1);
+                      // @ts-ignore - We're adding a dynamic property
+                      updatedMsg.has_replies = true;
+                      return updatedMsg;
+                    }
+                    return msg;
+                  });
+                }
+              );
+            }
+          } else {
+            // Sinon, incrémenter les compteurs unread
+            console.log('Incrementing unread counts for non-active channel:', post.channel_id);
+            
+            // Récupérer le teamId depuis différentes sources
+            const teamId = event.data?.team_id || post.team_id || getTeamIdFromChannelId(post.channel_id);
+            
+            if (teamId) {
+              // Incrémenter channel unread count
+              queryClient.setQueryData(
+                unreadKeys.channelCounts(teamId),
+                (old: any[] = []) => {
+                  const existingIndex = old.findIndex((count: any) => count.channel_id === post.channel_id);
+                  
+                  if (existingIndex >= 0) {
+                    const updated = [...old];
+                    updated[existingIndex] = {
+                      ...updated[existingIndex],
+                      msg_count: updated[existingIndex].msg_count + 1,
+                    };
+                    return updated;
+                  } else {
+                    return [...old, {
+                      channel_id: post.channel_id,
+                      team_id: teamId,
+                      msg_count: 1,
+                      mention_count: 0,
+                    }];
+                  }
+                }
+              );
+
+              // Incrémenter team unread count
+              queryClient.setQueryData(
+                unreadKeys.counts(),
+                (old: any[] = []) => {
+                  const existingIndex = old.findIndex((count: any) => count.team_id === teamId);
+                  
+                  if (existingIndex >= 0) {
+                    const updated = [...old];
+                    updated[existingIndex] = {
+                      ...updated[existingIndex],
+                      msg_count: updated[existingIndex].msg_count + 1,
+                    };
+                    return updated;
+                  } else {
+                    return [...old, {
+                      team_id: teamId,
+                      msg_count: 1,
+                      mention_count: 0,
+                    }];
+                  }
+                }
+              );
+              console.log('Successfully incremented unread counts for team:', teamId, 'channel:', post.channel_id);
+            } else {
+              console.warn('Could not determine teamId for channel:', post.channel_id, 'skipping unread count increment');
+            }
           }
         }
       }
     },
     
     post_edited: {
-      handle: (event, queryClient) => eventHandlers.posted.handle(event, queryClient)
+      handle: (event, queryClient) => {
+        console.log('Handling post_edited event:', event);
+        const post = parseEventPost(event);
+        if (post?.channel_id) {
+          // Pour messages normaux : mettre à jour dans le cache
+          if (!post.root_id) {
+            queryClient.setQueryData(
+              messageKeys.list(post.channel_id),
+              (oldMessages: any[] = []) => {
+                return oldMessages.map((msg: any) => 
+                  msg.id === post.id ? { ...msg, ...post } : msg
+                );
+              }
+            );
+          } else {
+            // Pour thread replies : mettre à jour dans le cache thread
+            queryClient.setQueryData(
+              messageKeys.thread(post.root_id),
+              (oldData: any = { threadMessages: [], parentMessage: null }) => {
+                const threadMessages = oldData.threadMessages || [];
+                const updatedThreadMessages = threadMessages.map((msg: any) => 
+                  msg.id === post.id ? { ...msg, ...post } : msg
+                );
+                return {
+                  ...oldData,
+                  threadMessages: updatedThreadMessages
+                };
+              }
+            );
+          }
+        }
+      }
     },
     
     post_deleted: {
-      handle: (event, queryClient) => eventHandlers.posted.handle(event, queryClient)
+      handle: (event, queryClient) => {
+        console.log('Handling post_deleted event:', event);
+        const post = parseEventPost(event);
+        if (post?.channel_id) {
+          const currentActiveChannel = getCurrentActiveChannel();
+          
+          // Si c'est la channel active, utiliser setQueryData comme avant (pas de décrémentation)
+          if (post.channel_id === currentActiveChannel) {
+            // Pour messages normaux : supprimer du cache
+            if (!post.root_id) {
+              queryClient.setQueryData(
+                messageKeys.list(post.channel_id),
+                (oldMessages: any[] = []) => {
+                  return oldMessages.filter((msg: any) => msg.id !== post.id);
+                }
+              );
+            } else {
+              // Pour thread replies : supprimer du cache thread ET décrémenter reply count
+              queryClient.setQueryData(
+                messageKeys.thread(post.root_id),
+                (oldData: any = { threadMessages: [], parentMessage: null }) => {
+                  const threadMessages = oldData.threadMessages || [];
+                  const filteredThreadMessages = threadMessages.filter((msg: any) => msg.id !== post.id);
+                  return {
+                    ...oldData,
+                    threadMessages: filteredThreadMessages
+                  };
+                }
+              );
+              
+              // Décrémenter le reply count du message parent
+              queryClient.setQueryData(
+                messageKeys.list(post.channel_id),
+                (oldMessages: any[] = []) => {
+                  return oldMessages.map((msg: any) => {
+                    if (msg.id === post.root_id) {
+                      const updatedMsg = { ...msg };
+                      // @ts-ignore - We're adding a dynamic property
+                      updatedMsg.reply_count = Math.max(0, (updatedMsg.reply_count || 1) - 1);
+                      // @ts-ignore - We're adding a dynamic property
+                      updatedMsg.has_replies = updatedMsg.reply_count > 0;
+                      return updatedMsg;
+                    }
+                    return msg;
+                  });
+                }
+              );
+            }
+          } else {
+            // Sinon, décrémenter les compteurs unread
+            console.log('Decrementing unread counts for deleted message in non-active channel:', post.channel_id);
+            
+            // Récupérer le teamId depuis différentes sources
+            const teamId = event.data?.team_id || post.team_id || getTeamIdFromChannelId(post.channel_id);
+            
+            if (teamId) {
+              // Décrémenter channel unread count
+              queryClient.setQueryData(
+                unreadKeys.channelCounts(teamId),
+                (old: any[] = []) => old.map((count: any) => 
+                  count.channel_id === post.channel_id && count.msg_count > 0
+                    ? { ...count, msg_count: count.msg_count - 1 }
+                    : count
+                )
+              );
+
+              // Décrémenter team unread count
+              queryClient.setQueryData(
+                unreadKeys.counts(),
+                (old: any[] = []) => old.map((count: any) => 
+                  count.team_id === teamId && count.msg_count > 0
+                    ? { ...count, msg_count: count.msg_count - 1 }
+                    : count
+                )
+              );
+              console.log('Successfully decremented unread counts for team:', teamId, 'channel:', post.channel_id);
+            } else {
+              console.warn('Could not determine teamId for channel:', post.channel_id, 'skipping unread count decrement');
+            }
+          }
+        }
+      }
     },
     
     // Canaux
@@ -863,27 +1088,18 @@ export function useWebSocket() {
         const { team_id, channel_id } = event.data || {};
         
         if (team_id) {
-          try {
-            // Importer dynamiquement pour éviter les dépendances circulaires
-            const { markTeamAsDirty, channelsCache } = require('./useChannels');
-            
-            // Obtenir l'ID d'équipe actuellement affichée
-            // Nous détectons l'équipe active en regardant les données actuellement en cache
-            const activeTeamIds = Object.keys(channelsCache);
-            
-            if (activeTeamIds.includes(team_id)) {
-              // Si c'est l'équipe actuelle, invalider les requêtes immédiatement
-              console.log(`Channel event on current team ${team_id}, invalidating queries`);
-              queryClient.invalidateQueries({ queryKey: channelKeys.list(team_id) });
-            } else {
-              // Si c'est une autre équipe, marquer comme "dirty" pour refetch futur
-              console.log(`Channel event on other team ${team_id}, marking team as dirty`);
-              markTeamAsDirty(team_id);
-            }
-          } catch (error) {
-            // Fallback au comportement précédent en cas d'erreur
-            console.error('Error in channel event handler:', error);
+          // Obtenir l'ID d'équipe actuellement affichée
+          // Nous détectons l'équipe active en regardant les données actuellement en cache
+          const activeTeamIds = Object.keys(channelsCache);
+          
+          if (activeTeamIds.includes(team_id)) {
+            // Si c'est l'équipe actuelle, invalider les requêtes immédiatement
+            console.log(`Channel event on current team ${team_id}, invalidating queries`);
             queryClient.invalidateQueries({ queryKey: channelKeys.list(team_id) });
+          } else {
+            // Si c'est une autre équipe, marquer comme "dirty" pour refetch futur
+            console.log(`Channel event on other team ${team_id}, marking team as dirty`);
+            markTeamAsDirty(team_id);
           }
         }
         
@@ -1189,6 +1405,58 @@ export function useWebSocket() {
         if (channelId) {
           queryClient.invalidateQueries({ queryKey: unreadKeys.counts });
           queryClient.invalidateQueries({ queryKey: messageKeys.list(channelId) });
+        }
+      }
+    },
+
+    // Channel viewed (mark as read)
+    channel_viewed: {
+      handle: (event, queryClient) => {
+        console.log('Handling channel_viewed event:', event);
+        const channelId = event.data?.channel_id;
+        if (channelId) {
+          console.log('Handling channel_viewed for channel:', channelId);
+          
+          // Récupérer le teamId depuis l'événement ou en utilisant le mapping
+          const teamId = event.data?.team_id || getTeamIdFromChannelId(channelId);
+          
+          if (teamId) {
+            // Récupérer le channel count actuel pour ajuster le team count
+            let currentChannelCount = 0;
+            const channelData = queryClient.getQueryData<any[]>(unreadKeys.channelCounts(teamId));
+            if (channelData) {
+              const channelUnread = channelData.find((c: any) => c.channel_id === channelId);
+              currentChannelCount = channelUnread?.msg_count || 0;
+            }
+
+            // Reset channel unread count
+            queryClient.setQueryData(
+              unreadKeys.channelCounts(teamId),
+              (old: any[] = []) => old.map((count: any) => 
+                count.channel_id === channelId 
+                  ? { ...count, msg_count: 0, mention_count: 0 }
+                  : count
+              )
+            );
+
+            // Ajuster team unread count en soustrayant le count du channel
+            if (currentChannelCount > 0) {
+              queryClient.setQueryData(
+                unreadKeys.counts(),
+                (old: any[] = []) => old.map((count: any) => 
+                  count.team_id === teamId 
+                    ? { 
+                        ...count, 
+                        msg_count: Math.max(0, count.msg_count - currentChannelCount)
+                      }
+                    : count
+                )
+              );
+              console.log('Successfully reset unread counts for channel:', channelId, 'team:', teamId, 'previous count:', currentChannelCount);
+            }
+          } else {
+            console.warn('Could not determine teamId for channel_viewed event:', channelId);
+          }
         }
       }
     },

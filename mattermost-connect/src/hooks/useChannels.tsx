@@ -15,6 +15,9 @@ export const channelsLastUpdate: Record<string, number> = {};
 // Requêtes en cours pour éviter les requêtes dupliquées
 export const pendingChannelsRequests: Record<string, Promise<Channel[]>> = {};
 
+// Cache global pour mapping channelId -> teamId
+export const channelToTeamMapping: Record<string, string> = {};
+
 // Liste des équipes dont les canaux ont été modifiés pendant qu'on n'y était pas
 export const dirtyTeams = new Set<string>();
 
@@ -27,6 +30,22 @@ export function markTeamAsDirty(teamId: string): void {
   if (teamId) {
     dirtyTeams.add(teamId);
   }
+}
+
+/**
+ * Met à jour le mapping channelId -> teamId pour une liste de channels
+ */
+export function updateChannelToTeamMapping(channels: Channel[], teamId: string): void {
+  channels.forEach(channel => {
+    channelToTeamMapping[channel.id] = teamId;
+  });
+}
+
+/**
+ * Récupère le teamId depuis un channelId
+ */
+export function getTeamIdFromChannelId(channelId: string): string | undefined {
+  return channelToTeamMapping[channelId];
 }
 
 /**
@@ -61,6 +80,9 @@ export async function getChannels(teamId: string, force: boolean = false): Promi
       // Mettre à jour le cache
       channelsCache[teamId] = channels;
       channelsLastUpdate[teamId] = Date.now();
+      
+      // Mettre à jour le mapping channelId -> teamId
+      updateChannelToTeamMapping(channels, teamId);
       
       // Nettoyer la promesse en cours
       delete pendingChannelsRequests[teamId];

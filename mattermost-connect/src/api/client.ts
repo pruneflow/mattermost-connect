@@ -199,7 +199,9 @@ class ApiClient {
         );
         
         // N'appeler le gestionnaire d'erreur global que si ce n'est pas une erreur de token expiré
-        if (this.onErrorHandler && !this.isTokenExpiredError(error)) {
+        // ou une erreur 404 sur un endpoint users (utilisateur non trouvé)
+        const isUserNotFoundError = error.status === 404 && endpoint.includes('users/');
+        if (this.onErrorHandler && !this.isTokenExpiredError(error) && !isUserNotFoundError) {
           this.onErrorHandler(error);
         }
         

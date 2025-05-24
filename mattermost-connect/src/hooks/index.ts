@@ -10,3 +10,4 @@ export * from './useTypingEventsForChannel';
 export * from './useUserAvatar';
 export * from './useFile';
 export * from './useLayout';
+export * from './useUnreadCounts';

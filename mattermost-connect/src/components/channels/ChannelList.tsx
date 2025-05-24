@@ -26,8 +26,9 @@ import {
   AlternateEmail as MentionsIcon
 } from '@mui/icons-material';
 import { useChannels } from '../../hooks/useChannels';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import { Channel } from '../../api/types';
-import ChannelTypingIndicator from '../common/ChannelTypingIndicator';
+import ChannelIndicators from '../common/ChannelIndicators';
 import StatusIndicator from '../common/StatusIndicator';
 
 export interface ChannelListProps {
@@ -47,6 +48,9 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     isLoading,
     getDirectChannelInfo
   } = useChannels(teamId);
+  
+  // Get unread counts for channels in this team
+  const { getChannelUnreadCount } = useUnreadCounts(teamId);
   
   // Status pour le tri des canaux directs
   const statusOrder = { online: 0, away: 1, dnd: 2, offline: 3 };
@@ -174,6 +178,9 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
     const directInfo = isDirectMsg ? getDirectChannelInfo(channel.id) : null;
     const otherUserId = directInfo?.otherUserId;
     
+    // Get unread count for this channel
+    const unreadCount = getChannelUnreadCount(channel.id);
+    
     return (
       <ListItem key={channel.id} disablePadding dense>
         <ListItemButton
@@ -184,6 +191,7 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
             borderRadius: 1,
             mx: 0.5,
             pl: isDirectMsg ? 1 : 2, // Moins de padding à gauche pour les DM pour l'indicateur de statut
+            width: '100%',
             '&.Mui-selected': {
               bgcolor: 'action.selected',
               '&:hover': {
@@ -216,16 +224,17 @@ export function ChannelList({ teamId, onSelectChannel, selectedChannelId }: Chan
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                   fontSize: '0.9rem',
-                  fontWeight: channel.unread_messages_count ? 600 : 400, // Mettre en gras si messages non lus
+                  fontWeight: unreadCount > 0 ? 600 : 400, // Use our unread count instead
                   color: theme => 
-                    channel.unread_messages_count 
+                    unreadCount > 0
                       ? theme.palette.text.primary 
                       : theme.palette.text.secondary
                 }
               }
             }}
           />
-          <ChannelTypingIndicator channelId={channel.id} />
+          
+          <ChannelIndicators channelId={channel.id} unreadCount={unreadCount} />
         </ListItemButton>
       </ListItem>
     );
