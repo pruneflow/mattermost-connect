@@ -28,33 +28,13 @@ export interface EntitiesState {
   };
 }
 
-// Restore user from localStorage if exists
-const getInitialUserState = () => {
-  try {
-    const userJson = localStorage.getItem('mattermostUser');
-    if (userJson) {
-      const user = JSON.parse(userJson);
-      return {
-        currentUserId: user.id,
-        profiles: { [user.id]: user },
-        profilesInChannel: {},
-        statuses: {},
-      };
-    }
-  } catch (error) {
-    console.warn('Failed to restore user from localStorage:', error);
-  }
-  
-  return {
+const initialState: EntitiesState = {
+  users: {
     currentUserId: '',
     profiles: {},
     profilesInChannel: {},
     statuses: {},
-  };
-};
-
-const initialState: EntitiesState = {
-  users: getInitialUserState(),
+  },
   teams: {
     currentTeamId: '',
     teams: {},

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
   List,
@@ -49,21 +49,21 @@ export const TeamList: React.FC<TeamListProps> = ({
 
   const filteredTeams = filterTeams(teams, searchTerm);
 
-  const handleTeamClick = (team: Team) => {
+  const handleTeamClick = useCallback((team: Team) => {
     if (onTeamSelect) {
       onTeamSelect(team);
     }
-  };
+  }, [onTeamSelect]);
 
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
-  };
+  }, []);
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, team: Team) => {
+  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>, team: Team) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
     setSelectedTeamForMenu(team);
-  };
+  }, []);
 
   const handleMenuClose = () => {
     setMenuAnchorEl(null);

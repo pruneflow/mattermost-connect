@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Provider } from 'react-redux';
+import { Box } from '@mui/material';
 import { 
   store,
   LoginForm, 
@@ -26,45 +27,6 @@ const Phase2Demo: React.FC = () => {
     }
   }, [currentUser, loadTeams, loadUsers]);
 
-  const demoStyle: React.CSSProperties = {
-    padding: '20px',
-    backgroundColor: '#fff',
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    margin: '20px auto',
-    maxWidth: '800px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-  };
-
-  const headerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '20px',
-    padding: '16px',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '6px',
-  };
-
-  const userInfoStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  };
-
-  const contentStyle: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '20px',
-    marginTop: '20px',
-  };
-
-  const sectionStyle: React.CSSProperties = {
-    padding: '16px',
-    border: '1px solid #e0e0e0',
-    borderRadius: '6px',
-    backgroundColor: '#fafafa',
-  };
 
   const handleTeamSelect = (team: any) => {
     setSelectedTeamId(team.id);
@@ -72,10 +34,30 @@ const Phase2Demo: React.FC = () => {
   };
 
   return (
-    <div style={demoStyle}>
+    <Box sx={{
+      p: 2.5,
+      backgroundColor: '#fff',
+      border: '1px solid #ddd',
+      borderRadius: 2,
+      margin: '20px auto',
+      maxWidth: '800px',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    }}>
       {/* Header with User Info */}
-      <div style={headerStyle}>
-        <div style={userInfoStyle}>
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        mb: 2.5,
+        p: 2,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 1,
+      }}>
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+        }}>
           <UserAvatar user={currentUser} size="medium" />
           <div>
             <div style={{ fontWeight: 'bold' }}>
@@ -85,19 +67,29 @@ const Phase2Demo: React.FC = () => {
               @{currentUser?.username}
             </div>
           </div>
-        </div>
+        </Box>
         <UserMenu 
           user={currentUser} 
           onLogout={logout}
           size="medium"
           showStatus={true}
         />
-      </div>
+      </Box>
 
       {/* Phase 2 Components Demo */}
-      <div style={contentStyle}>
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 2.5,
+        mt: 2.5,
+      }}>
         {/* Teams Section */}
-        <div style={sectionStyle}>
+        <Box sx={{
+          p: 2,
+          border: '1px solid #e0e0e0',
+          borderRadius: 1,
+          backgroundColor: '#fafafa',
+        }}>
           <h3 style={{ marginTop: 0, color: '#333' }}>Teams</h3>
           {teams && teams.length > 0 ? (
             <TeamList 
@@ -111,10 +103,15 @@ const Phase2Demo: React.FC = () => {
               Loading teams...
             </div>
           )}
-        </div>
+        </Box>
 
         {/* Current Team Info */}
-        <div style={sectionStyle}>
+        <Box sx={{
+          p: 2,
+          border: '1px solid #e0e0e0',
+          borderRadius: 1,
+          backgroundColor: '#fafafa',
+        }}>
           <h3 style={{ marginTop: 0, color: '#333' }}>Current Team</h3>
           {currentTeam ? (
             <div>
@@ -131,9 +128,9 @@ const Phase2Demo: React.FC = () => {
           ) : (
             <div style={{ color: '#666' }}>No team selected</div>
           )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 
