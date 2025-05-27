@@ -2,121 +2,207 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Gouvernance et Règles Techniques
+
+**OBLIGATOIRE** : Suivre systématiquement les principes définis dans :
+- `RULES.md` - Règles de gouvernance générales
+- `BonnesPratiques.md` - Standards techniques pour applications web
+
+## Mode d'Interaction : Sparring Partner Technique
+
+**Objectif** : Être un partenaire intellectuel qui aide à trouver les MEILLEURES solutions tout en respectant les bonnes pratiques.
+
+**Méthode** : Pour chaque proposition/idée :
+1. **Analyser les assumptions** - Qu'est-ce qui est pris pour acquis ?
+2. **Évaluer la conformité** - La solution respecte-t-elle les règles RULES.md et BonnesPratiques.md ?
+3. **Proposer des alternatives** - Comment mieux implémenter dans le cadre des contraintes ?
+4. **Questionner l'approche** - Y a-t-il des failles ou des optimisations possibles ?
+5. **Prioriser la qualité** - Corriger clairement si l'approche viole les bonnes pratiques
+
+**Principe directeur** : Le questionnement critique au SERVICE des bonnes pratiques, pas contre elles.
+
+## Règle de Refactoring Intelligent
+
+**OBLIGATOIRE** : Si un refactor (même minime) est nécessaire, ne pas hésiter. Ne pas ajouter de la complexité sous prétexte qu'on doit "corriger".
+
+**Méthode** :
+1. **Analyser le problème en profondeur** - Pourquoi ça ne marche pas vraiment ?
+2. **Rechercher Mattermost officiel** - Comment c'est fait côté source officiel ?
+3. **Réfléchir avant de corriger** - Quelle est la VRAIE solution architecturale ?
+4. **Refactorer proprement** - Quitte à refaire des fichiers entiers si nécessaire
+5. **Éviter les patchs** - Une solution simple et élégante vaut mieux qu'un hack complexe
+
+**Principe** : Mieux vaut refaire correctement que maintenir du code bancal.
+
+---
+
 ## Project Overview
 
-MattermostConnect is a modern React component library for integrating Mattermost features into any web application. It's built with Material-UI and TypeScript, providing a flexible way to embed Mattermost communication features in third-party applications.
+MattermostConnect est une librairie de composants React moderne pour intégrer les fonctionnalités Mattermost dans n'importe quelle application web. L'objectif est de **reproduire exactement** l'expérience Mattermost native tout en respectant nos contraintes architecturales.
 
-The library offers two integration modes:
-- **Direct Mode**: Connect directly with a Mattermost server using a user token
-- **Proxy Mode**: Connect via an intermediary service
+### Objectifs de Qualité
 
-## Building and Development Commands
+**Performance Parfaite** :
+- Temps réel fluide via WebSocket optimisé
+- Éviter les appels API redondants
+- Lazy loading intelligent
+- Gestion d'état efficace sans sur-ingénierie
+
+**Fidélité à Mattermost** :
+- **TOUJOURS** vérifier sur le web comment Mattermost implémente une fonctionnalité
+- Reproduire le comportement exact (UX, interactions, temps réel)
+- Maintenir la compatibilité avec l'API Mattermost officielle
+
+**Contraintes Architecturales** :
+- Rester SIMPLE : pas de Redux, pas de grosses dépendances
+- Composants autonomes et réutilisables
+- WebSocket géré de façon centralisée et optimisée
+- Gestion d'état légère (Context + useState/useReducer)
+
+### Modes d'Intégration
+
+- **Direct Mode** : Connexion directe avec serveur Mattermost (token utilisateur)
+- **Proxy Mode** : Connexion via service intermédiaire
+
+---
+
+## Architecture Technique
+
+### Structure du Code
+
+- **src/components/** : Composants UI réutilisables (auth, channels, messages, teams)
+- **src/hooks/** : Hooks React pour chaque fonctionnalité
+- **src/api/** : Client API et utilitaires
+- **src/context/** : Contextes React pour état global
+- **src/utils/** : Fonctions utilitaires
+
+### Gestion Temps Réel
+
+**WebSocket Strategy** :
+- Connexion unique centralisée
+- Event dispatch optimisé
+- Reconnexion automatique intelligente
+- Throttling pour événements haute fréquence
+
+### Gestion d'État
+
+**Principe** : État local quand possible, global quand nécessaire
+- React Query pour cache serveur
+- Context API pour état global simple
+- useState/useReducer pour logique locale
+- **ÉVITER** Redux et autres solutions lourdes
+
+---
+
+## Commandes de Développement
 
 ```bash
-# Install dependencies
+# Installation
 pnpm install
 
-# Build the library
+# Build de la librairie
 pnpm run build
 
-# Development mode with watch
+# Mode développement avec watch
 pnpm run dev
 
-# Clean build artifacts
+# Nettoyage
 pnpm run clean
 
-# Run linting
+# Qualité du code
 pnpm run lint
-
-# Format code
 pnpm run format
-
-# Type checking
 pnpm run typecheck
-
-# Run tests
 pnpm run test
 
-# Run demo application
+# Application de démo
 pnpm run demo
 ```
 
-## Demo Application
-
-The demo application shows example usage of the component library. To run it:
+### Demo Application
 
 ```bash
-# First build the main library
+# Build principal + démo
 pnpm run build
-
-# Install demo dependencies
 cd examples/demo
 pnpm install
-
-# Start the demo
 pnpm start
+
+# Développement (2 terminaux)
+# Terminal 1 (root) : pnpm run dev
+# Terminal 2 (demo) : pnpm start
 ```
 
-For development, use two terminals:
-1. In the root directory: `pnpm run dev`
-2. In examples/demo: `pnpm start`
+---
 
-## Architecture
+## Workflow de Développement
 
-### Core Structure
+### Recherche et Implémentation
 
-- **src/**: Main source code
-  - **components/**: React UI components for users, teams, channels, messages
-  - **core/**: Core functionality 
-    - **api/**: API client, queries, and utilities
-    - **services/**: Service implementations for auth, channels, messages, etc.
-    - **store/**: State management with various stores
-  - **hooks/**: React hooks for different features (auth, channels, messages, teams, users, etc.)
-  - **internal/**: Internal implementation details
-    - **components/**: UI components implementations
-    - **containers/**: Container components
-    - **hooks/**: Internal hooks
-    - **providers/**: Context providers
-    - **theme/**: Theme configuration
-  - **providers/**: Public provider components
-  - **types/**: TypeScript type definitions
-  - **utils/**: Utility functions
+1. **Analyser Mattermost officiel** - Comment la fonctionnalité est-elle implémentée ?
+2. **Identifier les patterns** - APIs utilisées, événements WebSocket, comportements UX
+3. **Adapter à notre architecture** - Respecter nos contraintes de simplicité
+4. **Optimiser performance** - Minimiser les appels, optimiser le temps réel selon le pattern intelligent :
+   - **Unread counts** : Un seul API initial → WebSocket sync uniquement  
+   - **Messages contextuels** : Fetch initial avec `/api/v4/users/{user_id}/channels/{channel_id}/posts/unread?limit_before=30&limit_after=30` → pagination classique → WebSocket conditionnel
+   - **Stratégie lazy** : Fetch channel uniquement quand l'utilisateur y accède
+5. **Tester dans la démo** - Vérifier que l'expérience est identique
 
-### Key Components
+### Validation Qualité
 
-The library exposes components for:
-- Authentication and user management
-- Team selection and management
-- Channel listing and viewing
-- Messaging and attachments
-- Notifications
+- Exécuter `pnpm run typecheck` et `pnpm run lint` avant commit
+- Tester les changements dans l'application de démo
+- Vérifier les performances (pas de calls excessifs)
+- S'assurer de la compatibilité avec l'API Mattermost
 
-### Data Flow
+---
 
-1. **MattermostProvider**: Top-level provider that manages connections and state
-2. **Service Layer**: Handles communication with Mattermost servers
-3. **Hooks Layer**: Exposes React hooks for components
-4. **Component Layer**: UI components that use hooks and services
+## **Endpoints API Mattermost Utilisés**
 
-### State Management
+### **Posts et Pagination**
+```http
+# Initial fetch contextuel (autour du dernier non-lu)
+GET /api/v4/users/{user_id}/channels/{channel_id}/posts/unread?limit_before=30&limit_after=30
 
-State is managed through a combination of:
-- React Query for server state
-- Zustand for local state management
-- Custom hooks for specific features
+# Pagination classique ensuite  
+GET /api/v4/channels/{channel_id}/posts?before={post_id}  # Messages plus anciens
+GET /api/v4/channels/{channel_id}/posts?after={post_id}   # Messages plus récents
+```
 
-## Working with the Codebase
+### **Unread Counts**
+```http
+# Compteurs globaux (refresh unique au démarrage)
+GET /api/v4/users/{user_id}/teams/unread
 
-When making changes:
+# Informations channel spécifique
+GET /api/v4/users/{user_id}/channels/{channel_id}/unread
+```
 
-1. Consider which integration mode (Direct or Proxy) your changes affect
-2. Check for existing patterns in similar components
-3. Use the existing hook structure for data fetching and state management
-4. Run typecheck and lint before submitting changes
-5. Test changes in the demo application
+### **WebSocket Events**
+- `posted` → Increment unread count + add message (si channel fetched)
+- `channel_viewed` → Reset unread count à 0  
+- `post_deleted` → Remove from cache
+- `post_updated` → Update in cache
 
-For new components:
-1. Create UI components in the appropriate subfolder of `src/internal/components/`
-2. Create containers in `src/internal/containers/`
-3. Export public components from `src/components/`
-4. Update the exports in the feature's index.ts and the root index.ts
+**Principe fondamental** : Chaque fonctionnalité doit fonctionner exactement comme dans Mattermost, mais avec notre code simple et performant.
+
+---
+
+## **📋 SUIVI OPÉRATIONNEL**
+
+### **Journal de Bord Obligatoire**
+
+**🚨 PROTOCOLE IMPÉRATIF :**
+1. **Première action de chaque session** : Consulter `JOURNAL.md` pour connaître l'état exact des tâches
+2. **Mise à jour temps réel** : Le journal DOIT être maintenu avec une précision exemplaire à chaque étape
+3. **Recherche officielle obligatoire** : Avant tout développement, vérifier sources et documentation Mattermost officielles
+4. **Traçabilité complète** : Chaque modification, recherche, et décision documentée dans le journal
+
+**Voir → `JOURNAL.md`** pour :
+- État précis de toutes les tâches en cours
+- Problèmes identifiés avec localisation exacte des fichiers/lignes
+- Solutions techniques validées avec sources Mattermost officielles
+- Protocoles de développement et de nettoyage
+- Historique détaillé des sessions de travail
+
+**Exigence de précision** : Le journal doit contenir un niveau de détail permettant à n'importe quel développeur de reprendre le travail exactement où il a été interrompu, sans perte d'information ni re-analyse nécessaire.

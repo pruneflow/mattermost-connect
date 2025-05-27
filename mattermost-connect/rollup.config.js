@@ -16,7 +16,7 @@ const pkg = JSON.parse(
 export default [
   // JavaScript/TypeScript build
   {
-    input: "src/index.tsx",
+    input: "src/index.ts",
     output: [
       {
         file: pkg.main,
@@ -31,16 +31,16 @@ export default [
     ],
     plugins: [
       peerDepsExternal(), // Automatically externalize peerDependencies
+      typescript({
+        tsconfig: "./tsconfig.json",
+        exclude: ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx", "node_modules/**"],
+        noEmitOnError: false,
+      }),
       resolve({
         extensions: [".js", ".jsx", ".ts", ".tsx"],
       }),
       commonjs(),
       json(),
-      typescript({
-        tsconfig: "./tsconfig.json",
-        exclude: ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
-        noEmitOnError: false, // Ne pas arrêter le build en cas d'erreur TypeScript
-      }),
       terser(), // Minify the output
     ],
     external: [

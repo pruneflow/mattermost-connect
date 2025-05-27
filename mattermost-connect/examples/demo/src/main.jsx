@@ -1,8 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import App from "./App"; // Main application with authentication flow
-import MattermostDemo from "./MattermostDemo"; // New component implementation
+// import App from "./App"; // Commented out - uses old MattermostProvider
+// import MattermostDemo from "./MattermostDemo"; // Commented out - uses old API
+import ReduxDemo from "./ReduxDemo"; // Phase 1 Redux demo
 import "./index.css";
 
 
@@ -10,12 +11,17 @@ import "./index.css";
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <App />,
+    element: <ReduxDemo />, // Use Redux demo for Phase 1
   },
-  {
-    path: '/demo',
-    element: <MattermostDemo />,
-  }
+  // Commented out old routes that use deprecated MattermostProvider
+  // {
+  //   path: '/old',
+  //   element: <App />, // Original app
+  // },
+  // {
+  //   path: '/demo',
+  //   element: <MattermostDemo />,
+  // }
 ]);
 
 // Create root and render

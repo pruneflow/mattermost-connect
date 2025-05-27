@@ -1,263 +1,202 @@
-/**
- * Simple API client for Mattermost
- * Handles direct server communication and authentication
- */
+// Simple API client inspired by Mattermost Client4
+// Complements RTK Query for direct API calls when needed
 
-// Basic response type for API calls
-export interface ApiResponse<T> {
-  data: T;
-  headers: Record<string, string>;
-  status: number;
-}
+import { APIError } from './types';
 
-// API client configuration
-export interface ApiClientConfig {
+export interface MattermostClientConfig {
   serverUrl: string;
-  token?: string | null;
-  clientId?: string;
-  onError?: (error: any) => void;
+  token?: string;
 }
 
-// API client error with status code
-export class ApiError extends Error {
-  status: number;
-  data?: any;
-  
-  constructor(message: string, status: number, data?: any) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.data = data;
-  }
-}
-
-/**
- * Simplified API client for Mattermost
- */
-class ApiClient {
-  private baseUrl: string = '';
+export class MattermostClient {
+  public serverUrl: string;
   private token: string | null = null;
-  private clientId: string | null = null;
-  private onErrorHandler?: (error: any) => void;
-  
-  /**
-   * Vérifie si l'erreur est due à un token expiré
-   */
-  isTokenExpiredError(error: ApiError): boolean {
-    if (error.status !== 401) return false;
-    
-    // Vérifier les messages d'erreur courants pour les tokens expirés
-    const message = (error.data?.message || error.message || '').toLowerCase();
-    
-    return (
-      message.includes('token is expired') || 
-      message.includes('token has expired') || 
-      message.includes('invalid token') || 
-      message.includes('token invalid') ||
-      message.includes('session expirée') ||
-      message.includes('session expiré')
-    );
+
+  constructor(config: MattermostClientConfig) {
+    this.serverUrl = config.serverUrl.replace(/\/$/, ''); // Remove trailing slash
+    this.token = config.token || null;
   }
 
-  /**
-   * Configure the API client
-   */
-  configure(config: ApiClientConfig): void {
-    this.baseUrl = config.serverUrl.endsWith('/') 
-      ? config.serverUrl.slice(0, -1) 
-      : config.serverUrl;
-    
-    if (config.token) {
-      this.token = config.token;
-    }
-    
-    if (config.clientId) {
-      this.clientId = config.clientId;
-    }
-    
-    if (config.onError) {
-      this.onErrorHandler = config.onError;
-    }
-  }
-
-  /**
-   * Set authentication token
-   */
-  setToken(token: string | null): void {
+  setToken(token: string) {
     this.token = token;
   }
 
-  /**
-   * Get current base URL
-   */
-  getBaseUrl(): string {
-    return this.baseUrl;
+  getToken(): string | null {
+    return this.token;
   }
 
-  /**
-   * Perform GET request
-   */
-  async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
-    return this.request<T>('GET', endpoint, undefined, params);
-  }
-
-  /**
-   * Perform POST request
-   */
-  async post<T>(endpoint: string, data?: any, params?: Record<string, any>): Promise<ApiResponse<T>> {
-    return this.request<T>('POST', endpoint, data, params);
-  }
-
-  /**
-   * Perform PUT request
-   */
-  async put<T>(endpoint: string, data?: any, params?: Record<string, any>): Promise<ApiResponse<T>> {
-    return this.request<T>('PUT', endpoint, data, params);
-  }
-
-  /**
-   * Perform DELETE request
-   */
-  async delete<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
-    return this.request<T>('DELETE', endpoint, undefined, params);
-  }
-
-  /**
-   * Core request method
-   */
-  private async request<T>(
-    method: string,
+  private async makeRequest(
     endpoint: string,
-    data?: any,
-    params?: Record<string, any>
-  ): Promise<ApiResponse<T>> {
-    // Build full URL
-    let url = `${this.baseUrl}/api/v4/${endpoint.startsWith('/') ? endpoint.substring(1) : endpoint}`;
+    options: RequestInit = {}
+  ): Promise<any> {
+    const url = `${this.serverUrl}/api/v4${endpoint}`;
     
-    // Add query parameters if provided
-    if (params) {
-      const queryParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          queryParams.append(key, String(value));
-        }
-      });
-      
-      const queryString = queryParams.toString();
-      if (queryString) {
-        url += `?${queryString}`;
-      }
-    }
-    
-    // Configure headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
     };
-    
-    // Add auth token if available
+
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
-    
-    // Add client ID if available
-    if (this.clientId) {
-      headers['X-Client-ID'] = this.clientId;
-    }
-    
+
     try {
-      // Make the request
       const response = await fetch(url, {
-        method,
+        ...options,
         headers,
-        body: data ? JSON.stringify(data) : undefined,
       });
-      
-      // Parse headers
-      const responseHeaders: Record<string, string> = {};
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
-      
-      // Handle token in headers (Mattermost sometimes returns token in header)
-      if (responseHeaders['token']) {
-        this.token = responseHeaders['token'];
+
+      // Extract token from response header if present (for login)
+      const token = response.headers.get('Token');
+      if (token) {
+        this.setToken(token);
       }
-      
-      // Handle response
+
       if (!response.ok) {
-        let errorData;
+        let errorData: APIError;
         try {
           errorData = await response.json();
-        } catch (e) {
-          errorData = { message: 'Unknown error occurred' };
+        } catch {
+          errorData = {
+            id: 'api.error',
+            message: `HTTP ${response.status}: ${response.statusText}`,
+            detailed_error: '',
+            request_id: '',
+            status_code: response.status,
+          };
         }
-        
-        const error = new ApiError(
-          errorData.message || `Request failed with status ${response.status}`,
-          response.status,
-          errorData
-        );
-        
-        // N'appeler le gestionnaire d'erreur global que si ce n'est pas une erreur de token expiré
-        // ou une erreur 404 sur un endpoint users (utilisateur non trouvé)
-        const isUserNotFoundError = error.status === 404 && endpoint.includes('users/');
-        if (this.onErrorHandler && !this.isTokenExpiredError(error) && !isUserNotFoundError) {
-          this.onErrorHandler(error);
-        }
-        
-        throw error;
+        throw errorData;
       }
-      
-      // Parse response data
-      let responseData: T;
-      const contentType = response.headers.get('content-type');
-      
-      if (contentType && contentType.includes('application/json')) {
-        responseData = await response.json();
-      } else {
-        // Handle non-JSON responses
-        const text = await response.text();
-        responseData = text as unknown as T;
+
+      // Return empty object for 204 No Content
+      if (response.status === 204) {
+        return {};
       }
-      
-      return {
-        data: responseData,
-        headers: responseHeaders,
-        status: response.status,
-      };
+
+      return await response.json();
     } catch (error) {
-      // Handle network errors
-      if (!(error instanceof ApiError)) {
-        const networkError = new ApiError(
-          (error as Error).message || 'Network error',
-          0, // 0 indicates network error
-          error
-        );
-        
-        // Call error handler if provided
-        if (this.onErrorHandler) {
-          this.onErrorHandler(networkError);
-        }
-        
-        throw networkError;
+      if (error instanceof Error) {
+        // Network or other errors
+        const apiError: APIError = {
+          id: 'network.error',
+          message: error.message,
+          detailed_error: '',
+          request_id: '',
+          status_code: 0,
+        };
+        throw apiError;
       }
-      
+      // Re-throw API errors
       throw error;
     }
   }
+
+  // Auth methods
+  async login(loginId: string, password: string) {
+    return this.makeRequest('/users/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        login_id: loginId,
+        password,
+      }),
+    });
+  }
+
+  async logout() {
+    try {
+      await this.makeRequest('/users/logout', {
+        method: 'POST',
+      });
+    } finally {
+      // Always clear token on logout
+      this.token = null;
+    }
+  }
+
+  async getMe() {
+    return this.makeRequest('/users/me');
+  }
+
+  // Teams methods
+  async getMyTeams() {
+    return this.makeRequest('/users/me/teams');
+  }
+
+  async getTeamsUnread(userId: string) {
+    return this.makeRequest(`/users/${userId}/teams/unread`);
+  }
+
+  // Channels methods
+  async getMyChannels() {
+    return this.makeRequest('/users/me/channels');
+  }
+
+  async getChannelsForTeam(teamId: string) {
+    return this.makeRequest(`/users/me/teams/${teamId}/channels`);
+  }
+
+  async getChannelUnread(userId: string, channelId: string) {
+    return this.makeRequest(`/users/${userId}/channels/${channelId}/unread`);
+  }
+
+  // Posts methods
+  async getPostsUnread(userId: string, channelId: string, limitBefore = 30, limitAfter = 30) {
+    return this.makeRequest(
+      `/users/${userId}/channels/${channelId}/posts/unread?limit_before=${limitBefore}&limit_after=${limitAfter}`
+    );
+  }
+
+  async getPosts(channelId: string, page = 0, perPage = 30, before?: string, after?: string) {
+    let url = `/channels/${channelId}/posts?page=${page}&per_page=${perPage}`;
+    if (before) url += `&before=${before}`;
+    if (after) url += `&after=${after}`;
+    return this.makeRequest(url);
+  }
+
+  async createPost(channelId: string, message: string, rootId?: string) {
+    return this.makeRequest('/posts', {
+      method: 'POST',
+      body: JSON.stringify({
+        channel_id: channelId,
+        message,
+        root_id: rootId,
+      }),
+    });
+  }
+
+  async getPostThread(postId: string) {
+    return this.makeRequest(`/posts/${postId}/thread`);
+  }
+
+  async viewChannel(userId: string, channelId: string) {
+    return this.makeRequest(`/channels/members/${userId}/view`, {
+      method: 'POST',
+      body: JSON.stringify({
+        channel_id: channelId,
+      }),
+    });
+  }
+
+  // WebSocket URL helper
+  getWebSocketUrl(): string {
+    const wsProtocol = this.serverUrl.startsWith('https') ? 'wss' : 'ws';
+    const baseUrl = this.serverUrl.replace(/^https?/, wsProtocol);
+    return `${baseUrl}/api/v4/websocket`;
+  }
 }
 
-// Create singleton instance
-const apiInstance = new ApiClient();
+// Default client instance
+let defaultClient: MattermostClient | null = null;
 
-// Export only public interface to avoid private property exposure
-export const api = {
-  configure: (config: ApiClientConfig) => apiInstance.configure(config),
-  setToken: (token: string | null) => apiInstance.setToken(token),
-  getBaseUrl: () => apiInstance.getBaseUrl(),
-  isTokenExpiredError: (error: ApiError) => apiInstance.isTokenExpiredError(error),
-  get: <T>(endpoint: string, params?: Record<string, any>) => apiInstance.get<T>(endpoint, params),
-  post: <T>(endpoint: string, data?: any, params?: Record<string, any>) => apiInstance.post<T>(endpoint, data, params),
-  put: <T>(endpoint: string, data?: any, params?: Record<string, any>) => apiInstance.put<T>(endpoint, data, params),
-  delete: <T>(endpoint: string, params?: Record<string, any>) => apiInstance.delete<T>(endpoint, params),
-} as const;
+export function setDefaultClient(client: MattermostClient) {
+  defaultClient = client;
+}
+
+export function getDefaultClient(): MattermostClient {
+  if (!defaultClient) {
+    throw new Error('Default Mattermost client not initialized');
+  }
+  return defaultClient;
+}
+
+export default MattermostClient;
