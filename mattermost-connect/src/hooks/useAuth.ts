@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { loginUser, logoutUser, getCurrentUser, setServerUrl } from '../store/slices/authSlice';
+import { setUsersStatus, setTeams, setCurrentTeamId } from '../store/slices/entitiesSlice';
 import { LoginRequest } from '../api/types';
 import { Client4 } from '../api/client';
 
@@ -13,6 +14,7 @@ export const useAuth = () => {
   const { isAuthenticated, token, serverUrl } = useAppSelector(state => state.auth);
   const { isLoggingIn, loginError } = useAppSelector(state => state.views.auth);
   const currentUserId = useAppSelector(state => state.entities.users.currentUserId);
+  const currentTeamId = useAppSelector(state => state.entities.teams.currentTeamId);
   const currentUser = useAppSelector(state => 
     currentUserId ? state.entities.users.profiles[currentUserId] : null
   );
@@ -26,6 +28,36 @@ export const useAuth = () => {
       }
     }
   }, [isAuthenticated, token, serverUrl]);
+
+  // Auto-load essential data after authentication - Mattermost pattern
+  useEffect(() => {
+    if (isAuthenticated && currentUserId) {
+      const loadInitialData = async () => {
+        try {
+          // Load user status
+          const userStatus = await Client4.getStatus(currentUserId);
+          dispatch(setUsersStatus({ [currentUserId]: userStatus }));
+
+          // Load user teams
+          const userTeams = await Client4.getMyTeams();
+          const teamsById = userTeams.reduce((acc: Record<string, any>, team: any) => {
+            acc[team.id] = team;
+            return acc;
+          }, {});
+          dispatch(setTeams(teamsById));
+
+          // Set first team as current if none selected - Essential UX
+          if (!currentTeamId && userTeams.length > 0) {
+            dispatch(setCurrentTeamId(userTeams[0].id));
+          }
+
+        } catch (error) {
+          console.error('Failed to load initial data:', error);
+        }
+      };
+      loadInitialData();
+    }
+  }, [isAuthenticated, currentUserId, dispatch]);
 
   // Auth actions
   const login = useCallback(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { Client4 } from '../api/client';
@@ -24,20 +24,7 @@ export const useUserStatus = (): {
   
   const currentUserStatus = currentUserId ? statuses[currentUserId] : null;
 
-  // Load current user status on mount (only once)
-  useEffect(() => {
-    if (currentUserId && !statuses[currentUserId]) {
-      const loadCurrentUserStatus = async () => {
-        try {
-          const userStatus = await Client4.getStatus(currentUserId);
-          dispatch(setUsersStatus({ [currentUserId]: userStatus }));
-        } catch (error) {
-          console.error('Failed to load current user status:', error);
-        }
-      };
-      loadCurrentUserStatus();
-    }
-  }, [currentUserId, dispatch]);
+  // No individual loading - follow Mattermost pattern: status loaded globally
 
   // Actions
   const loadUsersStatus = useCallback(async (userIds: string[]) => {

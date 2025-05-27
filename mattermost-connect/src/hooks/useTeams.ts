@@ -10,8 +10,6 @@ export const useTeams = (): {
   teamsById: Record<string, Team>;
   currentTeam: Team | null;
   currentTeamId: string;
-  loadTeams: () => Promise<Team[] | undefined>;
-  loadTeamUnreads: () => Promise<any[]>;
   switchTeam: (teamId: string) => void;
   getAllTeamsUnread: () => Promise<any[]>;
 } => {
@@ -28,38 +26,12 @@ export const useTeams = (): {
   const teamsArray = Object.values(teams);
   const currentTeam = currentTeamId ? teams[currentTeamId] : null;
 
-  // Actions
-  const loadTeams = useCallback(async () => {
-    try {
-      if (!currentUser) return;
-      
-      const userTeams = await Client4.getTeamsForUser(currentUser.id);
-      
-      // Convert array to normalized object
-      const teamsById = userTeams.reduce((acc: Record<string, Team>, team: Team) => {
-        acc[team.id] = team;
-        return acc;
-      }, {});
-      
-      dispatch(setTeams(teamsById));
-      
-      // Set first team as current if none selected
-      if (!currentTeamId && userTeams.length > 0) {
-        dispatch(setCurrentTeamId(userTeams[0].id));
-      }
-      
-      return userTeams;
-    } catch (error) {
-      console.error('Failed to load teams:', error);
-      throw error;
-    }
-  }, [dispatch, currentUser, currentTeamId]);
+  // No manual loading - teams auto-loaded by useAuth
 
   const switchTeam = useCallback((teamId: string) => {
-    if (teams[teamId]) {
-      dispatch(setCurrentTeamId(teamId));
-    }
-  }, [dispatch, teams]);
+    // Follow Mattermost pattern: just dispatch the team ID without validation
+    dispatch(setCurrentTeamId(teamId));
+  }, [dispatch]);
 
   // Load team unread counts into Redux store
   const loadTeamUnreads = useCallback(async () => {
@@ -98,8 +70,6 @@ export const useTeams = (): {
     currentTeamId,
     
     // Actions
-    loadTeams,
-    loadTeamUnreads,
     switchTeam,
     getAllTeamsUnread,
   };

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Provider } from 'react-redux';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { 
   store,
   LoginForm, 
@@ -8,24 +8,16 @@ import {
   UserMenu,
   UserAvatar,
   useAuth,
-  useTeams,
-  useUsers
+  useTeams
 } from 'mattermost-connect';
 
 // Phase 2 Demo Component - Teams & User Management
 const Phase2Demo: React.FC = () => {
   const { currentUser, logout } = useAuth();
-  const { teams, currentTeam, switchTeam, loadTeams } = useTeams();
-  const { loadUsers } = useUsers();
+  const { teams, currentTeam, switchTeam } = useTeams(); // No manual loading needed
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
-  // Load data when component mounts
-  useEffect(() => {
-    if (currentUser) {
-      loadTeams();
-      loadUsers();
-    }
-  }, [currentUser, loadTeams, loadUsers]);
+  // No manual data loading - handled automatically by useAuth
 
 
   const handleTeamSelect = (team: any) => {
@@ -59,14 +51,14 @@ const Phase2Demo: React.FC = () => {
           gap: 1.5,
         }}>
           <UserAvatar user={currentUser} size="medium" />
-          <div>
-            <div style={{ fontWeight: 'bold' }}>
+          <Box>
+            <Typography sx={{ fontWeight: 'bold' }}>
               {currentUser?.first_name} {currentUser?.last_name}
-            </div>
-            <div style={{ fontSize: '14px', color: '#666' }}>
+            </Typography>
+            <Typography sx={{ fontSize: '14px', color: '#666' }}>
               @{currentUser?.username}
-            </div>
-          </div>
+            </Typography>
+          </Box>
         </Box>
         <UserMenu 
           user={currentUser} 
@@ -90,7 +82,7 @@ const Phase2Demo: React.FC = () => {
           borderRadius: 1,
           backgroundColor: '#fafafa',
         }}>
-          <h3 style={{ marginTop: 0, color: '#333' }}>Teams</h3>
+          <Typography variant="h6" sx={{ mt: 0, color: '#333' }}>Teams</Typography>
           {teams && teams.length > 0 ? (
             <TeamList 
               teams={teams}
@@ -99,9 +91,9 @@ const Phase2Demo: React.FC = () => {
               layout="vertical"
             />
           ) : (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+            <Box sx={{ textAlign: 'center', p: 2.5, color: '#666' }}>
               Loading teams...
-            </div>
+            </Box>
           )}
         </Box>
 
@@ -112,21 +104,21 @@ const Phase2Demo: React.FC = () => {
           borderRadius: 1,
           backgroundColor: '#fafafa',
         }}>
-          <h3 style={{ marginTop: 0, color: '#333' }}>Current Team</h3>
+          <Typography variant="h6" sx={{ mt: 0, color: '#333' }}>Current Team</Typography>
           {currentTeam ? (
-            <div>
-              <div style={{ marginBottom: '8px' }}>
+            <Box>
+              <Typography sx={{ mb: 1 }}>
                 <strong>Name:</strong> {currentTeam.display_name}
-              </div>
-              <div style={{ marginBottom: '8px' }}>
+              </Typography>
+              <Typography sx={{ mb: 1 }}>
                 <strong>Description:</strong> {currentTeam.description || 'No description'}
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>
+              </Typography>
+              <Typography sx={{ fontSize: '12px', color: '#666' }}>
                 ID: {currentTeam.id}
-              </div>
-            </div>
+              </Typography>
+            </Box>
           ) : (
-            <div style={{ color: '#666' }}>No team selected</div>
+            <Typography sx={{ color: '#666' }}>No team selected</Typography>
           )}
         </Box>
       </Box>
@@ -140,36 +132,35 @@ const AuthStatus: React.FC = () => {
 
   if (isLoggingIn) {
     return (
-      <div style={{ textAlign: 'center', padding: '20px' }}>
-        <div>Authenticating...</div>
-      </div>
+      <Box sx={{ textAlign: 'center', p: 2.5 }}>
+        <Typography>Authenticating...</Typography>
+      </Box>
     );
   }
 
   if (isAuthenticated && currentUser) {
     return (
       <>
-        <div style={{
-          padding: '20px',
+        <Box sx={{
+          p: 2.5,
           backgroundColor: '#e8f5e8',
           border: '1px solid #4caf50',
-          borderRadius: '8px',
+          borderRadius: 2,
           maxWidth: '800px',
           margin: '20px auto',
           textAlign: 'center',
         }}>
-          <h3 style={{
-            fontSize: '20px',
+          <Typography variant="h5" sx={{
             fontWeight: 600,
             color: '#2e7d32',
-            margin: '0 0 12px 0',
+            mb: 1.5,
           }}>
             ✅ Successfully connected to Mattermost!
-          </h3>
-          <p style={{ color: '#388e3c', margin: '6px 0' }}>
+          </Typography>
+          <Typography sx={{ color: '#388e3c', my: 0.75 }}>
             Welcome {currentUser.first_name} {currentUser.last_name} (@{currentUser.username})
-          </p>
-        </div>
+          </Typography>
+        </Box>
         <Phase2Demo />
       </>
     );
