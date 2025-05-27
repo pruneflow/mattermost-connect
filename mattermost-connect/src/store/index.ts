@@ -3,16 +3,14 @@ import { configureStore } from '@reduxjs/toolkit';
 import entitiesReducer from './slices/entitiesSlice';
 import viewsReducer from './slices/viewsSlice';
 import errorsReducer from './slices/errorsSlice';
-import requestsReducer from './slices/requestsSlice';
 import authReducer from './slices/authSlice';
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
   reducer: {
-    // Core state structure identical to mattermost-redux
+    // Core state structure simplified (no requests - createAsyncThunk handles loading)
     entities: entitiesReducer,
     views: viewsReducer,
     errors: errorsReducer,
-    requests: requestsReducer,
     auth: authReducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -41,5 +39,4 @@ export const store = configureStore({
 export * from './slices/entitiesSlice';
 export * from './slices/viewsSlice';
 export * from './slices/errorsSlice';
-export * from './slices/requestsSlice';
 export * from './slices/authSlice';
