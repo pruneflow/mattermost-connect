@@ -13,6 +13,7 @@ export interface EntitiesState {
     currentTeamId: string;
     teams: Record<string, Team>;
     myMembers: Record<string, TeamMember>;
+    unreads: Record<string, { msg_count: number; mention_count: number }>;
   };
   channels: {
     currentChannelId: string;
@@ -58,6 +59,7 @@ const initialState: EntitiesState = {
     currentTeamId: '',
     teams: {},
     myMembers: {},
+    unreads: {},
   },
   channels: {
     currentChannelId: '',
@@ -129,6 +131,9 @@ const entitiesSlice = createSlice({
     },
     setTeamMembers: (state, action: PayloadAction<Record<string, TeamMember>>) => {
       Object.assign(state.teams.myMembers, action.payload);
+    },
+    setTeamUnreads: (state, action: PayloadAction<Record<string, { msg_count: number; mention_count: number }>>) => {
+      Object.assign(state.teams.unreads, action.payload);
     },
 
     // Channels
@@ -228,6 +233,7 @@ export const {
   setTeams,
   setTeamMember,
   setTeamMembers,
+  setTeamUnreads,
   
   // Channels
   setCurrentChannelId,

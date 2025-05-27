@@ -45,9 +45,9 @@ export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
     ...sx
   };
 
-  // Format count for display
+  // Format count for display (Mattermost standard)
   const formatCount = (num: number): string => {
-    if (num > 99) return '99+';
+    if (num > 999) return '999+';
     return num.toString();
   };
 

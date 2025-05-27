@@ -1,5 +1,6 @@
 import React from 'react';
 import { UserAvatar, StatusBadge } from '../atoms';
+import { displayUsername } from '../../utils/userUtils';
 import type { UserProfile, UserStatus } from '../../api/types';
 
 export interface UserCardProps {
@@ -79,16 +80,6 @@ export const UserCard: React.FC<UserCardProps> = ({
     gap: '4px'
   };
 
-  // Get display name
-  const getDisplayName = (user: UserProfile): string => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`;
-    }
-    if (user.first_name) {
-      return user.first_name;
-    }
-    return user.username;
-  };
 
   return (
     <div 
@@ -100,7 +91,7 @@ export const UserCard: React.FC<UserCardProps> = ({
       
       <div style={contentStyle}>
         <div style={nameStyle}>
-          {getDisplayName(user)}
+          {displayUsername(user, 'full_name')}
         </div>
         
         <div style={usernameStyle}>

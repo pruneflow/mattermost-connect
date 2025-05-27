@@ -27,14 +27,11 @@ export interface LoginRequest {
   password: string;
 }
 
-// Keep our custom API types
-export interface APIError {
-  id: string;
-  message: string;
-  detailed_error: string;
-  request_id: string;
-  status_code: number;
-}
+// Error types - use official Mattermost types  
+export type {
+  ServerError as APIError,
+  ServerError
+} from '@mattermost/types/errors';
 
 export interface TeamsUnreadResponse {
   team_id: string;

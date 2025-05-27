@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { Client4 } from '../api/client';
+import { getCurrentUser } from './slices/authSlice';
 
 import entitiesReducer from './slices/entitiesSlice';
 import viewsReducer from './slices/viewsSlice';
@@ -43,6 +44,11 @@ export const store = configureStore({
     // WebSocket middleware will be added in Phase 5
   devTools: process.env.NODE_ENV !== 'production',
 });
+
+// Auto-restore user if credentials exist - use getCurrentUser() instead of localStorage parsing
+if (token && serverUrl) {
+  store.dispatch(getCurrentUser());
+}
 
 // Export store type
 export type RootState = ReturnType<typeof store.getState>;

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { Client4 } from '../api/client';
-import { setCurrentTeamId, setTeams } from '../store/slices/entitiesSlice';
+import { setCurrentTeamId, setTeams, setTeamUnreads } from '../store/slices/entitiesSlice';
 import type { Team } from '../api/types';
 
 export const useTeams = (): {
@@ -11,6 +11,7 @@ export const useTeams = (): {
   currentTeam: Team | null;
   currentTeamId: string;
   loadTeams: () => Promise<Team[] | undefined>;
+  loadTeamUnreads: () => Promise<any[]>;
   switchTeam: (teamId: string) => void;
   getAllTeamsUnread: () => Promise<any[]>;
 } => {
@@ -60,16 +61,34 @@ export const useTeams = (): {
     }
   }, [dispatch, teams]);
 
-  const getAllTeamsUnread = useCallback(async () => {
+  // Load team unread counts into Redux store
+  const loadTeamUnreads = useCallback(async () => {
     try {
-      // Use the actual method available in Client4
-      const unreadData = await Client4.getMyTeamUnreads();
-      return unreadData;
+      if (!currentUser) return [];
+      
+      const teamUnreads = await Client4.getMyTeamUnreads();
+      
+      // Convert to normalized format and store in Redux
+      const unreadsByTeam: Record<string, { msg_count: number; mention_count: number }> = {};
+      teamUnreads.forEach((unread: any) => {
+        unreadsByTeam[unread.team_id] = {
+          msg_count: unread.msg_count,
+          mention_count: unread.mention_count
+        };
+      });
+      
+      dispatch(setTeamUnreads(unreadsByTeam));
+      return teamUnreads;
     } catch (error) {
-      console.error('Failed to get teams unread:', error);
+      console.error('Failed to load team unread counts:', error);
       return [];
     }
-  }, []);
+  }, [dispatch, currentUser]);
+
+  const getAllTeamsUnread = useCallback(async () => {
+    // Alias for backwards compatibility
+    return loadTeamUnreads();
+  }, [loadTeamUnreads]);
 
   return {
     // State
@@ -80,6 +99,7 @@ export const useTeams = (): {
     
     // Actions
     loadTeams,
+    loadTeamUnreads,
     switchTeam,
     getAllTeamsUnread,
   };

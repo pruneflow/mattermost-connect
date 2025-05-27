@@ -3,6 +3,7 @@ import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { Client4 } from '../api/client';
 import { setUser } from '../store/slices/entitiesSlice';
+import { displayUsername } from '../utils/userUtils';
 import type { UserProfile } from '../api/types';
 
 export const useUsers = (): {
@@ -67,13 +68,7 @@ export const useUsers = (): {
   }, [profiles]);
 
   const getDisplayName = useCallback((user: UserProfile): string => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`;
-    }
-    if (user.first_name) {
-      return user.first_name;
-    }
-    return user.username;
+    return displayUsername(user, 'full_name');
   }, []);
 
   return {
