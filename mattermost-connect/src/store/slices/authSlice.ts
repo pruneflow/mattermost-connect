@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { User, LoginRequest, APIError } from '../../api/types';
-import { getDefaultClient } from '../../api/client';
+import { UserProfile, LoginRequest, APIError } from '../../api/types';
+import { Client4 } from '../../api/client';
 import { 
   setCurrentUserId, 
   setUser, 
@@ -32,7 +32,7 @@ const initialState: AuthState = {
 
 // Async thunks for auth actions
 export const loginUser = createAsyncThunk<
-  { user: User; token: string },
+  { user: UserProfile; token: string },
   LoginRequest & { serverUrl: string },
   { rejectValue: APIError }
 >(
@@ -43,11 +43,11 @@ export const loginUser = createAsyncThunk<
       dispatch(setLoginError(null));
       dispatch(setAuthError(null));
 
-      const client = getDefaultClient();
-      client.serverUrl = serverUrl;
+      // Configure Client4 with server URL
+      Client4.setUrl(serverUrl);
       
-      const user = await client.login(login_id, password);
-      const token = client.getToken();
+      const user = await Client4.login(login_id, password);
+      const token = Client4.getToken();
       
       if (!token) {
         throw new Error('No token received from server');
@@ -95,8 +95,7 @@ export const logoutUser = createAsyncThunk<
   'auth/logout',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      const client = getDefaultClient();
-      await client.logout();
+      await Client4.logout();
     } catch (error) {
       // Continue with logout even if API call fails
       console.warn('Logout API call failed:', error);
@@ -120,15 +119,14 @@ export const logoutUser = createAsyncThunk<
 );
 
 export const getCurrentUser = createAsyncThunk<
-  User,
+  UserProfile,
   void,
   { rejectValue: APIError }
 >(
   'auth/getCurrentUser',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      const client = getDefaultClient();
-      const user = await client.getMe();
+      const user = await Client4.getMe();
       
       dispatch(setCurrentUserId(user.id));
       dispatch(setUser(user));

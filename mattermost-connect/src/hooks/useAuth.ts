@@ -3,7 +3,7 @@ import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { loginUser, logoutUser, getCurrentUser, setServerUrl } from '../store/slices/authSlice';
 import { LoginRequest } from '../api/types';
-import { getDefaultClient } from '../api/client';
+import { Client4 } from '../api/client';
 
 // Auth hook providing authentication state and actions
 export const useAuth = () => {
@@ -17,17 +17,12 @@ export const useAuth = () => {
     currentUserId ? state.entities.users.profiles[currentUserId] : null
   );
 
-  // Configure client with stored credentials if authenticated
+  // Configure Client4 with stored credentials if authenticated
   useEffect(() => {
     if (isAuthenticated && token && serverUrl) {
-      try {
-        const client = getDefaultClient();
-        if (client.getToken() !== token) {
-          client.serverUrl = serverUrl;
-          client.setToken(token);
-        }
-      } catch (error) {
-        // Client not initialized yet, that's fine
+      if (Client4.getToken() !== token) {
+        Client4.setUrl(serverUrl);
+        Client4.setToken(token);
       }
     }
   }, [isAuthenticated, token, serverUrl]);

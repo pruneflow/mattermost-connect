@@ -1,12 +1,10 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { setupListeners } from '@reduxjs/toolkit/query';
 
 import entitiesReducer from './slices/entitiesSlice';
 import viewsReducer from './slices/viewsSlice';
 import errorsReducer from './slices/errorsSlice';
 import requestsReducer from './slices/requestsSlice';
 import authReducer from './slices/authSlice';
-import { apiSlice } from './middleware/api';
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
   reducer: {
@@ -16,9 +14,6 @@ export const store = configureStore({
     errors: errorsReducer,
     requests: requestsReducer,
     auth: authReducer,
-    
-    // RTK Query API slice
-    [apiSlice.reducerPath]: apiSlice.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -32,21 +27,15 @@ export const store = configureStore({
         ],
         ignoredPaths: ['api.queries', 'api.mutations'],
       },
-    }).concat(
-      apiSlice.middleware,
-      // WebSocket middleware will be added in Phase 5
-    ),
+    }),
+    // WebSocket middleware will be added in Phase 5
   devTools: process.env.NODE_ENV !== 'production',
 });
 
-// Setup RTK Query listeners for refetchOnFocus/refetchOnReconnect
-setupListeners(store.dispatch);
 
 
 // Types are exported from src/types.ts to avoid Rollup issues
 
-// Re-export API slice
-export { apiSlice };
 
 // Re-export all actions for convenience
 export * from './slices/entitiesSlice';

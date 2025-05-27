@@ -23,9 +23,5 @@ export * from './store/slices/entitiesSlice';
 export * from './store/slices/viewsSlice';
 export * from './store/slices/errorsSlice';
 
-// RTK Query API slice
-export { apiSlice } from './store/middleware/api';
-export * from './store/middleware/api';
-
-// Constants
-export { MATTERMOST_API_ENDPOINTS, WEBSOCKET_EVENTS } from './api/endpoints';
+// Client4 from mattermost-redux
+export { Client4, mattermostClient } from './api/client';

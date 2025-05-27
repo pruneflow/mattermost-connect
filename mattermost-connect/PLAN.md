@@ -13,14 +13,23 @@ Refactoriser **complètement** la librairie en gardant le **même scope fonction
 
 ## 🏗️ **ARCHITECTURE REDUX MATTERMOST**
 
-### **Redux Toolkit (Migration de l'architecture legacy)**
+### **Redux Toolkit + Client4 (Architecture Hybride)**
 
-**Choix technique** : Redux Toolkit au lieu du Redux classique Mattermost pour :
+**Choix technique** : Redux Toolkit pour l'état + Client4 officiel pour les API :
+
+**Redux Toolkit (État uniquement)** :
 - ✅ **DevTools** : Debug et time-travel essentiels
-- ✅ **RTK Query** : Cache API intelligent (remplacement actions/selectors custom)
 - ✅ **Performance** : React-Redux optimisé
 - ✅ **TypeScript** : Support natif excellent
 - ✅ **Simplicité** : Moins de boilerplate que Redux classique
+- ✅ **Structure simple** : Notre store custom adapté à nos besoins
+
+**Client4 (API uniquement)** :
+- ✅ **Compatibilité native** : Client officiel Mattermost
+- ✅ **Maintenance automatique** : Updates avec nouvelles versions Mattermost
+- ✅ **APIs complètes** : Toutes les méthodes déjà implémentées
+- ✅ **WebSocket intégré** : Gestion temps réel native
+- ✅ **Types officiels** : Interfaces TypeScript Mattermost
 
 ### **Structure Store Inspirée Mattermost**
 
@@ -40,8 +49,8 @@ const store = configureStore({
         ignoredActions: ['persist/PERSIST']  // WebSocket actions
       }
     }).concat(
-      apiSlice.middleware,  // RTK Query
-      websocketMiddleware   // Custom WebSocket
+      // Pas de RTK Query - Client4 gère les API
+      websocketMiddleware   // WebSocket via Client4
     )
 });
 ```
@@ -145,33 +154,38 @@ src/components/
 6. **Real-time** : WebSocket + Typing indicators + Presence + Notifications
 7. **UI Common** : UserAvatar + StatusIndicator + UnreadBadge + Loading states
 
-### **API Endpoints Mattermost Exacts**
+### **API Layer avec Client4**
 
 ```typescript
-// Endpoints identiques à l'API officielle
-Auth:
-- POST /api/v4/users/login
-- GET /api/v4/users/me
-- POST /api/v4/users/logout
+// Client4 fournit toutes les méthodes API
+import { Client4 } from 'mattermost-redux/client';
 
-Teams:
-- GET /api/v4/users/me/teams
-- GET /api/v4/users/{user_id}/teams/unread
+// Exemples d'usage dans nos thunks Redux
+export const loginUser = createAsyncThunk(
+  'auth/login',
+  async ({ login_id, password, serverUrl }) => {
+    Client4.setUrl(serverUrl);
+    const user = await Client4.login(login_id, password);
+    return { user, token: Client4.getToken() };
+  }
+);
 
-Channels:
-- GET /api/v4/users/me/channels
-- GET /api/v4/channels/{channel_id}/posts/unread?limit_before=30&limit_after=30
-- GET /api/v4/users/{user_id}/channels/{channel_id}/unread
+export const getChannels = createAsyncThunk(
+  'channels/getChannels',
+  async (teamId) => {
+    return await Client4.getChannelsForUser(getCurrentUserId(), teamId);
+  }
+);
 
-Messages:
-- GET /api/v4/channels/{channel_id}/posts
-- POST /api/v4/posts
-- GET /api/v4/posts/{post_id}/thread
-
-WebSocket:
-- WSS /api/v4/websocket
-- Events: posted, channel_viewed, user_updated, typing, etc.
+// WebSocket automatique via Client4
+Client4.getWebSocketUrl() // Connexion WebSocket native
 ```
+
+**Avantages** :
+- ✅ **0 maintenance API** : Client officiel maintenu par Mattermost
+- ✅ **Toutes les méthodes** : login, getChannels, getPosts, WebSocket, etc.
+- ✅ **Types natifs** : Interfaces TypeScript officielles
+- ✅ **Évolutivité** : Nouvelles features automatiques
 
 ---
 
@@ -191,11 +205,10 @@ src/
 │   │   ├── entitiesSlice.ts  # Entities normalisées
 │   │   └── viewsSlice.ts     # UI state
 │   └── middleware/
-│       └── api.ts            # RTK Query API slice
+│       └── websocket.ts      # WebSocket middleware (Client4)
 ├── api/
-│   ├── client.ts             # Client API (inspiré Client4)
-│   ├── types.ts              # Types API officiels
-│   └── endpoints.ts          # Endpoints configuration
+│   ├── client.ts             # Export Client4 + helpers
+│   └── types.ts              # Re-export types officiels
 ├── components/
 │   ├── atoms/
 │   │   ├── Button.tsx
@@ -211,7 +224,7 @@ src/
 └── index.ts                  # Export principal
 ```
 
-**Test** : Démo login/logout identique à l'actuel
+**Test** : Démo login/logout avec Client4 + Redux Toolkit
 
 ---
 

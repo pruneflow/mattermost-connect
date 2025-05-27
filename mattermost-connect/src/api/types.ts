@@ -1,156 +1,33 @@
-export interface User {
-  id: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-  username: string;
-  first_name: string;
-  last_name: string;
-  nickname: string;
-  email: string;
-  email_verified: boolean;
-  auth_service: string;
-  roles: string;
-  locale: string;
-  timezone: {
-    useAutomaticTimezone: string;
-    automaticTimezone: string;
-    manualTimezone: string;
-  };
-  position: string;
-  props: Record<string, any>;
-  notify_props: {
-    email: string;
-    push: string;
-    desktop: string;
-    desktop_sound: string;
-    mention_keys: string;
-    channel: string;
-    first_name: string;
-  };
-  last_password_update: number;
-  last_picture_update: number;
-  failed_attempts: number;
-  mfa_active: boolean;
-  last_activity_at: number;
-}
+// Import types directly from @mattermost/types (same as Client4)
+import type { UserProfile } from '@mattermost/types/users';
 
-export interface Team {
-  id: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-  display_name: string;
-  name: string;
-  description: string;
-  email: string;
-  type: string;
-  company_name: string;
-  allowed_domains: string;
-  invite_id: string;
-  allow_open_invite: boolean;
-  scheme_id: string;
-  group_constrained: boolean;
-}
+export type {
+  UserProfile as User,
+  UserProfile,
+  UserStatus
+} from '@mattermost/types/users';
 
-export interface Channel {
-  id: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-  team_id: string;
-  type: "O" | "P" | "D" | "G"; // Open, Private, Direct, Group
-  display_name: string;
-  name: string;
-  header: string;
-  purpose: string;
-  last_post_at: number;
-  total_msg_count: number;
-  extra_update_at: number;
-  creator_id: string;
-  scheme_id: string;
-  group_constrained: boolean;
-}
+export type {
+  Team,
+  TeamMembership as TeamMember
+} from '@mattermost/types/teams';
 
-export interface Post {
-  id: string;
-  create_at: number;
-  update_at: number;
-  edit_at: number;
-  delete_at: number;
-  is_pinned: boolean;
-  user_id: string;
-  channel_id: string;
-  root_id: string;
-  parent_id: string;
-  original_id: string;
-  message: string;
-  type: string;
-  props: Record<string, any>;
-  hashtags: string;
-  pending_post_id: string;
-  reply_count: number;
-  last_reply_at: number;
-  participants: string[] | null;
-  metadata: {
-    embeds: any[];
-    emojis: any[];
-    files: any[];
-    images: any[];
-    reactions: any[];
-  };
-}
+export type {
+  Channel,
+  ChannelMembership as ChannelMember
+} from '@mattermost/types/channels';
 
-export interface TeamMember {
-  team_id: string;
-  user_id: string;
-  roles: string;
-  delete_at: number;
-  scheme_guest: boolean;
-  scheme_user: boolean;
-  scheme_admin: boolean;
-  explicit_roles: string;
-}
+export type {
+  Post
+} from '@mattermost/types/posts';
 
-export interface ChannelMember {
-  channel_id: string;
-  user_id: string;
-  roles: string;
-  last_viewed_at: number;
-  msg_count: number;
-  mention_count: number;
-  notify_props: {
-    desktop: string;
-    email: string;
-    mark_unread: string;
-    push: string;
-    ignore_channel_mentions: string;
-  };
-  last_update_at: number;
-  scheme_guest: boolean;
-  scheme_user: boolean;
-  scheme_admin: boolean;
-  explicit_roles: string;
-}
-
-export interface UserStatus {
-  user_id: string;
-  status: "online" | "away" | "dnd" | "offline";
-  manual: boolean;
-  last_activity_at: number;
-}
-
-// API Response Types
+// Auth types - keep our own for compatibility
 export interface LoginRequest {
   login_id: string;
   password: string;
 }
 
-export interface LoginResponse {
-  user: User;
-  token?: string;
-}
-
+// Keep our custom API types
 export interface APIError {
   id: string;
   message: string;
@@ -200,7 +77,7 @@ export interface WSEventChannelViewed {
 }
 
 export interface WSEventUserUpdated {
-  user: User;
+  user: UserProfile;
 }
 
 export interface WSEventTyping {

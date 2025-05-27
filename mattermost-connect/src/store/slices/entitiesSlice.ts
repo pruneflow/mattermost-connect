@@ -1,11 +1,11 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { User, Team, Channel, Post, TeamMember, ChannelMember, UserStatus } from '../../api/types';
+import { UserProfile, Team, Channel, Post, TeamMember, ChannelMember, UserStatus } from '../../api/types';
 
 // Entities State Structure inspired by mattermost-redux
 export interface EntitiesState {
   users: {
     currentUserId: string;
-    profiles: Record<string, User>;
+    profiles: Record<string, UserProfile>;
     profilesInChannel: Record<string, string[]>;
     statuses: Record<string, UserStatus>;
   };
@@ -80,10 +80,10 @@ const entitiesSlice = createSlice({
     setCurrentUserId: (state, action: PayloadAction<string>) => {
       state.users.currentUserId = action.payload;
     },
-    setUser: (state, action: PayloadAction<User>) => {
+    setUser: (state, action: PayloadAction<UserProfile>) => {
       state.users.profiles[action.payload.id] = action.payload;
     },
-    setUsers: (state, action: PayloadAction<User[]>) => {
+    setUsers: (state, action: PayloadAction<UserProfile[]>) => {
       action.payload.forEach(user => {
         state.users.profiles[user.id] = user;
       });
