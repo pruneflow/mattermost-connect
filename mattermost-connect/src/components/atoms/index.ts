@@ -1,6 +1,14 @@
 // Atoms exports
 export { default as Button } from './Button';
 export { default as TextInput } from './TextInput';
+export { default as UserAvatar } from './UserAvatar';
+export { default as StatusBadge } from './StatusBadge';
+export { default as UnreadBadge } from './UnreadBadge';
+export { default as Dropdown } from './Dropdown';
 
 export type { ButtonProps } from './Button';
 export type { TextInputProps } from './TextInput';
+export type { UserAvatarProps } from './UserAvatar';
+export type { StatusBadgeProps } from './StatusBadge';
+export type { UnreadBadgeProps } from './UnreadBadge';
+export type { DropdownProps, DropdownOption } from './Dropdown';

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Box, CssBaseline, ThemeProvider, createTheme, Button, Container, Paper, Typography, TextField, CircularProgress } from '@mui/material';
-import { MattermostProvider, useAuth, MattermostChat, UserAvatar, MessageContainer } from 'mattermost-connect';
+import { useAuth, UserAvatar } from 'mattermost-connect';
 
 // Create theme
 const theme = createTheme({
@@ -186,11 +186,30 @@ function MainContent({ onLogout }: { onLogout?: () => void }) {
   
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>           
-        {/* Main chat component with custom logout handler */}
-        <MattermostChat 
-          // Surcharger la fonction de déconnexion pour utiliser notre handler personnalisé
-          onLogout={handleLogout}
-        />
+        {/* Placeholder for future MattermostChat component */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100%',
+          flexDirection: 'column',
+          gap: 2
+        }}>
+          <UserAvatar user={user} size={64} />
+          <Typography variant="h5">
+            Welcome {user.first_name} {user.last_name}!
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            MattermostChat component will be implemented in Phase 3
+          </Typography>
+          <Button 
+            variant="outlined" 
+            onClick={handleLogout}
+            sx={{ mt: 2 }}
+          >
+            Logout
+          </Button>
+        </Box>
     </Box>
   );
 }

@@ -32,6 +32,9 @@ importers:
       '@reduxjs/toolkit':
         specifier: ^2.8.2
         version: 2.8.2(react-redux@9.2.0(@types/react@18.3.23)(react@18.3.1)(redux@4.2.1))(react@18.3.1)
+      color-hash:
+        specifier: ^2.0.2
+        version: 2.0.2
       emoji-datasource:
         specifier: 15.1.2
         version: 15.1.2
@@ -105,6 +108,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.74.4
         version: 5.74.4(react@18.3.1)
+      '@types/color-hash':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@types/jest':
         specifier: ^29.5.4
         version: 29.5.14
@@ -2485,6 +2491,9 @@ packages:
   '@types/body-parser@1.19.5':
     resolution: {integrity: sha512-fB3Zu92ucau0iQ0JMCFQE7b/dv8Ot07NI3KaZIkIUNXq82k4eBAqUaneXfleGY9JWskeS9y+u0nXMyspcuQrCg==}
 
+  '@types/color-hash@2.0.0':
+    resolution: {integrity: sha512-wVZU2AthjkuxcK8IQl2lpVzWZxu/nuOoQfEBv0cxsbV8mVlCiPExNaw9/Z1PBC0ostupYr8KbTmT2J4+qrOW7w==}
+
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
 
@@ -3259,6 +3268,9 @@ packages:
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
     engines: {node: '>=7.0.0'}
+
+  color-hash@2.0.2:
+    resolution: {integrity: sha512-6exeENAqBTuIR1wIo36mR8xVVBv6l1hSLd7Qmvf6158Ld1L15/dbahR9VUOiX7GmGJBCnQyS0EY+I8x+wa7egg==}
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
@@ -9533,6 +9545,8 @@ snapshots:
       '@types/connect': 3.4.38
       '@types/node': 20.17.50
 
+  '@types/color-hash@2.0.0': {}
+
   '@types/connect@3.4.38':
     dependencies:
       '@types/node': 20.17.50
@@ -10436,6 +10450,8 @@ snapshots:
   color-convert@2.0.1:
     dependencies:
       color-name: 1.1.4
+
+  color-hash@2.0.2: {}
 
   color-name@1.1.4: {}
 

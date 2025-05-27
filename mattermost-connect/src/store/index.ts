@@ -1,9 +1,23 @@
 import { configureStore } from '@reduxjs/toolkit';
+import { Client4 } from '../api/client';
 
 import entitiesReducer from './slices/entitiesSlice';
 import viewsReducer from './slices/viewsSlice';
 import errorsReducer from './slices/errorsSlice';
 import authReducer from './slices/authSlice';
+
+// Configure Client4 immediately before store creation if credentials exist
+const token = localStorage.getItem('mattermostToken');
+const serverUrl = localStorage.getItem('mattermostServerUrl');
+
+if (token && serverUrl) {
+  Client4.setUrl(serverUrl);
+  Client4.setToken(token);
+  // Disable cookies to avoid CORS issues with Access-Control-Allow-Origin: *
+  Client4.setIncludeCookies(false);
+  Client4.setEnableLogging(false);
+}
+
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
   reducer: {
@@ -30,10 +44,9 @@ export const store = configureStore({
   devTools: process.env.NODE_ENV !== 'production',
 });
 
-
-
-// Types are exported from src/types.ts to avoid Rollup issues
-
+// Export store type
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
 
 // Re-export all actions for convenience
 export * from './slices/entitiesSlice';

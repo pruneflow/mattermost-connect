@@ -21,6 +21,7 @@ import {
 import AuthenticationUI from "./components/AuthenticationUI";
 import createMockService from "./mockService";
 import MattermostDemo from "./MattermostDemo";
+import ReduxDemo from "./ReduxDemo";
 
 // Définir le type de détails de connexion
 interface ConnectionDetails {
@@ -187,6 +188,7 @@ function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showReduxDemo, setShowReduxDemo] = useState(false);
   const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>({
     mode: "demo"
   });

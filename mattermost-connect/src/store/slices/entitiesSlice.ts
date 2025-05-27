@@ -82,6 +82,15 @@ const entitiesSlice = createSlice({
     },
     setUser: (state, action: PayloadAction<UserProfile>) => {
       state.users.profiles[action.payload.id] = action.payload;
+      
+      // If this is the current user, update localStorage for persistence
+      if (state.users.currentUserId === action.payload.id) {
+        try {
+          localStorage.setItem('mattermostUser', JSON.stringify(action.payload));
+        } catch (error) {
+          console.warn('Failed to update user in localStorage:', error);
+        }
+      }
     },
     setUsers: (state, action: PayloadAction<UserProfile[]>) => {
       action.payload.forEach(user => {
@@ -94,6 +103,9 @@ const entitiesSlice = createSlice({
     setUsersInChannel: (state, action: PayloadAction<{ channelId: string; userIds: string[] }>) => {
       state.users.profilesInChannel[action.payload.channelId] = action.payload.userIds;
     },
+    setUsersStatus: (state, action: PayloadAction<Record<string, UserStatus>>) => {
+      Object.assign(state.users.statuses, action.payload);
+    },
 
     // Teams
     setCurrentTeamId: (state, action: PayloadAction<string>) => {
@@ -102,13 +114,21 @@ const entitiesSlice = createSlice({
     setTeam: (state, action: PayloadAction<Team>) => {
       state.teams.teams[action.payload.id] = action.payload;
     },
-    setTeams: (state, action: PayloadAction<Team[]>) => {
-      action.payload.forEach(team => {
-        state.teams.teams[team.id] = team;
-      });
+    setTeams: (state, action: PayloadAction<Team[] | Record<string, Team>>) => {
+      if (Array.isArray(action.payload)) {
+        action.payload.forEach(team => {
+          state.teams.teams[team.id] = team;
+        });
+      } else {
+        // Handle normalized object format
+        Object.assign(state.teams.teams, action.payload);
+      }
     },
     setTeamMember: (state, action: PayloadAction<TeamMember>) => {
       state.teams.myMembers[action.payload.team_id] = action.payload;
+    },
+    setTeamMembers: (state, action: PayloadAction<Record<string, TeamMember>>) => {
+      Object.assign(state.teams.myMembers, action.payload);
     },
 
     // Channels
@@ -200,12 +220,14 @@ export const {
   setUsers,
   setUserStatus,
   setUsersInChannel,
+  setUsersStatus,
   
   // Teams
   setCurrentTeamId,
   setTeam,
   setTeams,
   setTeamMember,
+  setTeamMembers,
   
   // Channels
   setCurrentChannelId,

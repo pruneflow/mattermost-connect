@@ -12,6 +12,7 @@ export { setDefaultClient, getDefaultClient } from './api/client';
 
 // Components
 export * from './components/atoms';
+export * from './components/molecules';
 export * from './components/organisms';
 
 // Hooks

@@ -1,20 +1,145 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Provider } from 'react-redux';
 import { 
-  store, 
-  setDefaultClient,
+  store,
   LoginForm, 
-  useAuth
+  TeamList,
+  UserMenu,
+  UserAvatar,
+  useAuth,
+  useTeams,
+  useUsers
 } from 'mattermost-connect';
 
-// Initialize the default client with Client4
-setDefaultClient({
-  serverUrl: 'https://demo.mattermost.com' // Default demo server
-});
+// Phase 2 Demo Component - Teams & User Management
+const Phase2Demo: React.FC = () => {
+  const { currentUser, logout } = useAuth();
+  const { teams, currentTeam, switchTeam, loadTeams } = useTeams();
+  const { loadUsers } = useUsers();
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
+  // Load data when component mounts
+  useEffect(() => {
+    if (currentUser) {
+      loadTeams();
+      loadUsers();
+    }
+  }, [currentUser, loadTeams, loadUsers]);
+
+  const demoStyle: React.CSSProperties = {
+    padding: '20px',
+    backgroundColor: '#fff',
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    margin: '20px auto',
+    maxWidth: '800px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  };
+
+  const headerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '20px',
+    padding: '16px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '6px',
+  };
+
+  const userInfoStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  };
+
+  const contentStyle: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '20px',
+    marginTop: '20px',
+  };
+
+  const sectionStyle: React.CSSProperties = {
+    padding: '16px',
+    border: '1px solid #e0e0e0',
+    borderRadius: '6px',
+    backgroundColor: '#fafafa',
+  };
+
+  const handleTeamSelect = (team: any) => {
+    setSelectedTeamId(team.id);
+    switchTeam(team.id);
+  };
+
+  return (
+    <div style={demoStyle}>
+      {/* Header with User Info */}
+      <div style={headerStyle}>
+        <div style={userInfoStyle}>
+          <UserAvatar user={currentUser} size="medium" />
+          <div>
+            <div style={{ fontWeight: 'bold' }}>
+              {currentUser?.first_name} {currentUser?.last_name}
+            </div>
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              @{currentUser?.username}
+            </div>
+          </div>
+        </div>
+        <UserMenu 
+          user={currentUser} 
+          onLogout={logout}
+          size="medium"
+          showStatus={true}
+        />
+      </div>
+
+      {/* Phase 2 Components Demo */}
+      <div style={contentStyle}>
+        {/* Teams Section */}
+        <div style={sectionStyle}>
+          <h3 style={{ marginTop: 0, color: '#333' }}>Teams</h3>
+          {teams && teams.length > 0 ? (
+            <TeamList 
+              teams={teams}
+              selectedTeamId={selectedTeamId}
+              onTeamSelect={handleTeamSelect}
+              layout="vertical"
+            />
+          ) : (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+              Loading teams...
+            </div>
+          )}
+        </div>
+
+        {/* Current Team Info */}
+        <div style={sectionStyle}>
+          <h3 style={{ marginTop: 0, color: '#333' }}>Current Team</h3>
+          {currentTeam ? (
+            <div>
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Name:</strong> {currentTeam.display_name}
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Description:</strong> {currentTeam.description || 'No description'}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                ID: {currentTeam.id}
+              </div>
+            </div>
+          ) : (
+            <div style={{ color: '#666' }}>No team selected</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Auth status component
 const AuthStatus: React.FC = () => {
-  const { isAuthenticated, currentUser, isLoggingIn, logout } = useAuth();
+  const { isAuthenticated, currentUser, isLoggingIn } = useAuth();
 
   if (isLoggingIn) {
     return (
@@ -25,60 +150,37 @@ const AuthStatus: React.FC = () => {
   }
 
   if (isAuthenticated && currentUser) {
-    const successStyle: React.CSSProperties = {
-      padding: '20px',
-      backgroundColor: '#e8f5e8',
-      border: '1px solid #4caf50',
-      borderRadius: '8px',
-      maxWidth: '500px',
-      margin: '20px auto',
-    };
-
-    const titleStyle: React.CSSProperties = {
-      fontSize: '20px',
-      fontWeight: 600,
-      color: '#2e7d32',
-      margin: '0 0 12px 0',
-    };
-
-    const textStyle: React.CSSProperties = {
-      color: '#388e3c',
-      margin: '6px 0',
-    };
-
     return (
-      <div style={successStyle}>
-        <h3 style={titleStyle}>
-          ✅ Successfully connected to Mattermost!
-        </h3>
-        <p style={textStyle}><strong>Name:</strong> {currentUser.first_name} {currentUser.last_name}</p>
-        <p style={textStyle}><strong>Username:</strong> @{currentUser.username}</p>
-        <p style={textStyle}><strong>Email:</strong> {currentUser.email}</p>
-        <button 
-          onClick={logout}
-          style={{
-            marginTop: '16px',
-            padding: '8px 16px',
-            backgroundColor: '#d32f2f',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Logout
-        </button>
-      </div>
+      <>
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#e8f5e8',
+          border: '1px solid #4caf50',
+          borderRadius: '8px',
+          maxWidth: '800px',
+          margin: '20px auto',
+          textAlign: 'center',
+        }}>
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: 600,
+            color: '#2e7d32',
+            margin: '0 0 12px 0',
+          }}>
+            ✅ Successfully connected to Mattermost!
+          </h3>
+          <p style={{ color: '#388e3c', margin: '6px 0' }}>
+            Welcome {currentUser.first_name} {currentUser.last_name} (@{currentUser.username})
+          </p>
+        </div>
+        <Phase2Demo />
+      </>
     );
   }
 
   return (
     <div style={{ maxWidth: '500px', margin: '40px auto' }}>
-      <LoginForm 
-        onSuccess={() => {
-          console.log('Login successful!');
-        }}
-      />
+      <LoginForm onSuccess={() => console.log('Login successful!')} />
     </div>
   );
 };
@@ -157,22 +259,23 @@ const ReduxDemoContent: React.FC = () => {
           MattermostConnect Redux
         </h1>
         <p style={subtitleStyle}>
-          Phase 1: Redux Toolkit + RTK Query + Authentication
+          Phase 2: Teams + User Management (Built on Redux + Client4)
         </p>
       </header>
       
       <AuthStatus />
       
       <div style={featureBoxStyle}>
-        <h3 style={featureTitleStyle}>✅ Phase 1 Features Implemented</h3>
+        <h3 style={featureTitleStyle}>✅ Phase 2 Features Implemented</h3>
         <ul style={listStyle}>
-          <li style={listItemStyle}>✅ Redux Toolkit store with Mattermost architecture (entities/views/errors/auth)</li>
-          <li style={listItemStyle}>✅ RTK Query API client with official Mattermost endpoints</li>
-          <li style={listItemStyle}>✅ Auth slice with async login/logout thunks</li>
-          <li style={listItemStyle}>✅ Atomic Design components (Button, TextInput, LoginForm)</li>
-          <li style={listItemStyle}>✅ Typed React hooks (useAppSelector, useAppDispatch, useAuth)</li>
-          <li style={listItemStyle}>✅ Authentication flow with token persistence</li>
-          <li style={listItemStyle}>✅ CSS-in-JS styling compatible with MUI</li>
+          <li style={listItemStyle}>✅ Atoms: UserAvatar, StatusBadge, UnreadBadge, Dropdown</li>
+          <li style={listItemStyle}>✅ Molecules: UserCard, TeamItem, StatusSelector</li>
+          <li style={listItemStyle}>✅ Organisms: TeamList, UserMenu, UserProfileComponent</li>
+          <li style={listItemStyle}>✅ Hooks: useTeams, useUsers, useUserStatus</li>
+          <li style={listItemStyle}>✅ Redux integration with Client4 from mattermost-redux</li>
+          <li style={listItemStyle}>✅ Teams management with switching capabilities</li>
+          <li style={listItemStyle}>✅ User management and status handling</li>
+          <li style={listItemStyle}>✅ Complete TypeScript typing</li>
         </ul>
       </div>
 
@@ -182,7 +285,16 @@ const ReduxDemoContent: React.FC = () => {
           Just 3 lines to integrate in your React app:
         </p>
         <div style={codeBoxStyle}>
-{`import { store, setDefaultClient, LoginForm } from 'mattermost-connect';
+{`import { 
+  store, 
+  setDefaultClient, 
+  LoginForm,
+  TeamList,
+  UserMenu,
+  UserAvatar,
+  useTeams,
+  useUsers 
+} from 'mattermost-connect';
 import { Provider } from 'react-redux';
 
 // Setup Client4
@@ -193,6 +305,8 @@ setDefaultClient({
 // Use
 <Provider store={store}>
   <LoginForm />
+  <TeamList teams={teams} onTeamSelect={handleTeamSelect} />
+  <UserMenu user={user} onLogout={logout} />
 </Provider>`}
         </div>
       </div>
@@ -200,7 +314,8 @@ setDefaultClient({
       <div style={featureBoxStyle}>
         <h3 style={featureTitleStyle}>🏗️ Next Phases</h3>
         <ul style={listStyle}>
-          <li style={listItemStyle}>⏳ Phase 2: Teams + User Management</li>
+          <li style={listItemStyle}>✅ Phase 1: Redux Toolkit + RTK Query + Authentication</li>
+          <li style={listItemStyle}>✅ Phase 2: Teams + User Management</li>
           <li style={listItemStyle}>⏳ Phase 3: Channels + Navigation</li>
           <li style={listItemStyle}>⏳ Phase 4: Messages + Core Chat</li>
           <li style={listItemStyle}>⏳ Phase 5: Threads + WebSocket Real-time</li>

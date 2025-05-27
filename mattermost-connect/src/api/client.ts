@@ -7,6 +7,11 @@ export const mattermostClient: typeof Client4 = Client4;
 // Simple helpers for configuration
 export const setDefaultClient = (config: { serverUrl: string }): void => {
   Client4.setUrl(config.serverUrl);
+  
+  // Configure Client4 for cross-origin requests - disable cookies to avoid CORS issues
+  // with Access-Control-Allow-Origin: * servers
+  Client4.setIncludeCookies(false);
+  Client4.setEnableLogging(true);
 };
 
 export const getDefaultClient = (): typeof Client4 => {
