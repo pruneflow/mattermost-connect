@@ -2,17 +2,15 @@ import React from 'react';
 import { Provider } from 'react-redux';
 import { 
   store, 
-  MattermostClient,
   setDefaultClient,
   LoginForm, 
   useAuth
 } from 'mattermost-connect';
 
-// Initialize the default client
-const client = new MattermostClient({
+// Initialize the default client with Client4
+setDefaultClient({
   serverUrl: 'https://demo.mattermost.com' // Default demo server
 });
-setDefaultClient(client);
 
 // Auth status component
 const AuthStatus: React.FC = () => {
@@ -184,14 +182,13 @@ const ReduxDemoContent: React.FC = () => {
           Just 3 lines to integrate in your React app:
         </p>
         <div style={codeBoxStyle}>
-{`import { store, MattermostClient, setDefaultClient, LoginForm } from 'mattermost-connect';
+{`import { store, setDefaultClient, LoginForm } from 'mattermost-connect';
 import { Provider } from 'react-redux';
 
-// Setup
-const client = new MattermostClient({ 
+// Setup Client4
+setDefaultClient({ 
   serverUrl: 'https://your-mattermost.com' 
 });
-setDefaultClient(client);
 
 // Use
 <Provider store={store}>

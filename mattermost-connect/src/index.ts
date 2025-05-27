@@ -4,9 +4,9 @@
 // Redux store and state management
 export { store } from './store';
 
-// API types and client - explicit exports like src-old
+// API types and client
 export * from './api/types';
-export { default as MattermostClient, setDefaultClient, getDefaultClient } from './api/client';
+export { setDefaultClient, getDefaultClient } from './api/client';
 
 // Types will be available via * exports
 
