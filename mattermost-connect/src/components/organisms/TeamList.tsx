@@ -22,13 +22,15 @@ import {
   MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import { getTeamInitials, getTeamColor, filterTeams } from '../../utils/teamUtils';
+import { usePermissions, useErrorHandler, useNavigation, useTeamCreation } from '../../hooks';
+import { CreateTeamModal, type CreateTeamData } from './CreateTeamModal';
 import type { Team } from '../../api/types';
 
 export interface TeamListProps {
   teams: Team[];
   selectedTeamId?: string;
   onTeamSelect?: (team: Team) => void;
-  onCreateTeam?: () => void;
+  showCreateButton?: boolean; // default: true
   layout?: 'vertical' | 'horizontal' | 'tabs';
   loading?: boolean;
   error?: string | null;
@@ -38,7 +40,7 @@ export const TeamList: React.FC<TeamListProps> = ({
   teams,
   selectedTeamId,
   onTeamSelect,
-  onCreateTeam,
+  showCreateButton = true,
   layout = 'vertical',
   loading = false,
   error = null,
@@ -46,29 +48,61 @@ export const TeamList: React.FC<TeamListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedTeamForMenu, setSelectedTeamForMenu] = useState<Team | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  const { canCreateTeam } = usePermissions();
+  const { handleError } = useErrorHandler();
+  const { navigateToTeam } = useNavigation();
+  const { createTeam } = useTeamCreation();
 
   const filteredTeams = filterTeams(teams, searchTerm);
-
-  const handleTeamClick = useCallback((team: Team) => {
-    if (onTeamSelect) {
-      onTeamSelect(team);
+  const handleTeamClick = (team: Team) => {
+    try {
+      // Update navigation state
+      navigateToTeam(team.id);
+      
+      if (onTeamSelect) {
+        onTeamSelect(team);
+      }
+    } catch (error) {
+      handleError(error, {
+        component: 'TeamList',
+        action: 'selectTeam',
+        showToast: true
+      });
     }
-  }, [onTeamSelect]);
+  };
 
-  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
-  }, []);
+  };
 
-  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>, team: Team) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, team: Team) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
     setSelectedTeamForMenu(team);
-  }, []);
+  };
 
   const handleMenuClose = () => {
     setMenuAnchorEl(null);
     setSelectedTeamForMenu(null);
   };
+
+  const handleCreateTeamClick = () => {
+    setCreateModalOpen(true);
+  };
+
+  const handleCreateTeam = async (teamData: CreateTeamData) => {
+    await createTeam(teamData);
+    setCreateModalOpen(false);
+  };
+
+  const handleCloseModal = () => {
+    setCreateModalOpen(false);
+  };
+
+  // Show create button if: props allows it AND user has permissions
+  const shouldShowCreateButton = showCreateButton && canCreateTeam();
 
   if (loading) {
     return (
@@ -128,7 +162,7 @@ export const TeamList: React.FC<TeamListProps> = ({
           </Box>
         ))}
 
-        {onCreateTeam && (
+        {shouldShowCreateButton && (
           <Box
             sx={{
               px: 3,
@@ -141,7 +175,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 bgcolor: 'rgba(255,255,255,0.2)',
               },
             }}
-            onClick={onCreateTeam}
+            onClick={handleCreateTeamClick}
           >
             <AddIcon fontSize="small" sx={{ mr: 0.5 }} />
             Add Team
@@ -173,7 +207,7 @@ export const TeamList: React.FC<TeamListProps> = ({
           </Box>
         ))}
 
-        {onCreateTeam && (
+        {shouldShowCreateButton && (
           <Tooltip title="Create new team">
             <Avatar
               sx={{
@@ -181,7 +215,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 m: 0.5,
                 cursor: 'pointer',
               }}
-              onClick={onCreateTeam}
+              onClick={handleCreateTeamClick}
             >
               <AddIcon />
             </Avatar>
@@ -256,9 +290,9 @@ export const TeamList: React.FC<TeamListProps> = ({
         ))}
 
         {/* Create team item */}
-        {onCreateTeam && (
+        {shouldShowCreateButton && (
           <ListItem disablePadding>
-            <ListItemButton onClick={onCreateTeam}>
+            <ListItemButton onClick={handleCreateTeamClick}>
               <ListItemAvatar>
                 <Avatar sx={{ bgcolor: 'action.selected' }}>
                   <AddIcon />
@@ -282,6 +316,13 @@ export const TeamList: React.FC<TeamListProps> = ({
         <MenuItem onClick={handleMenuClose}>Manage Members</MenuItem>
         <MenuItem onClick={handleMenuClose}>View Team Info</MenuItem>
       </Menu>
+
+      {/* Create team modal */}
+      <CreateTeamModal
+        open={createModalOpen}
+        onClose={handleCloseModal}
+        onCreateTeam={handleCreateTeam}
+      />
     </Box>
   );
 };

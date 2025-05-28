@@ -100,9 +100,12 @@ export const Dropdown: React.FC<DropdownProps> = ({
     }
   };
 
-  const handleOptionClick = (optionValue: string, optionDisabled?: boolean) => {
-    if (!optionDisabled) {
-      onChange(optionValue);
+  const handleOptionSelect = (e: React.MouseEvent<HTMLDivElement>) => {
+    const value = e.currentTarget.dataset.value;
+    const disabled = e.currentTarget.dataset.disabled === 'true';
+    
+    if (!disabled && value) {
+      onChange(value);
       setIsOpen(false);
     }
   };
@@ -128,7 +131,9 @@ export const Dropdown: React.FC<DropdownProps> = ({
                 color: option.disabled ? '#6c757d' : '#212529',
                 cursor: option.disabled ? 'not-allowed' : 'pointer'
               }}
-              onClick={() => handleOptionClick(option.value, option.disabled)}
+              data-value={option.value}
+              data-disabled={option.disabled}
+              onClick={handleOptionSelect}
             >
               {option.icon && <span style={{ marginRight: '8px' }}>{option.icon}</span>}
               {option.label}

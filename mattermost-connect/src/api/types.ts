@@ -12,6 +12,13 @@ export type {
   TeamMembership as TeamMember
 } from '@mattermost/types/teams';
 
+// Import Team type for use in definitions
+import type { Team } from '@mattermost/types/teams';
+
+// Team creation request - partial data for creating new teams
+export type TeamCreationRequest = Pick<Team, 'name' | 'display_name' | 'type'> & 
+  Partial<Pick<Team, 'description' | 'company_name' | 'allow_open_invite'>>;
+
 export type {
   Channel,
   ChannelMembership as ChannelMember

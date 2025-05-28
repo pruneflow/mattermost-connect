@@ -79,6 +79,16 @@ const TextInput: React.FC<TextInputProps> = ({
     marginTop: '4px',
   };
 
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.target.style.borderColor = error ? '#d32f2f' : '#1976d2';
+    e.target.style.boxShadow = `0 0 0 2px ${error ? 'rgba(211, 47, 47, 0.2)' : 'rgba(25, 118, 210, 0.2)'}`;
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.target.style.borderColor = error ? '#d32f2f' : '#ddd';
+    e.target.style.boxShadow = 'none';
+  };
+
   return (
     <div style={containerStyle}>
       {label && (
@@ -90,14 +100,8 @@ const TextInput: React.FC<TextInputProps> = ({
       <input
         id={inputId}
         style={inputStyle}
-        onFocus={(e) => {
-          e.target.style.borderColor = error ? '#d32f2f' : '#1976d2';
-          e.target.style.boxShadow = `0 0 0 2px ${error ? 'rgba(211, 47, 47, 0.2)' : 'rgba(25, 118, 210, 0.2)'}`;
-        }}
-        onBlur={(e) => {
-          e.target.style.borderColor = error ? '#d32f2f' : '#ddd';
-          e.target.style.boxShadow = 'none';
-        }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         {...props}
       />
       

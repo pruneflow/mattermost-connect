@@ -1,11 +1,20 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 // Views State for UI-specific state
+// Navigation state following Mattermost pattern
+export interface NavigationState {
+  currentUrl: string;
+  previousUrl: string;
+  lastVisitedChannels: Record<string, string>; // teamId -> channelId
+  isNavigating: boolean;
+}
+
 export interface ViewsState {
   auth: {
     isLoggingIn: boolean;
     loginError: string | null;
   };
+  navigation: NavigationState;
   channels: {
     isChannelSidebarOpen: boolean;
     isRightSidebarOpen: boolean;
@@ -32,6 +41,12 @@ const initialState: ViewsState = {
   auth: {
     isLoggingIn: false,
     loginError: null,
+  },
+  navigation: {
+    currentUrl: '/',
+    previousUrl: '/',
+    lastVisitedChannels: {},
+    isNavigating: false,
   },
   channels: {
     isChannelSidebarOpen: true,
@@ -63,6 +78,22 @@ const viewsSlice = createSlice({
     },
     setLoginError: (state, action: PayloadAction<string | null>) => {
       state.auth.loginError = action.payload;
+    },
+
+    // Navigation
+    setCurrentUrl: (state, action: PayloadAction<string>) => {
+      state.navigation.previousUrl = state.navigation.currentUrl;
+      state.navigation.currentUrl = action.payload;
+    },
+    setNavigating: (state, action: PayloadAction<boolean>) => {
+      state.navigation.isNavigating = action.payload;
+    },
+    setLastVisitedChannel: (state, action: PayloadAction<{ teamId: string; channelId: string }>) => {
+      const { teamId, channelId } = action.payload;
+      state.navigation.lastVisitedChannels[teamId] = channelId;
+    },
+    restoreLastVisitedChannels: (state, action: PayloadAction<Record<string, string>>) => {
+      state.navigation.lastVisitedChannels = action.payload;
     },
 
     // Channel views
@@ -136,6 +167,12 @@ export const {
   // Auth
   setLoggingIn,
   setLoginError,
+  
+  // Navigation
+  setCurrentUrl,
+  setNavigating,
+  setLastVisitedChannel,
+  restoreLastVisitedChannels,
   
   // Channels
   setChannelSidebarOpen,

@@ -171,6 +171,17 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     }
   }, [user]);
 
+  const handleCameraClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleStatusSelect = (e: React.MouseEvent<HTMLLIElement>) => {
+    const status = e.currentTarget.dataset.status as UserStatus['status'];
+    if (status) {
+      handleStatusChange(status);
+    }
+  };
+
   const profileContent = (
     <Box sx={{ p: 3 }}>
       {/* Header with avatar and basic info */}
@@ -188,7 +199,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                     border: '1px solid',
                     borderColor: 'divider'
                   }}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={handleCameraClick}
                   disabled={isUploadingImage}
                 >
                   {isUploadingImage ? (
@@ -384,7 +395,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({
       {STATUS_OPTIONS.map((option) => (
         <MenuItem
           key={option.value}
-          onClick={() => handleStatusChange(option.value)}
+          data-status={option.value}
+          onClick={handleStatusSelect}
           selected={status === option.value}
           disabled={isUpdatingStatus}
         >

@@ -81,6 +81,13 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     setProfileOpen(false);
   }, []);
 
+  const handleStatusSelect = (e: React.MouseEvent<HTMLLIElement>) => {
+    const status = e.currentTarget.dataset.status as UserStatus['status'];
+    if (status) {
+      handleStatusChange(status);
+    }
+  };
+
   return (
     <>
       <Box 
@@ -133,7 +140,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         {STATUS_OPTIONS.map((option) => (
           <MenuItem
             key={option.value}
-            onClick={() => handleStatusChange(option.value)}
+            data-status={option.value}
+            onClick={handleStatusSelect}
             selected={status === option.value}
             disabled={isUpdatingStatus}
             sx={{ display: 'flex', justifyContent: 'space-between' }}

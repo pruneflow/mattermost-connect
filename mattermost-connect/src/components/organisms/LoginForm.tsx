@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, TextInput } from '../atoms';
-import { useAppDispatch, useAppSelector } from '../../hooks';
+import { useAppDispatch, useAppSelector, useErrorHandler } from '../../hooks';
 import { loginUser } from '../../store/slices/authSlice';
 
 export interface LoginFormProps {
@@ -11,6 +11,7 @@ export interface LoginFormProps {
 const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
   const dispatch = useAppDispatch();
   const { isLoggingIn, loginError } = useAppSelector(state => state.views.auth);
+  const { handleError } = useErrorHandler();
   
   const [formData, setFormData] = useState({
     serverUrl: '',
@@ -67,8 +68,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
         onSuccess?.();
       }
     } catch (error) {
-      // Error is handled by the auth slice
-      console.error('Login failed:', error);
+      // Handle error with proper logging and user feedback
+      handleError(error, {
+        component: 'LoginForm',
+        action: 'login',
+        showToast: true
+      });
     }
   };
 
