@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
+import { FormControl, Select, MenuItem, Box, SelectChangeEvent } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material';
 
 export interface DropdownOption {
   label: string;
@@ -14,7 +16,7 @@ export interface DropdownProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
 }
 
 export const Dropdown: React.FC<DropdownProps> = ({
@@ -26,122 +28,67 @@ export const Dropdown: React.FC<DropdownProps> = ({
   className,
   sx
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const selectedOption = options.find(opt => opt.value === value);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const containerStyle: React.CSSProperties = {
-    position: 'relative',
-    display: 'inline-block',
-    minWidth: '120px',
-    ...sx
-  };
-
-  const triggerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    padding: '8px 12px',
-    backgroundColor: 'white',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontSize: '14px',
-    color: disabled ? '#6c757d' : '#212529',
-    opacity: disabled ? 0.6 : 1
-  };
-
-  const arrowStyle: React.CSSProperties = {
-    marginLeft: '8px',
-    fontSize: '12px',
-    transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-    transition: 'transform 0.2s ease'
-  };
-
-  const menuStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-    zIndex: 1000,
-    maxHeight: '200px',
-    overflowY: 'auto'
-  };
-
-  const optionStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '8px 12px',
-    fontSize: '14px',
-    cursor: 'pointer',
-    borderBottom: '1px solid #f8f9fa'
-  };
-
-  const handleToggle = () => {
-    if (!disabled) {
-      setIsOpen(!isOpen);
-    }
-  };
-
-  const handleOptionSelect = (e: React.MouseEvent<HTMLDivElement>) => {
-    const value = e.currentTarget.dataset.value;
-    const disabled = e.currentTarget.dataset.disabled === 'true';
-    
-    if (!disabled && value) {
-      onChange(value);
-      setIsOpen(false);
-    }
+  const handleChange = (event: SelectChangeEvent<string>) => {
+    onChange(event.target.value);
   };
 
   return (
-    <div ref={dropdownRef} style={containerStyle} className={className}>
-      <div style={triggerStyle} onClick={handleToggle}>
-        <span style={{ display: 'flex', alignItems: 'center' }}>
-          {selectedOption?.icon && <span style={{ marginRight: '8px' }}>{selectedOption.icon}</span>}
-          {selectedOption?.label || placeholder}
-        </span>
-        <span style={arrowStyle}>▼</span>
-      </div>
-      
-      {isOpen && (
-        <div style={menuStyle}>
-          {options.map((option) => (
-            <div
-              key={option.value}
-              style={{
-                ...optionStyle,
-                backgroundColor: option.value === value ? '#f8f9fa' : 'transparent',
-                color: option.disabled ? '#6c757d' : '#212529',
-                cursor: option.disabled ? 'not-allowed' : 'pointer'
-              }}
-              data-value={option.value}
-              data-disabled={option.disabled}
-              onClick={handleOptionSelect}
-            >
-              {option.icon && <span style={{ marginRight: '8px' }}>{option.icon}</span>}
-              {option.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <FormControl 
+      size="small" 
+      className={className}
+      sx={{ 
+        minWidth: 120, 
+        ...sx 
+      }}
+    >
+      <Select
+        value={value || ''}
+        onChange={handleChange}
+        disabled={disabled}
+        displayEmpty
+        renderValue={(selected) => {
+          if (!selected) {
+            return placeholder;
+          }
+          const selectedOption = options.find(opt => opt.value === selected);
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {selectedOption?.icon && (
+                <Box sx={{ mr: 1, display: 'flex' }}>
+                  {selectedOption.icon}
+                </Box>
+              )}
+              {selectedOption?.label}
+            </Box>
+          );
+        }}
+        sx={{
+          '& .MuiSelect-select': {
+            display: 'flex',
+            alignItems: 'center',
+          },
+        }}
+      >
+        {options.map((option) => (
+          <MenuItem
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            {option.icon && (
+              <Box sx={{ mr: 1, display: 'flex' }}>
+                {option.icon}
+              </Box>
+            )}
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
   );
 };
 

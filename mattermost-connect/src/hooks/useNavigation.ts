@@ -94,18 +94,12 @@ export const useNavigation = () => {
     }
   }, [lastVisitedChannels]);
   
-  // Navigate to URL - following Mattermost pattern
+  // Navigate to URL - following Mattermost pattern (memory only)
   const navigateToUrl = useCallback((url: string) => {
     if (url === currentUrl) return; // No-op if same URL
     
     dispatch(setNavigating(true));
     dispatch(setCurrentUrl(url));
-    
-    // Update browser URL if we're in a browser environment
-    if (typeof window !== 'undefined' && window.history) {
-      window.history.pushState({}, '', url);
-    }
-    
     dispatch(setNavigating(false));
   }, [currentUrl, dispatch]);
   
@@ -186,21 +180,7 @@ export const useNavigation = () => {
     return location.teamName === team.name && location.channelName === channelId;
   }, [teams, getCurrentLocation]);
   
-  // Handle browser back/forward
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const handlePopState = (event: PopStateEvent) => {
-      const url = window.location.pathname;
-      dispatch(setCurrentUrl(url));
-    };
-    
-    window.addEventListener('popstate', handlePopState);
-    
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [dispatch]);
+  // Note: Navigation is memory-only, no browser URL handling
   
   return {
     // State

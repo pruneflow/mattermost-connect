@@ -27,3 +27,7 @@ export * from './store/slices/errorsSlice';
 
 // Client4 from mattermost-redux
 export { Client4, mattermostClient } from './api/client';
+
+// Providers
+export { ThemeProvider } from './providers';
+export type { ThemeProviderProps } from './providers';

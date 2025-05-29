@@ -12,6 +12,10 @@ export type {
   TeamMembership as TeamMember
 } from '@mattermost/types/teams';
 
+export type {
+  PreferenceType
+} from '@mattermost/types/preferences';
+
 // Import Team type for use in definitions
 import type { Team } from '@mattermost/types/teams';
 

@@ -1,7 +1,9 @@
 import React from 'react';
+import { Box, Typography, ButtonBase } from '@mui/material';
 import { UserAvatar, StatusBadge } from '../atoms';
 import { displayUsername } from '../../utils/userUtils';
 import type { UserProfile, UserStatus } from '../../api/types';
+import type { SxProps, Theme } from '@mui/material';
 
 export interface UserCardProps {
   user: UserProfile;
@@ -11,7 +13,7 @@ export interface UserCardProps {
   size?: 'small' | 'medium' | 'large';
   onClick?: () => void;
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
 }
 
 export const UserCard: React.FC<UserCardProps> = ({
@@ -24,93 +26,105 @@ export const UserCard: React.FC<UserCardProps> = ({
   className,
   sx
 }) => {
-  const containerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: size === 'small' ? '8px' : size === 'medium' ? '12px' : '16px',
-    padding: size === 'small' ? '8px' : size === 'medium' ? '12px' : '16px',
-    borderRadius: '6px',
-    cursor: onClick ? 'pointer' : 'default',
-    transition: 'background-color 0.2s ease',
-    ...sx
+  const gap = { 
+    xs: size === 'small' ? 0.75 : size === 'medium' ? 1 : 1.5,
+    sm: size === 'small' ? 1 : size === 'medium' ? 1.5 : 2
+  };
+  const padding = { 
+    xs: size === 'small' ? 0.75 : size === 'medium' ? 1 : 1.5,
+    sm: size === 'small' ? 1 : size === 'medium' ? 1.5 : 2
   };
 
-  // Note: CSS-in-JS doesn't support pseudo-selectors like :hover
-  const hoverClass = onClick ? 'user-card-hoverable' : '';
-
-  const contentStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    flex: 1,
-    minWidth: 0 // Allow text truncation
-  };
-
-  const nameStyle: React.CSSProperties = {
-    fontSize: size === 'small' ? '13px' : size === 'medium' ? '14px' : '16px',
-    fontWeight: 600,
-    color: '#212529',
-    margin: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  };
-
-  const usernameStyle: React.CSSProperties = {
-    fontSize: size === 'small' ? '11px' : size === 'medium' ? '12px' : '13px',
-    color: '#6c757d',
-    margin: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  };
-
-  const emailStyle: React.CSSProperties = {
-    fontSize: size === 'small' ? '10px' : size === 'medium' ? '11px' : '12px',
-    color: '#868e96',
-    margin: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  };
-
-  const statusContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px'
-  };
-
-
-  return (
-    <div 
-      style={containerStyle} 
-      className={`${className || ''} ${hoverClass}`.trim()}
-      onClick={onClick}
+  const content = (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap,
+        p: padding,
+        borderRadius: 1.5,
+        width: '100%',
+        ...sx
+      }}
     >
       <UserAvatar user={user} size={size} />
       
-      <div style={contentStyle}>
-        <div style={nameStyle}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: 0.25, 
+        flex: 1, 
+        minWidth: 0 
+      }}>
+        <Typography
+          variant={size === 'small' ? 'body2' : size === 'medium' ? 'body1' : 'h6'}
+          sx={{
+            fontWeight: 600,
+            color: 'text.primary',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
           {displayUsername(user, 'full_name')}
-        </div>
+        </Typography>
         
-        <div style={usernameStyle}>
+        <Typography
+          variant={size === 'small' ? 'caption' : 'body2'}
+          sx={{
+            color: 'text.secondary',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
           @{user.username}
-        </div>
+        </Typography>
         
         {showEmail && user.email && (
-          <div style={emailStyle}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.disabled',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
             {user.email}
-          </div>
+          </Typography>
         )}
-      </div>
+      </Box>
       
       {showStatus && (
-        <div style={statusContainerStyle}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <StatusBadge status={status} size={size === 'large' ? 'md' : 'sm'} />
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
+  );
+
+  if (onClick) {
+    return (
+      <ButtonBase
+        className={className}
+        onClick={onClick}
+        sx={{
+          borderRadius: 1.5,
+          '&:hover': {
+            backgroundColor: 'action.hover',
+          },
+        }}
+      >
+        {content}
+      </ButtonBase>
+    );
+  }
+
+  return (
+    <Box className={className}>
+      {content}
+    </Box>
   );
 };
 

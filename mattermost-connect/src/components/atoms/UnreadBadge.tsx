@@ -1,11 +1,14 @@
 import React from 'react';
+import { Badge } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material';
 
 export interface UnreadBadgeProps {
   count: number;
   mentions?: number;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
-  sx?: React.CSSProperties;
+  sx?: SxProps<Theme>;
+  children?: React.ReactNode;
 }
 
 export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
@@ -13,14 +16,17 @@ export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   mentions = 0,
   size = 'md',
   className,
-  sx
+  sx,
+  children
 }) => {
-  if (count === 0 && mentions === 0) return null;
+  if (count === 0 && mentions === 0) {
+    return children ? <>{children}</> : null;
+  }
 
   const sizeMap = {
-    sm: { height: 16, fontSize: '10px', padding: '0 4px' },
-    md: { height: 18, fontSize: '11px', padding: '0 5px' },
-    lg: { height: 20, fontSize: '12px', padding: '0 6px' }
+    sm: { fontSize: '10px', minWidth: 16, height: 16 },
+    md: { fontSize: '11px', minWidth: 18, height: 18 },
+    lg: { fontSize: '12px', minWidth: 20, height: 20 }
   };
 
   const sizeConfig = sizeMap[size];
@@ -29,32 +35,57 @@ export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   const displayCount = mentions > 0 ? mentions : count;
   const isMention = mentions > 0;
 
-  const badgeStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: sizeConfig.height,
-    minWidth: sizeConfig.height,
-    backgroundColor: isMention ? '#dc3545' : '#6c757d',
-    color: 'white',
-    borderRadius: sizeConfig.height / 2,
-    fontSize: sizeConfig.fontSize,
-    fontWeight: 600,
-    padding: sizeConfig.padding,
-    lineHeight: 1,
-    ...sx
-  };
-
   // Format count for display (Mattermost standard)
   const formatCount = (num: number): string => {
     if (num > 999) return '999+';
     return num.toString();
   };
 
+  const badgeContent = formatCount(displayCount);
+
+  if (children) {
+    return (
+      <Badge
+        badgeContent={badgeContent}
+        color={isMention ? 'error' : 'default'}
+        className={className}
+        sx={{
+          '& .MuiBadge-badge': {
+            fontSize: sizeConfig.fontSize,
+            minWidth: sizeConfig.minWidth,
+            height: sizeConfig.height,
+            fontWeight: 600,
+            backgroundColor: isMention ? 'error.main' : 'action.disabled',
+            color: 'common.white',
+          },
+          ...sx
+        }}
+      >
+        {children}
+      </Badge>
+    );
+  }
+
+  // Standalone badge
   return (
-    <span style={badgeStyle} className={className}>
-      {formatCount(displayCount)}
-    </span>
+    <Badge
+      badgeContent={badgeContent}
+      color={isMention ? 'error' : 'default'}
+      className={className}
+      sx={{
+        '& .MuiBadge-badge': {
+          fontSize: sizeConfig.fontSize,
+          minWidth: sizeConfig.minWidth,
+          height: sizeConfig.height,
+          fontWeight: 600,
+          backgroundColor: isMention ? 'error.main' : 'action.disabled',
+          color: 'common.white',
+          position: 'static',
+          transform: 'none',
+        },
+        ...sx
+      }}
+    />
   );
 };
 

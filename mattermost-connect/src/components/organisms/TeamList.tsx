@@ -23,7 +23,7 @@ import {
 } from '@mui/icons-material';
 import { getTeamInitials, getTeamColor, filterTeams } from '../../utils/teamUtils';
 import { usePermissions, useErrorHandler, useNavigation, useTeamCreation } from '../../hooks';
-import { CreateTeamModal, type CreateTeamData } from './CreateTeamModal';
+import { CreateTeamDialog, type CreateTeamData } from './CreateTeamDialog';
 import type { Team } from '../../api/types';
 
 export interface TeamListProps {
@@ -130,31 +130,44 @@ export const TeamList: React.FC<TeamListProps> = ({
           width: '100%',
           display: 'flex',
           overflowX: 'auto',
-          bgcolor: 'primary.dark',
+          bgcolor: 'primary.main',
           minHeight: 48,
+          // Amélioration scroll mobile
+          scrollbarWidth: 'none', // Firefox
+          '&::-webkit-scrollbar': {
+            display: 'none', // Chrome/Safari
+          },
+          // Assurer que ça ne dépasse pas
+          maxWidth: '100vw',
+          boxSizing: 'border-box',
         }}
       >
         {filteredTeams.map((team) => (
           <Box
             key={team.id}
             sx={{
-              px: 3,
+              px: { xs: 1.5, sm: 3 },
               py: 1.5,
               minWidth: 'fit-content',
               display: 'flex',
               alignItems: 'center',
-              color: 'white',
+              color: 'common.white',
               cursor: 'pointer',
               borderBottom:
                 selectedTeamId === team.id ? '3px solid' : '3px solid transparent',
+              borderColor: selectedTeamId === team.id ? 'common.white' : 'transparent',
               fontWeight: selectedTeamId === team.id ? 'bold' : 'normal',
+              fontSize: { xs: '0.875rem', sm: '1rem' },
               bgcolor:
                 selectedTeamId === team.id
-                  ? 'rgba(255,255,255,0.1)'
+                  ? 'action.selected'
                   : 'transparent',
               '&:hover': {
-                bgcolor: 'rgba(255,255,255,0.2)',
+                bgcolor: 'action.hover',
               },
+              // Assurer que le texte ne wrap pas
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
             onClick={() => handleTeamClick(team)}
           >
@@ -165,14 +178,15 @@ export const TeamList: React.FC<TeamListProps> = ({
         {shouldShowCreateButton && (
           <Box
             sx={{
-              px: 3,
+              px: { xs: 2, sm: 3 },
               py: 1.5,
               display: 'flex',
               alignItems: 'center',
-              color: 'white',
+              color: 'common.white',
               cursor: 'pointer',
+              fontSize: { xs: '0.875rem', sm: '1rem' },
               '&:hover': {
-                bgcolor: 'rgba(255,255,255,0.2)',
+                bgcolor: 'action.hover',
               },
             }}
             onClick={handleCreateTeamClick}
@@ -278,12 +292,11 @@ export const TeamList: React.FC<TeamListProps> = ({
                 secondary={team.description || 'No description'}
                 primaryTypographyProps={{
                   noWrap: true,
-                  style: { maxWidth: '180px' },
                 }}
                 secondaryTypographyProps={{
                   noWrap: true,
-                  style: { maxWidth: '180px' },
                 }}
+                sx={{ minWidth: 0 }}
               />
             </ListItemButton>
           </ListItem>
@@ -318,7 +331,7 @@ export const TeamList: React.FC<TeamListProps> = ({
       </Menu>
 
       {/* Create team modal */}
-      <CreateTeamModal
+      <CreateTeamDialog
         open={createModalOpen}
         onClose={handleCloseModal}
         onCreateTeam={handleCreateTeam}

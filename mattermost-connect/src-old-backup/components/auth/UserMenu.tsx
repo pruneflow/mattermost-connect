@@ -133,7 +133,7 @@ export const UserMenu = React.memo(
     // Si pas d'utilisateur, rendu simplifié
     if (!user) {
       return (
-        <Box sx={{ position: "relative" }}>
+        <Box sx={{ position: "relative", cursor: "pointer" }}>
           <UserAvatar
             size={size}
             onClick={handleAvatarClick}
@@ -251,7 +251,7 @@ export const UserMenu = React.memo(
 
     return (
       <>
-        <Box ref={avatarBoxRef} sx={{ position: "relative" }}>
+        <Box ref={avatarBoxRef} sx={{ position: "relative", cursor: "pointer"  }}>
           <UserAvatar
             user={user}
             size={size}

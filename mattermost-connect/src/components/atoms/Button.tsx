@@ -1,10 +1,11 @@
 import React from 'react';
+import { Button as MuiButton, CircularProgress } from '@mui/material';
+import type { ButtonProps as MuiButtonProps } from '@mui/material';
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends Omit<MuiButtonProps, 'variant' | 'size'> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
-  children: React.ReactNode;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -13,77 +14,68 @@ const Button: React.FC<ButtonProps> = ({
   loading = false,
   disabled,
   children,
-  style,
+  sx,
   ...props
 }) => {
-  const baseStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 500,
-    borderRadius: '6px',
-    border: 'none',
-    cursor: disabled || loading ? 'not-allowed' : 'pointer',
-    transition: 'all 0.2s ease',
-    fontFamily: 'inherit',
-    opacity: disabled || loading ? 0.6 : 1,
+  const getVariant = (): MuiButtonProps['variant'] => {
+    switch (variant) {
+      case 'primary':
+      case 'danger':
+        return 'contained';
+      case 'secondary':
+        return 'outlined';
+      case 'ghost':
+        return 'text';
+      default:
+        return 'contained';
+    }
   };
 
-  const variantStyles = {
-    primary: {
-      backgroundColor: '#1976d2',
-      color: 'white',
-    },
-    secondary: {
-      backgroundColor: '#f5f5f5',
-      color: '#333',
-      border: '1px solid #ddd',
-    },
-    danger: {
-      backgroundColor: '#d32f2f',
-      color: 'white',
-    },
-    ghost: {
-      backgroundColor: 'transparent',
-      color: '#666',
-    },
+  const getColor = (): MuiButtonProps['color'] => {
+    switch (variant) {
+      case 'primary':
+        return 'primary';
+      case 'danger':
+        return 'error';
+      case 'secondary':
+      case 'ghost':
+        return 'inherit';
+      default:
+        return 'primary';
+    }
   };
 
-  const sizeStyles = {
-    sm: {
-      padding: '6px 12px',
-      fontSize: '13px',
-    },
-    md: {
-      padding: '8px 16px',
-      fontSize: '14px',
-    },
-    lg: {
-      padding: '12px 24px',
-      fontSize: '16px',
-    },
-  };
-
-  const finalStyle = {
-    ...baseStyle,
-    ...variantStyles[variant],
-    ...sizeStyles[size],
-    ...style,
+  const getSize = (): MuiButtonProps['size'] => {
+    switch (size) {
+      case 'sm':
+        return 'small';
+      case 'lg':
+        return 'large';
+      default:
+        return 'medium';
+    }
   };
 
   return (
-    <button
-      style={finalStyle}
+    <MuiButton
+      variant={getVariant()}
+      color={getColor()}
+      size={getSize()}
       disabled={disabled || loading}
+      startIcon={loading ? <CircularProgress size={16} /> : undefined}
+      sx={{
+        textTransform: 'none',
+        borderRadius: 1.5,
+        fontWeight: 500,
+        // Mobile touch targets
+        minHeight: { xs: 44, sm: 'auto' },
+        px: { xs: 2, sm: 'auto' },
+        ...sx,
+      }}
       {...props}
     >
-      {loading && (
-        <span style={{ marginRight: '8px' }}>
-          ⏳
-        </span>
-      )}
       {children}
-    </button>
+    </MuiButton>
   );
 };
 

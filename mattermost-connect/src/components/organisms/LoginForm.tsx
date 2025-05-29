@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Box, Card, Typography, Alert } from '@mui/material';
 import { Button, TextInput } from '../atoms';
 import { useAppDispatch, useAppSelector, useErrorHandler } from '../../hooks';
 import { loginUser } from '../../store/slices/authSlice';
@@ -85,71 +86,30 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
     }
   };
 
-  const containerStyle: React.CSSProperties = {
-    maxWidth: '400px',
-    margin: '0 auto',
-    padding: '20px',
-  };
-
-  const cardStyle: React.CSSProperties = {
-    backgroundColor: 'white',
-    borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
-    padding: '32px',
-  };
-
-  const headerStyle: React.CSSProperties = {
-    textAlign: 'center',
-    marginBottom: '24px',
-  };
-
-  const titleStyle: React.CSSProperties = {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    color: '#333',
-    margin: '0 0 8px 0',
-  };
-
-  const subtitleStyle: React.CSSProperties = {
-    fontSize: '14px',
-    color: '#666',
-    margin: 0,
-  };
-
-  const errorBoxStyle: React.CSSProperties = {
-    backgroundColor: '#ffebee',
-    border: '1px solid #ffcdd2',
-    borderRadius: '4px',
-    padding: '12px',
-    marginBottom: '16px',
-  };
-
-  const errorTextStyle: React.CSSProperties = {
-    fontSize: '14px',
-    color: '#d32f2f',
-    margin: 0,
-  };
-
-  const footerStyle: React.CSSProperties = {
-    textAlign: 'center',
-    marginTop: '24px',
-  };
-
-  const footerTextStyle: React.CSSProperties = {
-    fontSize: '12px',
-    color: '#999',
-    margin: 0,
-  };
 
   return (
-    <div style={containerStyle}>
-      <div style={cardStyle}>
-        <div style={headerStyle}>
-          <h2 style={titleStyle}>Sign in to Mattermost</h2>
-          <p style={subtitleStyle}>
+    <Box sx={{ 
+      maxWidth: { xs: '100%', sm: 400 }, 
+      margin: '0 auto', 
+      p: { xs: 1, sm: 2.5 },
+      minHeight: { xs: '100vh', sm: 'auto' },
+      display: { xs: 'flex', sm: 'block' },
+      alignItems: { xs: 'center', sm: 'flex-start' }
+    }}>
+      <Card sx={{ 
+        p: { xs: 3, sm: 4 }, 
+        borderRadius: { xs: 2, sm: 2 },
+        width: '100%',
+        maxWidth: { xs: 400, sm: 'none' }
+      }}>
+        <Box sx={{ textAlign: 'center', mb: 3 }}>
+          <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', mb: 1 }}>
+            Sign in to Mattermost
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             Connect to your Mattermost server
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
         <form onSubmit={handleSubmit}>
           <TextInput
@@ -158,7 +118,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
             placeholder="https://your-mattermost-server.com"
             value={formData.serverUrl}
             onChange={handleChange('serverUrl')}
-            error={fieldErrors.serverUrl}
+            error={!!fieldErrors.serverUrl}
+            helperText={fieldErrors.serverUrl}
             disabled={isLoggingIn}
             required
           />
@@ -169,7 +130,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
             placeholder="Enter your email or username"
             value={formData.loginId}
             onChange={handleChange('loginId')}
-            error={fieldErrors.loginId}
+            error={!!fieldErrors.loginId}
+            helperText={fieldErrors.loginId}
             disabled={isLoggingIn}
             required
           />
@@ -180,15 +142,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
             placeholder="Enter your password"
             value={formData.password}
             onChange={handleChange('password')}
-            error={fieldErrors.password}
+            error={!!fieldErrors.password}
+            helperText={fieldErrors.password}
             disabled={isLoggingIn}
             required
           />
 
           {loginError && (
-            <div style={errorBoxStyle}>
-              <p style={errorTextStyle}>{loginError}</p>
-            </div>
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {loginError}
+            </Alert>
           )}
 
           <Button
@@ -196,19 +159,19 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
             variant="primary"
             size="lg"
             loading={isLoggingIn}
-            style={{ width: '100%' }}
+            sx={{ width: '100%' }}
           >
             {isLoggingIn ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
 
-        <div style={footerStyle}>
-          <p style={footerTextStyle}>
+        <Box sx={{ textAlign: 'center', mt: 3 }}>
+          <Typography variant="caption" color="text.secondary">
             Make sure your Mattermost server is accessible and you have valid credentials
-          </p>
-        </div>
-      </div>
-    </div>
+          </Typography>
+        </Box>
+      </Card>
+    </Box>
   );
 };
 

@@ -11,12 +11,14 @@ import {
 } from '@mui/material';
 import {
   AccountCircle as AccountCircleIcon,
+  Settings as SettingsIcon,
   Logout as LogoutIcon,
   Check as CheckIcon,
 } from '@mui/icons-material';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { StatusBadge } from '../atoms/StatusBadge';
 import { UserProfile } from './UserProfile';
+import { SettingsDialog } from './SettingsDialog';
 import { useUserStatus } from '../../hooks/useUserStatus';
 import { displayUsername } from '../../utils/userUtils';
 import { STATUS_OPTIONS } from '../../utils/statusUtils';
@@ -39,6 +41,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
 }) => {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { status, updateStatus } = useUserStatus();
 
@@ -81,6 +84,15 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     setProfileOpen(false);
   }, []);
 
+  const handleSettingsOpen = useCallback(() => {
+    setSettingsOpen(true);
+    handleCloseMenu();
+  }, [handleCloseMenu]);
+
+  const handleSettingsClose = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
+
   const handleStatusSelect = (e: React.MouseEvent<HTMLLIElement>) => {
     const status = e.currentTarget.dataset.status as UserStatus['status'];
     if (status) {
@@ -95,9 +107,18 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           cursor: 'pointer',
           transition: 'transform 0.2s ease, box-shadow 0.2s ease',
           borderRadius: '50%',
+          // Mobile touch target
+          minWidth: { xs: 44, sm: 'auto' },
+          minHeight: { xs: 44, sm: 'auto' },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           '&:hover': {
-            transform: 'scale(1.05)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            transform: { xs: 'none', sm: 'scale(1.05)' }, // Pas de scale sur mobile
+            boxShadow: { xs: 'none', sm: 4 },
+          },
+          '&:active': {
+            transform: { xs: 'scale(0.95)', sm: 'scale(1.05)' }, // Feedback tactile mobile
           }
         }} 
         onClick={handleAvatarClick}
@@ -107,10 +128,22 @@ export const UserMenu: React.FC<UserMenuProps> = ({
 
       <Menu
         anchorEl={menuAnchor}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        anchorOrigin={{ 
+          vertical: 'bottom', 
+          horizontal: 'right'
+        }}
+        transformOrigin={{ 
+          vertical: 'top', 
+          horizontal: 'right'
+        }}
         open={Boolean(menuAnchor)}
         onClose={handleCloseMenu}
+        sx={{
+          '& .MuiPaper-root': {
+            minWidth: { xs: 200, sm: 240 },
+            maxWidth: { xs: 280, sm: 320 },
+          }
+        }}
       >
         {/* User info */}
         <Box sx={{ py: 1, px: 2 }}>
@@ -169,15 +202,21 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         ))}
         <Divider />
 
-        {/* Profile and logout */}
+        {/* Profile, Settings and logout */}
         {showProfile && (
           <MenuItem onClick={handleProfileOpen}>
             <ListItemIcon>
               <AccountCircleIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Profile Settings</ListItemText>
+            <ListItemText>Profile</ListItemText>
           </MenuItem>
         )}
+        <MenuItem onClick={handleSettingsOpen}>
+          <ListItemIcon>
+            <SettingsIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Settings</ListItemText>
+        </MenuItem>
         {onLogout && (
           <MenuItem onClick={handleLogout}>
             <ListItemIcon>
@@ -196,6 +235,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           onClose={handleProfileClose}
         />
       )}
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={handleSettingsClose}
+      />
     </>
   );
 };

@@ -57,10 +57,9 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
       sx={{
         width: avatarSize,
         height: avatarSize,
-        bgcolor: '#166de0', // Mattermost blue
+        bgcolor: 'primary.main', // Use theme primary color (Mattermost blue in light)
         fontSize: size === 'small' ? '12px' : size === 'medium' ? '14px' : '18px',
         fontWeight: 600,
-        cursor: onClick ? 'pointer' : 'default',
       }}
       onClick={onClick}
     >
@@ -85,7 +84,8 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
             height: size === 'small' ? 8 : size === 'medium' ? 10 : 12,
             borderRadius: '50%',
             bgcolor: statusColor,
-            border: '2px solid white',
+            border: '2px solid',
+            borderColor: 'background.paper',
           }}
         />
       }

@@ -424,7 +424,12 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth={false} disableGutters sx={{ minHeight: "100vh" }}>
+      <Container maxWidth={false} disableGutters sx={{ 
+        minHeight: "100vh",
+        overflowX: "hidden",
+        maxWidth: "100vw",
+        width: "100%",
+      }}>
         {renderProvider()}
         <Snackbar
           open={!!error}

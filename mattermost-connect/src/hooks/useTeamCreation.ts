@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { Client4 } from '../api/client';
 import { setTeam, setCurrentTeamId } from '../store/slices/entitiesSlice';
-import type { CreateTeamData } from '../components/organisms/CreateTeamModal';
+import type { CreateTeamData } from '../components/organisms/CreateTeamDialog';
 import type { Team, TeamCreationRequest } from '../api/types';
 
 export const useTeamCreation = () => {

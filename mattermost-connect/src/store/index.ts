@@ -6,6 +6,7 @@ import entitiesReducer from './slices/entitiesSlice';
 import viewsReducer from './slices/viewsSlice';
 import errorsReducer from './slices/errorsSlice';
 import authReducer from './slices/authSlice';
+import preferencesReducer from './slices/preferencesSlice';
 
 // Configure Client4 immediately before store creation if credentials exist
 const token = localStorage.getItem('mattermostToken');
@@ -27,6 +28,7 @@ export const store = configureStore({
     views: viewsReducer,
     errors: errorsReducer,
     auth: authReducer,
+    preferences: preferencesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -59,3 +61,4 @@ export * from './slices/entitiesSlice';
 export * from './slices/viewsSlice';
 export * from './slices/errorsSlice';
 export * from './slices/authSlice';
+export * from './slices/preferencesSlice';

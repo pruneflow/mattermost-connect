@@ -16,6 +16,7 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  alpha,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -37,6 +38,7 @@ import { displayUsername } from '../../utils/userUtils';
 import { STATUS_OPTIONS } from '../../utils/statusUtils';
 import { setUser } from '../../store/slices/entitiesSlice';
 import { Client4 } from 'mattermost-redux/client';
+import { useLayout } from '../../hooks';
 import type { UserProfile as UserProfileType, UserStatus } from '../../api/types';
 import type { RootState } from '../../store';
 
@@ -51,6 +53,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
   editable = false,
   onClose,
 }) => {
+  const { isMobile } = useLayout();
   const dispatch = useDispatch();
   const currentUser = useSelector((state: RootState) => state.entities.users.currentUserId);
   const isCurrentUser = user.id === currentUser;
@@ -427,16 +430,35 @@ export const UserProfile: React.FC<UserProfileProps> = ({
           onClose={onClose}
           maxWidth="sm"
           fullWidth
+          fullScreen={isMobile}
         >
-          <DialogTitle>
+          <DialogTitle sx={{
+            borderBottom: 1,
+            borderColor: 'divider',
+            px: { xs: 2, sm: 3 },
+            py: { xs: 1.5, sm: 2 },
+          }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">User Profile</Typography>
-              <IconButton onClick={onClose}>
+              <Typography variant={isMobile ? "h6" : "h5"} fontWeight={600}>
+                User Profile
+              </Typography>
+              <IconButton 
+                onClick={onClose}
+                size={isMobile ? "medium" : "small"}
+                sx={{ 
+                  color: 'text.secondary',
+                  minWidth: { xs: 44, sm: 'auto' },
+                  minHeight: { xs: 44, sm: 'auto' },
+                  '&:hover': { 
+                    bgcolor: 'action.hover'
+                  }
+                }}
+              >
                 <CloseIcon />
               </IconButton>
             </Box>
           </DialogTitle>
-          <DialogContent dividers>
+          <DialogContent dividers sx={{ px: { xs: 2, sm: 3 } }}>
             {profileContent}
           </DialogContent>
         </Dialog>

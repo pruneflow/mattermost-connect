@@ -7,8 +7,10 @@ export { default as useUsers } from './useUsers';
 export { default as useUserStatus } from './useUserStatus';
 export { default as usePermissions } from './usePermissions';
 export { default as useErrorHandler } from './useErrorHandler';
+export { default as useLayout } from './useLayout';
 export { default as useNavigation } from './useNavigation';
 export { default as useTeamCreation } from './useTeamCreation';
+export { default as useUserPreferences } from './useUserPreferences';
 
 // Export Redux types
 export type { RootState } from './useAppSelector';

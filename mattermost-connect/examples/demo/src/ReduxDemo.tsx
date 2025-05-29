@@ -8,7 +8,8 @@ import {
   UserMenu,
   UserAvatar,
   useAuth,
-  useTeams
+  useTeams,
+  ThemeProvider
 } from 'mattermost-connect';
 
 // Phase 2 Demo Component - Teams & User Management
@@ -27,13 +28,15 @@ const Phase2Demo: React.FC = () => {
 
   return (
     <Box sx={{
-      p: 2.5,
-      backgroundColor: '#fff',
-      border: '1px solid #ddd',
+      p: { xs: 1.5, sm: 2.5 },
+      bgcolor: 'background.paper',
+      border: 1,
+      borderColor: 'divider',
       borderRadius: 2,
-      margin: '20px auto',
-      maxWidth: '800px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      margin: { xs: '10px', sm: '20px auto' },
+      maxWidth: { xs: '100%', sm: '800px' },
+      boxShadow: 1,
+      minWidth: 0,
     }}>
       {/* Header with User Info */}
       <Box sx={{
@@ -41,27 +44,30 @@ const Phase2Demo: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         mb: 2.5,
-        p: 2,
-        backgroundColor: '#f8f9fa',
+        p: { xs: 1.5, sm: 2 },
+        bgcolor: 'action.hover',
         borderRadius: 1,
+        minWidth: 0,
       }}>
         <Box sx={{
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
+          minWidth: 0,
+          flex: 1,
         }}>
           <UserAvatar user={currentUser} size="medium" />
-          <Box>
-            <Typography sx={{ fontWeight: 'bold' }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography sx={{ fontWeight: 'bold', noWrap: true }}>
               {currentUser?.first_name} {currentUser?.last_name}
             </Typography>
-            <Typography sx={{ fontSize: '14px', color: '#666' }}>
+            <Typography sx={{ fontSize: '14px', color: 'text.secondary', noWrap: true }}>
               @{currentUser?.username}
             </Typography>
           </Box>
         </Box>
-        <UserMenu 
-          user={currentUser} 
+        <UserMenu
+          user={currentUser}
           onLogout={logout}
           size="medium"
           showStatus={true}
@@ -71,18 +77,20 @@ const Phase2Demo: React.FC = () => {
       {/* Phase 2 Components Demo */}
       <Box sx={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
         gap: 2.5,
         mt: 2.5,
       }}>
         {/* Teams Section */}
         <Box sx={{
           p: 2,
-          border: '1px solid #e0e0e0',
+          border: 1,
+          borderColor: 'divider',
           borderRadius: 1,
-          backgroundColor: '#fafafa',
+          bgcolor: 'background.paper',
+          minWidth: 0,
         }}>
-          <Typography variant="h6" sx={{ mt: 0, color: '#333' }}>Teams</Typography>
+          <Typography variant="h6" sx={{ mt: 0, color: 'text.primary' }}>Teams</Typography>
           {teams && teams.length > 0 ? (
             <TeamList 
               teams={teams}
@@ -91,7 +99,7 @@ const Phase2Demo: React.FC = () => {
               layout="vertical"
             />
           ) : (
-            <Box sx={{ textAlign: 'center', p: 2.5, color: '#666' }}>
+            <Box sx={{ textAlign: 'center', p: 2.5, color: 'text.secondary' }}>
               Loading teams...
             </Box>
           )}
@@ -100,25 +108,27 @@ const Phase2Demo: React.FC = () => {
         {/* Current Team Info */}
         <Box sx={{
           p: 2,
-          border: '1px solid #e0e0e0',
+          border: 1,
+          borderColor: 'divider',
           borderRadius: 1,
-          backgroundColor: '#fafafa',
+          bgcolor: 'background.paper',
+          minWidth: 0,
         }}>
-          <Typography variant="h6" sx={{ mt: 0, color: '#333' }}>Current Team</Typography>
+          <Typography variant="h6" sx={{ mt: 0, color: 'text.primary' }}>Current Team</Typography>
           {currentTeam ? (
             <Box>
-              <Typography sx={{ mb: 1 }}>
+              <Typography sx={{ mb: 1, wordBreak: 'break-word' }}>
                 <strong>Name:</strong> {currentTeam.display_name}
               </Typography>
-              <Typography sx={{ mb: 1 }}>
+              <Typography sx={{ mb: 1, wordBreak: 'break-word' }}>
                 <strong>Description:</strong> {currentTeam.description || 'No description'}
               </Typography>
-              <Typography sx={{ fontSize: '12px', color: '#666' }}>
+              <Typography sx={{ fontSize: '12px', color: 'text.secondary', wordBreak: 'break-all' }}>
                 ID: {currentTeam.id}
               </Typography>
             </Box>
           ) : (
-            <Typography sx={{ color: '#666' }}>No team selected</Typography>
+            <Typography sx={{ color: 'text.secondary' }}>No team selected</Typography>
           )}
         </Box>
       </Box>
@@ -143,21 +153,23 @@ const AuthStatus: React.FC = () => {
       <>
         <Box sx={{
           p: 2.5,
-          backgroundColor: '#e8f5e8',
-          border: '1px solid #4caf50',
+          bgcolor: 'success.light',
+          border: 1,
+          borderColor: 'success.main',
           borderRadius: 2,
-          maxWidth: '800px',
-          margin: '20px auto',
+          maxWidth: { xs: '100%', sm: '800px' },
+          margin: { xs: '10px', sm: '20px auto' },
           textAlign: 'center',
+          minWidth: 0,
         }}>
           <Typography variant="h5" sx={{
             fontWeight: 600,
-            color: '#2e7d32',
+            color: 'text.primary',
             mb: 1.5,
           }}>
             ✅ Successfully connected to Mattermost!
           </Typography>
-          <Typography sx={{ color: '#388e3c', my: 0.75 }}>
+          <Typography sx={{ color: 'text.secondary', my: 0.75, wordBreak: 'break-word' }}>
             Welcome {currentUser.first_name} {currentUser.last_name} (@{currentUser.username})
           </Typography>
         </Box>
@@ -191,13 +203,13 @@ const ReduxDemoContent: React.FC = () => {
         <Typography variant="h3" component="h1" sx={{
           fontSize: '32px',
           fontWeight: 'bold',
-          color: '#333',
+          color: 'text.primary',
           mb: 1,
         }}>
           MattermostConnect Redux
         </Typography>
         <Typography sx={{
-          color: '#666',
+          color: 'text.secondary',
           fontSize: '16px',
           m: 0,
         }}>
@@ -210,16 +222,17 @@ const ReduxDemoContent: React.FC = () => {
       <Box sx={{
         mt: 5,
         p: 3,
-        backgroundColor: 'white',
-        border: '1px solid #ddd',
+        bgcolor: 'background.paper',
+        border: 1,
+        borderColor: 'divider',
         borderRadius: 2,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        boxShadow: 1,
       }}>
         <Typography variant="h6" sx={{
           fontSize: '18px',
           fontWeight: 600,
           mb: 2,
-          color: '#333',
+          color: 'text.primary',
         }}>✅ Phase 2 Features Implemented</Typography>
         <Box component="ul" sx={{
           listStyle: 'none',
@@ -227,49 +240,49 @@ const ReduxDemoContent: React.FC = () => {
           m: 0,
         }}>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Atoms: UserAvatar, StatusBadge, UnreadBadge, Dropdown</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Molecules: UserCard, TeamItem, StatusSelector</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Organisms: TeamList, UserMenu, UserProfileComponent</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Hooks: useTeams, useUsers, useUserStatus</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Redux integration with Client4 from mattermost-redux</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Teams management with switching capabilities</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ User management and status handling</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
@@ -280,23 +293,25 @@ const ReduxDemoContent: React.FC = () => {
       <Box sx={{
         mt: 5,
         p: 3,
-        backgroundColor: 'white',
-        border: '1px solid #ddd',
+        bgcolor: 'background.paper',
+        border: 1,
+        borderColor: 'divider',
         borderRadius: 2,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        boxShadow: 1,
       }}>
         <Typography variant="h6" sx={{
           fontSize: '18px',
           fontWeight: 600,
           mb: 2,
-          color: '#333',
+          color: 'text.primary',
         }}>🚀 Simple Integration</Typography>
         <Typography sx={{ color: '#666', mb: 1.5 }}>
           Just 3 lines to integrate in your React app:
         </Typography>
         <Box sx={{
-          backgroundColor: '#f5f5f5',
-          border: '1px solid #ddd',
+          bgcolor: 'action.hover',
+          border: 1,
+          borderColor: 'divider',
           borderRadius: 1,
           p: 2,
           fontFamily: 'Monaco, Consolas, monospace',
@@ -333,16 +348,17 @@ setDefaultClient({
       <Box sx={{
         mt: 5,
         p: 3,
-        backgroundColor: 'white',
-        border: '1px solid #ddd',
+        bgcolor: 'background.paper',
+        border: 1,
+        borderColor: 'divider',
         borderRadius: 2,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        boxShadow: 1,
       }}>
         <Typography variant="h6" sx={{
           fontSize: '18px',
           fontWeight: 600,
           mb: 2,
-          color: '#333',
+          color: 'text.primary',
         }}>🏗️ Next Phases</Typography>
         <Box component="ul" sx={{
           listStyle: 'none',
@@ -350,37 +366,37 @@ setDefaultClient({
           m: 0,
         }}>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Phase 1: Redux Toolkit + RTK Query + Authentication</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>✅ Phase 2: Teams + User Management</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>⏳ Phase 3: Channels + Navigation</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>⏳ Phase 4: Messages + Core Chat</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
           }}>⏳ Phase 5: Threads + WebSocket Real-time</Typography>
           <Typography component="li" sx={{
-            color: '#666',
+            color: 'text.secondary',
             mb: 1,
             fontSize: '14px',
             pl: 0.5,
@@ -395,12 +411,14 @@ setDefaultClient({
 const ReduxDemo: React.FC = () => {
   return (
     <Provider store={store}>
+      <ThemeProvider>
       <Box sx={{
         minHeight: '100vh',
-        backgroundColor: '#f8f9fa',
+        bgcolor: 'background.default',
       }}>
         <ReduxDemoContent />
       </Box>
+      </ThemeProvider>
     </Provider>
   );
 };

@@ -29,7 +29,6 @@ export interface ViewsState {
   };
   ui: {
     isMobile: boolean;
-    theme: 'light' | 'dark';
     sidebarWidth: number;
   };
   typing: {
@@ -62,7 +61,6 @@ const initialState: ViewsState = {
   },
   ui: {
     isMobile: false,
-    theme: 'light',
     sidebarWidth: 240,
   },
   typing: {},
@@ -131,9 +129,6 @@ const viewsSlice = createSlice({
     setIsMobile: (state, action: PayloadAction<boolean>) => {
       state.ui.isMobile = action.payload;
     },
-    setTheme: (state, action: PayloadAction<'light' | 'dark'>) => {
-      state.ui.theme = action.payload;
-    },
     setSidebarWidth: (state, action: PayloadAction<number>) => {
       state.ui.sidebarWidth = action.payload;
     },
@@ -188,7 +183,6 @@ export const {
   
   // UI
   setIsMobile,
-  setTheme,
   setSidebarWidth,
   
   // Typing

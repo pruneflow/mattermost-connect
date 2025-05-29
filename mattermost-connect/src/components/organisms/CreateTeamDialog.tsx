@@ -10,8 +10,10 @@ import {
   Typography,
   CircularProgress,
   Alert,
+  IconButton,
 } from '@mui/material';
-import { useErrorHandler, useAppSelector } from '../../hooks';
+import { Close as CloseIcon } from '@mui/icons-material';
+import { useErrorHandler, useAppSelector, useLayout } from '../../hooks';
 
 export interface CreateTeamData {
   name: string;
@@ -20,7 +22,7 @@ export interface CreateTeamData {
   type: 'O' | 'I'; // O = Open, I = Invite only
 }
 
-export interface CreateTeamModalProps {
+export interface CreateTeamDialogProps {
   open: boolean;
   onClose: () => void;
   onCreateTeam: (teamData: CreateTeamData) => Promise<void>;
@@ -38,13 +40,14 @@ const cleanUpUrlable = (text: string): string => {
     .substring(0, 64); // Limit to 64 characters
 };
 
-export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
+export const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
   open,
   onClose,
   onCreateTeam,
   loading = false,
 }) => {
   const { handleError } = useErrorHandler();
+  const { isMobile } = useLayout();
   const serverUrl = useAppSelector(state => state.auth.serverUrl) || '';
   
   const [formData, setFormData] = useState<CreateTeamData>({
@@ -148,20 +151,53 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
+      fullScreen={isMobile}
       PaperProps={{
-        sx: { minHeight: '400px' }
+        sx: { 
+          minHeight: '400px',
+          width: { xs: '100%', sm: 'auto' },
+          height: { xs: '100%', sm: 'auto' },
+          m: { xs: 0, sm: 2 },
+        }
       }}
     >
-      <DialogTitle>
-        <Typography variant="h6" component="div">
-          Create a new team
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Teams are a digital workspace for you and your teammates to collaborate.
-        </Typography>
+      <DialogTitle
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          borderBottom: 1,
+          borderColor: 'divider',
+          px: { xs: 2, sm: 3 },
+          py: { xs: 1.5, sm: 2 },
+        }}
+      >
+        <Box sx={{ flex: 1, pr: 2 }}>
+          <Typography variant={isMobile ? "h6" : "h5"} component="div" fontWeight={600}>
+            Create a new team
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Teams are a digital workspace for you and your teammates to collaborate.
+          </Typography>
+        </Box>
+        <IconButton 
+          onClick={handleClose}
+          size={isMobile ? "medium" : "small"}
+          disabled={isSubmitting}
+          sx={{ 
+            color: 'text.secondary',
+            minWidth: { xs: 44, sm: 'auto' },
+            minHeight: { xs: 44, sm: 'auto' },
+            '&:hover': { 
+              bgcolor: 'action.hover'
+            }
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
       </DialogTitle>
 
-      <DialogContent>
+      <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
         <Box sx={{ pt: 1 }}>
           <TextField
             label="Team Name"
@@ -189,16 +225,31 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
                 </Box>
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid', borderColor: errors.name ? 'error.main' : 'grey.300', borderRadius: 1, overflow: 'hidden' }}>
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                border: '1px solid', 
+                borderColor: errors.name ? 'error.main' : 'divider', 
+                borderRadius: 1, 
+                overflow: 'hidden',
+                flexDirection: { xs: 'column', sm: 'row' },
+                minWidth: 0,
+              }}
+            >
               <Typography 
                 color="text.secondary" 
                 sx={{ 
                   px: 1.5, 
                   py: 1.75, 
-                  backgroundColor: 'grey.50', 
-                  borderRight: '1px solid', 
-                  borderColor: 'grey.300',
-                  fontSize: '14px'
+                  backgroundColor: 'action.hover', 
+                  borderRight: { xs: 'none', sm: '1px solid' },
+                  borderBottom: { xs: '1px solid', sm: 'none' },
+                  borderColor: 'divider',
+                  fontSize: '14px',
+                  width: { xs: '100%', sm: 'auto' },
+                  textAlign: { xs: 'center', sm: 'left' },
+                  wordBreak: 'break-all',
                 }}
               >
                 {serverUrl ? `${serverUrl}/` : 'https://your-server.com/'}
@@ -214,10 +265,11 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
                   sx: { 
                     px: 1.5, 
                     py: 0.5,
-                    '& input': { fontSize: '14px' }
+                    '& input': { fontSize: '14px' },
+                    minWidth: 0,
                   }
                 }}
-                sx={{ flex: 1 }}
+                sx={{ flex: 1, minWidth: 0 }}
               />
             </Box>
             {errors.name && (
@@ -249,7 +301,18 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 3 }}>
+      <DialogActions sx={{ 
+        px: { xs: 2, sm: 3 }, 
+        pb: { xs: 2, sm: 3 },
+        pt: 2,
+        borderTop: 1,
+        borderColor: 'divider',
+        gap: 1,
+        flexDirection: { xs: 'column-reverse', sm: 'row' },
+        '& > :not(style) + :not(style)': {
+          ml: { xs: 0, sm: 1 },
+        },
+      }}>
         <Button 
           onClick={handleClose} 
           disabled={isSubmitting}
@@ -270,4 +333,4 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   );
 };
 
-export default CreateTeamModal;
+export default CreateTeamDialog;

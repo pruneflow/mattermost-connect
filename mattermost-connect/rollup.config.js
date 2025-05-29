@@ -43,6 +43,13 @@ export default [
       json(),
       terser(), // Minify the output
     ],
+    onwarn(warning, warn) {
+      // Ignore "use client" warnings from Material-UI and other dependencies
+      if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('"use client"')) {
+        return;
+      }
+      warn(warning);
+    },
     external: [
       ...Object.keys(pkg.dependencies || {}),
       ...Object.keys(pkg.peerDependencies || {}),
