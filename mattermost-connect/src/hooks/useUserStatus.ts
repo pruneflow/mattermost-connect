@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { Client4 } from '../api/client';
+import { client } from '../api/client';
 import { setUsersStatus } from "../store";
 import type { UserStatus } from '../api/types';
 
@@ -53,7 +53,7 @@ export const useUserStatus = (): {
     // Only auto-set away if not manually set and not already away
     if (timeSinceActivity >= AWAY_TIMEOUT && !isCurrentlyAway && !isManualStatus) {
       try {
-        await Client4.updateStatus({ 
+        await client.updateStatus({ 
           user_id: currentUserId, 
           status: 'away',
           manual: false,
@@ -113,7 +113,7 @@ export const useUserStatus = (): {
   // Actions
   const loadUsersStatus = useCallback(async (userIds: string[]) => {
     try {
-      const statuses = await Client4.getStatusesByIds(userIds);
+      const statuses = await client.getStatusesByIds(userIds);
       
       // Convert array to record format expected by the store
       const statusRecord: Record<string, UserStatus> = {};
@@ -158,7 +158,7 @@ export const useUserStatus = (): {
     if (!currentUserId) return;
     
     try {
-      await Client4.updateStatus({ 
+      await client.updateStatus({ 
         user_id: currentUserId, 
         status: newStatus,
         manual,

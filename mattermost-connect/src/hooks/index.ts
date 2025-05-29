@@ -11,6 +11,8 @@ export { default as useLayout } from './useLayout';
 export { default as useNavigation } from './useNavigation';
 export { default as useTeamCreation } from './useTeamCreation';
 export { default as useUserPreferences } from './useUserPreferences';
+export { default as useUnreadCounts } from './useUnreadCounts';
+export { useLoading } from './useLoading';
 
 // Export Redux types
 export type { RootState } from './useAppSelector';

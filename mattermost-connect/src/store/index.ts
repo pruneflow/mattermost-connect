@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { Client4 } from '../api/client';
+import { client } from '../api/client';
 import { getCurrentUser } from './slices/authSlice';
 
 import entitiesReducer from './slices/entitiesSlice';
@@ -7,28 +7,30 @@ import viewsReducer from './slices/viewsSlice';
 import errorsReducer from './slices/errorsSlice';
 import authReducer from './slices/authSlice';
 import preferencesReducer from './slices/preferencesSlice';
+import loadingReducer from './slices/loadingSlice';
 
 // Configure Client4 immediately before store creation if credentials exist
 const token = localStorage.getItem('mattermostToken');
 const serverUrl = localStorage.getItem('mattermostServerUrl');
 
 if (token && serverUrl) {
-  Client4.setUrl(serverUrl);
-  Client4.setToken(token);
+  client.setUrl(serverUrl);
+  client.setToken(token);
   // Disable cookies to avoid CORS issues with Access-Control-Allow-Origin: *
-  Client4.setIncludeCookies(false);
-  Client4.setEnableLogging(false);
+  client.setIncludeCookies(false);
+  client.setEnableLogging(false);
 }
 
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
   reducer: {
-    // Core state structure simplified (no requests - createAsyncThunk handles loading)
+    // Core state structure following Mattermost patterns
     entities: entitiesReducer,
     views: viewsReducer,
     errors: errorsReducer,
     auth: authReducer,
     preferences: preferencesReducer,
+    loading: loadingReducer, // WebSocket-first loading states
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -62,3 +64,4 @@ export * from './slices/viewsSlice';
 export * from './slices/errorsSlice';
 export * from './slices/authSlice';
 export * from './slices/preferencesSlice';
+export * from './slices/loadingSlice';

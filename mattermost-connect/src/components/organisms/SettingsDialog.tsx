@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import useUserPreferences from '../../hooks/useUserPreferences';
 import { useLayout } from '../../hooks';
+import { SettingsDialogSkeleton } from '../atoms/SkeletonLoader';
 
 interface TabPanelProps {
   children?: React.ReactNode;

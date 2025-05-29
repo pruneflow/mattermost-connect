@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch';
-import { Client4 } from '../api/client';
+import { client } from '../api/client';
 import { setTeam, setCurrentTeamId } from '../store/slices/entitiesSlice';
 import type { CreateTeamData } from '../components/organisms/CreateTeamDialog';
 import type { Team, TeamCreationRequest } from '../api/types';
@@ -20,7 +20,7 @@ export const useTeamCreation = () => {
       };
 
       // Create team via API - following mattermost-redux pattern
-      const newTeam = await Client4.createTeam(teamRequest as Team);
+      const newTeam = await client.createTeam(teamRequest as Team);
 
       // Add to store
       dispatch(setTeam(newTeam));
@@ -35,8 +35,34 @@ export const useTeamCreation = () => {
     }
   }, [dispatch]);
 
+  const uploadTeamIcon = useCallback(async (teamId: string, imageFile: File): Promise<void> => {
+    try {
+      // Validate file type - following Mattermost requirements
+      const allowedTypes = ['image/bmp', 'image/jpg', 'image/jpeg', 'image/png'];
+      if (!allowedTypes.includes(imageFile.type)) {
+        throw new Error('Invalid file type. Only BMP, JPG, JPEG, and PNG files are supported.');
+      }
+
+      // Validate file size (reasonable limit for team icons)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (imageFile.size > maxSize) {
+        throw new Error('File too large. Maximum size is 10MB.');
+      }
+
+      // Upload team icon via API - following mattermost-redux setTeamIcon pattern
+      await client.setTeamIcon(teamId, imageFile);
+
+      // Note: Team update will be handled by WebSocket events
+      // No need to manually update store here
+    } catch (error) {
+      console.error('Failed to upload team icon:', error);
+      throw error;
+    }
+  }, []);
+
   return {
     createTeam,
+    uploadTeamIcon,
   };
 };
 

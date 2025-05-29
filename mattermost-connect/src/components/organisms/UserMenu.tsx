@@ -17,6 +17,7 @@ import {
 } from '@mui/icons-material';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { StatusBadge } from '../atoms/StatusBadge';
+import { UserMenuSkeleton } from '../atoms/SkeletonLoader';
 import { UserProfile } from './UserProfile';
 import { SettingsDialog } from './SettingsDialog';
 import { useUserStatus } from '../../hooks/useUserStatus';
@@ -25,11 +26,12 @@ import { STATUS_OPTIONS } from '../../utils/statusUtils';
 import type { UserProfile as UserProfileType, UserStatus } from '../../api/types';
 
 export interface UserMenuProps {
-  user: UserProfileType;
+  user?: UserProfileType;
   size?: 'small' | 'medium' | 'large';
   showStatus?: boolean;
   showProfile?: boolean;
   onLogout?: () => void;
+  loading?: boolean;
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({
@@ -38,6 +40,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   showStatus = true,
   showProfile = true,
   onLogout,
+  loading = false,
 }) => {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -99,6 +102,26 @@ export const UserMenu: React.FC<UserMenuProps> = ({
       handleStatusChange(status);
     }
   };
+
+  // Show skeleton loader when loading or no user
+  if (loading || !user) {
+    return (
+      <Box 
+        sx={{ 
+          cursor: 'pointer',
+          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+          borderRadius: '50%',
+          minWidth: { xs: 44, sm: 'auto' },
+          minHeight: { xs: 44, sm: 'auto' },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }} 
+      >
+        <UserMenuSkeleton />
+      </Box>
+    );
+  }
 
   return (
     <>

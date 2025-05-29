@@ -4,7 +4,7 @@ import { useAppDispatch } from './useAppDispatch';
 import { loginUser, logoutUser, getCurrentUser, setServerUrl } from '../store/slices/authSlice';
 import { setUsersStatus, setTeams, setCurrentTeamId } from '../store/slices/entitiesSlice';
 import { LoginRequest } from '../api/types';
-import { Client4 } from '../api/client';
+import { client } from '../api/client';
 
 // Auth hook providing authentication state and actions
 export const useAuth = () => {
@@ -18,46 +18,46 @@ export const useAuth = () => {
   const currentUser = useAppSelector(state => 
     currentUserId ? state.entities.users.profiles[currentUserId] : null
   );
+  const teams = useAppSelector(state => state.entities.teams.teams);
 
   // Configure Client4 with stored credentials if authenticated
   useEffect(() => {
     if (isAuthenticated && token && serverUrl) {
-      if (Client4.getToken() !== token) {
-        Client4.setUrl(serverUrl);
-        Client4.setToken(token);
+      if (client.getToken() !== token) {
+        client.setUrl(serverUrl);
+        client.setToken(token);
       }
     }
   }, [isAuthenticated, token, serverUrl]);
 
-  // Auto-load essential data after authentication - Mattermost pattern
+  // Auto-load essential data after authentication - ONCE only
   useEffect(() => {
     if (isAuthenticated && currentUserId) {
       const loadInitialData = async () => {
         try {
           // Load user status
-          const userStatus = await Client4.getStatus(currentUserId);
+          const userStatus = await client.getStatus(currentUserId);
           dispatch(setUsersStatus({ [currentUserId]: userStatus }));
 
-          // Load user teams
-          const userTeams = await Client4.getMyTeams();
+          // Load user teams - this is the main place for initial loading
+          const userTeams = await client.getMyTeams();
           const teamsById = userTeams.reduce((acc: Record<string, any>, team: any) => {
             acc[team.id] = team;
             return acc;
           }, {});
           dispatch(setTeams(teamsById));
 
-          // Set first team as current if none selected - Essential UX
+          // Set first team as current if none selected
           if (!currentTeamId && userTeams.length > 0) {
             dispatch(setCurrentTeamId(userTeams[0].id));
           }
-
         } catch (error) {
           console.error('Failed to load initial data:', error);
         }
       };
       loadInitialData();
     }
-  }, [isAuthenticated, currentUserId, dispatch]);
+  }, [isAuthenticated, currentUserId]); // REMOVED teams and currentTeamId to prevent loops
 
   // Auth actions
   const login = useCallback(

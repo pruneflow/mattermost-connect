@@ -6,6 +6,9 @@ export { default as StatusBadge } from './StatusBadge';
 export { default as UnreadBadge } from './UnreadBadge';
 export { default as Dropdown } from './Dropdown';
 
+// Skeleton loaders
+export * from './SkeletonLoader';
+
 export type { ButtonProps } from './Button';
 export type { TextInputProps } from './TextInput';
 export type { UserAvatarProps } from './UserAvatar';

@@ -1,8 +1,9 @@
 import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { Client4 } from '../api/client';
+import { client } from '../api/client';
 import { setCurrentTeamId, setTeams, setTeamUnreads } from '../store/slices/entitiesSlice';
+import { useLoading } from './useLoading';
 import type { Team } from '../api/types';
 
 export const useTeams = (): {
@@ -11,12 +12,19 @@ export const useTeams = (): {
   currentTeam: Team | null;
   currentTeamId: string;
   switchTeam: (teamId: string) => void;
-  getAllTeamsUnread: () => Promise<any[]>;
+  loadTeams: (forceRefresh?: boolean) => Promise<void>;
+  loadTeamUnreads: (forceRefresh?: boolean) => Promise<void>;
+  getAllTeamsUnread: () => Promise<any[]>; // Legacy compatibility
+  isLoadingTeams: boolean;
+  isLoadingUnreads: boolean;
+  teamsError: string | null;
+  unreadsError: string | null;
 } => {
   const dispatch = useAppDispatch();
+  const { withLoading, isLoading, getError } = useLoading();
   
   // Teams state
-  const { currentTeamId, teams } = useAppSelector(state => state.entities.teams);
+  const { currentTeamId, teams, unreads } = useAppSelector(state => state.entities.teams);
   const currentUser = useAppSelector(state => {
     const userId = state.entities.users.currentUserId;
     return userId ? state.entities.users.profiles[userId] : null;
@@ -26,21 +34,50 @@ export const useTeams = (): {
   const teamsArray = Object.values(teams);
   const currentTeam = currentTeamId ? teams[currentTeamId] : null;
 
-  // No manual loading - teams auto-loaded by useAuth
-
   const switchTeam = useCallback((teamId: string) => {
     // Follow Mattermost pattern: just dispatch the team ID without validation
     dispatch(setCurrentTeamId(teamId));
   }, [dispatch]);
 
-  // Load team unread counts into Redux store
-  const loadTeamUnreads = useCallback(async () => {
-    try {
-      if (!currentUser) return [];
+  // Load teams - Only if forced or really empty
+  const loadTeams = useCallback(async (forceRefresh = false) => {
+    if (!currentUser) return;
+
+    // Check current teams length without dependency
+    const currentTeamsCount = Object.keys(teams).length;
+    
+    // Don't load if teams exist and not forcing
+    if (!forceRefresh && currentTeamsCount > 0) {
+      return;
+    }
+
+    await withLoading('teams.loadTeams', async () => {
+      const teamsData = await client.getMyTeams();
       
-      const teamUnreads = await Client4.getMyTeamUnreads();
+      const teamsById: Record<string, Team> = {};
+      teamsData.forEach((team: Team) => {
+        teamsById[team.id] = team;
+      });
       
-      // Convert to normalized format and store in Redux
+      dispatch(setTeams(teamsById));
+    });
+  }, [withLoading, dispatch, currentUser]); // REMOVED teams dependency
+
+  // Load team unread counts - Simple check then load
+  const loadTeamUnreads = useCallback(async (forceRefresh = false) => {
+    if (!currentUser) return;
+    
+    // Check current unreads length without dependency
+    const currentUnreadsCount = Object.keys(unreads).length;
+    
+    // Simple check: if we have unreads and not forcing refresh, skip
+    if (!forceRefresh && currentUnreadsCount > 0) {
+      return;
+    }
+
+    await withLoading('teams.loadUnreads', async () => {
+      const teamUnreads = await client.getMyTeamUnreads();
+      
       const unreadsByTeam: Record<string, { msg_count: number; mention_count: number }> = {};
       teamUnreads.forEach((unread: any) => {
         unreadsByTeam[unread.team_id] = {
@@ -50,17 +87,14 @@ export const useTeams = (): {
       });
       
       dispatch(setTeamUnreads(unreadsByTeam));
-      return teamUnreads;
-    } catch (error) {
-      console.error('Failed to load team unread counts:', error);
-      return [];
-    }
-  }, [dispatch, currentUser]);
+    });
+  }, [withLoading, dispatch, currentUser]); // REMOVED unreads dependency
 
   const getAllTeamsUnread = useCallback(async () => {
-    // Alias for backwards compatibility
-    return loadTeamUnreads();
-  }, [loadTeamUnreads]);
+    // Legacy compatibility - calls loadTeamUnreads but returns teams format
+    await loadTeamUnreads();
+    return teamsArray; // Return teams for backwards compatibility
+  }, [loadTeamUnreads, teamsArray]);
 
   return {
     // State
@@ -71,7 +105,15 @@ export const useTeams = (): {
     
     // Actions
     switchTeam,
-    getAllTeamsUnread,
+    loadTeams,
+    loadTeamUnreads,
+    getAllTeamsUnread, // Legacy compatibility
+    
+    // Loading states
+    isLoadingTeams: isLoading('teams.loadTeams'),
+    isLoadingUnreads: isLoading('teams.loadUnreads'),
+    teamsError: getError('teams.loadTeams'),
+    unreadsError: getError('teams.loadUnreads'),
   };
 };
 

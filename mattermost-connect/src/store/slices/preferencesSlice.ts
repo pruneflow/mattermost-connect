@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { Client4 } from '../../api/client';
+import { client } from '../../api/client';
 import type { ServerError, PreferenceType } from '../../api/types';
 
 // Preferences state
@@ -94,7 +94,7 @@ export const loadPreferences = createAsyncThunk<
   'preferences/load',
   async (userId, { rejectWithValue }) => {
     try {
-      return await Client4.getUserPreferences(userId);
+      return await client.getUserPreferences(userId);
     } catch (error) {
       console.warn('Failed to load preferences from server:', error);
       return rejectWithValue(error as ServerError);
@@ -110,7 +110,7 @@ export const savePreferences = createAsyncThunk<
   'preferences/save',
   async ({ userId, preferences }, { rejectWithValue }) => {
     try {
-      await Client4.savePreferences(userId, preferences);
+      await client.savePreferences(userId, preferences);
     } catch (error) {
       console.warn('Failed to save preferences to server:', error);
       return rejectWithValue(error as ServerError);

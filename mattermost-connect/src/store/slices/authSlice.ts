@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { UserProfile, LoginRequest, APIError } from '../../api/types';
-import { Client4 } from '../../api/client';
+import { client } from '../../api/client';
 import { 
   setCurrentUserId, 
   setUser, 
@@ -44,10 +44,10 @@ export const loginUser = createAsyncThunk<
       dispatch(setAuthError(null));
 
       // Configure Client4 with server URL
-      Client4.setUrl(serverUrl);
+      client.setUrl(serverUrl);
       
-      const user = await Client4.login(login_id, password);
-      const token = Client4.getToken();
+      const user = await client.login(login_id, password);
+      const token = client.getToken();
       
       if (!token) {
         throw new Error('No token received from server');
@@ -95,7 +95,7 @@ export const logoutUser = createAsyncThunk<
   'auth/logout',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      await Client4.logout();
+      await client.logout();
     } catch (error) {
       // Continue with logout even if API call fails
       console.warn('Logout API call failed:', error);
@@ -126,7 +126,7 @@ export const getCurrentUser = createAsyncThunk<
   'auth/getCurrentUser',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      const user = await Client4.getMe();
+      const user = await client.getMe();
       
       dispatch(setCurrentUserId(user.id));
       dispatch(setUser(user));

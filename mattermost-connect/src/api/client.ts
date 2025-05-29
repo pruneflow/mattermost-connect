@@ -1,24 +1,25 @@
-// Export Client4 from mattermost-redux as our main client
-import { Client4 } from 'mattermost-redux/client';
+// Official Mattermost client
+import { Client4 } from '@mattermost/client';
 
-// Re-export Client4 as our main client
-export const mattermostClient: typeof Client4 = Client4;
+// Create singleton client instance
+const client = new Client4();
 
 // Simple helpers for configuration
 export const setDefaultClient = (config: { serverUrl: string }): void => {
-  Client4.setUrl(config.serverUrl);
+  client.setUrl(config.serverUrl);
   
-  // Configure Client4 for cross-origin requests - disable cookies to avoid CORS issues
+  // Configure client for cross-origin requests - disable cookies to avoid CORS issues
   // with Access-Control-Allow-Origin: * servers
-  Client4.setIncludeCookies(false);
-  Client4.setEnableLogging(true);
+  client.setIncludeCookies(false);
+  client.setEnableLogging(true);
 };
 
-export const getDefaultClient = (): typeof Client4 => {
-  return Client4;
+export const getDefaultClient = () => {
+  return client;
 };
 
-// Export Client4 directly
-export { Client4 };
+// Export client instance 
+export { client };
+export const mattermostClient = client;
 
-export default Client4;
+export default client;

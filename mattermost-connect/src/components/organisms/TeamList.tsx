@@ -1,15 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   List,
-  Avatar,
   Tooltip,
-  CircularProgress,
   Typography,
-  ListItem,
-  ListItemAvatar,
-  ListItemButton,
-  ListItemText,
   Divider,
   IconButton,
   InputBase,
@@ -18,49 +12,67 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Add as AddIcon,
-  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
-import { getTeamInitials, getTeamColor, filterTeams } from '../../utils/teamUtils';
-import { usePermissions, useErrorHandler, useNavigation, useTeamCreation } from '../../hooks';
+import { filterTeams } from '../../utils/teamUtils';
+import { usePermissions, useErrorHandler, useNavigation, useTeamCreation, useUnreadCounts, useTeams } from '../../hooks';
 import { CreateTeamDialog, type CreateTeamData } from './CreateTeamDialog';
+import { TeamItemSkeleton, ListSkeleton } from '../atoms';
+import { TeamItem, CreateTeamButton } from '../molecules';
 import type { Team } from '../../api/types';
 
 export interface TeamListProps {
-  teams: Team[];
   selectedTeamId?: string;
   onTeamSelect?: (team: Team) => void;
   showCreateButton?: boolean; // default: true
   layout?: 'vertical' | 'horizontal' | 'tabs';
-  loading?: boolean;
-  error?: string | null;
 }
 
 export const TeamList: React.FC<TeamListProps> = ({
-  teams,
   selectedTeamId,
   onTeamSelect,
   showCreateButton = true,
   layout = 'vertical',
-  loading = false,
-  error = null,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedTeamForMenu, setSelectedTeamForMenu] = useState<Team | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
+  // Hooks
   const { canCreateTeam } = usePermissions();
   const { handleError } = useErrorHandler();
   const { navigateToTeam } = useNavigation();
   const { createTeam } = useTeamCreation();
+  const { 
+    getTeamUnreadCount, 
+    getTeamMentionCount, 
+    loadUnreadCounts 
+  } = useUnreadCounts();
+  
+  // Teams data from hook
+  const {
+    teams: teamsById,
+    loadTeams,
+    isLoadingTeams,
+    teamsError,
+  } = useTeams();
+
+  // Convert teams object to array
+  const teams = Object.values(teamsById);
+
+  // Load unread counts when teams are available (once)
+  useEffect(() => {
+    if (teams.length > 0) {
+      loadUnreadCounts();
+    }
+  }, [teams.length]); // Removed loadUnreadCounts to prevent re-calls
 
   const filteredTeams = filterTeams(teams, searchTerm);
-  const handleTeamClick = (team: Team) => {
+
+  // Stable event handlers - const outside render
+  const handleTeamClick = useCallback((team: Team) => {
     try {
-      // Update navigation state
       navigateToTeam(team.id);
-      
       if (onTeamSelect) {
         onTeamSelect(team);
       }
@@ -71,252 +83,228 @@ export const TeamList: React.FC<TeamListProps> = ({
         showToast: true
       });
     }
-  };
+  }, [navigateToTeam, onTeamSelect, handleError]);
 
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
-  };
+  }, []);
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, team: Team) => {
+  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>, team: Team) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
     setSelectedTeamForMenu(team);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setMenuAnchorEl(null);
     setSelectedTeamForMenu(null);
-  };
+  }, []);
 
-  const handleCreateTeamClick = () => {
+  const handleCreateTeamClick = useCallback(() => {
     setCreateModalOpen(true);
-  };
+  }, []);
 
-  const handleCreateTeam = async (teamData: CreateTeamData) => {
+  const handleCreateTeam = useCallback(async (teamData: CreateTeamData) => {
     await createTeam(teamData);
     setCreateModalOpen(false);
-  };
+  }, [createTeam]);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setCreateModalOpen(false);
-  };
+  }, []);
 
   // Show create button if: props allows it AND user has permissions
   const shouldShowCreateButton = showCreateButton && canCreateTeam();
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress size={24} />
-      </Box>
-    );
+  const handleRetry = useCallback(() => {
+    loadTeams(true); // Force refresh
+  }, [loadTeams]);
+
+  const getSkeleton = useCallback(() => {
+    if (layout === 'vertical') {
+      return <ListSkeleton count={5} showAvatar={true} />;
+    } else if (layout === 'horizontal') {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', p: 1, gap: 1 }}>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <TeamItemSkeleton key={index} />
+          ))}
+        </Box>
+      );
+    } else { // tabs
+      return (
+        <Box sx={{ display: 'flex', overflowX: 'auto', p: 1, gap: 2 }}>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <TeamItemSkeleton key={index} />
+          ))}
+        </Box>
+      );
+    }
+  }, [layout]);
+
+  // Show loading
+  if (isLoadingTeams) {
+    return getSkeleton();
   }
 
-  if (error) {
+  // Show error
+  if (teamsError) {
     return (
       <Box sx={{ p: 2, textAlign: 'center' }}>
         <Typography color="error" variant="body2">
-          Error loading teams
+          {teamsError}
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{ cursor: 'pointer', textDecoration: 'underline', color: 'primary.main', mt: 1 }}
+          onClick={handleRetry}
+        >
+          Try again
         </Typography>
       </Box>
     );
   }
 
-  // Render as tabs (for header tabs)
-  if (layout === 'tabs') {
-    return (
-      <Box
-        sx={{
-          width: '100%',
-          display: 'flex',
-          overflowX: 'auto',
-          bgcolor: 'primary.main',
-          minHeight: 48,
-          // Amélioration scroll mobile
-          scrollbarWidth: 'none', // Firefox
-          '&::-webkit-scrollbar': {
-            display: 'none', // Chrome/Safari
-          },
-          // Assurer que ça ne dépasse pas
-          maxWidth: '100vw',
-          boxSizing: 'border-box',
-        }}
-      >
-        {filteredTeams.map((team) => (
-          <Box
-            key={team.id}
-            sx={{
-              px: { xs: 1.5, sm: 3 },
-              py: 1.5,
-              minWidth: 'fit-content',
-              display: 'flex',
-              alignItems: 'center',
-              color: 'common.white',
-              cursor: 'pointer',
-              borderBottom:
-                selectedTeamId === team.id ? '3px solid' : '3px solid transparent',
-              borderColor: selectedTeamId === team.id ? 'common.white' : 'transparent',
-              fontWeight: selectedTeamId === team.id ? 'bold' : 'normal',
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              bgcolor:
-                selectedTeamId === team.id
-                  ? 'action.selected'
-                  : 'transparent',
-              '&:hover': {
-                bgcolor: 'action.hover',
-              },
-              // Assurer que le texte ne wrap pas
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-            onClick={() => handleTeamClick(team)}
-          >
-            {team.display_name || team.name}
-          </Box>
-        ))}
-
-        {shouldShowCreateButton && (
-          <Box
-            sx={{
-              px: { xs: 2, sm: 3 },
-              py: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-              color: 'common.white',
-              cursor: 'pointer',
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              '&:hover': {
-                bgcolor: 'action.hover',
-              },
-            }}
-            onClick={handleCreateTeamClick}
-          >
-            <AddIcon fontSize="small" sx={{ mr: 0.5 }} />
-            Add Team
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
-  // Render horizontal layout (for top navigation)
-  if (layout === 'horizontal') {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', p: 1, overflowX: 'auto' }}>
-        {filteredTeams.map((team) => (
-          <Box key={team.id} sx={{ display: 'flex', alignItems: 'center', m: 0.5 }}>
-            <Tooltip title={team.display_name}>
-              <Avatar
-                sx={{
-                  bgcolor: getTeamColor(team.name),
-                  cursor: 'pointer',
-                  border: selectedTeamId === team.id ? '2px solid' : 'none',
-                  borderColor: 'primary.main',
-                }}
+  const renderTeamList = () => {
+    // Tabs layout container (for header tabs)
+    if (layout === 'tabs') {
+      return (
+        <Box
+          sx={{
+            width: '100%',
+            display: 'flex',
+            overflowX: 'auto',
+            bgcolor: 'primary.main',
+            minHeight: 48,
+            // Amélioration scroll mobile
+            scrollbarWidth: 'none', // Firefox
+            '&::-webkit-scrollbar': {
+              display: 'none', // Chrome/Safari
+            },
+            // Assurer que ça ne dépasse pas
+            maxWidth: '100vw',
+            boxSizing: 'border-box',
+          }}
+        >
+          {filteredTeams.map((team) => {
+            const unreadCount = getTeamUnreadCount(team.id);
+            const mentionCount = getTeamMentionCount(team.id);
+            
+            return (
+              <TeamItem
+                key={team.id}
+                team={team}
+                layout="tabs"
+                isActive={selectedTeamId === team.id}
+                unreadCount={unreadCount}
+                mentionCount={mentionCount}
                 onClick={() => handleTeamClick(team)}
-              >
-                {getTeamInitials(team)}
-              </Avatar>
-            </Tooltip>
-          </Box>
-        ))}
+              />
+            );
+          })}
 
-        {shouldShowCreateButton && (
-          <Tooltip title="Create new team">
-            <Avatar
-              sx={{
-                bgcolor: 'action.selected',
-                m: 0.5,
-                cursor: 'pointer',
-              }}
+          {shouldShowCreateButton && (
+            <CreateTeamButton
+              layout="tabs"
               onClick={handleCreateTeamClick}
-            >
-              <AddIcon />
-            </Avatar>
-          </Tooltip>
+            />
+          )}
+        </Box>
+      );
+    }
+
+    // Horizontal layout container (for top navigation)
+    if (layout === 'horizontal') {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', p: 1, overflowX: 'auto' }}>
+          {filteredTeams.map((team) => {
+            const unreadCount = getTeamUnreadCount(team.id);
+            const mentionCount = getTeamMentionCount(team.id);
+            
+            return (
+              <TeamItem
+                key={team.id}
+                team={team}
+                layout="horizontal"
+                isActive={selectedTeamId === team.id}
+                unreadCount={unreadCount}
+                mentionCount={mentionCount}
+                onClick={() => handleTeamClick(team)}
+              />
+            );
+          })}
+
+          {shouldShowCreateButton && (
+            <Tooltip title="Create new team">
+              <CreateTeamButton
+                layout="horizontal"
+                onClick={handleCreateTeamClick}
+              />
+            </Tooltip>
+          )}
+        </Box>
+      );
+    }
+
+    // Vertical layout (for sidebar)
+    return (
+      <Box sx={{ width: '100%' }}>
+        {/* Search input */}
+        {teams.length > 5 && (
+          <>
+            <Box sx={{ p: 1, display: 'flex' }}>
+              <InputBase
+                placeholder="Search teams..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                sx={{ ml: 1, flex: 1 }}
+                inputProps={{ 'aria-label': 'search teams' }}
+              />
+              <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
+                <SearchIcon />
+              </IconButton>
+            </Box>
+            <Divider />
+          </>
         )}
+
+        {/* Teams list */}
+        <List sx={{ width: '100%' }}>
+          {filteredTeams.map((team) => {
+            const unreadCount = getTeamUnreadCount(team.id);
+            const mentionCount = getTeamMentionCount(team.id);
+            
+            return (
+              <TeamItem
+                key={team.id}
+                team={team}
+                layout="vertical"
+                isActive={selectedTeamId === team.id}
+                unreadCount={unreadCount}
+                mentionCount={mentionCount}
+                onClick={() => handleTeamClick(team)}
+                onMenuOpen={handleMenuOpen}
+                showMenu={true}
+              />
+            );
+          })}
+
+          {/* Create team item */}
+          {shouldShowCreateButton && (
+            <CreateTeamButton
+              layout="vertical"
+              onClick={handleCreateTeamClick}
+            />
+          )}
+        </List>
       </Box>
     );
-  }
+  };
 
-  // Render vertical layout (for sidebar)
   return (
-    <Box sx={{ width: '100%' }}>
-      {/* Search input */}
-      {teams.length > 5 && (
-        <>
-          <Box sx={{ p: 1, display: 'flex' }}>
-            <InputBase
-              placeholder="Search teams..."
-              value={searchTerm}
-              onChange={handleSearchChange}
-              sx={{ ml: 1, flex: 1 }}
-              inputProps={{ 'aria-label': 'search teams' }}
-            />
-            <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
-              <SearchIcon />
-            </IconButton>
-          </Box>
-          <Divider />
-        </>
-      )}
-
-      {/* Teams list */}
-      <List sx={{ width: '100%' }}>
-        {filteredTeams.map((team) => (
-          <ListItem
-            key={team.id}
-            disablePadding
-            secondaryAction={
-              <IconButton
-                edge="end"
-                aria-label="team options"
-                onClick={(e) => handleMenuOpen(e, team)}
-              >
-                <MoreVertIcon />
-              </IconButton>
-            }
-          >
-            <ListItemButton
-              selected={selectedTeamId === team.id}
-              onClick={() => handleTeamClick(team)}
-              sx={{ width: '100%' }}
-            >
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: getTeamColor(team.name) }}>
-                  {getTeamInitials(team)}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={team.display_name}
-                secondary={team.description || 'No description'}
-                primaryTypographyProps={{
-                  noWrap: true,
-                }}
-                secondaryTypographyProps={{
-                  noWrap: true,
-                }}
-                sx={{ minWidth: 0 }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-
-        {/* Create team item */}
-        {shouldShowCreateButton && (
-          <ListItem disablePadding>
-            <ListItemButton onClick={handleCreateTeamClick}>
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: 'action.selected' }}>
-                  <AddIcon />
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText primary="Create New Team" />
-            </ListItemButton>
-          </ListItem>
-        )}
-      </List>
-
+    <>
+      {renderTeamList()}
+      
       {/* Team options menu */}
       <Menu
         anchorEl={menuAnchorEl}
@@ -336,7 +324,7 @@ export const TeamList: React.FC<TeamListProps> = ({
         onClose={handleCloseModal}
         onCreateTeam={handleCreateTeam}
       />
-    </Box>
+    </>
   );
 };
 

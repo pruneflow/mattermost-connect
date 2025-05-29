@@ -37,7 +37,7 @@ import { useUserStatus } from '../../hooks/useUserStatus';
 import { displayUsername } from '../../utils/userUtils';
 import { STATUS_OPTIONS } from '../../utils/statusUtils';
 import { setUser } from '../../store/slices/entitiesSlice';
-import { Client4 } from 'mattermost-redux/client';
+import { client } from '../../api/client';
 import { useLayout } from '../../hooks';
 import type { UserProfile as UserProfileType, UserStatus } from '../../api/types';
 import type { RootState } from '../../store';
@@ -111,7 +111,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     
     try {
       // Update server
-      const updatedUser = await Client4.patchUser({ id: user.id, ...formData });
+      const updatedUser = await client.patchUser({ id: user.id, ...formData });
       
       // Update Redux store with server response
       dispatch(setUser(updatedUser));
@@ -156,7 +156,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     setIsUploadingImage(true);
     
     try {
-      await Client4.uploadProfileImage(user.id, file);
+      await client.uploadProfileImage(user.id, file);
       
       // Force refresh of profile image by updating user with timestamp
       const updatedUser = { ...user, last_picture_update: Date.now() };

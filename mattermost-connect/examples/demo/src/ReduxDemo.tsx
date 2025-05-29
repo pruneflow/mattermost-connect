@@ -15,11 +15,8 @@ import {
 // Phase 2 Demo Component - Teams & User Management
 const Phase2Demo: React.FC = () => {
   const { currentUser, logout } = useAuth();
-  const { teams, currentTeam, switchTeam } = useTeams(); // No manual loading needed
+  const { currentTeam, switchTeam } = useTeams();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-
-  // No manual data loading - handled automatically by useAuth
-
 
   const handleTeamSelect = (team: any) => {
     setSelectedTeamId(team.id);
@@ -91,18 +88,11 @@ const Phase2Demo: React.FC = () => {
           minWidth: 0,
         }}>
           <Typography variant="h6" sx={{ mt: 0, color: 'text.primary' }}>Teams</Typography>
-          {teams && teams.length > 0 ? (
-            <TeamList 
-              teams={teams}
-              selectedTeamId={selectedTeamId}
-              onTeamSelect={handleTeamSelect}
-              layout="vertical"
-            />
-          ) : (
-            <Box sx={{ textAlign: 'center', p: 2.5, color: 'text.secondary' }}>
-              Loading teams...
-            </Box>
-          )}
+          <TeamList 
+            selectedTeamId={selectedTeamId}
+            onTeamSelect={handleTeamSelect}
+            layout="vertical"
+          />
         </Box>
 
         {/* Current Team Info */}
