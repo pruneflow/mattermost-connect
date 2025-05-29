@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   Box, 
   Avatar, 
@@ -8,10 +8,12 @@ import {
   ListItemAvatar,
   ListItemButton,
   ListItemText,
-  IconButton
+  IconButton,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import { MoreVert as MoreVertIcon } from '@mui/icons-material';
-import { getTeamInitials, getTeamColor } from '../../utils/teamUtils';
+import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
 import type { Team } from '../../api/types';
 
 export interface TeamItemProps {
@@ -21,7 +23,7 @@ export interface TeamItemProps {
   unreadCount?: number;
   mentionCount?: number;
   onClick?: () => void;
-  onMenuOpen?: (e: React.MouseEvent<HTMLElement>, team: Team) => void;
+  onOpenSettings?: (team: Team) => void;
   showMenu?: boolean;
   className?: string;
   sx?: any;
@@ -34,11 +36,26 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   unreadCount = 0,
   mentionCount = 0,
   onClick,
-  onMenuOpen,
+  onOpenSettings,
   showMenu = false,
   className,
   sx
 }) => {
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+
+  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    setMenuAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleMenuClose = useCallback(() => {
+    setMenuAnchorEl(null);
+  }, []);
+
+  const handleSettingsClick = useCallback(() => {
+    onOpenSettings?.(team);
+    handleMenuClose();
+  }, [onOpenSettings, team, handleMenuClose]);
   // Tabs layout (header tabs)
   if (layout === 'tabs') {
     return (
@@ -133,6 +150,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
             }}
           >
             <Avatar
+              src={getTeamIconUrl(team) || undefined}
               sx={{
                 bgcolor: getTeamColor(team.name),
                 cursor: 'pointer',
@@ -178,7 +196,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
             <IconButton
               edge="end"
               aria-label="team options"
-              onClick={(e) => onMenuOpen?.(e, team)}
+              onClick={handleMenuOpen}
             >
               <MoreVertIcon />
             </IconButton>
@@ -192,7 +210,10 @@ export const TeamItem: React.FC<TeamItemProps> = ({
         sx={{ width: '100%' }}
       >
         <ListItemAvatar>
-          <Avatar sx={{ bgcolor: getTeamColor(team.name) }}>
+          <Avatar 
+            src={getTeamIconUrl(team) || undefined}
+            sx={{ bgcolor: getTeamColor(team.name) }}
+          >
             {getTeamInitials(team)}
           </Avatar>
         </ListItemAvatar>
@@ -211,6 +232,19 @@ export const TeamItem: React.FC<TeamItemProps> = ({
           sx={{ minWidth: 0 }}
         />
       </ListItemButton>
+
+      {/* Team menu - only for vertical layout */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem onClick={handleSettingsClick}>Team Settings</MenuItem>
+        <MenuItem onClick={handleMenuClose}>Manage Members</MenuItem>
+        <MenuItem onClick={handleMenuClose}>View Team Info</MenuItem>
+      </Menu>
     </ListItem>
   );
 };

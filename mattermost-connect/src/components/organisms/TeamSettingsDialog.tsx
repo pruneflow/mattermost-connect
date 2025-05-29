@@ -23,7 +23,7 @@ import {
   Upload as UploadIcon,
 } from '@mui/icons-material';
 import { useErrorHandler, useLayout, useTeamCreation, usePermissions } from '../../hooks';
-import { getTeamInitials, getTeamColor } from '../../utils/teamUtils';
+import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
 import type { Team } from '../../api/types';
 
 interface TabPanelProps {
@@ -41,7 +41,7 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => (
 export interface TeamSettingsDialogProps {
   open: boolean;
   onClose: () => void;
-  team: Team;
+  team: Team | null;
 }
 
 export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
@@ -49,6 +49,10 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
   onClose,
   team,
 }) => {
+  // Ne pas render si pas de team
+  if (!team) {
+    return null;
+  }
   const { isMobile } = useLayout();
   const { handleError } = useErrorHandler();
   const { uploadTeamIcon } = useTeamCreation();
@@ -149,6 +153,7 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
         }}
       >
         <Typography 
+          component="span"
           variant={isMobile ? "h6" : "h5"} 
           fontWeight={600}
           sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
@@ -215,6 +220,7 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
               
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                 <Avatar
+                  src={getTeamIconUrl(team) || undefined}
                   sx={{
                     width: 64,
                     height: 64,
@@ -298,6 +304,7 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
                   Current Icon
                 </Typography>
                 <Avatar
+                  src={getTeamIconUrl(team) || undefined}
                   sx={{
                     width: 128,
                     height: 128,

@@ -96,6 +96,12 @@ const entitiesSlice = createSlice({
     setTeam: (state, action: PayloadAction<Team>) => {
       state.teams.teams[action.payload.id] = action.payload;
     },
+    updateTeam: (state, action: PayloadAction<Partial<Team> & { id: string }>) => {
+      const teamId = action.payload.id;
+      if (state.teams.teams[teamId]) {
+        Object.assign(state.teams.teams[teamId], action.payload);
+      }
+    },
     setTeams: (state, action: PayloadAction<Team[] | Record<string, Team>>) => {
       if (Array.isArray(action.payload)) {
         action.payload.forEach(team => {
@@ -210,6 +216,7 @@ export const {
   // Teams
   setCurrentTeamId,
   setTeam,
+  updateTeam,
   setTeams,
   setTeamMember,
   setTeamMembers,

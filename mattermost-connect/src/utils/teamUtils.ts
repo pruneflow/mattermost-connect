@@ -1,4 +1,5 @@
 import ColorHash from 'color-hash';
+import { client } from '../api/client';
 import type { Team } from '../api/types';
 
 // Default color hash instance (same as Mattermost)
@@ -24,6 +25,19 @@ export const getTeamInitials = (team: Team): string => {
  */
 export const getTeamColor = (teamName: string): string => {
   return defaultColorHash.hex(teamName);
+};
+
+/**
+ * Get team icon URL with cache busting
+ * Returns null if no icon is available
+ */
+export const getTeamIconUrl = (team: Team): string | null => {
+  if (!team.last_team_icon_update || team.last_team_icon_update === 0) {
+    return null; // No icon uploaded
+  }
+
+  // Client handles cache busting internally
+  return client.getTeamIconUrl(team.id, team.last_team_icon_update);
 };
 
 /**

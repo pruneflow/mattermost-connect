@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { client } from '../api/client';
-import { setTeam, setCurrentTeamId } from '../store/slices/entitiesSlice';
+import { setTeam, updateTeam, setCurrentTeamId } from '../store/slices/entitiesSlice';
 import type { CreateTeamData } from '../components/organisms/CreateTeamDialog';
 import type { Team, TeamCreationRequest } from '../api/types';
 
@@ -52,8 +52,12 @@ export const useTeamCreation = () => {
       // Upload team icon via API - following mattermost-redux setTeamIcon pattern
       await client.setTeamIcon(teamId, imageFile);
 
-      // Note: Team update will be handled by WebSocket events
-      // No need to manually update store here
+      // Manually update store with new timestamp for cache busting
+      // (Mattermost API doesn't return updated team object or send WebSocket events for icons)
+      dispatch(updateTeam({ 
+        id: teamId, 
+        last_team_icon_update: Date.now() 
+      }));
     } catch (error) {
       console.error('Failed to upload team icon:', error);
       throw error;

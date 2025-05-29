@@ -7,8 +7,6 @@ import {
   Divider,
   IconButton,
   InputBase,
-  Menu,
-  MenuItem,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -16,6 +14,7 @@ import {
 import { filterTeams } from '../../utils/teamUtils';
 import { usePermissions, useErrorHandler, useNavigation, useTeamCreation, useUnreadCounts, useTeams } from '../../hooks';
 import { CreateTeamDialog, type CreateTeamData } from './CreateTeamDialog';
+import { TeamSettingsDialog } from './TeamSettingsDialog';
 import { TeamItemSkeleton, ListSkeleton } from '../atoms';
 import { TeamItem, CreateTeamButton } from '../molecules';
 import type { Team } from '../../api/types';
@@ -34,9 +33,9 @@ export const TeamList: React.FC<TeamListProps> = ({
   layout = 'vertical',
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedTeamForMenu, setSelectedTeamForMenu] = useState<Team | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
+  const [selectedTeamForSettings, setSelectedTeamForSettings] = useState<Team | null>(null);
 
   // Hooks
   const { canCreateTeam } = usePermissions();
@@ -89,15 +88,14 @@ export const TeamList: React.FC<TeamListProps> = ({
     setSearchTerm(event.target.value);
   }, []);
 
-  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>, team: Team) => {
-    event.stopPropagation();
-    setMenuAnchorEl(event.currentTarget);
-    setSelectedTeamForMenu(team);
+  const handleOpenSettings = useCallback((team: Team) => {
+    setSelectedTeamForSettings(team);
+    setTeamSettingsOpen(true);
   }, []);
 
-  const handleMenuClose = useCallback(() => {
-    setMenuAnchorEl(null);
-    setSelectedTeamForMenu(null);
+  const handleCloseTeamSettings = useCallback(() => {
+    setTeamSettingsOpen(false);
+    setSelectedTeamForSettings(null);
   }, []);
 
   const handleCreateTeamClick = useCallback(() => {
@@ -283,7 +281,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 unreadCount={unreadCount}
                 mentionCount={mentionCount}
                 onClick={() => handleTeamClick(team)}
-                onMenuOpen={handleMenuOpen}
+                onOpenSettings={handleOpenSettings}
                 showMenu={true}
               />
             );
@@ -304,25 +302,19 @@ export const TeamList: React.FC<TeamListProps> = ({
   return (
     <>
       {renderTeamList()}
-      
-      {/* Team options menu */}
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={handleMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <MenuItem onClick={handleMenuClose}>Team Settings</MenuItem>
-        <MenuItem onClick={handleMenuClose}>Manage Members</MenuItem>
-        <MenuItem onClick={handleMenuClose}>View Team Info</MenuItem>
-      </Menu>
-
       {/* Create team modal */}
       <CreateTeamDialog
         open={createModalOpen}
         onClose={handleCloseModal}
         onCreateTeam={handleCreateTeam}
+      />
+
+      {/* Team settings modal */}
+      <TeamSettingsDialog
+        key="team-settings-dialog"
+        open={teamSettingsOpen}
+        onClose={handleCloseTeamSettings}
+        team={selectedTeamForSettings}
       />
     </>
   );
