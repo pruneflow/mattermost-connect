@@ -15,13 +15,8 @@ import {
 // Phase 2 Demo Component - Teams & User Management
 const Phase2Demo: React.FC = () => {
   const { currentUser, logout } = useAuth();
-  const { currentTeam, switchTeam } = useTeams();
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const { currentTeam } = useTeams();
 
-  const handleTeamSelect = (team: any) => {
-    setSelectedTeamId(team.id);
-    switchTeam(team.id);
-  };
 
   return (
     <Box sx={{
@@ -88,9 +83,7 @@ const Phase2Demo: React.FC = () => {
           minWidth: 0,
         }}>
           <Typography variant="h6" sx={{ mt: 0, color: 'text.primary' }}>Teams</Typography>
-          <TeamList 
-            selectedTeamId={selectedTeamId}
-            onTeamSelect={handleTeamSelect}
+          <TeamList
             layout="vertical"
           />
         </Box>
@@ -329,7 +322,7 @@ setDefaultClient({
 // Use
 <Provider store={store}>
   <LoginForm />
-  <TeamList teams={teams} onTeamSelect={handleTeamSelect} />
+  <TeamList teams={teams}  />
   <UserMenu user={user} onLogout={logout} />
 </Provider>`}
         </Box>

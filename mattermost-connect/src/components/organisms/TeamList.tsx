@@ -20,22 +20,20 @@ import { TeamItem, CreateTeamButton } from '../molecules';
 import type { Team } from '../../api/types';
 
 export interface TeamListProps {
-  selectedTeamId?: string;
   onTeamSelect?: (team: Team) => void;
   showCreateButton?: boolean; // default: true
   layout?: 'vertical' | 'horizontal' | 'tabs';
 }
 
 export const TeamList: React.FC<TeamListProps> = ({
-  selectedTeamId,
   onTeamSelect,
   showCreateButton = true,
   layout = 'vertical',
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
-  const [selectedTeamForSettings, setSelectedTeamForSettings] = useState<Team | null>(null);
 
   // Hooks
   const { canCreateTeam } = usePermissions();
@@ -51,9 +49,11 @@ export const TeamList: React.FC<TeamListProps> = ({
   // Teams data from hook
   const {
     teams: teamsById,
+    currentTeamId,
     loadTeams,
     isLoadingTeams,
     teamsError,
+    switchTeam
   } = useTeams();
 
   // Convert teams object to array
@@ -89,13 +89,13 @@ export const TeamList: React.FC<TeamListProps> = ({
   }, []);
 
   const handleOpenSettings = useCallback((team: Team) => {
-    setSelectedTeamForSettings(team);
+    setSelectedTeamId(team.id);
     setTeamSettingsOpen(true);
   }, []);
 
   const handleCloseTeamSettings = useCallback(() => {
     setTeamSettingsOpen(false);
-    setSelectedTeamForSettings(null);
+    setSelectedTeamId(null);
   }, []);
 
   const handleCreateTeamClick = useCallback(() => {
@@ -193,7 +193,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 key={team.id}
                 team={team}
                 layout="tabs"
-                isActive={selectedTeamId === team.id}
+                isActive={currentTeamId === team.id}
                 unreadCount={unreadCount}
                 mentionCount={mentionCount}
                 onClick={() => handleTeamClick(team)}
@@ -224,7 +224,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 key={team.id}
                 team={team}
                 layout="horizontal"
-                isActive={selectedTeamId === team.id}
+                isActive={currentTeamId === team.id}
                 unreadCount={unreadCount}
                 mentionCount={mentionCount}
                 onClick={() => handleTeamClick(team)}
@@ -277,7 +277,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 key={team.id}
                 team={team}
                 layout="vertical"
-                isActive={selectedTeamId === team.id}
+                isActive={currentTeamId === team.id}
                 unreadCount={unreadCount}
                 mentionCount={mentionCount}
                 onClick={() => handleTeamClick(team)}
@@ -314,7 +314,7 @@ export const TeamList: React.FC<TeamListProps> = ({
         key="team-settings-dialog"
         open={teamSettingsOpen}
         onClose={handleCloseTeamSettings}
-        team={selectedTeamForSettings}
+        teamId={selectedTeamId}
       />
     </>
   );

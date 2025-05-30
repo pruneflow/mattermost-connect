@@ -31,9 +31,9 @@ export const getTeamColor = (teamName: string): string => {
  * Get team icon URL with cache busting
  * Returns null if no icon is available
  */
-export const getTeamIconUrl = (team: Team): string | null => {
+export const getTeamIconUrl = (team: Team): string | undefined => {
   if (!team.last_team_icon_update || team.last_team_icon_update === 0) {
-    return null; // No icon uploaded
+    return undefined; // No icon uploaded
   }
 
   // Client handles cache busting internally

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -9,98 +9,140 @@ import {
   Typography,
   IconButton,
   Avatar,
-  Paper,
   Alert,
   CircularProgress,
-  Tabs,
-  Tab,
   TextField,
   Divider,
+  Fab,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
   Close as CloseIcon,
   PhotoCamera as PhotoCameraIcon,
-  Upload as UploadIcon,
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
-import { useErrorHandler, useLayout, useTeamCreation, usePermissions } from '../../hooks';
+import { useErrorHandler, useLayout, useTeamCreation, usePermissions, useTeams } from '../../hooks';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { updateTeam } from '../../store/slices/entitiesSlice';
+import { client } from '../../api/client';
 import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
 import type { Team } from '../../api/types';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => (
-  <div hidden={value !== index} style={{ height: '100%' }}>
-    {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-  </div>
-);
 
 export interface TeamSettingsDialogProps {
   open: boolean;
   onClose: () => void;
-  team: Team | null;
+  teamId: string | null;
 }
 
 export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
   open,
   onClose,
-  team,
+  teamId,
 }) => {
-  // Ne pas render si pas de team
-  if (!team) {
-    return null;
-  }
   const { isMobile } = useLayout();
   const { handleError } = useErrorHandler();
   const { uploadTeamIcon } = useTeamCreation();
   const { canManageTeam } = usePermissions();
+  const { teamsById } = useTeams();
+  const dispatch = useAppDispatch();
+  
+  // Get fresh team from store
+  const team = teamId ? teamsById[teamId] : null;
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState(0);
-  const [selectedIcon, setSelectedIcon] = useState<File | null>(null);
-  const [iconPreview, setIconPreview] = useState<string>('');
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  
+  // Edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    display_name: '',
+    description: '',
+    allow_open_invite: false,
+  });
 
-  const canManageSettings = canManageTeam(team.id);
+  const canManageSettings = canManageTeam(team?.id);
 
-  const handleTabChange = useCallback((event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-  }, []);
+  // Initialize form when team changes
+  useEffect(() => {
+    if (team) {
+      setFormData({
+        display_name: team.display_name || '',
+        description: team.description || '',
+        allow_open_invite: team.allow_open_invite || false,
+      });
+    }
+  }, [team]);
 
   const handleClose = useCallback(() => {
-    setSelectedIcon(null);
-    setIconPreview('');
-    setActiveTab(0);
+    setIsEditing(false);
     onClose();
   }, [onClose]);
 
-  // Handle icon file selection (no validation here - handled in uploadTeamIcon)
-  const handleIconSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setSelectedIcon(file);
-    
-    // Create preview URL
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setIconPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, checked, type } = e.target;
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: type === 'checkbox' ? checked : value 
+    }));
   }, []);
 
-  // Upload team icon (validation handled in hook)
-  const handleUploadIcon = useCallback(async () => {
-    if (!selectedIcon) return;
+  const handleEditClick = useCallback(() => {
+    if (team) {
+      setFormData({
+        display_name: team.display_name || '',
+        description: team.description || '',
+        allow_open_invite: team.allow_open_invite || false,
+      });
+      setIsEditing(true);
+    }
+  }, [team]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    if (team) {
+      setFormData({
+        display_name: team.display_name || '',
+        description: team.description || '',
+        allow_open_invite: team.allow_open_invite || false,
+      });
+    }
+  }, [team]);
+
+  const handleSave = useCallback(async () => {
+    if (!team) return;
+
+    try {
+      // Update team via API
+      const updatedTeam = await client.patchTeam({
+        id: team.id,
+        display_name: formData.display_name.trim(),
+        description: formData.description.trim(),
+        allow_open_invite: formData.allow_open_invite,
+      });
+
+      // Update store
+      dispatch(updateTeam(updatedTeam));
+      setIsEditing(false);
+    } catch (error) {
+      handleError(error, {
+        component: 'TeamSettingsDialog',
+        action: 'saveTeam',
+        showToast: true
+      });
+    }
+  }, [team, formData, dispatch, handleError]);
+
+  // Handle icon file selection and upload directly
+  const handleIconSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !team) return;
 
     setIsUploadingIcon(true);
     try {
-      await uploadTeamIcon(team.id, selectedIcon);
-      setSelectedIcon(null);
-      setIconPreview('');
+      await uploadTeamIcon(team.id, file);
     } catch (error) {
       handleError(error, {
         component: 'TeamSettingsDialog',
@@ -110,318 +152,251 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
     } finally {
       setIsUploadingIcon(false);
     }
-  }, [selectedIcon, uploadTeamIcon, team.id, handleError]);
+  }, [uploadTeamIcon, team?.id, handleError]);
 
   // Const functions outside render for better memory management
-  const handleFileInputClick = () => {
-    fileInputRef.current?.click();
+  const handleAvatarClick = () => {
+    if (canManageSettings) {
+      fileInputRef.current?.click();
+    }
   };
 
-  const handleCancelIconSelection = () => {
-    setSelectedIcon(null);
-    setIconPreview('');
-  };
+  const renderDialog = () => {
+    if (!team) return null;
+    
+    return (
+      <>
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: 1,
+            borderColor: 'divider',
+            px: { xs: 2, sm: 3 },
+            py: { xs: 1.5, sm: 2 },
+          }}
+        >
+          <Typography 
+            component="span"
+            variant={isMobile ? "h6" : "h5"} 
+            fontWeight={600}
+            sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+          >
+            Team Settings
+          </Typography>
+          <IconButton 
+            onClick={handleClose}
+            size={isMobile ? "medium" : "small"}
+            sx={{ 
+              color: 'text.secondary',
+              '&:hover': { 
+                bgcolor: 'action.hover'
+              }
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
 
-  const tabs = [
-    { label: 'General', id: 'general' },
-    { label: 'Icon', id: 'icon' },
-  ];
+        <DialogContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Box sx={{ maxWidth: 600 }}>
+            <Typography variant="h6" gutterBottom fontWeight={600}>
+              General Information
+            </Typography>
+            
+            {/* Team info with avatar and camera icon */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Box sx={{ position: 'relative' }}>
+                <Avatar
+                  src={getTeamIconUrl(team) || undefined}
+                  sx={{
+                    width: 80,
+                    height: 80,
+                    bgcolor: getTeamColor(team.name),
+                    fontSize: '32px',
+                    fontWeight: 600,
+                    cursor: canManageSettings ? 'pointer' : 'default',
+                  }}
+                  onClick={handleAvatarClick}
+                >
+                  {getTeamInitials(team)}
+                </Avatar>
+                
+                {/* Camera icon overlay */}
+                {canManageSettings && (
+                  <Fab
+                    size="small"
+                    color="primary"
+                    sx={{
+                      position: 'absolute',
+                      bottom: -4,
+                      right: -4,
+                      width: 32,
+                      height: 32,
+                      minHeight: 32,
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': {
+                        bgcolor: 'primary.dark',
+                      },
+                    }}
+                    onClick={handleAvatarClick}
+                    disabled={isUploadingIcon}
+                  >
+                    {isUploadingIcon ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <PhotoCameraIcon sx={{ fontSize: 16 }} />
+                    )}
+                  </Fab>
+                )}
+              </Box>
+              
+              <Box>
+                <Typography variant="h6" fontWeight={600}>
+                  {team.display_name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {team.name}
+                </Typography>
+                {team.description && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    {team.description}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+
+            {!canManageSettings && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                You don't have permission to change team settings.
+              </Alert>
+            )}
+
+            <Divider sx={{ my: 3 }} />
+
+            {/* Team details form */}
+            <Box>
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>
+                Team Details
+              </Typography>
+              <Box sx={{ display: 'grid', gap: 2 }}>
+                <TextField
+                  label="Team Name"
+                  name="display_name"
+                  value={isEditing ? formData.display_name : team.display_name}
+                  onChange={handleChange}
+                  disabled={!canManageSettings || !isEditing}
+                  fullWidth
+                  size="small"
+                />
+                <TextField
+                  label="Team URL"
+                  value={team.name}
+                  disabled
+                  fullWidth
+                  size="small"
+                  helperText="Team URL cannot be changed"
+                />
+                <TextField
+                  label="Description"
+                  name="description"
+                  value={isEditing ? formData.description : (team.description || '')}
+                  onChange={handleChange}
+                  disabled={!canManageSettings || !isEditing}
+                  fullWidth
+                  multiline
+                  rows={2}
+                  size="small"
+                />
+                
+                {canManageSettings && (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="allow_open_invite"
+                        checked={isEditing ? formData.allow_open_invite : team.allow_open_invite}
+                        onChange={handleChange}
+                        disabled={!isEditing}
+                      />
+                    }
+                    label="Allow anyone to join this team"
+                  />
+                )}
+              </Box>
+            </Box>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/bmp"
+              onChange={handleIconSelect}
+              style={{ display: 'none' }}
+            />
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ 
+          px: { xs: 2, sm: 3 }, 
+          py: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}>
+          {canManageSettings && (
+            <>
+              {isEditing ? (
+                <>
+                  <Button 
+                    onClick={handleSave} 
+                    variant="contained" 
+                    startIcon={<SaveIcon />}
+                  >
+                    Save
+                  </Button>
+                  <Button 
+                    onClick={handleCancelEdit} 
+                    variant="outlined"
+                    startIcon={<CancelIcon />}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button 
+                  onClick={handleEditClick} 
+                  variant="contained"
+                  startIcon={<EditIcon />}
+                >
+                  Edit
+                </Button>
+              )}
+            </>
+          )}
+          <Button onClick={handleClose} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
+      </>
+    );
+  };
 
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="md"
+      maxWidth="sm"
       fullWidth
       fullScreen={isMobile}
       PaperProps={{
         sx: {
-          height: isMobile ? '100%' : 600,
+          height: isMobile ? '100%' : 'auto',
           maxHeight: isMobile ? '100%' : '90vh',
         }
       }}
     >
-      <DialogTitle
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: 1,
-          borderColor: 'divider',
-          px: { xs: 2, sm: 3 },
-          py: { xs: 1.5, sm: 2 },
-        }}
-      >
-        <Typography 
-          component="span"
-          variant={isMobile ? "h6" : "h5"} 
-          fontWeight={600}
-          sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
-        >
-          Team Settings
-        </Typography>
-        <IconButton 
-          onClick={handleClose}
-          size={isMobile ? "medium" : "small"}
-          sx={{ 
-            color: 'text.secondary',
-            '&:hover': { 
-              bgcolor: 'action.hover'
-            }
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-
-      <Box sx={{ display: 'flex', height: '100%' }}>
-        {/* Sidebar with tabs */}
-        <Box
-          sx={{
-            width: { xs: '100%', md: 200 },
-            borderRight: { xs: 'none', md: 1 },
-            borderColor: 'divider',
-            bgcolor: 'action.hover',
-          }}
-        >
-          <Tabs
-            orientation={isMobile ? 'horizontal' : 'vertical'}
-            value={activeTab}
-            onChange={handleTabChange}
-            variant={isMobile ? 'fullWidth' : 'scrollable'}
-            sx={{
-              minHeight: { xs: 48, md: 'auto' },
-            }}
-          >
-            {tabs.map((tab, index) => (
-              <Tab
-                key={tab.id}
-                label={tab.label}
-                sx={{
-                  minHeight: { xs: 48, md: 72 },
-                  minWidth: { xs: 'auto', md: '100%' },
-                  justifyContent: { xs: 'center', md: 'flex-start' },
-                  textTransform: 'none',
-                  fontWeight: 500,
-                }}
-              />
-            ))}
-          </Tabs>
-        </Box>
-
-        {/* Content area */}
-        <DialogContent sx={{ flex: 1, p: 0, overflow: 'auto' }}>
-          {/* General Tab */}
-          <TabPanel value={activeTab} index={0}>
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 600 }}>
-              <Typography variant="h6" gutterBottom fontWeight={600}>
-                General Information
-              </Typography>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                <Avatar
-                  src={getTeamIconUrl(team) || undefined}
-                  sx={{
-                    width: 64,
-                    height: 64,
-                    bgcolor: getTeamColor(team.name),
-                    fontSize: '24px',
-                    fontWeight: 600,
-                  }}
-                >
-                  {getTeamInitials(team)}
-                </Avatar>
-                <Box>
-                  <Typography variant="h6" fontWeight={600}>
-                    {team.display_name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {team.name}
-                  </Typography>
-                  {team.description && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      {team.description}
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-
-              <Divider sx={{ my: 3 }} />
-
-              <Box>
-                <Typography variant="subtitle1" gutterBottom fontWeight={600}>
-                  Team Details
-                </Typography>
-                <Box sx={{ display: 'grid', gap: 2 }}>
-                  <TextField
-                    label="Team Name"
-                    value={team.display_name}
-                    disabled={!canManageSettings}
-                    fullWidth
-                    size="small"
-                  />
-                  <TextField
-                    label="Team URL"
-                    value={team.name}
-                    disabled
-                    fullWidth
-                    size="small"
-                    helperText="Team URL cannot be changed"
-                  />
-                  <TextField
-                    label="Description"
-                    value={team.description || ''}
-                    disabled={!canManageSettings}
-                    fullWidth
-                    multiline
-                    rows={2}
-                    size="small"
-                  />
-                </Box>
-              </Box>
-            </Box>
-          </TabPanel>
-
-          {/* Icon Tab */}
-          <TabPanel value={activeTab} index={1}>
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 600 }}>
-              <Typography variant="h6" gutterBottom fontWeight={600}>
-                Team Icon
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Upload a custom icon for your team. Recommended size is 128x128 pixels.
-              </Typography>
-
-              {!canManageSettings && (
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  You don't have permission to change team settings.
-                </Alert>
-              )}
-
-              {/* Current Icon */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle1" gutterBottom fontWeight={600}>
-                  Current Icon
-                </Typography>
-                <Avatar
-                  src={getTeamIconUrl(team) || undefined}
-                  sx={{
-                    width: 128,
-                    height: 128,
-                    bgcolor: getTeamColor(team.name),
-                    fontSize: '48px',
-                    fontWeight: 600,
-                    border: 2,
-                    borderColor: 'divider',
-                  }}
-                >
-                  {getTeamInitials(team)}
-                </Avatar>
-              </Box>
-
-              {canManageSettings && (
-                <>
-                  <Divider sx={{ my: 3 }} />
-
-                  {/* Upload New Icon */}
-                  <Box sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight={600}>
-                      Upload New Icon
-                    </Typography>
-                    
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        '&:hover': {
-                          bgcolor: 'action.hover',
-                        },
-                      }}
-                      onClick={handleFileInputClick}
-                    >
-                      {iconPreview ? (
-                        <Box>
-                          <Avatar
-                            src={iconPreview}
-                            sx={{
-                              width: 128,
-                              height: 128,
-                              mx: 'auto',
-                              mb: 2,
-                              border: 2,
-                              borderColor: 'divider',
-                            }}
-                          />
-                          <Typography variant="body2" color="text.secondary">
-                            Click to change selected image
-                          </Typography>
-                        </Box>
-                      ) : (
-                        <Box>
-                          <PhotoCameraIcon 
-                            sx={{ 
-                              fontSize: 48, 
-                              color: 'text.secondary',
-                              mb: 2,
-                            }} 
-                          />
-                          <Typography variant="body1" gutterBottom>
-                            Click to select an image
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            JPG, PNG, BMP formats • Maximum 10MB • Recommended 128x128px
-                          </Typography>
-                        </Box>
-                      )}
-                    </Paper>
-
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/bmp"
-                      onChange={handleIconSelect}
-                      style={{ display: 'none' }}
-                    />
-                  </Box>
-
-                  {selectedIcon && (
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      <Button
-                        onClick={handleUploadIcon}
-                        variant="contained"
-                        disabled={isUploadingIcon}
-                        startIcon={isUploadingIcon ? <CircularProgress size={16} /> : <UploadIcon />}
-                      >
-                        {isUploadingIcon ? 'Uploading...' : 'Upload Icon'}
-                      </Button>
-                      <Button
-                        onClick={handleCancelIconSelection}
-                        variant="outlined"
-                        disabled={isUploadingIcon}
-                      >
-                        Cancel
-                      </Button>
-                    </Box>
-                  )}
-                </>
-              )}
-            </Box>
-          </TabPanel>
-        </DialogContent>
-      </Box>
-
-      <DialogActions sx={{ 
-        px: { xs: 2, sm: 3 }, 
-        py: 2,
-        borderTop: 1,
-        borderColor: 'divider',
-      }}>
-        <Button onClick={handleClose} variant="outlined">
-          Close
-        </Button>
-      </DialogActions>
+      {renderDialog()}
     </Dialog>
   );
 };
