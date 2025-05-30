@@ -61,7 +61,7 @@ export const useTeams = (): {
       
       dispatch(setTeams(teamsById));
     });
-  }, [withLoading, dispatch, currentUser]); // REMOVED teams dependency
+  }, [withLoading, dispatch, currentUser]); 
 
   // Load team unread counts - Simple check then load
   const loadTeamUnreads = useCallback(async (forceRefresh = false) => {
