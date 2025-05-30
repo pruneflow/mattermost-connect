@@ -4,6 +4,12 @@ import { useAppDispatch } from './useAppDispatch';
 import { client } from '../api/client';
 import { setCurrentTeamId, setTeams, setTeamUnreads } from '../store/slices/entitiesSlice';
 import { useLoading } from './useLoading';
+import { 
+  selectTeamsArray, 
+  selectCurrentTeam, 
+  selectCurrentTeamId,
+  selectCurrentUser 
+} from '../store/selectors';
 import type { Team } from '../api/types';
 
 export const useTeams = (): {
@@ -23,16 +29,14 @@ export const useTeams = (): {
   const dispatch = useAppDispatch();
   const { withLoading, isLoading, getError } = useLoading();
   
-  // Teams state
-  const { currentTeamId, teams, unreads } = useAppSelector(state => state.entities.teams);
-  const currentUser = useAppSelector(state => {
-    const userId = state.entities.users.currentUserId;
-    return userId ? state.entities.users.profiles[userId] : null;
-  });
-
-  // Get teams array
-  const teamsArray = Object.values(teams);
-  const currentTeam = currentTeamId ? teams[currentTeamId] : null;
+  // Use memoized selectors for better performance
+  const currentTeamId = useAppSelector(selectCurrentTeamId);
+  const currentTeam = useAppSelector(selectCurrentTeam);
+  const currentUser = useAppSelector(selectCurrentUser);
+  const teamsArray = useAppSelector(selectTeamsArray);
+  
+  // Direct access for internal logic that needs raw state
+  const { teams, unreads } = useAppSelector(state => state.entities.teams);
 
   const switchTeam = useCallback((teamId: string) => {
     // Follow Mattermost pattern: just dispatch the team ID without validation
@@ -61,7 +65,7 @@ export const useTeams = (): {
       
       dispatch(setTeams(teamsById));
     });
-  }, [withLoading, dispatch, currentUser]); 
+  }, [withLoading, dispatch, currentUser]);
 
   // Load team unread counts - Simple check then load
   const loadTeamUnreads = useCallback(async (forceRefresh = false) => {
@@ -97,19 +101,14 @@ export const useTeams = (): {
   }, [loadTeamUnreads, teamsArray]);
 
   return {
-    // State
     teams: teamsArray,
     teamsById: teams,
     currentTeam,
     currentTeamId,
-    
-    // Actions
     switchTeam,
     loadTeams,
     loadTeamUnreads,
-    getAllTeamsUnread, // Legacy compatibility
-    
-    // Loading states
+    getAllTeamsUnread,
     isLoadingTeams: isLoading('teams.loadTeams'),
     isLoadingUnreads: isLoading('teams.loadUnreads'),
     teamsError: getError('teams.loadTeams'),
