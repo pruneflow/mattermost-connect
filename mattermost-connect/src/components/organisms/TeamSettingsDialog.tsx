@@ -24,8 +24,10 @@ import {
   Save as SaveIcon,
   Cancel as CancelIcon,
 } from '@mui/icons-material';
-import { useErrorHandler, useLayout, useTeamCreation, usePermissions, useTeams } from '../../hooks';
+import { useErrorHandler, useLayout, useTeamCreation, usePermissions } from '../../hooks';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectTeamById } from '../../store/selectors';
 import { updateTeam } from '../../store/slices/entitiesSlice';
 import { client } from '../../api/client';
 import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
@@ -46,11 +48,10 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
   const { handleError } = useErrorHandler();
   const { uploadTeamIcon } = useTeamCreation();
   const { canManageTeam } = usePermissions();
-  const { teamsById } = useTeams();
   const dispatch = useAppDispatch();
   
-  // Get fresh team from store
-  const team = teamId ? teamsById[teamId] : null;
+  // Get fresh team from store using memoized selector
+  const team = useAppSelector(selectTeamById(teamId));
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);

@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
-import { Provider } from 'react-redux';
 import { Box, Typography } from '@mui/material';
 import { 
-  store,
   LoginForm, 
   TeamList,
   UserMenu,
   UserAvatar,
   useAuth,
   useTeams,
-  ThemeProvider
+  AppProvider
 } from 'mattermost-connect';
 
 // Phase 2 Demo Component - Teams & User Management
@@ -390,19 +388,17 @@ setDefaultClient({
   );
 };
 
-// Redux demo with provider
+// Redux demo with AppProvider (includes store + theme + initialization)
 const ReduxDemo: React.FC = () => {
   return (
-    <Provider store={store}>
-      <ThemeProvider>
+    <AppProvider>
       <Box sx={{
         minHeight: '100vh',
         bgcolor: 'background.default',
       }}>
         <ReduxDemoContent />
       </Box>
-      </ThemeProvider>
-    </Provider>
+    </AppProvider>
   );
 };
 

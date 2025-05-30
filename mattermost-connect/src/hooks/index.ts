@@ -13,6 +13,8 @@ export { default as useTeamCreation } from './useTeamCreation';
 export { default as useUserPreferences } from './useUserPreferences';
 export { default as useUnreadCounts } from './useUnreadCounts';
 export { useLoading } from './useLoading';
+export { default as useWebSocket } from './useWebSocket';
+export { default as useAppInitialization } from './useAppInitialization';
 
 // Export Redux types
 export type { RootState } from './useAppSelector';

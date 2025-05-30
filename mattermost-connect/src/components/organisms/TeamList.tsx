@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Box,
   List,
@@ -11,6 +11,8 @@ import {
 import {
   Search as SearchIcon,
 } from '@mui/icons-material';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectTeamsArray, selectTeamsByQuery } from '../../store/selectors';
 import { filterTeams } from '../../utils/teamUtils';
 import { usePermissions, useErrorHandler, useNavigation, useTeamCreation, useUnreadCounts, useTeams } from '../../hooks';
 import { CreateTeamDialog, type CreateTeamData } from './CreateTeamDialog';
@@ -42,31 +44,25 @@ export const TeamList: React.FC<TeamListProps> = ({
   const { createTeam } = useTeamCreation();
   const { 
     getTeamUnreadCount, 
-    getTeamMentionCount, 
-    loadUnreadCounts 
+    getTeamMentionCount
   } = useUnreadCounts();
   
-  // Teams data from hook
+  // Teams data from hook (read-only)
   const {
-    teams: teamsById,
     currentTeamId,
-    loadTeams,
-    isLoadingTeams,
-    teamsError,
     switchTeam
   } = useTeams();
 
-  // Convert teams object to array
-  const teams = Object.values(teamsById);
+  // Use memoized selector for teams array
+  const teams = useAppSelector(selectTeamsArray);
+  
+  // Use memoized selector for filtered teams when searching
+  const filteredTeams = searchTerm.trim() ? 
+    useAppSelector(useMemo(() => selectTeamsByQuery(searchTerm), [searchTerm])) : 
+    teams;
 
-  // Load unread counts when teams are available (once)
-  useEffect(() => {
-    if (teams.length > 0) {
-      loadUnreadCounts();
-    }
-  }, [teams.length]); // Removed loadUnreadCounts to prevent re-calls
-
-  const filteredTeams = filterTeams(teams, searchTerm);
+  // ✅ REMOVED: loadUnreadCounts call here 
+  // useUnreadCounts hook handles its own initialization to avoid duplication
 
   // Stable event handlers - const outside render
   const handleTeamClick = useCallback((team: Team) => {
@@ -115,8 +111,9 @@ export const TeamList: React.FC<TeamListProps> = ({
   const shouldShowCreateButton = showCreateButton && canCreateTeam();
 
   const handleRetry = useCallback(() => {
-    loadTeams(true); // Force refresh
-  }, [loadTeams]);
+    // Retry handled by AppProvider on mount
+    window.location.reload();
+  }, []);
 
   const getSkeleton = useCallback(() => {
     if (layout === 'vertical') {
@@ -140,28 +137,12 @@ export const TeamList: React.FC<TeamListProps> = ({
     }
   }, [layout]);
 
-  // Show loading
-  if (isLoadingTeams) {
+  // Show skeleton while teams are not loaded yet
+  if (teams.length === 0) {
     return getSkeleton();
   }
 
-  // Show error
-  if (teamsError) {
-    return (
-      <Box sx={{ p: 2, textAlign: 'center' }}>
-        <Typography color="error" variant="body2">
-          {teamsError}
-        </Typography>
-        <Typography
-          variant="body2"
-          sx={{ cursor: 'pointer', textDecoration: 'underline', color: 'primary.main', mt: 1 }}
-          onClick={handleRetry}
-        >
-          Try again
-        </Typography>
-      </Box>
-    );
-  }
+  // Note: Error handling is done by AppProvider
 
   const renderTeamList = () => {
     // Tabs layout container (for header tabs)

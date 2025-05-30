@@ -20,6 +20,7 @@ export interface EntitiesState {
     channels: Record<string, Channel>;
     myMembers: Record<string, ChannelMember>;
     channelsInTeam: Record<string, string[]>;
+    unreads: Record<string, { msg_count: number; mention_count: number }>;
   };
   posts: {
     posts: Record<string, Post>;
@@ -46,6 +47,7 @@ const initialState: EntitiesState = {
     channels: {},
     myMembers: {},
     channelsInTeam: {},
+    unreads: {},
   },
   posts: {
     posts: {},
@@ -140,6 +142,45 @@ const entitiesSlice = createSlice({
     setChannelsInTeam: (state, action: PayloadAction<{ teamId: string; channelIds: string[] }>) => {
       state.channels.channelsInTeam[action.payload.teamId] = action.payload.channelIds;
     },
+    setChannelUnread: (state, action: PayloadAction<{ channelId: string; msg_count: number; mention_count: number }>) => {
+      const { channelId, msg_count, mention_count } = action.payload;
+      state.channels.unreads[channelId] = { msg_count, mention_count };
+    },
+    setChannelUnreads: (state, action: PayloadAction<Record<string, { msg_count: number; mention_count: number }>>) => {
+      Object.assign(state.channels.unreads, action.payload);
+    },
+    // WebSocket event 'posted' handler - exactly like Mattermost
+    incrementChannelUnreadCount: (state, action: PayloadAction<{ 
+      channelId: string; 
+      msgCount?: number;
+      mentionCount?: number;
+      fromCurrentUser?: boolean;
+    }>) => {
+      const { channelId, msgCount = 1, mentionCount = 0, fromCurrentUser = false } = action.payload;
+      
+      // Don't increment for current user's own messages (Mattermost behavior)
+      if (fromCurrentUser) return;
+      
+      if (!state.channels.unreads[channelId]) {
+        state.channels.unreads[channelId] = { msg_count: 0, mention_count: 0 };
+      }
+      
+      // Always increment msg_count for new messages
+      state.channels.unreads[channelId].msg_count += msgCount;
+      
+      // Only increment mention_count if the message contains mentions
+      if (mentionCount > 0) {
+        state.channels.unreads[channelId].mention_count += mentionCount;
+      }
+    },
+    
+    // WebSocket event 'channel_viewed' handler - exactly like Mattermost  
+    resetChannelUnreadCount: (state, action: PayloadAction<string>) => {
+      const channelId = action.payload;
+      if (state.channels.unreads[channelId]) {
+        state.channels.unreads[channelId] = { msg_count: 0, mention_count: 0 };
+      }
+    },
 
     // Posts
     setPost: (state, action: PayloadAction<Post>) => {
@@ -228,6 +269,10 @@ export const {
   setChannels,
   setChannelMember,
   setChannelsInTeam,
+  setChannelUnread,
+  setChannelUnreads,
+  incrementChannelUnreadCount,
+  resetChannelUnreadCount,
   
   // Posts
   setPost,

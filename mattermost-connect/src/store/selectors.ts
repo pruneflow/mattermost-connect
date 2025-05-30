@@ -142,6 +142,53 @@ export const selectUserById = (userId: string | null) => createSelector(
 );
 
 // ============================================================================
+// UNREAD COUNTS SELECTORS
+// ============================================================================
+
+/**
+ * Get channel unread count by ID (memoized)
+ */
+export const selectChannelUnreadCount = (channelId: string) => createSelector(
+  [(state: RootState) => state.entities.channels.unreads],
+  (channelUnreads) => channelUnreads[channelId]?.msg_count || 0
+);
+
+/**
+ * Get channel mention count by ID (memoized)
+ */
+export const selectChannelMentionCount = (channelId: string) => createSelector(
+  [(state: RootState) => state.entities.channels.unreads],
+  (channelUnreads) => channelUnreads[channelId]?.mention_count || 0
+);
+
+/**
+ * Get team unread count by ID (memoized)
+ */
+export const selectTeamUnreadCount = (teamId: string) => createSelector(
+  [(state: RootState) => state.entities.teams.unreads],
+  (teamUnreads) => teamUnreads[teamId]?.msg_count || 0
+);
+
+/**
+ * Get team mention count by ID (memoized)
+ */
+export const selectTeamMentionCount = (teamId: string) => createSelector(
+  [(state: RootState) => state.entities.teams.unreads],
+  (teamUnreads) => teamUnreads[teamId]?.mention_count || 0
+);
+
+/**
+ * Check if channel is muted (memoized)
+ */
+export const selectIsChannelMuted = (channelId: string) => createSelector(
+  [(state: RootState) => state.entities.channels.myMembers],
+  (channelMembers) => {
+    const membership = channelMembers[channelId];
+    return membership?.notify_props?.mark_unread === 'mention';
+  }
+);
+
+// ============================================================================
 // COMBINED SELECTORS (most performance-critical)
 // ============================================================================
 

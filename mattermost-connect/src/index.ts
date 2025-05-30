@@ -29,5 +29,5 @@ export * from './store/slices/errorsSlice';
 export { client, mattermostClient } from './api/client';
 
 // Providers
-export { ThemeProvider } from './providers';
+export { ThemeProvider, AppProvider } from './providers';
 export type { ThemeProviderProps } from './providers';

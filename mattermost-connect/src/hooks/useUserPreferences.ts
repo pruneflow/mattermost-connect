@@ -1,5 +1,4 @@
 import { useEffect, useCallback } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
 import { 
   loadPreferences, 
   savePreferences,
@@ -16,11 +15,12 @@ import {
 import type { PreferenceType } from '../api/types';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
+import { selectCurrentUserId } from '../store/selectors';
 import type { RootState } from '../store';
 
 const useUserPreferences = () => {
   const dispatch = useAppDispatch();
-  const currentUserId = useAppSelector((state: RootState) => state.entities.users.currentUserId);
+  const currentUserId = useAppSelector(selectCurrentUserId);
   const { preferences, isLoading, isUpdating, lastSynced } = useAppSelector(
     (state: RootState) => state.preferences
   );
@@ -38,10 +38,10 @@ const useUserPreferences = () => {
 
   // Load preferences on mount
   useEffect(() => {
-    if (currentUserId && (!lastSynced || Date.now() - lastSynced > 5 * 60 * 1000)) { // 5 minutes
+    if (currentUserId && preferences.length === 0) {
       dispatch(loadPreferences(currentUserId));
     }
-  }, [dispatch, currentUserId, lastSynced]);
+  }, [dispatch, currentUserId, preferences.length]);
 
 
   // Save preferences with debouncing

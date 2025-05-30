@@ -13,15 +13,6 @@ const router = createBrowserRouter([
     path: '/',
     element: <ReduxDemo />, // Use Redux demo for Phase 1
   },
-  // Commented out old routes that use deprecated MattermostProvider
-  // {
-  //   path: '/old',
-  //   element: <App />, // Original app
-  // },
-  // {
-  //   path: '/demo',
-  //   element: <MattermostDemo />,
-  // }
 ]);
 
 // Create root and render

@@ -30,7 +30,9 @@ import {
   Language as LanguageIcon,
   Check as CheckIcon,
 } from '@mui/icons-material';
-import { useSelector, useDispatch } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectCurrentUserId } from '../../store/selectors';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { StatusBadge } from '../atoms/StatusBadge';
 import { useUserStatus } from '../../hooks/useUserStatus';
@@ -40,7 +42,6 @@ import { setUser } from '../../store/slices/entitiesSlice';
 import { client } from '../../api/client';
 import { useLayout } from '../../hooks';
 import type { UserProfile as UserProfileType, UserStatus } from '../../api/types';
-import type { RootState } from '../../store';
 
 export interface UserProfileProps {
   user: UserProfileType;
@@ -55,8 +56,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({
 }) => {
   const { isMobile } = useLayout();
   const dispatch = useDispatch();
-  const currentUser = useSelector((state: RootState) => state.entities.users.currentUserId);
-  const isCurrentUser = user.id === currentUser;
+  const currentUserId = useAppSelector(selectCurrentUserId);
+  const isCurrentUser = user.id === currentUserId;
   
   // User status
   const { status, updateStatus } = useUserStatus();

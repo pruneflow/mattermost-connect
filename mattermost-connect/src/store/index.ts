@@ -8,6 +8,7 @@ import errorsReducer from './slices/errorsSlice';
 import authReducer from './slices/authSlice';
 import preferencesReducer from './slices/preferencesSlice';
 import loadingReducer from './slices/loadingSlice';
+import websocketReducer from './slices/websocketSlice';
 
 // Configure Client4 immediately before store creation if credentials exist
 const token = localStorage.getItem('mattermostToken');
@@ -30,7 +31,8 @@ export const store = configureStore({
     errors: errorsReducer,
     auth: authReducer,
     preferences: preferencesReducer,
-    loading: loadingReducer, // WebSocket-first loading states
+    loading: loadingReducer,
+    websocket: websocketReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

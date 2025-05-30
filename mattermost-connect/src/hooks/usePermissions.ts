@@ -1,15 +1,13 @@
 import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
+import { selectCurrentUser, selectCurrentTeamId } from '../store/selectors';
 import { Permissions, RolePermissions, SystemRoles, TeamRoles, ChannelRoles } from '../constants/permissions';
 import type { Team, Channel } from '../api/types';
 
 // Following Mattermost pattern for permission checking
 export const usePermissions = () => {
-  const currentUserId = useAppSelector(state => state.entities.users.currentUserId);
-  const currentUser = useAppSelector(state => 
-    currentUserId ? state.entities.users.profiles[currentUserId] : null
-  );
-  const currentTeamId = useAppSelector(state => state.entities.teams.currentTeamId);
+  const currentUser = useAppSelector(selectCurrentUser);
+  const currentTeamId = useAppSelector(selectCurrentTeamId);
   const teams = useAppSelector(state => state.entities.teams.teams);
   const teamMembers = useAppSelector(state => state.entities.teams.myMembers);
 
