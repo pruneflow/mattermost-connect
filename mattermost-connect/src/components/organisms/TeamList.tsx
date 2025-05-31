@@ -12,7 +12,7 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { selectTeamsArray, selectTeamsByQuery } from '../../store/selectors';
+import { selectTeams, selectTeamsByQuery } from '../../store/selectors';
 import { filterTeams } from '../../utils/teamUtils';
 import { usePermissions, useErrorHandler, useNavigation, useTeamCreation, useUnreadCounts, useTeams } from '../../hooks';
 import { CreateTeamDialog, type CreateTeamData } from './CreateTeamDialog';
@@ -42,10 +42,7 @@ export const TeamList: React.FC<TeamListProps> = ({
   const { handleError } = useErrorHandler();
   const { navigateToTeam } = useNavigation();
   const { createTeam } = useTeamCreation();
-  const { 
-    getTeamUnreadCount, 
-    getTeamMentionCount
-  } = useUnreadCounts();
+  // UnreadCounts handled by TeamItem directly
   
   // Teams data from hook (read-only)
   const {
@@ -53,8 +50,8 @@ export const TeamList: React.FC<TeamListProps> = ({
     switchTeam
   } = useTeams();
 
-  // Use memoized selector for teams array
-  const teams = useAppSelector(selectTeamsArray);
+  // Use memoized selector for teams with unread data
+  const teams = useAppSelector(selectTeams);
   
   // Use memoized selector for filtered teams when searching
   const filteredTeams = searchTerm.trim() ? 
@@ -166,18 +163,14 @@ export const TeamList: React.FC<TeamListProps> = ({
           }}
         >
           {filteredTeams.map((team) => {
-            const unreadCount = getTeamUnreadCount(team.id);
-            const mentionCount = getTeamMentionCount(team.id);
-            
+            const handleClick = () => handleTeamClick(team);
             return (
               <TeamItem
                 key={team.id}
                 team={team}
                 layout="tabs"
                 isActive={currentTeamId === team.id}
-                unreadCount={unreadCount}
-                mentionCount={mentionCount}
-                onClick={() => handleTeamClick(team)}
+                onClick={handleClick}
               />
             );
           })}
@@ -197,18 +190,14 @@ export const TeamList: React.FC<TeamListProps> = ({
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', p: 1, overflowX: 'auto' }}>
           {filteredTeams.map((team) => {
-            const unreadCount = getTeamUnreadCount(team.id);
-            const mentionCount = getTeamMentionCount(team.id);
-            
+            const handleClick = () => handleTeamClick(team);
             return (
               <TeamItem
                 key={team.id}
                 team={team}
                 layout="horizontal"
                 isActive={currentTeamId === team.id}
-                unreadCount={unreadCount}
-                mentionCount={mentionCount}
-                onClick={() => handleTeamClick(team)}
+                onClick={handleClick}
               />
             );
           })}
@@ -250,23 +239,21 @@ export const TeamList: React.FC<TeamListProps> = ({
         {/* Teams list */}
         <List sx={{ width: '100%' }}>
           {filteredTeams.map((team) => {
-            const unreadCount = getTeamUnreadCount(team.id);
-            const mentionCount = getTeamMentionCount(team.id);
-            
+            const handleClick = () => handleTeamClick(team);
+            const handleSettings = () => handleOpenSettings(team);
             return (
               <TeamItem
                 key={team.id}
                 team={team}
                 layout="vertical"
                 isActive={currentTeamId === team.id}
-                unreadCount={unreadCount}
-                mentionCount={mentionCount}
-                onClick={() => handleTeamClick(team)}
-                onOpenSettings={handleOpenSettings}
+                onClick={handleClick}
+                onOpenSettings={handleSettings}
                 showMenu={true}
               />
             );
-          })}
+          })
+          }
 
           {/* Create team item */}
           {shouldShowCreateButton && (

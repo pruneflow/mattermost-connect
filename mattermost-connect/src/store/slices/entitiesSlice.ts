@@ -123,6 +123,29 @@ const entitiesSlice = createSlice({
     setTeamUnreads: (state, action: PayloadAction<Record<string, { msg_count: number; mention_count: number }>>) => {
       Object.assign(state.teams.unreads, action.payload);
     },
+    incrementTeamUnreadCount: (state, action: PayloadAction<{ 
+      teamId: string; 
+      msgCount?: number;
+      mentionCount?: number;
+    }>) => {
+      const { teamId, msgCount = 1, mentionCount = 0 } = action.payload;
+      
+      if (!state.teams.unreads[teamId]) {
+        state.teams.unreads[teamId] = { msg_count: 0, mention_count: 0 };
+      }
+      
+      // Increment/decrement msg_count (can be negative for decrementing)
+      state.teams.unreads[teamId].msg_count = Math.max(0, state.teams.unreads[teamId].msg_count + msgCount);
+      
+      // Increment/decrement mention_count (can be negative for decrementing)
+      state.teams.unreads[teamId].mention_count = Math.max(0, state.teams.unreads[teamId].mention_count + mentionCount);
+    },
+    resetTeamUnreadCount: (state, action: PayloadAction<string>) => {
+      const teamId = action.payload;
+      if (state.teams.unreads[teamId]) {
+        state.teams.unreads[teamId] = { msg_count: 0, mention_count: 0 };
+      }
+    },
 
     // Channels
     setCurrentChannelId: (state, action: PayloadAction<string>) => {
@@ -262,6 +285,8 @@ export const {
   setTeamMember,
   setTeamMembers,
   setTeamUnreads,
+  incrementTeamUnreadCount,
+  resetTeamUnreadCount,
   
   // Channels
   setCurrentChannelId,

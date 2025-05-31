@@ -16,31 +16,13 @@ export const selectCurrentUserId = (state: RootState) => state.entities.users.cu
 // ============================================================================
 
 /**
- * Get teams as an array (memoized)
- * Performance benefit: Avoids Object.values() recalculation on every render
+ * Get teams as an array (internal selector)
  */
-export const selectTeamsArray = createSelector(
+const selectTeamsArray = createSelector(
   [selectTeamsState],
   (teamsState) => Object.values(teamsState.teams)
 );
 
-/**
- * Get teams with unread counts enriched (memoized)
- * Performance benefit: Combines teams and unreads data efficiently
- */
-export const selectTeamsWithUnreads = createSelector(
-  [selectTeamsState],
-  (teamsState) => {
-    const teams = Object.values(teamsState.teams);
-    const unreads = teamsState.unreads;
-    
-    return teams.map(team => ({
-      ...team,
-      unreadCount: unreads[team.id]?.msg_count || 0,
-      mentionCount: unreads[team.id]?.mention_count || 0,
-    }));
-  }
-);
 
 /**
  * Get current team object (memoized)
@@ -63,11 +45,65 @@ export const selectTeamById = (teamId: string | null) => createSelector(
 );
 
 /**
+ * Get teams unread statuses (exact Mattermost pattern)
+ * Returns [unreadTeamsSet, mentionsInTeamMap] like official Mattermost
+ */
+export const getTeamsUnreadStatuses = createSelector(
+  [
+    (state: RootState) => state.entities.teams.unreads,
+  ],
+  (teamUnreads): [Set<string>, Map<string, number>] => {
+    const teamUnreadsSet = new Set<string>();
+    const teamMentionsMap = new Map<string, number>();
+
+    // Iterate through team unreads (from /users/me/teams/unread API)
+    for (const [teamId, unread] of Object.entries(teamUnreads)) {
+      // Add team to unread set if it has unread messages
+      if (unread.msg_count > 0) {
+        teamUnreadsSet.add(teamId);
+      }
+
+      // Add mentions count
+      if (unread.mention_count > 0) {
+        teamMentionsMap.set(teamId, unread.mention_count);
+      }
+    }
+
+    return [teamUnreadsSet, teamMentionsMap];
+  }
+);
+
+/**
+ * Get teams with unread data (main teams selector) - Mattermost pattern
+ * Uses getTeamsUnreadStatuses for consistency with official Mattermost
+ */
+export const selectTeams = createSelector(
+  [
+    selectTeamsArray,
+    selectCurrentTeamId,
+    getTeamsUnreadStatuses
+  ],
+  (teams, currentTeamId, [unreadTeamsSet, mentionsInTeamMap]) => {
+    return teams.map(team => {
+      const hasUnreads = unreadTeamsSet.has(team.id);
+      const mentionCount = mentionsInTeamMap.get(team.id) || 0;
+      
+      return {
+        ...team,
+        isActive: team.id === currentTeamId,
+        hasUnreads,
+        mentionCount,
+      };
+    });
+  }
+);
+
+/**
  * Get teams filtered by search query (memoized)
  * Performance benefit: Expensive filtering only happens when teams or query changes
  */
 export const selectTeamsByQuery = (searchQuery: string) => createSelector(
-  [selectTeamsArray],
+  [selectTeams],
   (teams) => {
     if (!searchQuery.trim()) return teams;
     
@@ -80,33 +116,7 @@ export const selectTeamsByQuery = (searchQuery: string) => createSelector(
   }
 );
 
-/**
- * Get total unread count across all teams (memoized)
- * Performance benefit: Expensive calculation only on unreads change
- */
-export const selectTotalUnreadCount = createSelector(
-  [selectTeamsState],
-  (teamsState) => {
-    return Object.values(teamsState.unreads).reduce(
-      (total, unread) => total + (unread.msg_count || 0),
-      0
-    );
-  }
-);
 
-/**
- * Get total mention count across all teams (memoized)
- * Performance benefit: Expensive calculation only on unreads change
- */
-export const selectTotalMentionCount = createSelector(
-  [selectTeamsState],
-  (teamsState) => {
-    return Object.values(teamsState.unreads).reduce(
-      (total, unread) => total + (unread.mention_count || 0),
-      0
-    );
-  }
-);
 
 // ============================================================================
 // MEMOIZED USER SELECTORS
@@ -161,21 +171,6 @@ export const selectChannelMentionCount = (channelId: string) => createSelector(
   (channelUnreads) => channelUnreads[channelId]?.mention_count || 0
 );
 
-/**
- * Get team unread count by ID (memoized)
- */
-export const selectTeamUnreadCount = (teamId: string) => createSelector(
-  [(state: RootState) => state.entities.teams.unreads],
-  (teamUnreads) => teamUnreads[teamId]?.msg_count || 0
-);
-
-/**
- * Get team mention count by ID (memoized)
- */
-export const selectTeamMentionCount = (teamId: string) => createSelector(
-  [(state: RootState) => state.entities.teams.unreads],
-  (teamUnreads) => teamUnreads[teamId]?.mention_count || 0
-);
 
 /**
  * Check if channel is muted (memoized)
@@ -193,41 +188,20 @@ export const selectIsChannelMuted = (channelId: string) => createSelector(
 // ============================================================================
 
 /**
- * Get enriched team data for TeamList component (memoized)
- * Performance benefit: Combines multiple data sources efficiently
- * This is the most valuable selector for TeamList performance
- */
-export const selectEnrichedTeams = createSelector(
-  [selectTeamsArray, selectTeamsState, selectCurrentTeamId],
-  (teams, teamsState, currentTeamId) => {
-    const unreads = teamsState.unreads;
-    
-    return teams.map(team => ({
-      ...team,
-      isActive: team.id === currentTeamId,
-      unreadCount: unreads[team.id]?.msg_count || 0,
-      mentionCount: unreads[team.id]?.mention_count || 0,
-      hasUnreads: (unreads[team.id]?.msg_count || 0) > 0,
-      hasMentions: (unreads[team.id]?.mention_count || 0) > 0,
-    }));
-  }
-);
-
-/**
  * Get teams sorted by activity (memoized)
  * Performance benefit: Expensive sorting only on data change
  */
 export const selectTeamsSortedByActivity = createSelector(
-  [selectEnrichedTeams],
-  (enrichedTeams) => {
-    return [...enrichedTeams].sort((a, b) => {
+  [selectTeams],
+  (teams) => {
+    return [...teams].sort((a, b) => {
       // Active team first
       if (a.isActive) return -1;
       if (b.isActive) return 1;
       
       // Teams with mentions next
-      if (a.hasMentions && !b.hasMentions) return -1;
-      if (b.hasMentions && !a.hasMentions) return 1;
+      if (a.mentionCount > 0 && b.mentionCount === 0) return -1;
+      if (b.mentionCount > 0 && a.mentionCount === 0) return 1;
       
       // Teams with unreads next
       if (a.hasUnreads && !b.hasUnreads) return -1;

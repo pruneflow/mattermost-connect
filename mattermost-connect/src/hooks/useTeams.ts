@@ -3,7 +3,7 @@ import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { setCurrentTeamId } from '../store/slices/entitiesSlice';
 import { 
-  selectTeamsArray, 
+  selectTeams, 
   selectCurrentTeam, 
   selectCurrentTeamId
 } from '../store/selectors';
@@ -25,7 +25,7 @@ export const useTeams = (): {
   // Read-only access to store (Mattermost pattern)
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const currentTeam = useAppSelector(selectCurrentTeam);
-  const teamsArray = useAppSelector(selectTeamsArray);
+  const teamsArray = useAppSelector(selectTeams);
   const teamsById = useAppSelector(state => state.entities.teams.teams);
 
   const switchTeam = useCallback((teamId: string) => {

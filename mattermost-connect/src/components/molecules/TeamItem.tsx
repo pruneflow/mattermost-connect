@@ -14,14 +14,14 @@ import {
 } from '@mui/material';
 import { MoreVert as MoreVertIcon } from '@mui/icons-material';
 import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { getTeamsUnreadStatuses } from '../../store/selectors';
 import type { Team } from '../../api/types';
 
 export interface TeamItemProps {
   team: Team;
   layout: 'vertical' | 'horizontal' | 'tabs';
   isActive?: boolean;
-  unreadCount?: number;
-  mentionCount?: number;
   onClick?: () => void;
   onOpenSettings?: (team: Team) => void;
   showMenu?: boolean;
@@ -33,8 +33,6 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   team,
   layout,
   isActive = false,
-  unreadCount = 0,
-  mentionCount = 0,
   onClick,
   onOpenSettings,
   showMenu = false,
@@ -42,6 +40,13 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   sx
 }) => {
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  
+  // Get unread statuses using official Mattermost pattern
+  const teamUnreadStatuses = useAppSelector(getTeamsUnreadStatuses);
+  const [unreadTeamsSet, mentionsInTeamMap] = teamUnreadStatuses;
+  const hasUnreads = unreadTeamsSet.has(team.id);
+  const mentionCount = mentionsInTeamMap.get(team.id) || 0;
+
 
   const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
@@ -108,7 +113,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
         )}
         
         {/* Unread dot */}
-        {unreadCount > 0 && mentionCount === 0 && (
+        {hasUnreads && mentionCount === 0 && (
           <Box
             sx={{
               position: 'absolute',
@@ -129,12 +134,12 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   if (layout === 'horizontal') {
     return (
       <Box className={className} sx={{ display: 'flex', alignItems: 'center', m: 0.5, ...sx }}>
-        <Tooltip title={`${team.display_name}${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}>
+        <Tooltip title={`${team.display_name}${hasUnreads ? ` (unread messages)` : ''}`}>
           <Badge
             badgeContent={mentionCount > 0 ? mentionCount : 0}
             color="error"
             variant={mentionCount > 0 ? 'standard' : 'dot'}
-            invisible={mentionCount === 0 && unreadCount === 0}
+            invisible={mentionCount === 0 && !hasUnreads}
             sx={{
               '& .MuiBadge-badge': {
                 fontSize: '0.625rem',
@@ -145,7 +150,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
               '& .MuiBadge-dot': {
                 height: 8,
                 minWidth: 8,
-                backgroundColor: unreadCount > 0 ? 'info.main' : 'transparent',
+                backgroundColor: hasUnreads ? 'info.main' : 'transparent',
               }
             }}
           >
@@ -223,10 +228,13 @@ export const TeamItem: React.FC<TeamItemProps> = ({
           slotProps={{
             primary: {
               noWrap: true,
-              fontWeight: unreadCount > 0 ? 600 : 400, // Bold text for unread
+              fontWeight: hasUnreads ? 700 : 400, // More bold text for unread (700 instead of 600)
+              fontStyle: hasUnreads ? 'italic' : 'normal', // Italic for unread
             },
             secondary: {
               noWrap: true,
+              fontWeight: hasUnreads ? 600 : 400, // Bold description for unread
+              fontStyle: hasUnreads ? 'italic' : 'normal', // Italic description for unread
             }
           }}
           sx={{ minWidth: 0 }}

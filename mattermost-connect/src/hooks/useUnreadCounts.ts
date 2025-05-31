@@ -3,11 +3,16 @@ import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
 import { 
   selectCurrentUserId,
+  selectChannelUnreadCount,
+  selectChannelMentionCount,
+  getTeamsUnreadStatuses,
 } from '../store/selectors';
 import { 
   setChannelUnread,
   incrementChannelUnreadCount,
-  resetChannelUnreadCount
+  resetChannelUnreadCount,
+  incrementTeamUnreadCount,
+  resetTeamUnreadCount
 } from "../store";
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
@@ -23,8 +28,8 @@ export const useUnreadCounts = () => {
 
   const currentUserId = useAppSelector(selectCurrentUserId);
   const channelUnreads = useAppSelector(state => state.entities.channels.unreads);
-  const teamUnreads = useAppSelector(state => state.entities.teams.unreads);
   const channelMembers = useAppSelector(state => state.entities.channels.myMembers);
+  const channels = useAppSelector(state => state.entities.channels.channels);
 
   // On-demand channel unread loading (when needed)
   const loadChannelUnread = useCallback(async (channelId: string) => {
@@ -61,33 +66,18 @@ export const useUnreadCounts = () => {
     return membership?.notify_props?.mark_unread === 'mention';
   }, [channelMembers]);
 
-  const getChannelUnreadCount = useCallback((channelId: string): number => {
-    const unread = channelUnreads[channelId];
-    if (!unread) return 0;
-    const isMuted = isChannelMuted(channelId);
-    return isMuted ? 0 : unread.msg_count;
-  }, [channelUnreads, isChannelMuted]);
 
-  const getChannelMentionCount = useCallback((channelId: string): number => {
-    const unread = channelUnreads[channelId];
-    return unread?.mention_count || 0;
-  }, [channelUnreads]);
-
-  const getTeamUnreadCount = useCallback((teamId: string): number => {
-    const unread = teamUnreads[teamId];
-    return unread?.msg_count || 0;
-  }, [teamUnreads]);
-
-  const getTeamMentionCount = useCallback((teamId: string): number => {
-    const unread = teamUnreads[teamId];
-    return unread?.mention_count || 0;
-  }, [teamUnreads]);
 
   const hasChannelUnread = useCallback((channelId: string): boolean => {
-    const unreadCount = getChannelUnreadCount(channelId);
-    const mentionCount = getChannelMentionCount(channelId);
+    const unread = channelUnreads[channelId];
+    if (!unread) return false;
+    
+    const isMuted = isChannelMuted(channelId);
+    const unreadCount = isMuted ? 0 : unread.msg_count;
+    const mentionCount = unread.mention_count;
+    
     return unreadCount > 0 || mentionCount > 0;
-  }, [getChannelUnreadCount, getChannelMentionCount]);
+  }, [channelUnreads, isChannelMuted]);
 
   const markChannelAsRead = useCallback(async (channelId: string): Promise<void> => {
     try {
@@ -106,18 +96,53 @@ export const useUnreadCounts = () => {
           const channelId = data.post.channel_id;
           const mentionCount = data.post.message?.includes(`@${currentUserId}`) ? 1 : 0;
           
+          // Update channel unread count
           dispatch(incrementChannelUnreadCount({
             channelId,
             msgCount: 1,
             mentionCount,
             fromCurrentUser: false
           }));
+
+          // Update team unread count
+          const channel = channels[channelId];
+          if (channel && channel.team_id) {
+            dispatch(incrementTeamUnreadCount({
+              teamId: channel.team_id,
+              msgCount: 1,
+              mentionCount
+            }));
+          }
         }
         break;
 
       case 'channel_viewed':
         if (data.channel_id) {
-          dispatch(resetChannelUnreadCount(data.channel_id));
+          const channelId = data.channel_id;
+          const channelUnread = channelUnreads[channelId];
+          
+          // Reset channel unread count
+          dispatch(resetChannelUnreadCount(channelId));
+          
+          // Decrement team unread count by the amount that was in this channel
+          const channel = channels[channelId];
+          if (channel && channel.team_id && channelUnread) {
+            // Check if channel is muted
+            const membership = channelMembers[channelId];
+            const isMuted = membership?.notify_props?.mark_unread === 'mention';
+            
+            // Decrement team counts by what was reset in the channel
+            const msgCountToDecrement = isMuted ? 0 : channelUnread.msg_count;
+            const mentionCountToDecrement = channelUnread.mention_count;
+            
+            if (msgCountToDecrement > 0 || mentionCountToDecrement > 0) {
+              dispatch(incrementTeamUnreadCount({
+                teamId: channel.team_id,
+                msgCount: -msgCountToDecrement, // Negative to decrement
+                mentionCount: -mentionCountToDecrement // Negative to decrement
+              }));
+            }
+          }
         }
         break;
 
@@ -127,17 +152,16 @@ export const useUnreadCounts = () => {
         }
         break;
     }
-  }, [currentUserId, dispatch]);
+  }, [currentUserId, dispatch, channels, channelUnreads, channelMembers]);
 
   return {
-    // Channel functions
-    getChannelUnreadCount,
-    getChannelMentionCount,
+    // Channel functions - return selectors directly
+    getChannelUnreadCount: selectChannelUnreadCount,
+    getChannelMentionCount: selectChannelMentionCount,
     hasChannelUnread,
     
-    // Team functions
-    getTeamUnreadCount,
-    getTeamMentionCount,
+    // Team functions - use getTeamsUnreadStatuses
+    getTeamsUnreadStatuses,
     
     // Actions
     markChannelAsRead,
