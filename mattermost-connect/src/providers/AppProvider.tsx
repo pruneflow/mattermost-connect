@@ -5,10 +5,16 @@ import { useAppInitialization } from '../hooks/useAppInitialization';
 import { ThemeProvider } from './ThemeProvider';
 
 /**
- * App initialization component - handles single initialization
+ * App initialization component - handles single initialization (Mattermost pattern)
  */
 const AppInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  useAppInitialization();
+  const { isInitialized } = useAppInitialization();
+  
+  // Following Mattermost pattern: don't render until properly initialized
+  if (!isInitialized) {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>Initializing...</div>;
+  }
+  
   return <>{children}</>;
 };
 

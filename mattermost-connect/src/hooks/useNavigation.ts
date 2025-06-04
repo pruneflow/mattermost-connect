@@ -7,7 +7,9 @@ import {
   setLastVisitedChannel, 
   restoreLastVisitedChannels 
 } from '../store/slices/viewsSlice';
-import { setCurrentTeamId } from '../store/slices/entitiesSlice';
+import { useTeams } from './useTeams';
+import { useChannels } from './useChannels';
+import { selectTeamsById, selectCurrentTeamId, selectCurrentUrl, selectPreviousUrl, selectLastVisitedChannels, selectIsNavigating } from '../store/selectors';
 
 // URL parsing utilities following Mattermost pattern
 export interface ParsedUrl {
@@ -62,15 +64,19 @@ export const buildUrl = (teamName?: string, channelName?: string, postId?: strin
 export const useNavigation = () => {
   const dispatch = useAppDispatch();
   
-  // Navigation state
-  const { currentUrl, previousUrl, lastVisitedChannels, isNavigating } = useAppSelector(
-    state => state.views.navigation
-  );
+  // Navigation state - using individual selectors to avoid object recreation
+  const currentUrl = useAppSelector(selectCurrentUrl);
+  const previousUrl = useAppSelector(selectPreviousUrl);
+  const lastVisitedChannels = useAppSelector(selectLastVisitedChannels);
+  const isNavigating = useAppSelector(selectIsNavigating);
   
-  // Entity state for navigation
-  const teams = useAppSelector(state => state.entities.teams.teams);
-  const currentTeamId = useAppSelector(state => state.entities.teams.currentTeamId);
-  const currentTeam = currentTeamId ? teams[currentTeamId] : null;
+  // Entity state for navigation - using memoized selectors
+  const teams = useAppSelector(selectTeamsById);
+  const currentTeamId = useAppSelector(selectCurrentTeamId);
+  
+  // Use business logic hooks
+  const { switchTeam } = useTeams();
+  const { switchToChannel } = useChannels();
   
   // Restore last visited channels from localStorage on mount
   useEffect(() => {
@@ -120,11 +126,11 @@ export const useNavigation = () => {
       url = buildUrl(team.name);
     }
     
-    // Update current team
-    dispatch(setCurrentTeamId(teamId));
+    // Use switchTeam from useTeams hook
+    switchTeam(teamId);
     
     navigateToUrl(url);
-  }, [teams, lastVisitedChannels, dispatch, navigateToUrl]);
+  }, [teams, lastVisitedChannels, switchTeam, navigateToUrl]);
   
   // Navigate to channel - following Mattermost pattern
   const navigateToChannel = useCallback((teamId: string, channelId: string) => {
@@ -140,11 +146,14 @@ export const useNavigation = () => {
     
     // Update current team if different
     if (currentTeamId !== teamId) {
-      dispatch(setCurrentTeamId(teamId));
+      switchTeam(teamId);
     }
     
+    // Use switchToChannel from useChannels hook
+    switchToChannel(channelId);
+    
     navigateToUrl(url);
-  }, [teams, currentTeamId, dispatch, navigateToUrl]);
+  }, [teams, currentTeamId, switchTeam, switchToChannel, dispatch, navigateToUrl]);
   
   // Go back to previous URL
   const goBack = useCallback(() => {

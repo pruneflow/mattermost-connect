@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { selectCurrentUser, selectCurrentUserId, selectCurrentTeamId } from '../store/selectors';
+import { selectCurrentUser, selectCurrentUserId, selectCurrentTeamId, selectIsAuthenticated, selectAuthToken, selectServerUrl, selectIsLoggingIn, selectLoginError, selectWebSocketStatus } from '../store/selectors';
 import { loginUser, logoutUser, getCurrentUser, setServerUrl } from '../store/slices/authSlice';
 import { LoginRequest } from '../api/types';
 
@@ -9,13 +9,16 @@ import { LoginRequest } from '../api/types';
 export const useAuth = () => {
   const dispatch = useAppDispatch();
   
-  // Auth state
-  const { isAuthenticated, token, serverUrl } = useAppSelector(state => state.auth);
-  const { isLoggingIn, loginError } = useAppSelector(state => state.views.auth);
+  // Auth state (using individual selectors to avoid object recreation)
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const token = useAppSelector(selectAuthToken);
+  const serverUrl = useAppSelector(selectServerUrl);
+  const isLoggingIn = useAppSelector(selectIsLoggingIn);
+  const loginError = useAppSelector(selectLoginError);
   const currentUserId = useAppSelector(selectCurrentUserId);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const currentUser = useAppSelector(selectCurrentUser);
-  const connectionStatus = useAppSelector(state => state.websocket?.status || 'disconnected');
+  const connectionStatus = useAppSelector(selectWebSocketStatus);
 
   // No initialization here - handled at app level
 

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useTheme, useMediaQuery } from '@mui/material';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
+import { selectIsMobile, selectSidebarWidth } from '../store/selectors';
 import { setIsMobile, setSidebarWidth } from '../store/slices/viewsSlice';
 
 /**
@@ -13,7 +14,8 @@ export const useLayout = () => {
   const theme = useTheme();
   
   // Selector pour récupérer l'état du store
-  const { isMobile, sidebarWidth } = useAppSelector(state => state.views.ui);
+  const isMobile = useAppSelector(selectIsMobile);
+  const sidebarWidth = useAppSelector(selectSidebarWidth);
   
   // Détecter les breakpoints Material-UI
   const isMobileBreakpoint = useMediaQuery(theme.breakpoints.down('md'));

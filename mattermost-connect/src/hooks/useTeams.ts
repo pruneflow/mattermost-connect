@@ -5,7 +5,8 @@ import { setCurrentTeamId } from '../store/slices/entitiesSlice';
 import { 
   selectTeams, 
   selectCurrentTeam, 
-  selectCurrentTeamId
+  selectCurrentTeamId,
+  selectTeamsById
 } from '../store/selectors';
 import type { Team } from '../api/types';
 
@@ -26,7 +27,7 @@ export const useTeams = (): {
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const currentTeam = useAppSelector(selectCurrentTeam);
   const teamsArray = useAppSelector(selectTeams);
-  const teamsById = useAppSelector(state => state.entities.teams.teams);
+  const teamsById = useAppSelector(selectTeamsById);
 
   const switchTeam = useCallback((teamId: string) => {
     dispatch(setCurrentTeamId(teamId));

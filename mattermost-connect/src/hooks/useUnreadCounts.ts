@@ -5,7 +5,12 @@ import {
   selectCurrentUserId,
   selectChannelUnreadCount,
   selectChannelMentionCount,
+  selectChannelHasUnreads,
+  selectIsChannelMuted,
   getTeamsUnreadStatuses,
+  selectChannelUnreads,
+  selectChannelMembers,
+  selectChannelsData
 } from '../store/selectors';
 import { 
   setChannelUnread,
@@ -19,17 +24,17 @@ import { useErrorHandler } from './useErrorHandler';
 import type { ChannelUnreadResponse } from '../api/types';
 
 /**
- * Unread counts hook - READ-ONLY following Mattermost pattern
- * Initial data loaded by useAppInitialization, this handles WebSocket sync + on-demand actions
+ * Hook for managing unread counts
+ * Uses memoized selectors to avoid recreation issues
  */
 export const useUnreadCounts = () => {
   const dispatch = useAppDispatch();
   const { handleError } = useErrorHandler();
 
   const currentUserId = useAppSelector(selectCurrentUserId);
-  const channelUnreads = useAppSelector(state => state.entities.channels.unreads);
-  const channelMembers = useAppSelector(state => state.entities.channels.myMembers);
-  const channels = useAppSelector(state => state.entities.channels.channels);
+  const channelUnreads = useAppSelector(selectChannelUnreads);
+  const channelMembers = useAppSelector(selectChannelMembers);
+  const channels = useAppSelector(selectChannelsData);
 
   // On-demand channel unread loading (when needed)
   const loadChannelUnread = useCallback(async (channelId: string) => {
@@ -61,23 +66,21 @@ export const useUnreadCounts = () => {
     }
   }, [currentUserId, dispatch, handleError]);
 
+  // Helper functions using selectors instead of inline logic
   const isChannelMuted = useCallback((channelId: string): boolean => {
-    const membership = channelMembers[channelId];
-    return membership?.notify_props?.mark_unread === 'mention';
+    return selectIsChannelMuted(channelId)({ entities: { channels: { myMembers: channelMembers } } } as any);
   }, [channelMembers]);
 
-
-
   const hasChannelUnread = useCallback((channelId: string): boolean => {
-    const unread = channelUnreads[channelId];
-    if (!unread) return false;
-    
-    const isMuted = isChannelMuted(channelId);
-    const unreadCount = isMuted ? 0 : unread.msg_count;
-    const mentionCount = unread.mention_count;
-    
-    return unreadCount > 0 || mentionCount > 0;
-  }, [channelUnreads, isChannelMuted]);
+    return selectChannelHasUnreads(channelId)({ 
+      entities: { 
+        channels: { 
+          unreads: channelUnreads, 
+          myMembers: channelMembers 
+        } 
+      } 
+    } as any);
+  }, [channelUnreads, channelMembers]);
 
   const markChannelAsRead = useCallback(async (channelId: string): Promise<void> => {
     try {
@@ -155,12 +158,17 @@ export const useUnreadCounts = () => {
   }, [currentUserId, dispatch, channels, channelUnreads, channelMembers]);
 
   return {
-    // Channel functions - return selectors directly
+    // Channel functions - return selector references
     getChannelUnreadCount: selectChannelUnreadCount,
     getChannelMentionCount: selectChannelMentionCount,
-    hasChannelUnread,
+    getChannelHasUnreads: selectChannelHasUnreads,
+    getIsChannelMuted: selectIsChannelMuted,
     
-    // Team functions - use getTeamsUnreadStatuses
+    // Legacy functions for backward compatibility
+    hasChannelUnread,
+    isChannelMuted,
+    
+    // Team functions
     getTeamsUnreadStatuses,
     
     // Actions
@@ -168,7 +176,6 @@ export const useUnreadCounts = () => {
     loadChannelUnread,
     
     // Utilities
-    isChannelMuted,
     handleWebSocketEvent,
   };
 };

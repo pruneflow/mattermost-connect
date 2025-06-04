@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Card, Typography, Alert } from '@mui/material';
 import { Button, TextInput } from '../atoms';
 import { useAppDispatch, useAppSelector, useErrorHandler } from '../../hooks';
+import { selectIsLoggingIn, selectLoginError } from '../../store/selectors';
 import { loginUser } from '../../store/slices/authSlice';
 
 export interface LoginFormProps {
@@ -11,7 +12,8 @@ export interface LoginFormProps {
 
 const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
   const dispatch = useAppDispatch();
-  const { isLoggingIn, loginError } = useAppSelector(state => state.views.auth);
+  const isLoggingIn = useAppSelector(selectIsLoggingIn);
+  const loginError = useAppSelector(selectLoginError);
   const { handleError } = useErrorHandler();
   
   const [formData, setFormData] = useState({

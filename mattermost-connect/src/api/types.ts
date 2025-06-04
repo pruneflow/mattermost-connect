@@ -61,7 +61,7 @@ export interface ChannelUnreadResponse {
 // WebSocket Event Types
 export interface WebSocketMessage {
   event: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   broadcast: {
     omit_users: Record<string, boolean>;
     user_id: string;

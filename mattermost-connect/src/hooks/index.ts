@@ -15,7 +15,14 @@ export { default as useUnreadCounts } from './useUnreadCounts';
 export { useLoading } from './useLoading';
 export { default as useWebSocket } from './useWebSocket';
 export { default as useAppInitialization } from './useAppInitialization';
+export { default as useChannels } from './useChannels';
+export { default as useChannelWebSocket } from './useChannelWebSocket';
+export { default as useSpecificTeamChannels } from './useSpecificTeamChannels';
+export { default as useTypingEvents, useTypingEventsForChannel } from './useTypingEvents';
 
 // Export Redux types
 export type { RootState } from './useAppSelector';
 export type { AppDispatch } from './useAppDispatch';
+
+// Export hook types
+export type { TypingEvent } from './useTypingEvents';

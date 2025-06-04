@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
-import { selectCurrentUser, selectCurrentTeamId } from '../store/selectors';
+import { selectCurrentUser, selectCurrentTeamId, selectTeamsById, selectTeamMembers } from '../store/selectors';
 import { Permissions, RolePermissions, SystemRoles, TeamRoles, ChannelRoles } from '../constants/permissions';
 import type { Team, Channel } from '../api/types';
 
@@ -8,8 +8,8 @@ import type { Team, Channel } from '../api/types';
 export const usePermissions = () => {
   const currentUser = useAppSelector(selectCurrentUser);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
-  const teams = useAppSelector(state => state.entities.teams.teams);
-  const teamMembers = useAppSelector(state => state.entities.teams.myMembers);
+  const teams = useAppSelector(selectTeamsById);
+  const teamMembers = useAppSelector(selectTeamMembers);
 
   // Helper to get user roles for a team
   const getUserTeamRoles = useCallback((teamId: string): string[] => {

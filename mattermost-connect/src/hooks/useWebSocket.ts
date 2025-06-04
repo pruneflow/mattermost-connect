@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { WebSocketClient } from '@mattermost/client';
 import { useAppSelector } from './useAppSelector';
+import { selectWebSocketConnectionStatus } from '../store/selectors';
 import { useAppDispatch } from './useAppDispatch';
 import { setConnectionStatus, setConnectionError } from '../store/slices/websocketSlice';
 import { useUnreadCounts } from './useUnreadCounts';
+import { useChannelWebSocket } from './useChannelWebSocket';
 
 interface UseWebSocketReturn {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -18,8 +20,9 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const serverUrlRef = useRef<string>('');
   const tokenRef = useRef<string>('');
   
-  const connectionStatus = useAppSelector(state => state.websocket.status);
-  const { handleWebSocketEvent } = useUnreadCounts();
+  const connectionStatus = useAppSelector(selectWebSocketConnectionStatus);
+  const { handleWebSocketEvent: handleUnreadEvent } = useUnreadCounts();
+  const { handleChannelEvent } = useChannelWebSocket();
 
   const connect = useCallback((serverUrl: string, token: string) => {
     if (wsClientRef.current) {
@@ -58,7 +61,9 @@ export const useWebSocket = (): UseWebSocketReturn => {
     wsClient.addMessageListener((msg) => {
       try {
         if (msg.event && msg.data) {
-          handleWebSocketEvent(msg.event, msg.data);
+          // Route events to appropriate handlers
+          handleUnreadEvent(msg.event, msg.data);
+          handleChannelEvent(msg.event, msg.data);
         }
       } catch (error) {
         console.error('WebSocket: Error handling message', error, msg);
@@ -66,7 +71,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
     });
 
     wsClient.initialize(wsUrl, token);
-  }, [handleWebSocketEvent, dispatch]);
+  }, [handleUnreadEvent, handleChannelEvent, dispatch]);
 
   const disconnect = useCallback(() => {
     if (wsClientRef.current) {

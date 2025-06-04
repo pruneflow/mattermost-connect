@@ -154,16 +154,35 @@ const entitiesSlice = createSlice({
     setChannel: (state, action: PayloadAction<Channel>) => {
       state.channels.channels[action.payload.id] = action.payload;
     },
-    setChannels: (state, action: PayloadAction<Channel[]>) => {
-      action.payload.forEach(channel => {
-        state.channels.channels[channel.id] = channel;
-      });
+    setChannels: (state, action: PayloadAction<Channel[] | Record<string, Channel>>) => {
+      if (Array.isArray(action.payload)) {
+        action.payload.forEach(channel => {
+          state.channels.channels[channel.id] = channel;
+        });
+      } else {
+        Object.assign(state.channels.channels, action.payload);
+      }
     },
     setChannelMember: (state, action: PayloadAction<ChannelMember>) => {
       state.channels.myMembers[action.payload.channel_id] = action.payload;
     },
     setChannelsInTeam: (state, action: PayloadAction<{ teamId: string; channelIds: string[] }>) => {
       state.channels.channelsInTeam[action.payload.teamId] = action.payload.channelIds;
+    },
+    addChannelToTeam: (state, action: PayloadAction<{ teamId: string; channelId: string }>) => {
+      const { teamId, channelId } = action.payload;
+      if (!state.channels.channelsInTeam[teamId]) {
+        state.channels.channelsInTeam[teamId] = [];
+      }
+      if (!state.channels.channelsInTeam[teamId].includes(channelId)) {
+        state.channels.channelsInTeam[teamId].push(channelId);
+      }
+    },
+    removeChannelFromTeam: (state, action: PayloadAction<{ teamId: string; channelId: string }>) => {
+      const { teamId, channelId } = action.payload;
+      if (state.channels.channelsInTeam[teamId]) {
+        state.channels.channelsInTeam[teamId] = state.channels.channelsInTeam[teamId].filter(id => id !== channelId);
+      }
     },
     setChannelUnread: (state, action: PayloadAction<{ channelId: string; msg_count: number; mention_count: number }>) => {
       const { channelId, msg_count, mention_count } = action.payload;
@@ -294,6 +313,8 @@ export const {
   setChannels,
   setChannelMember,
   setChannelsInTeam,
+  addChannelToTeam,
+  removeChannelFromTeam,
   setChannelUnread,
   setChannelUnreads,
   incrementChannelUnreadCount,

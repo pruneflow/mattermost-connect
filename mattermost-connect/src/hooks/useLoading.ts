@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
+import { selectLoadingState } from '../store/selectors';
 import { setLoading, setError, setSuccess } from '../store/slices/loadingSlice';
 import { selectIsLoading, selectError } from '../store/slices/loadingSlice';
 import type { LoadingKey } from '../types/loading.types';
@@ -15,7 +16,7 @@ import type { LoadingKey } from '../types/loading.types';
  */
 export const useLoading = () => {
   const dispatch = useAppDispatch();
-  const loadingState = useAppSelector(state => state.loading);
+  const loadingState = useAppSelector(selectLoadingState);
 
   /**
    * Main loading wrapper - handles loading states and error management

@@ -1,7 +1,7 @@
-import { useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
-import { selectCurrentUserId } from '../store/selectors';
+import { selectCurrentUserId, selectIsAuthenticated, selectAuthToken, selectServerUrl, selectCurrentTeamId, selectTeamsById } from '../store/selectors';
 import { setUsersStatus, setTeams, setCurrentTeamId, setTeamUnreads } from '../store/slices/entitiesSlice';
 import { client } from '../api/client';
 import { useWebSocket } from './useWebSocket';
@@ -14,17 +14,25 @@ export const useAppInitialization = () => {
   const dispatch = useAppDispatch();
   const { connect: connectWebSocket, disconnect: disconnectWebSocket } = useWebSocket();
   
-  const { isAuthenticated, token, serverUrl } = useAppSelector(state => state.auth);
+  // Mattermost pattern: track initialization state
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const token = useAppSelector(selectAuthToken);
+  const serverUrl = useAppSelector(selectServerUrl);
   const currentUserId = useAppSelector(selectCurrentUserId);
-  const currentTeamId = useAppSelector(state => state.entities.teams.currentTeamId);
-  const teams = useAppSelector(state => state.entities.teams.teams);
+  const currentTeamId = useAppSelector(selectCurrentTeamId);
+  const teams = useAppSelector(selectTeamsById);
 
   const initializeApp = useCallback(async () => {
-    if (!isAuthenticated || !currentUserId || !token || !serverUrl) return;
+    if (!isAuthenticated || !currentUserId || !token || !serverUrl) {
+      setIsInitialized(false);
+      return;
+    }
 
     // Only initialize if we don't have data (avoid re-fetch)
     const hasTeams = Object.keys(teams).length > 0;
-    if (hasTeams) return;
+    if (hasTeams && isInitialized) return;
 
     try {
       console.log('🚀 Initializing app data (Mattermost pattern)...');
@@ -47,7 +55,7 @@ export const useAppInitialization = () => {
 
       console.log('✅ Initial data loaded:', { 
         teams: userTeams.length, 
-        unreads: teamUnreads.length 
+        unreads: teamUnreads.length
       });
 
       // Update store with all data
@@ -75,10 +83,15 @@ export const useAppInitialization = () => {
         dispatch(setCurrentTeamId(userTeams[0].id));
       }
 
+      // Mark as initialized (Mattermost pattern)
+      setIsInitialized(true);
+      console.log('✅ App initialization completed');
+
     } catch (error) {
       console.error('❌ Failed to initialize app:', error);
+      setIsInitialized(false);
     }
-  }, [isAuthenticated, currentUserId, token, serverUrl, teams, dispatch, connectWebSocket, currentTeamId]);
+  }, [isAuthenticated, currentUserId, token, serverUrl, teams, dispatch, connectWebSocket, currentTeamId, isInitialized]);
 
   // Single effect for initialization
   useEffect(() => {
@@ -93,7 +106,8 @@ export const useAppInitialization = () => {
   }, [isAuthenticated, disconnectWebSocket]);
 
   return {
-    initializeApp
+    initializeApp,
+    isInitialized: isInitialized && isAuthenticated && currentUserId
   };
 };
 

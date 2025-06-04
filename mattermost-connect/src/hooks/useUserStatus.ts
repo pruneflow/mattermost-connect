@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppSelector } from './useAppSelector';
+import { selectUserStatuses } from '../store/selectors';
 import { useAppDispatch } from './useAppDispatch';
 import { selectCurrentUserId } from '../store/selectors';
 import { client } from '../api/client';
@@ -24,7 +25,7 @@ export const useUserStatus = (): {
   const dispatch = useAppDispatch();
   
   // Status state
-  const { statuses } = useAppSelector(state => state.entities.users);
+  const statuses = useAppSelector(selectUserStatuses);
   const currentUserId = useAppSelector(selectCurrentUserId);
   
   const currentUserStatus = currentUserId ? statuses[currentUserId] : null;

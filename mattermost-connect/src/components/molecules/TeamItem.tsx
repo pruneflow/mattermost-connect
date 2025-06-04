@@ -25,6 +25,7 @@ export interface TeamItemProps {
   onClick?: () => void;
   onOpenSettings?: (team: Team) => void;
   showMenu?: boolean;
+  compact?: boolean; // For icon-only display in sidebar
   className?: string;
   sx?: any;
 }
@@ -36,6 +37,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   onClick,
   onOpenSettings,
   showMenu = false,
+  compact = false,
   className,
   sx
 }) => {
@@ -64,69 +66,74 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   // Tabs layout (header tabs)
   if (layout === 'tabs') {
     return (
-      <Box
-        className={className}
-        sx={{
-          px: { xs: 1.5, sm: 3 },
-          py: 1.5,
-          minWidth: 'fit-content',
-          display: 'flex',
-          alignItems: 'center',
-          color: 'common.white',
-          cursor: 'pointer',
-          borderBottom: isActive ? '3px solid' : '3px solid transparent',
-          borderColor: isActive ? 'common.white' : 'transparent',
-          fontWeight: isActive ? 'bold' : 'normal',
-          fontSize: { xs: '0.875rem', sm: '1rem' },
-          bgcolor: isActive ? 'action.selected' : 'transparent',
-          '&:hover': {
-            bgcolor: 'action.hover',
-          },
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
-          position: 'relative',
-          ...sx
-        }}
-        onClick={onClick}
-      >
-        {team.display_name || team.name}
+      <Tooltip title={team.display_name || team.name} arrow>
+        <Box
+          className={className}
+          sx={{
+            px: { xs: 2, sm: 3 },
+            py: 1.5,
+            minWidth: 'fit-content',
+            maxWidth: 200,
+            display: 'flex',
+            alignItems: 'center',
+            color: isActive ? 'primary.main' : 'text.primary',
+            cursor: 'pointer',
+            borderBottom: isActive ? '3px solid' : '3px solid transparent',
+            borderColor: isActive ? 'primary.main' : 'transparent',
+            fontWeight: isActive ? 600 : 400,
+            fontSize: { xs: '0.875rem', sm: '1rem' },
+            bgcolor: 'transparent',
+            '&:hover': {
+              bgcolor: 'action.hover',
+              color: 'primary.main',
+            },
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            position: 'relative',
+            gap: 1,
+            transition: 'all 0.2s ease',
+            ...sx
+          }}
+          onClick={onClick}
+        >
+          {team.display_name || team.name}
         
-        {/* Mention badge */}
+        {/* Mention badge - inline, not absolute */}
         {mentionCount > 0 && (
           <Badge
             badgeContent={mentionCount}
             color="error"
             sx={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
               '& .MuiBadge-badge': {
                 fontSize: '0.625rem',
-                height: 18,
-                minWidth: 18,
+                height: 16,
+                minWidth: 16,
                 fontWeight: 600,
+                position: 'static',
+                transform: 'none',
               }
             }}
           >
-            <Box sx={{ width: 8, height: 8 }} />
+            <Box sx={{ width: 0, height: 0 }} />
           </Badge>
         )}
         
-        {/* Unread dot */}
+        {/* Unread dot - inline, not absolute */}
         {hasUnreads && mentionCount === 0 && (
           <Box
             sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              width: 8,
-              height: 8,
+              width: 6,
+              height: 6,
               borderRadius: '50%',
-              bgcolor: 'info.main',
+              bgcolor: 'warning.main',
+              flexShrink: 0,
             }}
           />
         )}
       </Box>
+      </Tooltip>
     );
   }
 
@@ -172,7 +179,62 @@ export const TeamItem: React.FC<TeamItemProps> = ({
     );
   }
 
-  // Vertical layout (list based)
+  // Vertical layout (list based or icon-only for sidebar)
+  if (layout === 'vertical' && compact) {
+    // Icon-only mode for sidebar teams
+    return (
+      <Box
+        className={className}
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          py: 1,
+          ...sx
+        }}
+      >
+        <Tooltip title={`${team.display_name}${hasUnreads ? ` (unread messages)` : ''}`}>
+          <Badge
+            badgeContent={mentionCount > 0 ? mentionCount : 0}
+            color="error"
+            variant={mentionCount > 0 ? 'standard' : 'dot'}
+            invisible={mentionCount === 0 && !hasUnreads}
+            sx={{
+              '& .MuiBadge-badge': {
+                fontSize: '0.625rem',
+                height: 16,
+                minWidth: 16,
+                fontWeight: 600,
+              },
+              '& .MuiBadge-dot': {
+                height: 6,
+                minWidth: 6,
+                backgroundColor: hasUnreads ? 'warning.main' : 'transparent',
+              }
+            }}
+          >
+            <Avatar
+              src={getTeamIconUrl(team) || undefined}
+              sx={{
+                bgcolor: getTeamColor(team.name),
+                cursor: 'pointer',
+                width: 48,
+                height: 48,
+                border: isActive ? '3px solid' : 'none',
+                borderColor: 'common.white',
+                fontSize: '1.2rem',
+                fontWeight: 600,
+              }}
+              onClick={onClick}
+            >
+              {getTeamInitials(team)}
+            </Avatar>
+          </Badge>
+        </Tooltip>
+      </Box>
+    );
+  }
+
+  // Vertical layout (full list based)
   return (
     <ListItem
       className={className}

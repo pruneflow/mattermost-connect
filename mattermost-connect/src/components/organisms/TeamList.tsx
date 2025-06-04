@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Box,
   List,
@@ -7,32 +7,42 @@ import {
   Divider,
   IconButton,
   InputBase,
-} from '@mui/material';
+} from "@mui/material";
+import { Search as SearchIcon } from "@mui/icons-material";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectTeams, selectTeamsByQuery } from "../../store/selectors";
+import { filterTeams } from "../../utils/teamUtils";
 import {
-  Search as SearchIcon,
-} from '@mui/icons-material';
-import { useAppSelector } from '../../hooks/useAppSelector';
-import { selectTeams, selectTeamsByQuery } from '../../store/selectors';
-import { filterTeams } from '../../utils/teamUtils';
-import { usePermissions, useErrorHandler, useNavigation, useTeamCreation, useUnreadCounts, useTeams } from '../../hooks';
-import { CreateTeamDialog, type CreateTeamData } from './CreateTeamDialog';
-import { TeamSettingsDialog } from './TeamSettingsDialog';
-import { TeamItemSkeleton, ListSkeleton } from '../atoms';
-import { TeamItem, CreateTeamButton } from '../molecules';
-import type { Team } from '../../api/types';
+  usePermissions,
+  useErrorHandler,
+  useNavigation,
+  useTeamCreation,
+  useUnreadCounts,
+  useTeams,
+} from "../../hooks";
+import { CreateTeamDialog, type CreateTeamData } from "./CreateTeamDialog";
+import { TeamSettingsDialog } from "./TeamSettingsDialog";
+import { TeamItemSkeleton, ListSkeleton } from "../atoms";
+import { TeamItem, CreateTeamButton } from "../molecules";
+import { TeamTabs } from "./TeamTabs";
+import type { Team } from "../../api/types";
 
 export interface TeamListProps {
   onTeamSelect?: (team: Team) => void;
   showCreateButton?: boolean; // default: true
-  layout?: 'vertical' | 'horizontal' | 'tabs';
+  layout?: "vertical" | "horizontal" | "tabs";
+  compact?: boolean; // default: false
+  showMenu?: boolean; // default: true - show team settings menu
 }
 
 export const TeamList: React.FC<TeamListProps> = ({
   onTeamSelect,
   showCreateButton = true,
-  layout = 'vertical',
+  layout = "vertical",
+  compact = false,
+  showMenu = true,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
@@ -43,43 +53,45 @@ export const TeamList: React.FC<TeamListProps> = ({
   const { navigateToTeam } = useNavigation();
   const { createTeam } = useTeamCreation();
   // UnreadCounts handled by TeamItem directly
-  
+
   // Teams data from hook (read-only)
-  const {
-    currentTeamId,
-    switchTeam
-  } = useTeams();
+  const { currentTeamId } = useTeams();
 
   // Use memoized selector for teams with unread data
   const teams = useAppSelector(selectTeams);
-  
-  // Use memoized selector for filtered teams when searching
-  const filteredTeams = searchTerm.trim() ? 
-    useAppSelector(useMemo(() => selectTeamsByQuery(searchTerm), [searchTerm])) : 
-    teams;
 
-  // ✅ REMOVED: loadUnreadCounts call here 
-  // useUnreadCounts hook handles its own initialization to avoid duplication
+  // Use memoized selector for filtered teams when searching
+  const filteredTeams = searchTerm.trim()
+    ? useAppSelector(
+        useMemo(() => selectTeamsByQuery(searchTerm), [searchTerm]),
+      )
+    : teams;
 
   // Stable event handlers - const outside render
-  const handleTeamClick = useCallback((team: Team) => {
-    try {
-      navigateToTeam(team.id);
-      if (onTeamSelect) {
-        onTeamSelect(team);
+  const handleTeamClick = useCallback(
+    (team: Team) => {
+      try {
+        navigateToTeam(team.id);
+        if (onTeamSelect) {
+          onTeamSelect(team);
+        }
+      } catch (error) {
+        handleError(error, {
+          component: "TeamList",
+          action: "selectTeam",
+          showToast: true,
+        });
       }
-    } catch (error) {
-      handleError(error, {
-        component: 'TeamList',
-        action: 'selectTeam',
-        showToast: true
-      });
-    }
-  }, [navigateToTeam, onTeamSelect, handleError]);
+    },
+    [navigateToTeam, onTeamSelect, handleError],
+  );
 
-  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
-  }, []);
+  const handleSearchChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchTerm(event.target.value);
+    },
+    [],
+  );
 
   const handleOpenSettings = useCallback((team: Team) => {
     setSelectedTeamId(team.id);
@@ -95,10 +107,13 @@ export const TeamList: React.FC<TeamListProps> = ({
     setCreateModalOpen(true);
   }, []);
 
-  const handleCreateTeam = useCallback(async (teamData: CreateTeamData) => {
-    await createTeam(teamData);
-    setCreateModalOpen(false);
-  }, [createTeam]);
+  const handleCreateTeam = useCallback(
+    async (teamData: CreateTeamData) => {
+      await createTeam(teamData);
+      setCreateModalOpen(false);
+    },
+    [createTeam],
+  );
 
   const handleCloseModal = useCallback(() => {
     setCreateModalOpen(false);
@@ -107,25 +122,21 @@ export const TeamList: React.FC<TeamListProps> = ({
   // Show create button if: props allows it AND user has permissions
   const shouldShowCreateButton = showCreateButton && canCreateTeam();
 
-  const handleRetry = useCallback(() => {
-    // Retry handled by AppProvider on mount
-    window.location.reload();
-  }, []);
-
   const getSkeleton = useCallback(() => {
-    if (layout === 'vertical') {
+    if (layout === "vertical") {
       return <ListSkeleton count={5} showAvatar={true} />;
-    } else if (layout === 'horizontal') {
+    } else if (layout === "horizontal") {
       return (
-        <Box sx={{ display: 'flex', alignItems: 'center', p: 1, gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", p: 1, gap: 1 }}>
           {Array.from({ length: 4 }).map((_, index) => (
             <TeamItemSkeleton key={index} />
           ))}
         </Box>
       );
-    } else { // tabs
+    } else {
+      // tabs
       return (
-        <Box sx={{ display: 'flex', overflowX: 'auto', p: 1, gap: 2 }}>
+        <Box sx={{ display: "flex", overflowX: "auto", p: 1, gap: 2 }}>
           {Array.from({ length: 3 }).map((_, index) => (
             <TeamItemSkeleton key={index} />
           ))}
@@ -142,53 +153,28 @@ export const TeamList: React.FC<TeamListProps> = ({
   // Note: Error handling is done by AppProvider
 
   const renderTeamList = () => {
-    // Tabs layout container (for header tabs)
-    if (layout === 'tabs') {
+    // Tabs layout - use TeamTabs component
+    if (layout === "tabs") {
       return (
-        <Box
-          sx={{
-            width: '100%',
-            display: 'flex',
-            overflowX: 'auto',
-            bgcolor: 'primary.main',
-            minHeight: 48,
-            // Amélioration scroll mobile
-            scrollbarWidth: 'none', // Firefox
-            '&::-webkit-scrollbar': {
-              display: 'none', // Chrome/Safari
-            },
-            // Assurer que ça ne dépasse pas
-            maxWidth: '100vw',
-            boxSizing: 'border-box',
-          }}
-        >
-          {filteredTeams.map((team) => {
-            const handleClick = () => handleTeamClick(team);
-            return (
-              <TeamItem
-                key={team.id}
-                team={team}
-                layout="tabs"
-                isActive={currentTeamId === team.id}
-                onClick={handleClick}
-              />
-            );
-          })}
-
-          {shouldShowCreateButton && (
-            <CreateTeamButton
-              layout="tabs"
-              onClick={handleCreateTeamClick}
-            />
-          )}
-        </Box>
+        <TeamTabs
+          onTeamSelect={handleTeamClick}
+          showCreateButton={shouldShowCreateButton}
+          onCreate={handleCreateTeamClick}
+        />
       );
     }
 
     // Horizontal layout container (for top navigation)
-    if (layout === 'horizontal') {
+    if (layout === "horizontal") {
       return (
-        <Box sx={{ display: 'flex', alignItems: 'center', p: 1, overflowX: 'auto' }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            p: 1,
+            overflowX: "auto",
+          }}
+        >
           {filteredTeams.map((team) => {
             const handleClick = () => handleTeamClick(team);
             return (
@@ -216,19 +202,19 @@ export const TeamList: React.FC<TeamListProps> = ({
 
     // Vertical layout (for sidebar)
     return (
-      <Box sx={{ width: '100%' }}>
+      <Box sx={{ width: "100%" }}>
         {/* Search input */}
         {teams.length > 5 && (
           <>
-            <Box sx={{ p: 1, display: 'flex' }}>
+            <Box sx={{ p: 1, display: "flex" }}>
               <InputBase
                 placeholder="Search teams..."
                 value={searchTerm}
                 onChange={handleSearchChange}
                 sx={{ ml: 1, flex: 1 }}
-                inputProps={{ 'aria-label': 'search teams' }}
+                inputProps={{ "aria-label": "search teams" }}
               />
-              <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
+              <IconButton type="button" sx={{ p: "10px" }} aria-label="search">
                 <SearchIcon />
               </IconButton>
             </Box>
@@ -237,7 +223,7 @@ export const TeamList: React.FC<TeamListProps> = ({
         )}
 
         {/* Teams list */}
-        <List sx={{ width: '100%' }}>
+        <List sx={{ width: "100%" }}>
           {filteredTeams.map((team) => {
             const handleClick = () => handleTeamClick(team);
             const handleSettings = () => handleOpenSettings(team);
@@ -249,17 +235,18 @@ export const TeamList: React.FC<TeamListProps> = ({
                 isActive={currentTeamId === team.id}
                 onClick={handleClick}
                 onOpenSettings={handleSettings}
-                showMenu={true}
+                showMenu={showMenu}
+                compact={compact}
               />
             );
-          })
-          }
+          })}
 
           {/* Create team item */}
           {shouldShowCreateButton && (
             <CreateTeamButton
               layout="vertical"
               onClick={handleCreateTeamClick}
+              compact={compact}
             />
           )}
         </List>

@@ -12,6 +12,7 @@ import { Add as AddIcon } from '@mui/icons-material';
 export interface CreateTeamButtonProps {
   layout: 'vertical' | 'horizontal' | 'tabs';
   onClick?: () => void;
+  compact?: boolean; // For icon-only display in sidebar
   className?: string;
   sx?: any;
 }
@@ -19,6 +20,7 @@ export interface CreateTeamButtonProps {
 export const CreateTeamButton: React.FC<CreateTeamButtonProps> = ({
   layout,
   onClick,
+  compact = false,
   className,
   sx
 }) => {
@@ -65,7 +67,35 @@ export const CreateTeamButton: React.FC<CreateTeamButtonProps> = ({
     );
   }
 
-  // Vertical layout (list based)
+  // Vertical layout (list based or icon-only for sidebar)
+  if (layout === 'vertical' && compact) {
+    // Icon-only mode for sidebar
+    return (
+      <Box
+        className={className}
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          py: 1,
+          ...sx
+        }}
+      >
+        <Avatar
+          sx={{
+            bgcolor: 'action.selected',
+            cursor: 'pointer',
+            width: 48,
+            height: 48,
+          }}
+          onClick={onClick}
+        >
+          <AddIcon />
+        </Avatar>
+      </Box>
+    );
+  }
+
+  // Vertical layout (full list based)
   return (
     <ListItem
       className={className}

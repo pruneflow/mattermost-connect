@@ -1,5 +1,11 @@
 import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
+import { 
+  selectCurrentUserId, 
+  selectUserProfiles, 
+  selectCurrentUser,
+  selectUsersArray
+} from '../store/selectors';
 import { useAppDispatch } from './useAppDispatch';
 import { client } from '../api/client';
 import { setUser } from '../store/slices/entitiesSlice';
@@ -13,7 +19,7 @@ export const useUsers = (): {
   currentUser: UserProfile | null;
   currentUserId: string;
   loadUser: (userId: string) => Promise<UserProfile>;
-  loadUsers: () => Promise<void>;
+  loadUsers: (userIds: string[]) => Promise<UserProfile[]>;
   updateCurrentUser: (userData: Partial<UserProfile>) => Promise<UserProfile>;
   getUserById: (userId: string) => UserProfile | null;
   getDisplayName: (user: UserProfile) => string;
@@ -25,12 +31,11 @@ export const useUsers = (): {
   const dispatch = useAppDispatch();
   const { withLoading, isLoading, getError } = useLoading();
   
-  // Users state
-  const { currentUserId, profiles } = useAppSelector(state => state.entities.users);
-  const currentUser = currentUserId ? profiles[currentUserId] : null;
-
-  // Get users array
-  const usersArray = Object.values(profiles);
+  // Users state using memoized selectors
+  const currentUserId = useAppSelector(selectCurrentUserId);
+  const profiles = useAppSelector(selectUserProfiles);
+  const currentUser = useAppSelector(selectCurrentUser);
+  const users = useAppSelector(selectUsersArray);
 
   // Actions - Simple loading pattern
   const loadUser = useCallback(async (userId: string) => {
@@ -48,11 +53,27 @@ export const useUsers = (): {
     });
   }, [withLoading, dispatch, profiles]);
 
-  const loadUsers = useCallback(async () => {
-    // Placeholder for Phase 3 - will load channel users
-    // For now, this is a no-op since we focus on individual user loading
-    console.log('loadUsers called - placeholder for Phase 3');
-  }, []);
+  const loadUsers = useCallback(async (userIds: string[]) => {
+    if (!userIds || userIds.length === 0) return [];
+
+    // Filter out users we already have
+    const missingUserIds = userIds.filter(id => !profiles[id]);
+    if (missingUserIds.length === 0) return [];
+
+    return await withLoading('users.loadUsers', async () => {
+      console.log(`Loading ${missingUserIds.length} missing users for direct channels`);
+      
+      // Use efficient batch loading (official Mattermost pattern)
+      const users = await client.getProfilesByIds(missingUserIds);
+      
+      // Update store with all loaded users
+      users.forEach(user => {
+        dispatch(setUser(user));
+      });
+      
+      return users;
+    });
+  }, [withLoading, dispatch, profiles]);
 
   const updateCurrentUser = useCallback(async (userData: Partial<UserProfile>) => {
     try {
@@ -78,7 +99,7 @@ export const useUsers = (): {
 
   return {
     // State
-    users: usersArray,
+    users,
     usersById: profiles,
     currentUser,
     currentUserId,
