@@ -1,23 +1,16 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback } from "react";
 import {
   Box,
   List,
   Tooltip,
-  Typography,
-  Divider,
-  IconButton,
-  InputBase,
 } from "@mui/material";
-import { Search as SearchIcon } from "@mui/icons-material";
 import { useAppSelector } from "../../hooks/useAppSelector";
-import { selectTeams, selectTeamsByQuery } from "../../store/selectors";
-import { filterTeams } from "../../utils/teamUtils";
+import { selectTeams } from "../../store/selectors";
 import {
   usePermissions,
   useErrorHandler,
   useNavigation,
   useTeamCreation,
-  useUnreadCounts,
   useTeams,
 } from "../../hooks";
 import { CreateTeamDialog, type CreateTeamData } from "./CreateTeamDialog";
@@ -42,7 +35,6 @@ export const TeamList: React.FC<TeamListProps> = ({
   compact = false,
   showMenu = true,
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
@@ -60,12 +52,6 @@ export const TeamList: React.FC<TeamListProps> = ({
   // Use memoized selector for teams with unread data
   const teams = useAppSelector(selectTeams);
 
-  // Use memoized selector for filtered teams when searching
-  const filteredTeams = searchTerm.trim()
-    ? useAppSelector(
-        useMemo(() => selectTeamsByQuery(searchTerm), [searchTerm]),
-      )
-    : teams;
 
   // Stable event handlers - const outside render
   const handleTeamClick = useCallback(
@@ -86,12 +72,6 @@ export const TeamList: React.FC<TeamListProps> = ({
     [navigateToTeam, onTeamSelect, handleError],
   );
 
-  const handleSearchChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setSearchTerm(event.target.value);
-    },
-    [],
-  );
 
   const handleOpenSettings = useCallback((team: Team) => {
     setSelectedTeamId(team.id);
@@ -175,7 +155,7 @@ export const TeamList: React.FC<TeamListProps> = ({
             overflowX: "auto",
           }}
         >
-          {filteredTeams.map((team) => {
+          {teams.map((team) => {
             const handleClick = () => handleTeamClick(team);
             return (
               <TeamItem
@@ -203,28 +183,10 @@ export const TeamList: React.FC<TeamListProps> = ({
     // Vertical layout (for sidebar)
     return (
       <Box sx={{ width: "100%" }}>
-        {/* Search input */}
-        {teams.length > 5 && (
-          <>
-            <Box sx={{ p: 1, display: "flex" }}>
-              <InputBase
-                placeholder="Search teams..."
-                value={searchTerm}
-                onChange={handleSearchChange}
-                sx={{ ml: 1, flex: 1 }}
-                inputProps={{ "aria-label": "search teams" }}
-              />
-              <IconButton type="button" sx={{ p: "10px" }} aria-label="search">
-                <SearchIcon />
-              </IconButton>
-            </Box>
-            <Divider />
-          </>
-        )}
 
         {/* Teams list */}
         <List sx={{ width: "100%" }}>
-          {filteredTeams.map((team) => {
+          {teams.map((team) => {
             const handleClick = () => handleTeamClick(team);
             const handleSettings = () => handleOpenSettings(team);
             return (

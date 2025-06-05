@@ -12,7 +12,7 @@ export const getFullName = (user: UserProfile): string => {
 
 export const displayUsername = (
   user: UserProfile, 
-  teammateNameDisplay: string = 'username',
+  teammateNameDisplay: string = 'nickname_full_name',
   useFallbackUsername: boolean = true
 ): string => {
   const fullName = getFullName(user);

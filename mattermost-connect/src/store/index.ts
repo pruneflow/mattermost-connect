@@ -67,3 +67,6 @@ export * from './slices/errorsSlice';
 export * from './slices/authSlice';
 export * from './slices/preferencesSlice';
 export * from './slices/loadingSlice';
+
+// Re-export types from selectors
+export type { EnrichedChannel } from './selectors';

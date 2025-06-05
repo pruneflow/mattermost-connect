@@ -24,10 +24,16 @@ import {
 import { ChannelIcon } from '../atoms/ChannelIcon';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentUserId, selectMyChannelMember } from '../../store/selectors';
-import type { Channel } from '../../api/types';
+import { displayUsername } from '../../utils/userUtils';
+import type { Channel, UserProfile } from '../../api/types';
 
 export interface ChannelHeaderProps {
-  channel: Channel;
+  channel: Channel & {
+    // Enriched data from selectors (following Mattermost pattern)
+    computedDisplayName?: string;
+    otherUser?: UserProfile | null;
+    otherUserId?: string;
+  };
   onChannelInfo?: () => void;
   onAddMembers?: () => void;
   onChannelSettings?: () => void;
@@ -79,36 +85,11 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
     if (onChannelSettings) onChannelSettings();
   }, [onChannelSettings, handleMenuClose]);
 
-  // Get channel display information
-  const getChannelInfo = () => {
-    if (channel.type === 'D') {
-      // Direct message - show other user's name
-      const otherUserId = channel.name.replace(currentUserId || '', '').replace('__', '');
-      return {
-        title: channel.display_name || `@${otherUserId}`,
-        subtitle: 'Direct Message',
-        showMemberCount: false,
-      };
-    }
-    
-    if (channel.type === 'G') {
-      // Group message
-      return {
-        title: channel.display_name || 'Group Message',
-        subtitle: 'Group Message',
-        showMemberCount: true,
-      };
-    }
-
-    // Public or Private channel
-    return {
-      title: channel.display_name,
-      subtitle: channel.purpose || channel.header || 'Channel',
-      showMemberCount: true,
-    };
-  };
-
-  const { title, subtitle } = getChannelInfo();
+  // Use enriched channel data directly from selectors
+  const title = channel.computedDisplayName || channel.display_name || 'Channel';
+  const subtitle = channel.type === 'D' 
+    ? (channel.otherUser?.username ? `@${channel.otherUser.username}` : 'Direct Message')
+    : (channel.purpose || channel.header || (channel.type === 'G' ? 'Group Message' : 'Channel'));
   const isMuted = channelMember?.notify_props?.mark_unread === 'mention';
   const isFavorite = false; // TODO: Implement favorites when available
 

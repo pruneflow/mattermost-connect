@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Box,
   IconButton,
+  Typography,
   useTheme,
   useMediaQuery,
   SxProps,
@@ -9,7 +10,6 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Close as CloseIcon,
 } from '@mui/icons-material';
 import { Sidebar } from '../organisms/Sidebar';
 import { ChannelHeader } from '../molecules/ChannelHeader';
@@ -75,26 +75,34 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           minWidth: 0, // Allow content to shrink
         }}
       >
-        {/* Mobile Menu Button */}
+        {/* Mobile App Bar */}
         {isMobile && (
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              p: 1,
+              justifyContent: 'space-between',
+              p: 2,
               borderBottom: 1,
               borderColor: 'divider',
-              backgroundColor: 'background.paper',
+              backgroundColor: 'primary.main',
+              color: 'white',
             }}
           >
             <IconButton
               onClick={handleDrawerToggle}
               edge="start"
               aria-label="toggle sidebar"
-              sx={{ mr: 1 }}
+              sx={{ mr: 2, color: 'inherit' }}
             >
-              {mobileDrawerOpen ? <CloseIcon /> : <MenuIcon />}
+              <MenuIcon />
             </IconButton>
+            
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              MattermostConnect
+            </Typography>
+            
+            {/* User menu would go here */}
           </Box>
         )}
 

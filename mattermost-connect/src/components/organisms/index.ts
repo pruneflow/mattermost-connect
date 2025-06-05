@@ -9,6 +9,7 @@ export { default as TeamSettingsDialog } from './TeamSettingsDialog';
 export { default as ChannelList } from './ChannelList';
 export { default as Sidebar } from './Sidebar';
 export { default as TeamTabs } from './TeamTabs';
+export { default as AppBar } from './AppBar';
 
 export type { LoginFormProps } from './LoginForm';
 export type { TeamListProps } from './TeamList';
@@ -20,3 +21,4 @@ export type { TeamSettingsDialogProps } from './TeamSettingsDialog';
 export type { ChannelListProps } from './ChannelList';
 export type { SidebarProps } from './Sidebar';
 export type { TeamTabsProps } from './TeamTabs';
+export type { AppBarProps } from './AppBar';

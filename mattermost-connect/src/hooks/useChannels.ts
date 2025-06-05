@@ -16,7 +16,6 @@ import {
   selectCurrentUserId,
   selectCurrentTeamId,
   selectChannelsForCurrentTeam,
-  selectChannelsWithUnreadsForCurrentTeam,
   selectPublicChannelsInCurrentTeam,
   selectPrivateChannelsInCurrentTeam,
   selectDirectChannelsInCurrentTeam,
@@ -45,7 +44,6 @@ export const useChannels = () => {
   
   // Current team channels with enriched data (following Mattermost pattern)
   const channelsInTeam = useAppSelector(selectChannelsForCurrentTeam);
-  const channelsWithUnreads = useAppSelector(selectChannelsWithUnreadsForCurrentTeam);
   
   // Use new enriched selectors that include display names and user data
   const publicChannels = useAppSelector(selectPublicChannelsInCurrentTeam);
@@ -196,7 +194,7 @@ export const useChannels = () => {
     currentChannelMember,
 
     // Channels with all data (sorted, unread info, etc.)
-    channels: channelsWithUnreads,
+    channels: channelsInTeam,
     publicChannels,
     privateChannels,
     directChannels,

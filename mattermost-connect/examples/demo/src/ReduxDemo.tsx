@@ -5,9 +5,11 @@ import {
   TeamList,
   ChannelList,
   UserMenu,
+  AppBar,
   useAuth,
   useTeams,
   useChannels,
+  useLayout,
   AppProvider,
   AppLayout,
 } from "mattermost-connect";
@@ -115,49 +117,36 @@ const CustomLayoutContent: React.FC<CustomLayoutContentProps> = ({
   currentChannel,
   channels
 }) => {
+  const { isMobile } = useLayout();
+
   return (
     <Box sx={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
-      {/* AppBar */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'white',
-          p: 2,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}
-      >
-        <Typography variant="h6">
-          MattermostConnect
-        </Typography>
-        <UserMenu
-          user={currentUser}
-          onLogout={logout}
-          size="small"
-          showStatus={true}
-        />
-      </Box>
+      {/* AppBar with mobile drawer built-in */}
+      <AppBar />
 
-      {/* Teams Tabs */}
-      <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
-        <TeamList layout="tabs" />
-      </Box>
+      {/* Teams Tabs - Hidden on mobile (they're in AppBar drawer) */}
+      {!isMobile && (
+        <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+          <TeamList layout="tabs" />
+        </Box>
+      )}
 
       {/* Main Content */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Channels Sidebar */}
-        <Box
-          sx={{
-            width: 240,
-            bgcolor: 'background.paper',
-            borderRight: 1,
-            borderColor: 'divider',
-            overflow: 'auto'
-          }}
-        >
-          <ChannelList showSearch={true} compact={false} />
-        </Box>
+        {/* Channels Sidebar - Hidden on mobile (they're in AppBar drawer) */}
+        {!isMobile && (
+          <Box
+            sx={{
+              width: 240,
+              bgcolor: 'background.paper',
+              borderRight: 1,
+              borderColor: 'divider',
+              overflow: 'auto'
+            }}
+          >
+            <ChannelList showSearch={true} compact={false} />
+          </Box>
+        )}
 
       {/* Main Content - Current Team + Channel Info */}
       <Box

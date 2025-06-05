@@ -64,6 +64,7 @@ export const TeamHeader: React.FC<TeamHeaderProps> = ({
           borderBottom: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
+          minHeight: compact ? 48 : 56, // Ensure consistent height
           ...sx,
         }}
       >

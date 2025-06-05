@@ -1,7 +1,21 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from './index';
-import type { Channel, Team, User } from '../api/types';
+import type { Channel, UserProfile } from '../api/types';
 import { getChannelDisplayName } from '../utils/channelUtils';
+
+// Extended channel type with enriched data
+export interface EnrichedChannel extends Channel {
+  isActive: boolean;
+  hasUnreads: boolean;
+  unreadCount: number;
+  mentionCount: number;
+  isMuted: boolean;
+  computedDisplayName?: string;
+  otherUser?: UserProfile | null;
+  otherUserId?: string;
+  users?: UserProfile[];
+  userIds?: string[];
+}
 
 // ============================================================================
 // PATTERN 1: BASE SELECTORS (non-memoized, simple accessors) - Mattermost pattern
@@ -59,17 +73,21 @@ export const selectChannelsInCurrentTeam = createSelector(
 );
 
 /**
- * Get channels with unreads in current team (Pattern 2)
+ * Get channels in current team with ALL data: unreads, user names, display names, etc.
+ * This is the single source of truth for complete channel data
  */
-export const selectChannelsWithUnreadsInCurrentTeam = createSelector(
+export const selectChannelsForCurrentTeam = createSelector(
   [
     selectChannelsInCurrentTeam,
     (state: RootState) => state.entities.channels.unreads,
     (state: RootState) => state.entities.channels.myMembers,
-    selectCurrentChannelId
+    selectCurrentChannelId,
+    selectUsersState,
+    selectCurrentUserId
   ],
-  (teamChannels, channelUnreads, channelMembers, currentChannelId) => {
+  (teamChannels, channelUnreads, channelMembers, currentChannelId, usersState, currentUserId): EnrichedChannel[] => {
     return teamChannels.map(channel => {
+      // Unread data
       const unread = channelUnreads[channel.id];
       const membership = channelMembers[channel.id];
       const isMuted = membership?.notify_props?.mark_unread === 'mention';
@@ -77,84 +95,76 @@ export const selectChannelsWithUnreadsInCurrentTeam = createSelector(
       const unreadCount = isMuted ? 0 : (unread?.msg_count || 0);
       const mentionCount = unread?.mention_count || 0;
       const hasUnreads = unreadCount > 0 || mentionCount > 0;
+
+      // Compute display name and user data for direct/group channels
+      let computedDisplayName = channel.display_name;
+      let otherUser: UserProfile | null = null;
+      let otherUserId: string | undefined = undefined;
+      let users: UserProfile[] = [];
+      let userIds: string[] = [];
+
+      if (channel.type === 'D' && currentUserId) {
+        // Direct channel - extract other user
+        const channelUserIds = channel.name.split('__');
+        otherUserId = channelUserIds.find(id => id !== currentUserId);
+        otherUser = otherUserId ? usersState.profiles[otherUserId] : null;
+        computedDisplayName = getChannelDisplayName(channel, usersState.profiles, currentUserId);
+      } else if (channel.type === 'G' && currentUserId) {
+        // Group channel - extract all users except current
+        userIds = channel.name.split('__').filter(id => id !== 'G' && id !== '' && id !== currentUserId);
+        users = userIds.map(id => usersState.profiles[id]).filter(Boolean);
+        computedDisplayName = getChannelDisplayName(channel, usersState.profiles, currentUserId);
+      }
       
       return {
         ...channel,
+        // Unread data
         isActive: channel.id === currentChannelId,
         hasUnreads,
         unreadCount,
         mentionCount,
         isMuted,
-      };
-    });
-  }
-);
-
-/**
- * Get public channels in current team (Pattern 2)
- */
-export const selectPublicChannelsInCurrentTeam = createSelector(
-  [selectChannelsInCurrentTeam],
-  (teamChannels) => teamChannels.filter(channel => channel.type === 'O')
-);
-
-/**
- * Get private channels in current team (Pattern 2)
- */
-export const selectPrivateChannelsInCurrentTeam = createSelector(
-  [selectChannelsInCurrentTeam],
-  (teamChannels) => teamChannels.filter(channel => channel.type === 'P')
-);
-
-/**
- * Get direct channels in current team with computed display names (Pattern 2)
- * Following official Mattermost pattern with completeDirectChannelDisplayName
- */
-export const selectDirectChannelsInCurrentTeam = createSelector(
-  [selectChannelsInCurrentTeam, selectUsersState, selectCurrentUserId],
-  (teamChannels, usersState, currentUserId) => {
-    const directChannels = teamChannels.filter(channel => channel.type === 'D');
-    
-    return directChannels.map(channel => {
-      if (!currentUserId) {
-        return { ...channel, computedDisplayName: 'Direct Message', otherUser: null };
-      }
-      
-      // Extract other user ID from channel name (official MM pattern)
-      const userIds = channel.name.split('__');
-      const otherUserId = userIds.find(id => id !== currentUserId);
-      const otherUser = otherUserId ? usersState.profiles[otherUserId] : null;
-      
-      return {
-        ...channel,
-        computedDisplayName: getChannelDisplayName(channel, usersState.profiles, currentUserId),
+        // Display name and user data
+        computedDisplayName,
         otherUser,
         otherUserId,
-      };
+        users,
+        userIds,
+      } as EnrichedChannel;
     });
   }
 );
 
 /**
- * Get group channels in current team with computed display names (Pattern 2)
+ * Get public channels in current team with all data (unreads, etc.)
+ */
+export const selectPublicChannelsInCurrentTeam = createSelector(
+  [selectChannelsForCurrentTeam],
+  (allChannels): EnrichedChannel[] => allChannels.filter(channel => channel.type === 'O')
+);
+
+/**
+ * Get private channels in current team with all data (unreads, etc.)
+ */
+export const selectPrivateChannelsInCurrentTeam = createSelector(
+  [selectChannelsForCurrentTeam],
+  (allChannels): EnrichedChannel[] => allChannels.filter(channel => channel.type === 'P')
+);
+
+/**
+ * Get direct channels in current team with all data (unreads, user names, etc.)
+ */
+export const selectDirectChannelsInCurrentTeam = createSelector(
+  [selectChannelsForCurrentTeam],
+  (allChannels): EnrichedChannel[] => allChannels.filter(channel => channel.type === 'D')
+);
+
+/**
+ * Get group channels in current team with all data (unreads, user names, etc.)
  */
 export const selectGroupChannelsInCurrentTeam = createSelector(
-  [selectChannelsInCurrentTeam, selectUsersState, selectCurrentUserId],
-  (teamChannels, usersState, currentUserId) => {
-    const groupChannels = teamChannels.filter(channel => channel.type === 'G');
-    
-    return groupChannels.map(channel => {
-      const userIds = channel.name.split('__').filter(id => id !== 'G' && id !== '');
-      const users = userIds.map(id => usersState.profiles[id]).filter(Boolean);
-      
-      return {
-        ...channel,
-        computedDisplayName: getChannelDisplayName(channel, usersState.profiles, currentUserId),
-        users,
-        userIds,
-      };
-    });
-  }
+  [selectChannelsForCurrentTeam],
+  (allChannels): EnrichedChannel[] => allChannels.filter(channel => channel.type === 'G')
 );
 
 
@@ -298,13 +308,14 @@ const selectChannelsArray = createSelector(
 );
 
 /**
- * Get current channel object (memoized)
+ * Get current channel with all enriched data (memoized)
  * Performance benefit: Avoids lookup on every render
  */
 export const selectCurrentChannel = createSelector(
-  [selectChannelsState, selectCurrentChannelId],
-  (channelsState, currentChannelId) => {
-    return currentChannelId ? channelsState.channels[currentChannelId] : null;
+  [selectChannelsForCurrentTeam, selectCurrentChannelId],
+  (channels, currentChannelId): EnrichedChannel | null => {
+    if (!currentChannelId) return null;
+    return channels.find(channel => channel.id === currentChannelId) || null;
   }
 );
 
@@ -326,17 +337,6 @@ export const selectChannelById = (channelId: string | null) => createSelector(
 // CURRENT TEAM SELECTORS (no parameters, safe for useAppSelector)
 // ============================================================================
 
-/**
- * Get channels in current team (safe selector - no recreation issues)
- */
-export const selectChannelsForCurrentTeam = createSelector(
-  [selectChannelsData, selectCurrentTeamId, (state: RootState) => state.entities.channels.channelsInTeam],
-  (allChannels, currentTeamId, channelsInTeam) => {
-    if (!currentTeamId) return [];
-    const channelIds = channelsInTeam[currentTeamId] || [];
-    return channelIds.map(id => allChannels[id]).filter(Boolean);
-  }
-);
 
 /**
  * Get public channels in current team
@@ -354,37 +354,6 @@ export const selectPrivateChannelsForCurrentTeam = createSelector(
   (teamChannels) => teamChannels.filter(channel => channel.type === 'P')
 );
 
-/**
- * Get channels with unreads in current team
- */
-export const selectChannelsWithUnreadsForCurrentTeam = createSelector(
-  [
-    selectChannelsForCurrentTeam,
-    (state: RootState) => state.entities.channels.unreads,
-    (state: RootState) => state.entities.channels.myMembers,
-    selectCurrentChannelId
-  ],
-  (teamChannels, channelUnreads, channelMembers, currentChannelId) => {
-    return teamChannels.map(channel => {
-      const unread = channelUnreads[channel.id];
-      const membership = channelMembers[channel.id];
-      const isMuted = membership?.notify_props?.mark_unread === 'mention';
-      
-      const unreadCount = isMuted ? 0 : (unread?.msg_count || 0);
-      const mentionCount = unread?.mention_count || 0;
-      const hasUnreads = unreadCount > 0 || mentionCount > 0;
-      
-      return {
-        ...channel,
-        isActive: channel.id === currentChannelId,
-        hasUnreads,
-        unreadCount,
-        mentionCount,
-        isMuted,
-      };
-    });
-  }
-);
 
 /**
  * Get channels for team (factory pattern) - Exact Mattermost pattern

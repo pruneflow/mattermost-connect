@@ -90,7 +90,7 @@ export const getDirectChannelDisplayName = (
     return fallback;
   }
   
-  return displayUsername(user, 'full_name', true);
+  return displayUsername(user, 'nickname_full_name', true);
 };
 
 /**

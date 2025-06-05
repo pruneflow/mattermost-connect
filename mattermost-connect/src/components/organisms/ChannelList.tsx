@@ -86,31 +86,13 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   // Categorize and filter channels for display
   const channelCategories = useMemo(() => {
-    // Direct channels need to be enriched with unread data
-    const directChannelsEnriched = directChannels.map(channel => ({
-      ...channel,
-      isActive: false,
-      hasUnreads: false,
-      unreadCount: 0,
-      mentionCount: 0,
-      isMuted: false,
-    }));
-
-    const groupChannelsEnriched = groupChannels.map(channel => ({
-      ...channel,
-      isActive: false,
-      hasUnreads: false,
-      unreadCount: 0,
-      mentionCount: 0,
-      isMuted: false,
-    }));
 
     // Apply search filter to all categories
     return {
       public: filterChannels(publicChannels, searchQuery),
       private: filterChannels(privateChannels, searchQuery),
-      direct: filterChannels(directChannelsEnriched, searchQuery),
-      group: filterChannels(groupChannelsEnriched, searchQuery),
+      direct: filterChannels(directChannels, searchQuery),
+      group: filterChannels(groupChannels, searchQuery),
     };
   }, [publicChannels, privateChannels, directChannels, groupChannels, searchQuery, filterChannels]);
 

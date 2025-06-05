@@ -2,12 +2,14 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Box,
   IconButton,
-  Menu,
-  MenuItem,
   SxProps,
   Theme,
 } from '@mui/material';
-import { Add as AddIcon, MoreHoriz as MoreIcon } from '@mui/icons-material';
+import { 
+  Add as AddIcon, 
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon 
+} from '@mui/icons-material';
 import { TeamItem } from '../molecules/TeamItem';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectTeams } from '../../store/selectors';
@@ -16,18 +18,15 @@ import { useTeamCreation } from '../../hooks/useTeamCreation';
 import { usePermissions } from '../../hooks/usePermissions';
 import type { Team } from '../../api/types';
 
-// Constants
-const TEAM_TAB_WIDTH = 180;
-
 export interface TeamTabsProps {
   onTeamSelect: (team: Team) => void;
-  onCreate: () => void
+  onCreate: () => void;
   showCreateButton?: boolean;
   sx?: SxProps<Theme>;
 }
 
 /**
- * Team tabs that handle overflow with a dropdown menu
+ * Team tabs with smooth horizontal scrolling
  */
 export const TeamTabs: React.FC<TeamTabsProps> = ({
   onTeamSelect,
@@ -35,125 +34,147 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
   onCreate,
   sx,
 }) => {
-  const [overflowMenuAnchor, setOverflowMenuAnchor] = useState<null | HTMLElement>(null);
-  const [visibleTeamsCount, setVisibleTeamsCount] = useState(4);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const tabsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   // Get data
   const teams = useAppSelector(selectTeams);
   const { currentTeamId } = useTeams();
   const { canCreateTeam } = usePermissions();
   
-  // Calculate how many teams can fit using real measurements
-  useEffect(() => {
-    const calculateVisible = () => {
-      if (!containerRef.current || teams.length === 0) return;
-      
-      const container = containerRef.current;
-      const containerWidth = container.offsetWidth;
-      
-      // Reserve space for overflow menu and create button
-      const overflowMenuWidth = 48;
-      const createButtonWidth = showCreateButton ? 48 : 0;
-      const reservedWidth = overflowMenuWidth + createButtonWidth + 16; // +16 for margins
-      
-      let totalTabsWidth = 0;
-      let visibleCount = 0;
-      
-      // Measure actual tab widths
-      for (let i = 0; i < teams.length; i++) {
-        const tabElement = tabsRef.current[i];
-        if (tabElement) {
-          const tabWidth = tabElement.offsetWidth;
-          if (totalTabsWidth + tabWidth + reservedWidth <= containerWidth) {
-            totalTabsWidth += tabWidth;
-            visibleCount++;
-          } else {
-            break;
-          }
-        } else {
-          // Fallback to estimation if tab not yet rendered
-          const estimatedWidth = 120;
-          if (totalTabsWidth + estimatedWidth + reservedWidth <= containerWidth) {
-            totalTabsWidth += estimatedWidth;
-            visibleCount++;
-          } else {
-            break;
-          }
-        }
-      }
-      
-      setVisibleTeamsCount(Math.max(1, visibleCount));
-    };
+  // Check scroll position and update indicators
+  const updateScrollIndicators = useCallback(() => {
+    if (!scrollContainerRef.current) return;
     
-    // Small delay to ensure tabs are rendered
-    const timer = setTimeout(calculateVisible, 10);
+    const container = scrollContainerRef.current;
+    const { scrollLeft, scrollWidth, clientWidth } = container;
     
-    const handleResize = () => {
-      const timer = setTimeout(calculateVisible, 10);
-      return () => clearTimeout(timer);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [teams.length, showCreateButton]);
-  
-  // Stable ref handler
-  const setTabRef = useCallback((index: number) => (el: HTMLDivElement | null) => {
-    tabsRef.current[index] = el;
+    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1); // -1 for precision
   }, []);
 
-  // Stable event handlers - const en dehors du render
-  const handleOverflowMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    setOverflowMenuAnchor(event.currentTarget);
+  // Auto-scroll to active team when it changes
+  const scrollToActiveTeam = useCallback(() => {
+    if (!scrollContainerRef.current || !currentTeamId) return;
+    
+    const container = scrollContainerRef.current;
+    const activeTeamElement = container.querySelector(`[data-team-id="${currentTeamId}"]`) as HTMLElement;
+    
+    if (activeTeamElement) {
+      const containerRect = container.getBoundingClientRect();
+      const teamRect = activeTeamElement.getBoundingClientRect();
+      
+      // Check if team is fully visible
+      const isVisible = teamRect.left >= containerRect.left && teamRect.right <= containerRect.right;
+      
+      if (!isVisible) {
+        // Scroll to center the team
+        const scrollLeft = activeTeamElement.offsetLeft - (container.clientWidth / 2) + (activeTeamElement.offsetWidth / 2);
+        container.scrollTo({
+          left: Math.max(0, scrollLeft),
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [currentTeamId]);
+
+  // Update indicators on mount and team changes
+  useEffect(() => {
+    updateScrollIndicators();
+    scrollToActiveTeam();
+  }, [teams, updateScrollIndicators, scrollToActiveTeam]);
+  
+  // Scroll handlers
+  const scrollLeft = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+    const container = scrollContainerRef.current;
+    container.scrollBy({
+      left: -200, // Scroll by ~1 tab width
+      behavior: 'smooth'
+    });
   }, []);
-  
-  const handleOverflowMenuClose = useCallback(() => {
-    setOverflowMenuAnchor(null);
+
+  const scrollRight = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+    const container = scrollContainerRef.current;
+    container.scrollBy({
+      left: 200, // Scroll by ~1 tab width
+      behavior: 'smooth'
+    });
   }, []);
-  
-  const handleCreateTeam = useCallback(() => {
-    onCreate();
-    handleOverflowMenuClose();
-  }, [handleOverflowMenuClose]);
-  
-  // Méthode const qui prend une team en paramètre
+
+  // Team selection handler
   const handleTeamSelect = useCallback((team: Team) => {
     if (onTeamSelect) {
       onTeamSelect(team);
     }
-    handleOverflowMenuClose();
-  }, [onTeamSelect, handleOverflowMenuClose]);
+  }, [onTeamSelect]);
+
+  // Create team handler
+  const handleCreateTeam = useCallback(() => {
+    onCreate();
+  }, [onCreate]);
   
-  // Split teams
-  const visibleTeams = teams.slice(0, visibleTeamsCount);
-  const overflowTeams = teams.slice(visibleTeamsCount);
-  const hasOverflow = overflowTeams.length > 0;
   const shouldShowCreateButton = showCreateButton && canCreateTeam();
   
   return (
-    <>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        width: '100%',
+        position: 'relative',
+        ...sx,
+      }}
+    >
+      {/* Left scroll indicator */}
+      {canScrollLeft && (
+        <IconButton
+          size="small"
+          onClick={scrollLeft}
+          sx={{
+            position: 'absolute',
+            left: 0,
+            zIndex: 2,
+            bgcolor: 'background.paper',
+            color: 'text.secondary',
+            boxShadow: 1,
+            '&:hover': {
+              color: 'primary.main',
+            },
+          }}
+        >
+          <ChevronLeftIcon />
+        </IconButton>
+      )}
+
+      {/* Scrollable teams container */}
       <Box
-        ref={containerRef}
+        ref={scrollContainerRef}
+        onScroll={updateScrollIndicators}
         sx={{
           display: 'flex',
-          alignItems: 'center',
-          width: '100%',
-          overflow: 'hidden',
-          ...sx,
+          overflowX: 'auto',
+          scrollBehavior: 'smooth',
+          flex: 1,
+          ml: canScrollLeft ? 5 : 0,
+          mr: canScrollRight ? 5 : 0,
+          // Hide scrollbar but keep functionality
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
         }}
       >
-        {/* Visible Teams */}
-        {visibleTeams.map((team, index) => {
+        {/* All Teams */}
+        {teams.map((team) => {
           const handleClick = () => handleTeamSelect(team);
           return (
             <Box
               key={team.id}
-              ref={setTabRef(index)}
+              data-team-id={team.id}
+              sx={{ flexShrink: 0 }}
             >
               <TeamItem
                 team={team}
@@ -164,27 +185,7 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
             </Box>
           );
         })}
-        
-        {/* Spacer to push overflow menu to the right */}
-        <Box sx={{ flex: 1 }} />
-        
-        {/* Overflow Menu Button - aligned to the right */}
-        {hasOverflow && (
-          <IconButton
-            size="small"
-            onClick={handleOverflowMenuOpen}
-            sx={{
-              mx: 1,
-              color: 'text.secondary',
-              '&:hover': {
-                color: 'primary.main',
-              },
-            }}
-          >
-            <MoreIcon />
-          </IconButton>
-        )}
-        
+
         {/* Create Team Button */}
         {shouldShowCreateButton && (
           <IconButton
@@ -193,6 +194,7 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
             sx={{
               mx: 1,
               color: 'text.secondary',
+              flexShrink: 0,
               '&:hover': {
                 color: 'primary.main',
               },
@@ -202,39 +204,28 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
           </IconButton>
         )}
       </Box>
-      
-      {/* Overflow Menu */}
-      <Menu
-        anchorEl={overflowMenuAnchor}
-        open={Boolean(overflowMenuAnchor)}
-        onClose={handleOverflowMenuClose}
-        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-      >
-        {/* Overflow Teams */}
-        {overflowTeams.map((team) => {
-          // Const fonction pour chaque team
-          const handleClick = () => handleTeamSelect(team);
-          return (
-            <MenuItem
-              key={team.id}
-              onClick={handleClick}
-              selected={currentTeamId === team.id}
-            >
-              {team.display_name || team.name}
-            </MenuItem>
-          );
-        })}
-        
-        {/* Create Team in Menu */}
-        {shouldShowCreateButton && hasOverflow && (
-          <MenuItem onClick={handleCreateTeam}>
-            <AddIcon sx={{ mr: 1 }} />
-            Create New Team
-          </MenuItem>
-        )}
-      </Menu>
-    </>
+
+      {/* Right scroll indicator */}
+      {canScrollRight && (
+        <IconButton
+          size="small"
+          onClick={scrollRight}
+          sx={{
+            position: 'absolute',
+            right: 0,
+            zIndex: 2,
+            bgcolor: 'background.paper',
+            color: 'text.secondary',
+            boxShadow: 1,
+            '&:hover': {
+              color: 'primary.main',
+            },
+          }}
+        >
+          <ChevronRightIcon />
+        </IconButton>
+      )}
+    </Box>
   );
 };
 

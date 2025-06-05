@@ -47,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         sx={{
           width: 72,
           height: '100%',
-          backgroundColor: 'primary.dark',
+          backgroundColor: 'grey.100', // Light grey instead of dark
           borderRight: 1,
           borderColor: 'divider',
           display: 'flex',
@@ -70,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: 'background.paper',
+          backgroundColor: 'background.paper', // Same as teams for fluid design
         }}
       >
         <ChannelList
