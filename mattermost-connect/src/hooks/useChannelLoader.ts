@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
-import { loadChannelsForTeam } from '../store/slices/entitiesSlice';
+import { loadChannelsForTeam } from "../store";
 import { selectCurrentTeamId, selectChannelsState } from '../store/selectors';
 
 /**

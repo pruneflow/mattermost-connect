@@ -1,5 +1,6 @@
 import type { Channel, UserProfile } from '../api/types';
 import { displayUsername } from './userUtils';
+import type { EnrichedChannel } from '../store/selectors';
 
 /**
  * Channel utility functions following Mattermost patterns
@@ -157,4 +158,46 @@ export const getChannelDisplayName = (
   }
   
   return channel.display_name || channel.name;
+};
+
+/**
+ * Select best channel based on rules when no lastVisited channel
+ * Rules: If current is direct/group, keep it. Otherwise: Public > Private > Direct > Group
+ */
+export const selectChannelByRules = (
+  currentChannelId: string | null,
+  allChannels: EnrichedChannel[]
+): string | null => {
+  if (allChannels.length === 0) return null;
+
+  // Rule: If current channel is direct or group, keep it (they're global)
+  if (currentChannelId) {
+    const currentChannel = allChannels.find(ch => ch.id === currentChannelId);
+    if (currentChannel && (currentChannel.type === 'D' || currentChannel.type === 'G')) {
+      return currentChannelId; // Keep direct/group channels
+    }
+  }
+
+  // Priority: Public > Private > Direct > Group
+  const publicChannels = allChannels.filter(ch => ch.type === 'O');
+  if (publicChannels.length > 0) {
+    return publicChannels[0].id;
+  }
+
+  const privateChannels = allChannels.filter(ch => ch.type === 'P');
+  if (privateChannels.length > 0) {
+    return privateChannels[0].id;
+  }
+
+  const directChannels = allChannels.filter(ch => ch.type === 'D');
+  if (directChannels.length > 0) {
+    return directChannels[0].id;
+  }
+
+  const groupChannels = allChannels.filter(ch => ch.type === 'G');
+  if (groupChannels.length > 0) {
+    return groupChannels[0].id;
+  }
+
+  return null;
 };

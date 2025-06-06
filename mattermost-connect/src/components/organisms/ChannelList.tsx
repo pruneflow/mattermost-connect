@@ -12,6 +12,7 @@ import { SearchInput } from '../atoms/SearchInput';
 import { TeamHeader } from '../molecules/TeamHeader';
 import { useChannels } from '../../hooks/useChannels';
 import { useChannelLoader } from '../../hooks/useChannelLoader';
+import { useAutoChannelSelection } from '../../hooks/useAutoChannelSelection';
 import { useNavigation } from '../../hooks/useNavigation';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentTeam, selectCurrentChannelId } from '../../store/selectors';
@@ -45,6 +46,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   // Auto-load channels for current team
   useChannelLoader();
+
+  // Auto-select channel after loading
+  useAutoChannelSelection();
 
   // Get channels data (read-only)
   const {

@@ -9,7 +9,8 @@ import {
 } from '../store/slices/viewsSlice';
 import { useTeams } from './useTeams';
 import { useChannels } from './useChannels';
-import { selectTeamsById, selectCurrentTeamId, selectCurrentUrl, selectPreviousUrl, selectLastVisitedChannels, selectIsNavigating } from '../store/selectors';
+import { selectTeamsById, selectCurrentTeamId, selectCurrentUrl, selectPreviousUrl, selectLastVisitedChannels, selectIsNavigating, selectChannelsForCurrentTeam, selectCurrentChannelId } from '../store/selectors';
+import { selectChannelByRules } from '../utils/channelUtils';
 
 // URL parsing utilities following Mattermost pattern
 export interface ParsedUrl {
@@ -73,6 +74,8 @@ export const useNavigation = () => {
   // Entity state for navigation - using memoized selectors
   const teams = useAppSelector(selectTeamsById);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
+  const currentChannelId = useAppSelector(selectCurrentChannelId);
+  const allChannels = useAppSelector(selectChannelsForCurrentTeam);
   
   // Use business logic hooks
   const { switchTeam } = useTeams();
@@ -108,52 +111,53 @@ export const useNavigation = () => {
     dispatch(setCurrentUrl(url));
     dispatch(setNavigating(false));
   }, [currentUrl, dispatch]);
-  
+
+
+  // Navigate to channel - following Mattermost pattern
+  const navigateToChannel = useCallback((teamId: string, channelId: string) => {
+    const team = teams[teamId];
+    if (!team) return;
+
+    // Would need channel data to get channel name
+    // For now, build URL with IDs (in real implementation, use names)
+    const url = buildUrl(team.name, channelId);
+
+    // Update last visited channel for team
+    dispatch(setLastVisitedChannel({ teamId, channelId }));
+
+    // Update current team if different
+    if (currentTeamId !== teamId) {
+      switchTeam(teamId);
+    }
+
+    // Use switchToChannel from useChannels hook
+    switchToChannel(channelId);
+
+    navigateToUrl(url);
+  }, [teams, currentTeamId, switchTeam, switchToChannel, dispatch, navigateToUrl]);
+
   // Navigate to team - following Mattermost pattern
   const navigateToTeam = useCallback((teamId: string) => {
     const team = teams[teamId];
     if (!team) return;
     
-    // Get last visited channel for this team, or use team root
+    // Get last visited channel for this team
     const lastChannelId = lastVisitedChannels[teamId];
-    let url: string;
     
-    if (lastChannelId) {
-      // Would need channel data to get channel name
-      // For now, navigate to team root
-      url = buildUrl(team.name);
+    // Try to find best channel using our logic
+    const bestChannelId = lastChannelId || selectChannelByRules(currentChannelId, allChannels);
+    
+    if (bestChannelId) {
+      // Navigate to specific channel
+      navigateToChannel(teamId, bestChannelId);
     } else {
-      url = buildUrl(team.name);
-    }
-    
-    // Use switchTeam from useTeams hook
-    switchTeam(teamId);
-    
-    navigateToUrl(url);
-  }, [teams, lastVisitedChannels, switchTeam, navigateToUrl]);
-  
-  // Navigate to channel - following Mattermost pattern
-  const navigateToChannel = useCallback((teamId: string, channelId: string) => {
-    const team = teams[teamId];
-    if (!team) return;
-    
-    // Would need channel data to get channel name
-    // For now, build URL with IDs (in real implementation, use names)
-    const url = buildUrl(team.name, channelId);
-    
-    // Update last visited channel for team
-    dispatch(setLastVisitedChannel({ teamId, channelId }));
-    
-    // Update current team if different
-    if (currentTeamId !== teamId) {
+      // Fallback: navigate to team root as before
+      const url = buildUrl(team.name);
       switchTeam(teamId);
+      navigateToUrl(url);
     }
-    
-    // Use switchToChannel from useChannels hook
-    switchToChannel(channelId);
-    
-    navigateToUrl(url);
-  }, [teams, currentTeamId, switchTeam, switchToChannel, dispatch, navigateToUrl]);
+  }, [teams, lastVisitedChannels, currentChannelId, allChannels, navigateToChannel, switchTeam, navigateToUrl]);
+
   
   // Go back to previous URL
   const goBack = useCallback(() => {
