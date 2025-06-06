@@ -3,179 +3,108 @@ import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
 import { 
   selectCurrentUserId,
-  selectChannelUnreadCount,
-  selectChannelMentionCount,
-  selectChannelHasUnreads,
-  selectIsChannelMuted,
-  getTeamsUnreadStatuses,
-  selectChannelUnreads,
-  selectChannelMembers,
-  selectChannelsData
+  selectChannelById,
 } from '../store/selectors';
-import { 
-  setChannelUnread,
+import {
   incrementChannelUnreadCount,
   resetChannelUnreadCount,
   incrementTeamUnreadCount,
-  resetTeamUnreadCount
+  resetTeamUnreadCount,
 } from "../store";
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
-import type { ChannelUnreadResponse } from '../api/types';
 
 /**
- * Hook for managing unread counts
- * Uses memoized selectors to avoid recreation issues
+ * Hook for managing unread counts with single source of truth
+ * - Initial unreads calculated from channel/member data and stored in channels.unreads
+ * - WebSocket events update channels.unreads directly
+ * - Selectors read from channels.unreads only
  */
 export const useUnreadCounts = () => {
   const dispatch = useAppDispatch();
+  const currentUserId = useAppSelector(selectCurrentUserId);
   const { handleError } = useErrorHandler();
 
-  const currentUserId = useAppSelector(selectCurrentUserId);
-  const channelUnreads = useAppSelector(selectChannelUnreads);
-  const channelMembers = useAppSelector(selectChannelMembers);
-  const channels = useAppSelector(selectChannelsData);
-
-  // On-demand channel unread loading (when needed)
-  const loadChannelUnread = useCallback(async (channelId: string) => {
-    if (!currentUserId) return;
-
-    try {
-      const url = `${client.getUrl()}/api/v4/users/${currentUserId}/channels/${channelId}/unread`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${client.getToken()}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const channelUnread: ChannelUnreadResponse = await response.json();
-
-      dispatch(setChannelUnread({
-        channelId: channelUnread.channel_id,
-        msg_count: channelUnread.msg_count,
-        mention_count: channelUnread.mention_count
-      }));
-    } catch (error) {
-      handleError(error, { action: `Failed to fetch unread count for channel ${channelId}` });
-    }
-  }, [currentUserId, dispatch, handleError]);
-
-  // Helper functions using selectors instead of inline logic
-  const isChannelMuted = useCallback((channelId: string): boolean => {
-    return selectIsChannelMuted(channelId)({ entities: { channels: { myMembers: channelMembers } } } as any);
-  }, [channelMembers]);
-
-  const hasChannelUnread = useCallback((channelId: string): boolean => {
-    return selectChannelHasUnreads(channelId)({ 
-      entities: { 
-        channels: { 
-          unreads: channelUnreads, 
-          myMembers: channelMembers 
-        } 
-      } 
-    } as any);
-  }, [channelUnreads, channelMembers]);
+  // Get channel data using new selector
+  const getChannelData = useCallback((channelId: string) => {
+    return selectChannelById(channelId);
+  }, []);
 
   const markChannelAsRead = useCallback(async (channelId: string): Promise<void> => {
     try {
-      await client.viewMyChannel(channelId);
-      dispatch(resetChannelUnreadCount(channelId));
-    } catch (error) {
-      handleError(error, { action: 'Failed to mark channel as read' });
-    }
-  }, [dispatch, handleError]);
+      if (!currentUserId) return;
 
-  // WebSocket events handler (called by useWebSocket)
+      // Call API to mark channel as read
+      await client.viewMyChannel(channelId);
+      
+      // Reset unread count in store
+      dispatch(resetChannelUnreadCount(channelId));
+      
+    } catch (error) {
+      handleError(error, { action: `Failed to mark channel ${channelId} as read` });
+    }
+  }, [currentUserId, dispatch, handleError]);
+
+  const markTeamAsRead = useCallback(async (teamId: string): Promise<void> => {
+    try {
+      if (!currentUserId) return;
+
+      // Reset team unread count in store
+      dispatch(resetTeamUnreadCount(teamId));
+      
+    } catch (error) {
+      handleError(error, { action: `Failed to mark team ${teamId} as read` });
+    }
+  }, [currentUserId, dispatch, handleError]);
+
+  // Handle WebSocket events for unreads - single source of truth updates
   const handleWebSocketEvent = useCallback((event: string, data: any) => {
     switch (event) {
       case 'posted':
         if (data.post && data.post.user_id !== currentUserId) {
           const channelId = data.post.channel_id;
+          const teamId = data.team_id;
           const mentionCount = data.post.message?.includes(`@${currentUserId}`) ? 1 : 0;
           
-          // Update channel unread count
+          // Update channel unread count in channels.unreads
           dispatch(incrementChannelUnreadCount({
             channelId,
             msgCount: 1,
             mentionCount,
-            fromCurrentUser: false
+            fromCurrentUser: false,
           }));
 
           // Update team unread count
-          const channel = channels[channelId];
-          if (channel && channel.team_id) {
+          if (teamId) {
             dispatch(incrementTeamUnreadCount({
-              teamId: channel.team_id,
+              teamId,
               msgCount: 1,
-              mentionCount
+              mentionCount,
             }));
           }
         }
         break;
-
+        
       case 'channel_viewed':
         if (data.channel_id) {
-          const channelId = data.channel_id;
-          const channelUnread = channelUnreads[channelId];
-          
-          // Reset channel unread count
-          dispatch(resetChannelUnreadCount(channelId));
-          
-          // Decrement team unread count by the amount that was in this channel
-          const channel = channels[channelId];
-          if (channel && channel.team_id && channelUnread) {
-            // Check if channel is muted
-            const membership = channelMembers[channelId];
-            const isMuted = membership?.notify_props?.mark_unread === 'mention';
-            
-            // Decrement team counts by what was reset in the channel
-            const msgCountToDecrement = isMuted ? 0 : channelUnread.msg_count;
-            const mentionCountToDecrement = channelUnread.mention_count;
-            
-            if (msgCountToDecrement > 0 || mentionCountToDecrement > 0) {
-              dispatch(incrementTeamUnreadCount({
-                teamId: channel.team_id,
-                msgCount: -msgCountToDecrement, // Negative to decrement
-                mentionCount: -mentionCountToDecrement // Negative to decrement
-              }));
-            }
-          }
+          // Reset channel unread count in channels.unreads
+          dispatch(resetChannelUnreadCount(data.channel_id));
         }
         break;
-
-      case 'channel_member_updated':
-        if (data.channel_member?.user_id === currentUserId) {
-          // Could reload channel data if needed
-        }
+        
+      default:
+        // Ignore other events
         break;
     }
-  }, [currentUserId, dispatch, channels, channelUnreads, channelMembers]);
+  }, [currentUserId, dispatch]);
 
   return {
-    // Channel functions - return selector references
-    getChannelUnreadCount: selectChannelUnreadCount,
-    getChannelMentionCount: selectChannelMentionCount,
-    getChannelHasUnreads: selectChannelHasUnreads,
-    getIsChannelMuted: selectIsChannelMuted,
-    
-    // Legacy functions for backward compatibility
-    hasChannelUnread,
-    isChannelMuted,
-    
-    // Team functions
-    getTeamsUnreadStatuses,
-    
-    // Actions
+    // Channel functions
+    getChannelData,
     markChannelAsRead,
-    loadChannelUnread,
+    markTeamAsRead,
     
-    // Utilities
+    // WebSocket handler - updates single source of truth
     handleWebSocketEvent,
   };
 };

@@ -60,11 +60,6 @@ export const AppBar: React.FC<AppBarProps> = ({
   // Determine display title
   const getTitle = () => {
     if (currentChannelData) {
-      // For direct channels, use displayUsername for proper name formatting
-      if (currentChannelData.type === 'D' && currentChannelData.otherUser) {
-        return displayUsername(currentChannelData.otherUser, 'full_name', true);
-      }
-      // Use computed display name from selector for other channels
       return currentChannelData.computedDisplayName || currentChannelData.display_name || currentChannelData.name;
     }
 

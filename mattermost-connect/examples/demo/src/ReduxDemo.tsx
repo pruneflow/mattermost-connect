@@ -1,10 +1,14 @@
 import React, { useState } from "react";
-import { Box, Typography, ToggleButton, ToggleButtonGroup } from "@mui/material";
+import {
+  Box,
+  Typography,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "@mui/material";
 import {
   LoginForm,
   TeamList,
   ChannelList,
-  UserMenu,
   AppBar,
   useAuth,
   useTeams,
@@ -16,31 +20,34 @@ import {
 
 // Phase 3 Demo Component - Channels + Navigation with Layout Toggle
 const Phase3Demo: React.FC = () => {
-  const { currentUser, logout } = useAuth();
-  const { currentTeam } = useTeams();
-  const { currentChannel, channels } = useChannels();
-  
   // Layout mode toggle
-  const [layoutMode, setLayoutMode] = useState<'custom' | 'mattermost'>('custom');
+  const [layoutMode, setLayoutMode] = useState<"custom" | "mattermost">(
+    "custom",
+  );
 
   // Handle layout mode change
-  const handleLayoutModeChange = (_event: React.MouseEvent<HTMLElement>, newMode: 'custom' | 'mattermost') => {
+  const handleLayoutModeChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    newMode: "custom" | "mattermost",
+  ) => {
     if (newMode !== null) {
       setLayoutMode(newMode);
     }
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Layout Mode Toggle - Outside and above everything */}
-      <Box sx={{ 
-        p: 2, 
-        bgcolor: 'background.paper', 
-        borderBottom: 1, 
-        borderColor: 'divider',
-        display: 'flex',
-        justifyContent: 'center'
-      }}>
+      <Box
+        sx={{
+          p: 2,
+          bgcolor: "background.paper",
+          borderBottom: 1,
+          borderColor: "divider",
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
         <ToggleButtonGroup
           value={layoutMode}
           exclusive
@@ -48,36 +55,39 @@ const Phase3Demo: React.FC = () => {
           aria-label="layout mode"
           size="small"
         >
-          <ToggleButton 
-            value="custom" 
+          <ToggleButton
+            value="custom"
             aria-label="custom layout"
-            sx={{ 
-              px: 3, 
+            sx={{
+              px: 3,
               py: 1,
-              textTransform: 'none',
-              fontWeight: layoutMode === 'custom' ? 'bold' : 'normal',
-              bgcolor: layoutMode === 'custom' ? 'primary.main' : 'transparent',
-              color: layoutMode === 'custom' ? 'white' : 'text.primary',
-              '&:hover': {
-                bgcolor: layoutMode === 'custom' ? 'primary.dark' : 'action.hover',
-              }
+              textTransform: "none",
+              fontWeight: layoutMode === "custom" ? "bold" : "normal",
+              bgcolor: layoutMode === "custom" ? "primary.main" : "transparent",
+              color: layoutMode === "custom" ? "white" : "text.primary",
+              "&:hover": {
+                bgcolor:
+                  layoutMode === "custom" ? "primary.dark" : "action.hover",
+              },
             }}
           >
             🎨 Custom Layout
           </ToggleButton>
-          <ToggleButton 
-            value="mattermost" 
+          <ToggleButton
+            value="mattermost"
             aria-label="mattermost layout"
-            sx={{ 
-              px: 3, 
+            sx={{
+              px: 3,
               py: 1,
-              textTransform: 'none',
-              fontWeight: layoutMode === 'mattermost' ? 'bold' : 'normal',
-              bgcolor: layoutMode === 'mattermost' ? 'primary.main' : 'transparent',
-              color: layoutMode === 'mattermost' ? 'white' : 'text.primary',
-              '&:hover': {
-                bgcolor: layoutMode === 'mattermost' ? 'primary.dark' : 'action.hover',
-              }
+              textTransform: "none",
+              fontWeight: layoutMode === "mattermost" ? "bold" : "normal",
+              bgcolor:
+                layoutMode === "mattermost" ? "primary.main" : "transparent",
+              color: layoutMode === "mattermost" ? "white" : "text.primary",
+              "&:hover": {
+                bgcolor:
+                  layoutMode === "mattermost" ? "primary.dark" : "action.hover",
+              },
             }}
           >
             📋 Mattermost Layout
@@ -86,213 +96,188 @@ const Phase3Demo: React.FC = () => {
       </Box>
 
       {/* Conditional Layout Rendering */}
-      {layoutMode === 'mattermost' ? (
-        <AppLayout />
-      ) : (
-        <CustomLayoutContent 
-          currentUser={currentUser}
-          logout={logout}
-          currentTeam={currentTeam}
-          currentChannel={currentChannel}
-          channels={channels}
-        />
-      )}
+      {layoutMode === "mattermost" ? <AppLayout /> : <CustomLayoutContent />}
     </Box>
   );
 };
 
-// Custom Layout Content Component - Simplified
-interface CustomLayoutContentProps {
-  currentUser: any;
-  logout: () => void;
-  currentTeam: any;
-  currentChannel: any;
-  channels: any[];
-}
 
-const CustomLayoutContent: React.FC<CustomLayoutContentProps> = ({
-  currentUser,
-  logout,
-  currentTeam,
-  currentChannel,
-  channels
-}) => {
+const CustomLayoutContent = () => {
   const { isMobile } = useLayout();
-
+  const { currentChannel } = useChannels()
+  const { currentTeam } = useTeams()
   return (
-    <Box sx={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+    <Box
+      sx={{
+        display: "flex",
+        flex: 1,
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
       {/* AppBar with mobile drawer built-in */}
       <AppBar />
 
       {/* Teams Tabs - Hidden on mobile (they're in AppBar drawer) */}
       {!isMobile && (
-        <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+        <Box
+          sx={{
+            bgcolor: "background.paper",
+            borderBottom: 1,
+            borderColor: "divider",
+          }}
+        >
           <TeamList layout="tabs" />
         </Box>
       )}
 
       {/* Main Content */}
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Channels Sidebar - Hidden on mobile (they're in AppBar drawer) */}
         {!isMobile && (
           <Box
             sx={{
               width: 240,
-              bgcolor: 'background.paper',
+              bgcolor: "background.paper",
               borderRight: 1,
-              borderColor: 'divider',
-              overflow: 'auto'
+              borderColor: "divider",
+              overflow: "auto",
             }}
           >
             <ChannelList showSearch={true} compact={false} />
           </Box>
         )}
 
-      {/* Main Content - Current Team + Channel Info */}
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Header */}
-        <Box
-          sx={{
-            p: 2,
-            bgcolor: 'background.paper',
-            borderBottom: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="h6">
-            {currentTeam?.display_name || 'No Team Selected'}
-          </Typography>
-        </Box>
-
-        {/* Content Area */}
+        {/* Main Content - Current Team + Channel Info */}
         <Box
           sx={{
             flex: 1,
-            p: 3,
-            overflow: 'auto',
-            bgcolor: 'background.default'
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           }}
         >
-          {/* Current Team Info */}
+          {/* Header */}
           <Box
             sx={{
               p: 2,
-              mb: 3,
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-              bgcolor: 'background.paper',
+              bgcolor: "background.paper",
+              borderBottom: 1,
+              borderColor: "divider",
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, color: 'text.primary' }}>
-              Current Team
+            <Typography variant="h6">
+              {currentTeam?.display_name || "No Team Selected"}
             </Typography>
-            {currentTeam ? (
-              <Box>
-                <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                  <strong>Name:</strong> {currentTeam.display_name}
-                </Typography>
-                <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                  <strong>Description:</strong>{" "}
-                  {currentTeam.description || "No description"}
-                </Typography>
-                <Typography
-                  sx={{
-                    fontSize: "12px",
-                    color: "text.secondary",
-                    wordBreak: "break-all",
-                  }}
-                >
-                  ID: {currentTeam.id}
-                </Typography>
-              </Box>
-            ) : (
-              <Typography sx={{ color: "text.secondary" }}>
-                No team selected
-              </Typography>
-            )}
           </Box>
 
-          {/* Current Channel Info */}
+          {/* Content Area */}
           <Box
             sx={{
-              p: 2,
-              mb: 3,
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-              bgcolor: 'background.paper',
+              flex: 1,
+              p: 3,
+              overflow: "auto",
+              bgcolor: "background.default",
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, color: 'text.primary' }}>
-              Current Channel
-            </Typography>
-            {currentChannel ? (
-              <Box>
-                <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                  <strong>Name:</strong> {currentChannel.display_name}
-                </Typography>
-                <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                  <strong>Type:</strong>{" "}
-                  {currentChannel.type === 'O' ? 'Public' : 
-                   currentChannel.type === 'P' ? 'Private' : 
-                   currentChannel.type === 'D' ? 'Direct Message' : 
-                   'Group Message'}
-                </Typography>
-                {currentChannel.purpose && (
-                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                    <strong>Purpose:</strong> {currentChannel.purpose}
-                  </Typography>
-                )}
-                {currentChannel.header && (
-                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                    <strong>Header:</strong> {currentChannel.header}
-                  </Typography>
-                )}
-                <Typography
-                  sx={{
-                    fontSize: "12px",
-                    color: "text.secondary",
-                    wordBreak: "break-all",
-                  }}
-                >
-                  ID: {currentChannel.id}
-                </Typography>
-              </Box>
-            ) : (
-              <Typography sx={{ color: "text.secondary" }}>
-                No channel selected
+            {/* Current Team Info */}
+            <Box
+              sx={{
+                p: 2,
+                mb: 3,
+                border: 1,
+                borderColor: "divider",
+                borderRadius: 1,
+                bgcolor: "background.paper",
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2, color: "text.primary" }}>
+                Current Team
               </Typography>
-            )}
-          </Box>
+              {currentTeam ? (
+                <Box>
+                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
+                    <strong>Name:</strong> {currentTeam.display_name}
+                  </Typography>
+                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
+                    <strong>Description:</strong>{" "}
+                    {currentTeam.description || "No description"}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: "12px",
+                      color: "text.secondary",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    ID: {currentTeam.id}
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography sx={{ color: "text.secondary" }}>
+                  No team selected
+                </Typography>
+              )}
+            </Box>
 
-          {/* Channels Summary */}
-          <Box
-            sx={{
-              p: 2,
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-              bgcolor: 'info.light',
-            }}
-          >
-            <Typography variant="h6" sx={{ mb: 1, color: 'text.primary' }}>
-              Channels Summary
-            </Typography>
-            <Typography sx={{ color: 'text.secondary' }}>
-              Total channels in current team: {channels.length}
-            </Typography>
+            {/* Current Channel Info */}
+            <Box
+              sx={{
+                p: 2,
+                mb: 3,
+                border: 1,
+                borderColor: "divider",
+                borderRadius: 1,
+                bgcolor: "background.paper",
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2, color: "text.primary" }}>
+                Current Channel
+              </Typography>
+              {currentChannel ? (
+                <Box>
+                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
+                    <strong>Name:</strong> {currentChannel.display_name}
+                  </Typography>
+                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
+                    <strong>Type:</strong>{" "}
+                    {currentChannel.type === "O"
+                      ? "Public"
+                      : currentChannel.type === "P"
+                        ? "Private"
+                        : currentChannel.type === "D"
+                          ? "Direct Message"
+                          : "Group Message"}
+                  </Typography>
+                  {currentChannel.purpose && (
+                    <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
+                      <strong>Purpose:</strong> {currentChannel.purpose}
+                    </Typography>
+                  )}
+                  {currentChannel.header && (
+                    <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
+                      <strong>Header:</strong> {currentChannel.header}
+                    </Typography>
+                  )}
+                  <Typography
+                    sx={{
+                      fontSize: "12px",
+                      color: "text.secondary",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    ID: {currentChannel.id}
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography sx={{ color: "text.secondary" }}>
+                  No channel selected
+                </Typography>
+              )}
+            </Box>
           </Box>
         </Box>
       </Box>
-    </Box>
     </Box>
   );
 };
@@ -391,7 +376,8 @@ const ReduxDemoContent: React.FC = () => {
             m: 0,
           }}
         >
-          Phase 3: Channels + Navigation + Custom Layout (Built on Redux + Client4)
+          Phase 3: Channels + Navigation + Custom Layout (Built on Redux +
+          Client4)
         </Typography>
       </Box>
 

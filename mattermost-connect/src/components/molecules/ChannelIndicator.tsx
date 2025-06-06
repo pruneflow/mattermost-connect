@@ -4,7 +4,8 @@ import { TypingDots } from '../atoms/TypingDots';
 import { UnreadBadge } from '../atoms/UnreadBadge';
 import { useTypingEventsForChannel } from '../../hooks/useTypingEvents';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { selectChannelHasUnreads, selectChannelUnreadCount, selectChannelMentionCount } from '../../store/selectors';
+import { selectChannelById } from '../../store/selectors';
+import type { EnrichedChannel } from '../../store/selectors';
 
 export interface ChannelIndicatorProps {
   channelId: string;
@@ -22,13 +23,14 @@ export const ChannelIndicator: React.FC<ChannelIndicatorProps> = ({
   channelId,
   sx
 }) => {
-  // Get typing status for this channel (optimized selector)
+  // Get typing status for this channel
   const { isAnyoneTyping } = useTypingEventsForChannel(channelId);
   
-  // Get unread status (optimized selectors)
-  const hasUnreads = useAppSelector(selectChannelHasUnreads(channelId));
-  const unreadCount = useAppSelector(selectChannelUnreadCount(channelId));
-  const mentionCount = useAppSelector(selectChannelMentionCount(channelId));
+  // Get channel with all data
+  const channel: EnrichedChannel | null = useAppSelector(selectChannelById(channelId));
+  const hasUnreads = channel?.hasUnreads || false;
+  const unreadCount = channel?.unreadCount || 0;
+  const mentionCount = channel?.mentionCount || 0;
 
   return (
     <Box

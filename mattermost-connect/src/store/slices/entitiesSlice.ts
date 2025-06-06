@@ -1,5 +1,108 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { UserProfile, Team, Channel, Post, TeamMember, ChannelMember, UserStatus } from '../../api/types';
+import { client } from '../../api/client';
+
+// ============================================================================
+// ASYNC THUNKS - Centralized Data Loading (Mattermost pattern)
+// ============================================================================
+
+/**
+ * Load channels for specific team with store verification
+ * Only fetches if channels not already loaded for this team
+ */
+export const loadChannelsForTeam = createAsyncThunk(
+  'entities/loadChannelsForTeam',
+  async (teamId: string, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      
+      // Check if channels already loaded for this team
+      const existingChannels = state.entities.channels.channelsInTeam[teamId];
+      if (existingChannels && existingChannels.length > 0) {
+        // Already loaded, skip API call
+        return { teamId, skipped: true };
+      }
+
+      // Fetch channels, members and unreads in parallel (Mattermost pattern)
+      const [teamChannels, myChannelMembers] = await Promise.all([
+        client.getMyChannels(teamId),
+        client.getMyChannelMembers(teamId)
+      ]);
+
+      // Find users needed for direct/group channels
+      const currentUserId = state.entities.users.currentUserId;
+      const userIdsToLoad = new Set<string>();
+      
+      teamChannels.forEach((channel: Channel) => {
+        if (channel.type === 'D' && currentUserId) {
+          // For direct channels, extract other user ID
+          const userIds = channel.name.split('__');
+          const otherUserId = userIds.find(id => id !== currentUserId);
+          if (otherUserId) {
+            userIdsToLoad.add(otherUserId);
+          }
+        } else if (channel.type === 'G') {
+          // For group channels, extract all user IDs from channel name
+          // Group channel names follow format: user1__user2__user3
+          const userIds = channel.name.split('__');
+          userIds.forEach(id => {
+            if (id && id !== currentUserId) {
+              userIdsToLoad.add(id);
+            }
+          });
+        }
+      });
+
+      // Load missing users if any
+      let missingUsers: UserProfile[] = [];
+      if (userIdsToLoad.size > 0) {
+        const existingUserIds = Object.keys(state.entities.users.profiles);
+        const missingUserIds = Array.from(userIdsToLoad).filter(id => !existingUserIds.includes(id));
+        
+        if (missingUserIds.length > 0) {
+          console.log(`Loading ${missingUserIds.length} missing users for direct/group channels`);
+          missingUsers = await client.getProfilesByIds(missingUserIds);
+        }
+      }
+
+      // Calculate initial unreads from channel/member data (Mattermost pattern)
+      const initialUnreads: Record<string, { msg_count: number; mention_count: number }> = {};
+      
+      teamChannels.forEach((channel: Channel) => {
+        const membership = myChannelMembers.find((member: ChannelMember) => member.channel_id === channel.id);
+        
+        if (membership) {
+          const channelTotalMsg = (channel as any).total_msg_count || 0;
+          const memberMsgCount = membership.msg_count || 0;
+          const memberMentionCount = membership.mention_count || 0;
+          
+          // Calculate unread count: channel total - member read count
+          const unreadMsgCount = Math.max(0, channelTotalMsg - memberMsgCount);
+          
+          initialUnreads[channel.id] = {
+            msg_count: unreadMsgCount,
+            mention_count: memberMentionCount
+          };
+        }
+      });
+
+      return {
+        teamId,
+        channels: teamChannels,
+        members: myChannelMembers,
+        users: missingUsers,
+        unreads: initialUnreads,
+        skipped: false
+      };
+    } catch (error) {
+      return rejectWithValue({ teamId, error: error instanceof Error ? error.message : 'Failed to load channels' });
+    }
+  }
+);
+
+// ============================================================================
+// ENTITIES STATE STRUCTURE
+// ============================================================================
 
 // Entities State Structure inspired by mattermost-redux
 export interface EntitiesState {
@@ -284,6 +387,47 @@ const entitiesSlice = createSlice({
       state.users.statuses = {};
     },
     clearEntities: () => initialState,
+  },
+  
+  // Handle async thunks
+  extraReducers: (builder) => {
+    builder
+      .addCase(loadChannelsForTeam.fulfilled, (state, action) => {
+        const { teamId, channels, members, users, unreads, skipped } = action.payload;
+        
+        if (skipped) {
+          // Data already loaded, no action needed
+          return;
+        }
+        
+        // Normalize and store channels
+        const channelIds: string[] = [];
+        channels?.forEach((channel: Channel) => {
+          state.channels.channels[channel.id] = channel;
+          channelIds.push(channel.id);
+        });
+        
+        // Store channel IDs for this team
+        state.channels.channelsInTeam[teamId] = channelIds;
+        
+        // Normalize and store members
+        members?.forEach((member: ChannelMember) => {
+          state.channels.myMembers[member.channel_id] = member;
+        });
+        
+        // Store initial unreads calculated from channel/member data
+        if (unreads) {
+          Object.assign(state.channels.unreads, unreads);
+        }
+        
+        // Store loaded users for direct/group channels
+        users?.forEach((user: UserProfile) => {
+          state.users.profiles[user.id] = user;
+        });
+      })
+      .addCase(loadChannelsForTeam.rejected, (state, action) => {
+        console.error('Failed to load channels for team:', action.payload);
+      });
   },
 });
 

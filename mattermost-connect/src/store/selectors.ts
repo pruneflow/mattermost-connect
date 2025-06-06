@@ -87,10 +87,10 @@ export const selectChannelsForCurrentTeam = createSelector(
   ],
   (teamChannels, channelUnreads, channelMembers, currentChannelId, usersState, currentUserId): EnrichedChannel[] => {
     return teamChannels.map(channel => {
-      // Unread data
-      const unread = channelUnreads[channel.id];
+      // Unread data from single source of truth: channels.unreads
       const membership = channelMembers[channel.id];
       const isMuted = membership?.notify_props?.mark_unread === 'mention';
+      const unread = channelUnreads[channel.id];
       
       const unreadCount = isMuted ? 0 : (unread?.msg_count || 0);
       const mentionCount = unread?.mention_count || 0;
@@ -319,14 +319,6 @@ export const selectCurrentChannel = createSelector(
   }
 );
 
-/**
- * Get channel by ID selector factory (memoized)
- * Usage: const selectChannel = selectChannelById(channelId)
- */
-export const selectChannelById = (channelId: string | null) => createSelector(
-  [selectChannelsState],
-  (channelsState) => channelId ? channelsState.channels[channelId] : null
-);
 
 // ============================================================================
 // PATTERN 3: FACTORY SELECTORS (dynamic parameters) - Exact Mattermost pattern  
@@ -422,39 +414,12 @@ export const selectMyChannelMember = (channelId: string) => createSelector(
 // ============================================================================
 
 /**
- * Get channel unread count by ID (memoized)
+ * Get channel by ID with all data (unreads, user names, etc.)
  */
-export const selectChannelUnreadCount = (channelId: string) => createSelector(
-  [(state: RootState) => state.entities.channels.unreads],
-  (channelUnreads) => channelUnreads[channelId]?.msg_count || 0
-);
-
-/**
- * Get channel mention count by ID (memoized)
- */
-export const selectChannelMentionCount = (channelId: string) => createSelector(
-  [(state: RootState) => state.entities.channels.unreads],
-  (channelUnreads) => channelUnreads[channelId]?.mention_count || 0
-);
-
-/**
- * Check if channel has unreads (considering muted status) - Mattermost pattern
- */
-export const selectChannelHasUnreads = (channelId: string) => createSelector(
-  [
-    (state: RootState) => state.entities.channels.unreads,
-    (state: RootState) => state.entities.channels.myMembers
-  ],
-  (channelUnreads, channelMembers) => {
-    const unread = channelUnreads[channelId];
-    if (!unread) return false;
-    
-    const membership = channelMembers[channelId];
-    const isMuted = membership?.notify_props?.mark_unread === 'mention';
-    const unreadCount = isMuted ? 0 : unread.msg_count;
-    const mentionCount = unread.mention_count;
-    
-    return unreadCount > 0 || mentionCount > 0;
+export const selectChannelById = (channelId: string) => createSelector(
+  [selectChannelsForCurrentTeam],
+  (channels): EnrichedChannel | null => {
+    return channels.find(channel => channel.id === channelId) || null;
   }
 );
 

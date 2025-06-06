@@ -22,7 +22,6 @@ export const useAppInitialization = () => {
   const serverUrl = useAppSelector(selectServerUrl);
   const currentUserId = useAppSelector(selectCurrentUserId);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
-  const teams = useAppSelector(selectTeamsById);
 
   const initializeApp = useCallback(async () => {
     if (!isAuthenticated || !currentUserId || !token || !serverUrl) {
@@ -30,9 +29,8 @@ export const useAppInitialization = () => {
       return;
     }
 
-    // Only initialize if we don't have data (avoid re-fetch)
-    const hasTeams = Object.keys(teams).length > 0;
-    if (hasTeams && isInitialized) return;
+    // Skip if already initialized
+    if (isInitialized) return;
 
     try {
       console.log('🚀 Initializing app data (Mattermost pattern)...');
@@ -91,11 +89,11 @@ export const useAppInitialization = () => {
       console.error('❌ Failed to initialize app:', error);
       setIsInitialized(false);
     }
-  }, [isAuthenticated, currentUserId, token, serverUrl, teams, dispatch, connectWebSocket, currentTeamId, isInitialized]);
+  }, [isAuthenticated, currentUserId, token, serverUrl]);
 
   // Single effect for initialization
   useEffect(() => {
-    initializeApp();
+    void initializeApp();
   }, [initializeApp]);
 
   // Cleanup on logout

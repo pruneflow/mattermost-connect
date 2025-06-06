@@ -51,7 +51,7 @@ export const store = configureStore({
   devTools: process.env.NODE_ENV !== 'production',
 });
 
-// Auto-restore user if credentials exist - use getCurrentUser() instead of localStorage parsing
+// Auto-restore user if credentials exist - establishes auth state
 if (token && serverUrl) {
   store.dispatch(getCurrentUser());
 }

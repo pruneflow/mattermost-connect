@@ -17,7 +17,7 @@ export { default as useWebSocket } from './useWebSocket';
 export { default as useAppInitialization } from './useAppInitialization';
 export { default as useChannels } from './useChannels';
 export { default as useChannelWebSocket } from './useChannelWebSocket';
-export { default as useSpecificTeamChannels } from './useSpecificTeamChannels';
+export { default as useChannelLoader } from './useChannelLoader';
 export { default as useTypingEvents, useTypingEventsForChannel } from './useTypingEvents';
 
 // Export Redux types
