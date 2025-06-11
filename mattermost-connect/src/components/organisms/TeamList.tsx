@@ -11,10 +11,15 @@ import {
   useErrorHandler,
   useNavigation,
   useTeamCreation,
-  useTeams, useChannels
+  useTeams, 
+  useChannels,
+  useTeamDialogs
 } from "../../hooks";
 import { CreateTeamDialog, type CreateTeamData } from "./CreateTeamDialog";
-import { TeamSettingsDialog } from "./TeamSettingsDialog";
+import TeamSettingsDialog from "./TeamSettingsDialog";
+import ManageMembersDialog from "./ManageMembersDialog";
+import TeamInfoDialog from "./TeamInfoDialog";
+import LeaveTeamDialog from "./LeaveTeamDialog";
 import { TeamItemSkeleton, ListSkeleton } from "../atoms";
 import { TeamItem, CreateTeamButton } from "../molecules";
 import { TeamTabs } from "./TeamTabs";
@@ -36,8 +41,19 @@ export const TeamList: React.FC<TeamListProps> = ({
   showMenu = true,
 }) => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
+
+  const {
+    selectedTeamId,
+    openSettings,
+    openMembers,
+    openInfo,
+    openLeave,
+    isSettingsOpen,
+    isMembersOpen,
+    isInfoOpen,
+    isLeaveOpen,
+    closeDialog,
+  } = useTeamDialogs();
 
   // Hooks
   const { canCreateTeam } = usePermissions();
@@ -73,15 +89,6 @@ export const TeamList: React.FC<TeamListProps> = ({
   );
 
 
-  const handleOpenSettings = useCallback((team: Team) => {
-    setSelectedTeamId(team.id);
-    setTeamSettingsOpen(true);
-  }, []);
-
-  const handleCloseTeamSettings = useCallback(() => {
-    setTeamSettingsOpen(false);
-    setSelectedTeamId(null);
-  }, []);
 
   const handleCreateTeamClick = useCallback(() => {
     setCreateModalOpen(true);
@@ -130,8 +137,6 @@ export const TeamList: React.FC<TeamListProps> = ({
     return getSkeleton();
   }
 
-  // Note: Error handling is done by AppProvider
-
   const renderTeamList = () => {
     // Tabs layout - use TeamTabs component
     if (layout === "tabs") {
@@ -140,6 +145,10 @@ export const TeamList: React.FC<TeamListProps> = ({
           onTeamSelect={handleTeamClick}
           showCreateButton={shouldShowCreateButton}
           onCreate={handleCreateTeamClick}
+          onOpenSettings={openSettings}
+          onOpenMembers={openMembers}
+          onOpenInfo={openInfo}
+          onLeaveTeam={openLeave}
         />
       );
     }
@@ -188,7 +197,6 @@ export const TeamList: React.FC<TeamListProps> = ({
         <List sx={{ width: "100%" }}>
           {teams.map((team) => {
             const handleClick = () => handleTeamClick(team);
-            const handleSettings = () => handleOpenSettings(team);
             return (
               <TeamItem
                 key={team.id}
@@ -196,7 +204,10 @@ export const TeamList: React.FC<TeamListProps> = ({
                 layout="vertical"
                 isActive={currentTeamId === team.id}
                 onClick={handleClick}
-                onOpenSettings={handleSettings}
+                onOpenSettings={openSettings}
+                onOpenMembers={openMembers}
+                onOpenInfo={openInfo}
+                onLeaveTeam={openLeave}
                 showMenu={showMenu}
                 compact={compact}
               />
@@ -226,11 +237,28 @@ export const TeamList: React.FC<TeamListProps> = ({
         onCreateTeam={handleCreateTeam}
       />
 
-      {/* Team settings modal */}
+      {/* Team dialogs - gérés par useTeamDialogs */}
       <TeamSettingsDialog
-        key="team-settings-dialog"
-        open={teamSettingsOpen}
-        onClose={handleCloseTeamSettings}
+        open={isSettingsOpen}
+        onClose={closeDialog}
+        teamId={selectedTeamId}
+      />
+      
+      <ManageMembersDialog
+        open={isMembersOpen}
+        onClose={closeDialog}
+        teamId={selectedTeamId}
+      />
+      
+      <TeamInfoDialog
+        open={isInfoOpen}
+        onClose={closeDialog}
+        teamId={selectedTeamId}
+      />
+      
+      <LeaveTeamDialog
+        open={isLeaveOpen}
+        onClose={closeDialog}
         teamId={selectedTeamId}
       />
     </>

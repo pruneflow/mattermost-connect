@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Badge } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';
 
@@ -19,73 +19,89 @@ export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
   sx,
   children
 }) => {
+  // Early return for empty badge
   if (count === 0 && mentions === 0) {
     return children ? <>{children}</> : null;
   }
 
-  const sizeMap = {
-    sm: { fontSize: '10px', minWidth: 16, height: 16 },
-    md: { fontSize: '11px', minWidth: 18, height: 18 },
-    lg: { fontSize: '12px', minWidth: 20, height: 20 }
-  };
+  // Memoized size configuration
+  const sizeConfig = useMemo(() => {
+    const sizeMap = {
+      sm: { fontSize: '10px', minWidth: 16, height: 16 },
+      md: { fontSize: '11px', minWidth: 18, height: 18 },
+      lg: { fontSize: '12px', minWidth: 20, height: 20 }
+    };
+    return sizeMap[size];
+  }, [size]);
 
-  const sizeConfig = sizeMap[size];
+  // Memoized badge logic
+  const { displayCount, badgeColor, badgeContent } = useMemo(() => {
+    let displayCount: number;
+    let badgeColor: 'error' | 'warning' | 'default';
+    
+    if (mentions >= count) {
+      // Case 1: mentions >= unreads → RED with mention count
+      displayCount = mentions;
+      badgeColor = 'error'; // red
+    } else if (count > mentions && mentions > 0) {
+      // Case 2: unreads > mentions > 0 → ORANGE with unread count
+      displayCount = count;
+      badgeColor = 'warning'; // orange
+    } else {
+      // Case 3: unreads > 0 && mentions = 0 → GRAY with unread count
+      displayCount = count;
+      badgeColor = 'default'; // gray
+    }
 
-  // Show mentions if any, otherwise show unread count
-  const displayCount = mentions > 0 ? mentions : count;
-  const isMention = mentions > 0;
+    // Format count for display (Mattermost standard)
+    const formatCount = (num: number): string => {
+      if (num > 999) return '999+';
+      return num.toString();
+    };
 
-  // Format count for display (Mattermost standard)
-  const formatCount = (num: number): string => {
-    if (num > 999) return '999+';
-    return num.toString();
-  };
+    return {
+      displayCount,
+      badgeColor,
+      badgeContent: formatCount(displayCount)
+    };
+  }, [count, mentions]);
 
-  const badgeContent = formatCount(displayCount);
+  // Memoized base badge styles
+  const baseBadgeStyles = useMemo(() => ({
+    fontSize: sizeConfig.fontSize,
+    minWidth: sizeConfig.minWidth,
+    height: sizeConfig.height,
+    fontWeight: 600,
+    backgroundColor: badgeColor === 'error' ? 'error.main' : 
+                     badgeColor === 'warning' ? 'deepOrange.800' : 'action.disabled',
+    color: 'common.white',
+  }), [sizeConfig, badgeColor]);
 
-  if (children) {
-    return (
-      <Badge
-        badgeContent={badgeContent}
-        color={isMention ? 'error' : 'default'}
-        className={className}
-        sx={{
-          '& .MuiBadge-badge': {
-            fontSize: sizeConfig.fontSize,
-            minWidth: sizeConfig.minWidth,
-            height: sizeConfig.height,
-            fontWeight: 600,
-            backgroundColor: isMention ? 'error.main' : 'action.disabled',
-            color: 'common.white',
-          },
-          ...sx
-        }}
-      >
-        {children}
-      </Badge>
-    );
-  }
+  // Memoized sx for children (with badge positioning)
+  const childrenSx = useMemo(() => ({
+    '& .MuiBadge-badge': baseBadgeStyles,
+    ...sx
+  }), [baseBadgeStyles, sx]);
 
-  // Standalone badge
+  // Memoized sx for standalone (with static positioning)
+  const standaloneSx = useMemo(() => ({
+    '& .MuiBadge-badge': {
+      ...baseBadgeStyles,
+      position: 'static',
+      transform: 'none',
+    },
+    ...sx
+  }), [baseBadgeStyles, sx]);
+
   return (
     <Badge
       badgeContent={badgeContent}
-      color={isMention ? 'error' : 'default'}
+      color={badgeColor}
       className={className}
-      sx={{
-        '& .MuiBadge-badge': {
-          fontSize: sizeConfig.fontSize,
-          minWidth: sizeConfig.minWidth,
-          height: sizeConfig.height,
-          fontWeight: 600,
-          backgroundColor: isMention ? 'error.main' : 'action.disabled',
-          color: 'common.white',
-          position: 'static',
-          transform: 'none',
-        },
-        ...sx
-      }}
-    />
+      sx={children ? childrenSx : standaloneSx}
+    >
+      {children}
+    </Badge>
   );
 };
 

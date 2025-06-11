@@ -77,6 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           showSearch={!compact}
           compact={compact}
           showTeamHeader={true}
+          onChannelSelect={onClose}
         />
       </Box>
     </Box>

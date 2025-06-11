@@ -18,6 +18,8 @@ export const displayUsername = (
   const fullName = getFullName(user);
   
   switch (teammateNameDisplay) {
+    case 'full_name_nickname':
+      return fullName || user.nickname || (useFallbackUsername ? user.username : '');
     case 'nickname_full_name':
       return user.nickname || fullName || (useFallbackUsername ? user.username : '');
     case 'full_name':

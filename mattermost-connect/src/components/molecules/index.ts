@@ -8,6 +8,7 @@ export { default as ChannelItem } from './ChannelItem';
 export { default as SearchBar } from './SearchBar';
 export { default as ChannelHeader } from './ChannelHeader';
 export { default as TeamHeader } from './TeamHeader';
+export { default as TeamMenu } from './TeamMenu';
 
 export type { UserCardProps } from './UserCard';
 export type { TeamItemProps } from './TeamItem';
@@ -18,3 +19,4 @@ export type { ChannelItemProps } from './ChannelItem';
 export type { SearchBarProps } from './SearchBar';
 export type { ChannelHeaderProps } from './ChannelHeader';
 export type { TeamHeaderProps } from './TeamHeader';
+export type { TeamMenuProps, TeamMenuOptions } from './TeamMenu';

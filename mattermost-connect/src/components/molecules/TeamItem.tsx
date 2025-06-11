@@ -1,21 +1,19 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { 
   Box, 
   Avatar, 
-  Badge, 
   Tooltip,
   ListItem,
   ListItemAvatar,
   ListItemButton,
   ListItemText,
-  IconButton,
-  Menu,
-  MenuItem
+  Badge,
 } from '@mui/material';
-import { MoreVert as MoreVertIcon } from '@mui/icons-material';
 import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { getTeamsUnreadStatuses } from '../../store/selectors';
+import { selectTeamUnreadData } from '../../store/selectors';
+import { TeamMenu } from './TeamMenu';
+import { UnreadBadge } from '../atoms/UnreadBadge';
 import type { Team } from '../../api/types';
 
 export interface TeamItemProps {
@@ -24,6 +22,9 @@ export interface TeamItemProps {
   isActive?: boolean;
   onClick?: () => void;
   onOpenSettings?: (team: Team) => void;
+  onOpenMembers?: (team: Team) => void;
+  onOpenInfo?: (team: Team) => void;
+  onLeaveTeam?: (team: Team) => void;
   showMenu?: boolean;
   compact?: boolean; // For icon-only display in sidebar
   className?: string;
@@ -36,104 +37,112 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   isActive = false,
   onClick,
   onOpenSettings,
+  onOpenMembers,
+  onOpenInfo,
+  onLeaveTeam,
   showMenu = false,
   compact = false,
   className,
   sx
 }) => {
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-  
-  // Get unread statuses using official Mattermost pattern
-  const teamUnreadStatuses = useAppSelector(getTeamsUnreadStatuses);
-  const [unreadTeamsSet, mentionsInTeamMap] = teamUnreadStatuses;
-  const hasUnreads = unreadTeamsSet.has(team.id);
-  const mentionCount = mentionsInTeamMap.get(team.id) || 0;
+  // Get unread data for this team
+  const teamUnreadData = useAppSelector(selectTeamUnreadData(team.id));
+  const unreadCount = teamUnreadData.msg_count;
+  const mentionCount = teamUnreadData.mention_count;
+  const hasUnreads = unreadCount > 0 || mentionCount > 0;
 
-
-  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    event.stopPropagation();
-    setMenuAnchorEl(event.currentTarget);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setMenuAnchorEl(null);
-  }, []);
-
-  const handleSettingsClick = useCallback(() => {
+  // Handlers for TeamMenu (convert team param callbacks to no-param callbacks)
+  const handleOpenSettings = React.useCallback(() => {
     onOpenSettings?.(team);
-    handleMenuClose();
-  }, [onOpenSettings, team, handleMenuClose]);
+  }, [onOpenSettings, team]);
+
+  const handleOpenMembers = React.useCallback(() => {
+    onOpenMembers?.(team);
+  }, [onOpenMembers, team]);
+
+  const handleOpenInfo = React.useCallback(() => {
+    onOpenInfo?.(team);
+  }, [onOpenInfo, team]);
+
+  const handleLeaveTeam = React.useCallback(() => {
+    onLeaveTeam?.(team);
+  }, [onLeaveTeam, team]);
   // Tabs layout (header tabs)
   if (layout === 'tabs') {
     return (
-      <Tooltip title={team.display_name || team.name} arrow>
-        <Box
-          className={className}
-          sx={{
-            px: { xs: 2, sm: 3 },
-            py: 1.5,
-            minWidth: 'fit-content',
-            maxWidth: 200,
-            display: 'flex',
-            alignItems: 'center',
-            color: isActive ? 'primary.main' : 'text.primary',
-            cursor: 'pointer',
-            borderBottom: isActive ? '3px solid' : '3px solid transparent',
-            borderColor: isActive ? 'primary.main' : 'transparent',
-            fontWeight: isActive ? 600 : 400,
-            fontSize: { xs: '0.875rem', sm: '1rem' },
-            bgcolor: 'transparent',
-            '&:hover': {
-              bgcolor: 'action.hover',
-              color: 'primary.main',
+      <Box
+        className={className}
+        sx={{
+          px: { xs: 2, sm: 3 },
+          py: 1.5,
+          minWidth: 'fit-content',
+          maxWidth: 200,
+          display: 'flex',
+          alignItems: 'center',
+          color: isActive ? 'primary.main' : 'text.primary',
+          borderBottom: isActive ? '3px solid' : '3px solid transparent',
+          borderColor: isActive ? 'primary.main' : 'transparent',
+          fontWeight: isActive ? 600 : 400,
+          fontSize: { xs: '0.875rem', sm: '1rem' },
+          bgcolor: 'transparent',
+          '&:hover': {
+            bgcolor: 'action.hover',
+            color: 'primary.main',
+            '& .team-menu-button': {
+              opacity: 1,
             },
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-            position: 'relative',
-            gap: 1,
-            transition: 'all 0.2s ease',
-            ...sx
-          }}
-          onClick={onClick}
-        >
-          {team.display_name || team.name}
-        
-        {/* Mention badge - inline, not absolute */}
-        {mentionCount > 0 && (
-          <Badge
-            badgeContent={mentionCount}
-            color="error"
-            sx={{
-              '& .MuiBadge-badge': {
-                fontSize: '0.625rem',
-                height: 16,
-                minWidth: 16,
-                fontWeight: 600,
-                position: 'static',
-                transform: 'none',
-              }
-            }}
-          >
-            <Box sx={{ width: 0, height: 0 }} />
-          </Badge>
-        )}
-        
-        {/* Unread dot - inline, not absolute */}
-        {hasUnreads && mentionCount === 0 && (
+          },
+          overflow: 'visible',
+          flexShrink: 0,
+          position: 'relative',
+          gap: 1,
+          transition: 'all 0.2s ease',
+          ...sx
+        }}
+      >
+        <Tooltip title={team.display_name || team.name} arrow>
           <Box
             sx={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              bgcolor: 'warning.main',
-              flexShrink: 0,
+              cursor: 'pointer',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1,
             }}
+            onClick={onClick}
+          >
+            {team.display_name || team.name}
+          </Box>
+        </Tooltip>
+        
+        {/* Unread badge with smart priority logic */}
+        <UnreadBadge 
+          count={unreadCount} 
+          mentions={mentionCount} 
+          size="sm"
+        />
+
+        {/* Team Menu - appears on hover */}
+        <Box
+          className="team-menu-button"
+          sx={{
+            opacity: 0,
+            transition: 'opacity 0.2s ease',
+            '&:hover': {
+              opacity: 1,
+            },
+          }}
+        >
+          <TeamMenu 
+            team={team} 
+            size="small"
+            onOpenSettings={handleOpenSettings}
+            onOpenMembers={handleOpenMembers}
+            onOpenInfo={handleOpenInfo}
+            onLeaveTeam={handleLeaveTeam}
           />
-        )}
+        </Box>
       </Box>
-      </Tooltip>
     );
   }
 
@@ -142,24 +151,10 @@ export const TeamItem: React.FC<TeamItemProps> = ({
     return (
       <Box className={className} sx={{ display: 'flex', alignItems: 'center', m: 0.5, ...sx }}>
         <Tooltip title={`${team.display_name}${hasUnreads ? ` (unread messages)` : ''}`}>
-          <Badge
-            badgeContent={mentionCount > 0 ? mentionCount : 0}
-            color="error"
-            variant={mentionCount > 0 ? 'standard' : 'dot'}
-            invisible={mentionCount === 0 && !hasUnreads}
-            sx={{
-              '& .MuiBadge-badge': {
-                fontSize: '0.625rem',
-                height: 18,
-                minWidth: 18,
-                fontWeight: 600,
-              },
-              '& .MuiBadge-dot': {
-                height: 8,
-                minWidth: 8,
-                backgroundColor: hasUnreads ? 'info.main' : 'transparent',
-              }
-            }}
+          <UnreadBadge 
+            count={unreadCount} 
+            mentions={mentionCount} 
+            size="sm"
           >
             <Avatar
               src={getTeamIconUrl(team) || undefined}
@@ -173,7 +168,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
             >
               {getTeamInitials(team)}
             </Avatar>
-          </Badge>
+          </UnreadBadge>
         </Tooltip>
       </Box>
     );
@@ -193,24 +188,10 @@ export const TeamItem: React.FC<TeamItemProps> = ({
         }}
       >
         <Tooltip title={`${team.display_name}${hasUnreads ? ` (unread messages)` : ''}`}>
-          <Badge
-            badgeContent={mentionCount > 0 ? mentionCount : 0}
-            color="error"
-            variant={mentionCount > 0 ? 'standard' : 'dot'}
-            invisible={mentionCount === 0 && !hasUnreads}
-            sx={{
-              '& .MuiBadge-badge': {
-                fontSize: '0.625rem',
-                height: 16,
-                minWidth: 16,
-                fontWeight: 600,
-              },
-              '& .MuiBadge-dot': {
-                height: 6,
-                minWidth: 6,
-                backgroundColor: hasUnreads ? 'warning.main' : 'transparent',
-              }
-            }}
+          <UnreadBadge 
+            count={unreadCount} 
+            mentions={mentionCount} 
+            size="sm"
           >
             <Avatar
               src={getTeamIconUrl(team) || undefined}
@@ -228,7 +209,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
             >
               {getTeamInitials(team)}
             </Avatar>
-          </Badge>
+          </UnreadBadge>
         </Tooltip>
       </Box>
     );
@@ -243,30 +224,20 @@ export const TeamItem: React.FC<TeamItemProps> = ({
       secondaryAction={
         showMenu && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* Mention badge only */}
-            {mentionCount > 0 && (
-              <Badge
-                badgeContent={mentionCount}
-                color="error"
-                sx={{
-                  '& .MuiBadge-badge': {
-                    fontSize: '0.75rem',
-                    height: 18,
-                    minWidth: 18,
-                    fontWeight: 600,
-                  }
-                }}
-              >
-                <Box sx={{ width: 8, height: 8 }} />
-              </Badge>
-            )}
-            <IconButton
-              edge="end"
-              aria-label="team options"
-              onClick={handleMenuOpen}
-            >
-              <MoreVertIcon />
-            </IconButton>
+            {/* Unread badge */}
+            <UnreadBadge 
+              count={unreadCount} 
+              mentions={mentionCount} 
+              size="sm"
+            />
+            <TeamMenu 
+              team={team} 
+              size="small"
+              onOpenSettings={handleOpenSettings}
+              onOpenMembers={handleOpenMembers}
+              onOpenInfo={handleOpenInfo}
+              onLeaveTeam={handleLeaveTeam}
+            />
           </Box>
         )
       }
@@ -303,18 +274,6 @@ export const TeamItem: React.FC<TeamItemProps> = ({
         />
       </ListItemButton>
 
-      {/* Team menu - only for vertical layout */}
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={handleMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <MenuItem onClick={handleSettingsClick}>Team Settings</MenuItem>
-        <MenuItem onClick={handleMenuClose}>Manage Members</MenuItem>
-        <MenuItem onClick={handleMenuClose}>View Team Info</MenuItem>
-      </Menu>
     </ListItem>
   );
 };

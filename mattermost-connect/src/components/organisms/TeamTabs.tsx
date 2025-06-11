@@ -23,6 +23,10 @@ export interface TeamTabsProps {
   onCreate: () => void;
   showCreateButton?: boolean;
   sx?: SxProps<Theme>;
+  onOpenSettings?: (team: Team) => void;
+  onOpenMembers?: (team: Team) => void;
+  onOpenInfo?: (team: Team) => void;
+  onLeaveTeam?: (team: Team) => void;
 }
 
 /**
@@ -33,6 +37,10 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
   showCreateButton = true,
   onCreate,
   sx,
+  onOpenSettings,
+  onOpenMembers,
+  onOpenInfo,
+  onLeaveTeam,
 }) => {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -170,6 +178,10 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
         {/* All Teams */}
         {teams.map((team) => {
           const handleClick = () => handleTeamSelect(team);
+          const handleSettings = () => onOpenSettings?.(team);
+          const handleMembers = () => onOpenMembers?.(team);
+          const handleInfo = () => onOpenInfo?.(team);
+          const handleLeave = () => onLeaveTeam?.(team);
           return (
             <Box
               key={team.id}
@@ -181,6 +193,10 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
                 layout="tabs"
                 isActive={currentTeamId === team.id}
                 onClick={handleClick}
+                onOpenSettings={handleSettings}
+                onOpenMembers={handleMembers}
+                onOpenInfo={handleInfo}
+                onLeaveTeam={handleLeave}
               />
             </Box>
           );

@@ -18,7 +18,7 @@ export interface EnrichedChannel extends Channel {
 }
 
 // ============================================================================
-// PATTERN 1: BASE SELECTORS (non-memoized, simple accessors) - Mattermost pattern
+// non-memoized, simple accessors - Mattermost pattern
 // Usage: const data = useAppSelector(selectChannelsData);
 // ============================================================================
 
@@ -31,8 +31,6 @@ export const selectCurrentUserId = (state: RootState) => state.entities.users.cu
 export const selectChannelsState = (state: RootState) => state.entities.channels;
 export const selectCurrentChannelId = (state: RootState) => state.entities.channels.currentChannelId;
 export const selectChannelsData = (state: RootState) => state.entities.channels.channels;
-export const selectChannelUnreads = (state: RootState) => state.entities.channels.unreads;
-export const selectChannelMembers = (state: RootState) => state.entities.channels.myMembers;
 
 // ============================================================================
 // MEMOIZED TEAM SELECTORS
@@ -55,12 +53,8 @@ export const selectTeamsById = createSelector(
   (teamsState) => teamsState.teams
 );
 
-// ============================================================================
-// PATTERN 2: CURRENT TEAM/CHANNEL SELECTORS (like Mattermost getChannelsInCurrentTeam)
-// ============================================================================
-
 /**
- * Get channels in current team (Pattern 2) - Exact Mattermost pattern
+ * Get channels in current team - Exact Mattermost pattern
  * Like getChannelsInCurrentTeam but for any current context
  */
 export const selectChannelsInCurrentTeam = createSelector(
@@ -189,75 +183,16 @@ export const selectTeamById = (teamId: string | null) => createSelector(
 );
 
 /**
- * Get teams unread statuses (exact Mattermost pattern)
- * Returns [unreadTeamsSet, mentionsInTeamMap] like official Mattermost
+ * Get team unreads data directly from state - no processing needed
  */
-export const getTeamsUnreadStatuses = createSelector(
-  [
-    (state: RootState) => state.entities.teams.unreads,
-  ],
-  (teamUnreads): [Set<string>, Map<string, number>] => {
-    const teamUnreadsSet = new Set<string>();
-    const teamMentionsMap = new Map<string, number>();
-
-    // Iterate through team unreads (from /users/me/teams/unread API)
-    for (const [teamId, unread] of Object.entries(teamUnreads)) {
-      // Add team to unread set if it has unread messages
-      if (unread.msg_count > 0) {
-        teamUnreadsSet.add(teamId);
-      }
-
-      // Add mentions count
-      if (unread.mention_count > 0) {
-        teamMentionsMap.set(teamId, unread.mention_count);
-      }
-    }
-
-    return [teamUnreadsSet, teamMentionsMap];
-  }
-);
+export const selectTeamUnreads = (state: RootState) => state.entities.teams.unreads;
 
 /**
- * Get teams with unread data (derived selector) - Mattermost pattern
- * Uses getTeamsUnreadStatuses for consistency with official Mattermost
+ * Get unread data for specific team (memoized)
  */
-export const selectTeamsWithUnreads = createSelector(
-  [
-    selectTeams,
-    selectCurrentTeamId,
-    getTeamsUnreadStatuses
-  ],
-  (teams, currentTeamId, [unreadTeamsSet, mentionsInTeamMap]) => {
-    return teams.map(team => {
-      const hasUnreads = unreadTeamsSet.has(team.id);
-      const mentionCount = mentionsInTeamMap.get(team.id) || 0;
-      
-      return {
-        ...team,
-        isActive: team.id === currentTeamId,
-        hasUnreads,
-        mentionCount,
-      };
-    });
-  }
-);
-
-/**
- * Get teams filtered by search query (memoized)
- * Performance benefit: Expensive filtering only happens when teams or query changes
- */
-export const selectTeamsByQuery = (searchQuery: string) => createSelector(
-  [selectTeams],
-  (teams) => {
-    if (!searchQuery.trim()) return teams;
-    
-    const query = searchQuery.toLowerCase().trim();
-    return teams.filter(team => 
-      team.display_name.toLowerCase().includes(query) ||
-      team.name.toLowerCase().includes(query) ||
-      (team.description || '').toLowerCase().includes(query)
-    );
-  }
+export const selectTeamUnreadData = (teamId: string) => createSelector(
+  [selectTeamUnreads],
+  (teamUnreads) => teamUnreads[teamId] || { msg_count: 0, mention_count: 0 }
 );
 
 
@@ -286,26 +221,9 @@ export const selectUsersArray = createSelector(
   (usersState) => Object.values(usersState.profiles)
 );
 
-/**
- * Get user by ID selector factory (memoized)
- * Usage: const selectUser = selectUserById(userId)
- */
-export const selectUserById = (userId: string | null) => createSelector(
-  [selectUsersState],
-  (usersState) => userId ? usersState.profiles[userId] : null
-);
-
 // ============================================================================
 // CHANNELS SELECTORS (continued from Pattern 1)
 // ============================================================================
-
-/**
- * Get channels as array (internal selector)
- */
-const selectChannelsArray = createSelector(
-  [selectChannelsState],
-  (channelsState) => Object.values(channelsState.channels)
-);
 
 /**
  * Get current channel with all enriched data (memoized)
@@ -319,33 +237,9 @@ export const selectCurrentChannel = createSelector(
   }
 );
 
-
-// ============================================================================
-// PATTERN 3: FACTORY SELECTORS (dynamic parameters) - Exact Mattermost pattern  
-// Usage: const getChannels = useMemo(() => makeSelectChannelsInTeam(), []); const channels = useAppSelector(state => getChannels(state, teamId));
-// ============================================================================
-
 // ============================================================================
 // CURRENT TEAM SELECTORS (no parameters, safe for useAppSelector)
 // ============================================================================
-
-
-/**
- * Get public channels in current team
- */
-export const selectPublicChannelsForCurrentTeam = createSelector(
-  [selectChannelsForCurrentTeam],
-  (teamChannels) => teamChannels.filter(channel => channel.type === 'O')
-);
-
-/**
- * Get private channels in current team
- */
-export const selectPrivateChannelsForCurrentTeam = createSelector(
-  [selectChannelsForCurrentTeam],
-  (teamChannels) => teamChannels.filter(channel => channel.type === 'P')
-);
-
 
 /**
  * Get channels for team (factory pattern) - Exact Mattermost pattern
@@ -362,44 +256,6 @@ export const makeSelectChannelsInTeam = () => createSelector(
   }
 );
 
-/**
- * Get direct message channels (memoized)
- * Following Mattermost pattern
- */
-export const selectDirectChannels = createSelector(
-  [selectChannelsArray],
-  (channels) => channels.filter(channel => channel.type === 'D')
-);
-
-/**
- * Get group message channels (memoized)
- */
-export const selectGroupChannels = createSelector(
-  [selectChannelsArray],
-  (channels) => channels.filter(channel => channel.type === 'G')
-);
-
-/**
- * Get public channels for team (factory pattern)
- */
-export const makeSelectPublicChannelsInTeam = () => {
-  const getChannelsInTeam = makeSelectChannelsInTeam();
-  return createSelector(
-    [getChannelsInTeam],
-    (teamChannels) => teamChannels.filter(channel => channel.type === 'O')
-  );
-};
-
-/**
- * Get private channels for team (factory pattern)
- */
-export const makeSelectPrivateChannelsInTeam = () => {
-  const getChannelsInTeam = makeSelectChannelsInTeam();
-  return createSelector(
-    [getChannelsInTeam],
-    (teamChannels) => teamChannels.filter(channel => channel.type === 'P')
-  );
-};
 
 /**
  * Get my channel member by ID (memoized)
@@ -422,82 +278,6 @@ export const selectChannelById = (channelId: string) => createSelector(
     return channels.find(channel => channel.id === channelId) || null;
   }
 );
-
-/**
- * Check if channel is muted (memoized)
- */
-export const selectIsChannelMuted = (channelId: string) => createSelector(
-  [(state: RootState) => state.entities.channels.myMembers],
-  (channelMembers) => {
-    const membership = channelMembers[channelId];
-    return membership?.notify_props?.mark_unread === 'mention';
-  }
-);
-
-/**
- * Get channels with unread data for team (factory pattern)
- * Following Mattermost patterns for sidebar display
- */
-export const makeSelectChannelsWithUnreads = () => {
-  const getChannelsInTeam = makeSelectChannelsInTeam();
-  return createSelector(
-    [
-      getChannelsInTeam,
-      (state: RootState) => state.entities.channels.unreads,
-      (state: RootState) => state.entities.channels.myMembers,
-      selectCurrentChannelId
-    ],
-    (teamChannels, channelUnreads, channelMembers, currentChannelId) => {
-      return teamChannels.map(channel => {
-        const unread = channelUnreads[channel.id];
-        const membership = channelMembers[channel.id];
-        const isMuted = membership?.notify_props?.mark_unread === 'mention';
-        
-        const unreadCount = isMuted ? 0 : (unread?.msg_count || 0);
-        const mentionCount = unread?.mention_count || 0;
-        const hasUnreads = unreadCount > 0 || mentionCount > 0;
-        
-        return {
-          ...channel,
-          isActive: channel.id === currentChannelId,
-          hasUnreads,
-          unreadCount,
-          mentionCount,
-          isMuted,
-        };
-      });
-    }
-  );
-};
-
-/**
- * Get channels sorted by Mattermost sidebar order (factory pattern)
- * Performance benefit: Expensive sorting only on data change
- */
-export const makeSelectChannelsSortedBySidebar = () => {
-  const getChannelsWithUnreads = makeSelectChannelsWithUnreads();
-  return createSelector(
-    [getChannelsWithUnreads],
-    (channels) => {
-      return [...channels].sort((a, b) => {
-        // Active channel first
-        if (a.isActive) return -1;
-        if (b.isActive) return 1;
-        
-        // Channels with mentions next
-        if (a.mentionCount > 0 && b.mentionCount === 0) return -1;
-        if (b.mentionCount > 0 && a.mentionCount === 0) return 1;
-        
-        // Channels with unreads next
-        if (a.hasUnreads && !b.hasUnreads) return -1;
-        if (b.hasUnreads && !a.hasUnreads) return 1;
-        
-        // Alphabetical for the rest
-        return a.display_name.localeCompare(b.display_name);
-      });
-    }
-  );
-};
 
 // ============================================================================
 // WEBSOCKET & TYPING EVENTS SELECTORS
@@ -602,36 +382,6 @@ export const selectTypingMessageForChannel = (channelId: string) => createSelect
     if (typingUsers.length === 1) return `${typingUsers[0]} is typing...`;
     if (typingUsers.length === 2) return `${typingUsers[0]} and ${typingUsers[1]} are typing...`;
     return 'Several people are typing...';
-  }
-);
-
-// ============================================================================
-// COMBINED SELECTORS (most performance-critical)
-// ============================================================================
-
-/**
- * Get teams sorted by activity (memoized)
- * Performance benefit: Expensive sorting only on data change
- */
-export const selectTeamsSortedByActivity = createSelector(
-  [selectTeamsWithUnreads],
-  (teams) => {
-    return [...teams].sort((a, b) => {
-      // Active team first
-      if (a.isActive) return -1;
-      if (b.isActive) return 1;
-      
-      // Teams with mentions next
-      if (a.mentionCount > 0 && b.mentionCount === 0) return -1;
-      if (b.mentionCount > 0 && a.mentionCount === 0) return 1;
-      
-      // Teams with unreads next
-      if (a.hasUnreads && !b.hasUnreads) return -1;
-      if (b.hasUnreads && !a.hasUnreads) return 1;
-      
-      // Alphabetical for the rest
-      return a.display_name.localeCompare(b.display_name);
-    });
   }
 );
 

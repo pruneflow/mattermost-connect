@@ -2,6 +2,7 @@ import { useMemo, useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { setCurrentChannelId } from '../store/slices/entitiesSlice';
+import { useUnreadCounts } from './useUnreadCounts';
 import {
   selectCurrentTeamId,
   selectChannelsForCurrentTeam,
@@ -22,6 +23,7 @@ import {
 export const useChannels = () => {
   const dispatch = useAppDispatch();
   const currentTeamId = useAppSelector(selectCurrentTeamId);
+  const { markChannelAsRead } = useUnreadCounts();
   
   // Get all enriched channels for current team
   const allChannels = useAppSelector(selectChannelsForCurrentTeam);
@@ -47,7 +49,9 @@ export const useChannels = () => {
   // Actions
   const switchToChannel = useCallback((channelId: string) => {
     dispatch(setCurrentChannelId(channelId));
-  }, [dispatch]);
+    // Mark channel as read when switching to it
+    markChannelAsRead(channelId);
+  }, [dispatch, markChannelAsRead]);
 
   return {
     currentChannel,

@@ -1,10 +1,52 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { UserProfile, Team, Channel, Post, TeamMember, ChannelMember, UserStatus } from '../../api/types';
+import { UserProfile, Team, Channel, Post, TeamMember, ChannelMember, UserStatus, TeamStats } from '../../api/types';
 import { client } from '../../api/client';
 
 // ============================================================================
 // ASYNC THUNKS - Centralized Data Loading (Mattermost pattern)
 // ============================================================================
+
+/**
+ * Update team member scheme roles (like Mattermost)
+ */
+export const updateTeamMemberRoles = createAsyncThunk(
+  'entities/updateTeamMemberRoles',
+  async ({ teamId, userId, isSchemeAdmin }: { teamId: string; userId: string; isSchemeAdmin: boolean }, { dispatch, rejectWithValue }) => {
+    try {
+      // Utilise l'endpoint /schemeRoles comme Mattermost
+      await client.updateTeamMemberSchemeRoles(teamId, userId, true, isSchemeAdmin);
+      
+      // Calculate roles string for store update
+      const roles = isSchemeAdmin ? 'team_admin team_user' : 'team_user';
+      
+      // Update store with new roles
+      dispatch(updateTeamMemberRole({ teamId, userId, roles }));
+      
+      return { teamId, userId, roles };
+    } catch (error) {
+      return rejectWithValue({ teamId, userId, error: error instanceof Error ? error.message : 'Failed to update member roles' });
+    }
+  }
+);
+
+/**
+ * Remove user from team
+ */
+export const removeUserFromTeam = createAsyncThunk(
+  'entities/removeUserFromTeam',
+  async ({ teamId, userId }: { teamId: string; userId: string }, { dispatch, rejectWithValue }) => {
+    try {
+      await client.removeFromTeam(teamId, userId);
+      
+      // Update store - remove user from team
+      dispatch(removeUserFromTeamAction({ teamId, userId }));
+      
+      return { teamId, userId };
+    } catch (error) {
+      return rejectWithValue({ teamId, userId, error: error instanceof Error ? error.message : 'Failed to remove user from team' });
+    }
+  }
+);
 
 /**
  * Load channels for specific team with store verification
@@ -117,6 +159,7 @@ export interface EntitiesState {
     teams: Record<string, Team>;
     myMembers: Record<string, TeamMember>;
     unreads: Record<string, { msg_count: number; mention_count: number }>;
+    stats: Record<string, TeamStats>;
   };
   channels: {
     currentChannelId: string;
@@ -144,6 +187,7 @@ const initialState: EntitiesState = {
     teams: {},
     myMembers: {},
     unreads: {},
+    stats: {},
   },
   channels: {
     currentChannelId: '',
@@ -247,6 +291,39 @@ const entitiesSlice = createSlice({
       const teamId = action.payload;
       if (state.teams.unreads[teamId]) {
         state.teams.unreads[teamId] = { msg_count: 0, mention_count: 0 };
+      }
+    },
+    updateTeamMemberRole: (state, action: PayloadAction<{ teamId: string; userId: string; roles: string }>) => {
+      const { teamId, userId, roles } = action.payload;
+      if (state.teams.myMembers[teamId] && state.teams.myMembers[teamId].user_id === userId) {
+        state.teams.myMembers[teamId].roles = roles;
+      }
+    },
+    removeUserFromTeamAction: (state, action: PayloadAction<{ teamId: string; userId: string }>) => {
+      const { teamId, userId } = action.payload;
+      if (state.teams.myMembers[teamId] && state.teams.myMembers[teamId].user_id === userId) {
+        delete state.teams.myMembers[teamId];
+      }
+      // Note: User profiles are managed separately via useTeamMembers hook
+    },
+
+    // Team Stats
+    setTeamStats: (state, action: PayloadAction<{ teamId: string; stats: TeamStats }>) => {
+      const { teamId, stats } = action.payload;
+      state.teams.stats[teamId] = stats;
+    },
+    incrementTeamMemberCount: (state, action: PayloadAction<string>) => {
+      const teamId = action.payload;
+      if (state.teams.stats[teamId]) {
+        state.teams.stats[teamId].total_member_count += 1;
+        state.teams.stats[teamId].active_member_count += 1;
+      }
+    },
+    decrementTeamMemberCount: (state, action: PayloadAction<string>) => {
+      const teamId = action.payload;
+      if (state.teams.stats[teamId]) {
+        state.teams.stats[teamId].total_member_count = Math.max(0, state.teams.stats[teamId].total_member_count - 1);
+        state.teams.stats[teamId].active_member_count = Math.max(0, state.teams.stats[teamId].active_member_count - 1);
       }
     },
 
@@ -450,6 +527,13 @@ export const {
   setTeamUnreads,
   incrementTeamUnreadCount,
   resetTeamUnreadCount,
+  updateTeamMemberRole,
+  removeUserFromTeamAction,
+  
+  // Team Stats
+  setTeamStats,
+  incrementTeamMemberCount,
+  decrementTeamMemberCount,
   
   // Channels
   setCurrentChannelId,
@@ -473,5 +557,6 @@ export const {
   clearCurrentUser,
   clearEntities,
 } = entitiesSlice.actions;
+
 
 export default entitiesSlice.reducer;

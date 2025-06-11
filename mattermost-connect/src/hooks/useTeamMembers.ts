@@ -1,0 +1,186 @@
+import { useState, useCallback } from 'react';
+import { useAppDispatch } from './useAppDispatch';
+import { useErrorHandler } from './useErrorHandler';
+import { useTeamStats } from './useTeamStats';
+import { updateTeamMemberRoles, removeUserFromTeam } from '../store/slices/entitiesSlice';
+import { client } from '../api/client';
+import type { UserProfile, TeamMember } from '../api/types';
+
+/**
+ * Hook for loading team members following exact Mattermost pattern
+ * Keeps users and teamMembers separate to avoid role conflicts
+ * Loads fresh data on each call (no caching) - exactly like Mattermost does
+ */
+export const useTeamMembers = (teamId: string | null) => {
+  const dispatch = useAppDispatch();
+  const { handleError } = useErrorHandler();
+  const { stats, loading: statsLoading } = useTeamStats(teamId || '');
+  
+  const [loading, setLoading] = useState(false);
+  // ✅ Exactly like Mattermost: separate arrays, no conflicts
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [teamMembers, setTeamMembers] = useState<{ [userId: string]: TeamMember }>({});
+  const [currentPage, setCurrentPage] = useState(0);
+  
+  /**
+   * Load team members for specific page - following Mattermost's exact pattern:
+   * 1. GET /api/v4/users?active=true&in_team={teamId}&page={page}&per_page=100&sort=
+   * 2. GET /api/v4/teams/{teamId}/members?page={page}&per_page=50&sort=Username&exclude_deleted_users=true
+   * Note: Team stats are handled by useTeamStats hook
+   */
+  const loadTeamMembers = useCallback(async (page = 0) => {
+    if (!teamId) return;
+    
+    setLoading(true);
+    try {
+      console.log(`Loading team members for team ${teamId}, page ${page}`);
+      
+      // Run API calls in parallel for better performance
+      const [profilesInTeam, membersInTeam] = await Promise.all([
+        // 1. Get active users in team (exactly like Mattermost)
+        client.getProfilesInTeam(teamId, page, 100, '', {
+          active: true,
+        }),
+        
+        // 2. Get team members with roles (exactly like Mattermost)
+        client.getTeamMembers(teamId, page, 50, {
+          sort: 'Username',
+          exclude_deleted_users: true,
+        }),
+      ]);
+
+      // ✅ Mattermost pattern: convert array to dictionary by user_id
+      const teamMembersById: { [userId: string]: TeamMember } = {};
+      membersInTeam.forEach(member => {
+        teamMembersById[member.user_id] = member;
+      });
+      
+      // ✅ Store separately like Mattermost (NO role conflicts)
+      setUsers(profilesInTeam);
+      setTeamMembers(teamMembersById);
+      setCurrentPage(page);
+      
+      console.log(`Loaded ${profilesInTeam.length} users and ${membersInTeam.length} members for team ${teamId}, page ${page}`);
+      
+    } catch (error) {
+      handleError(error, {
+        component: 'useTeamMembers',
+        action: 'loadTeamMembers',
+        showToast: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [teamId, handleError]);
+  
+  // ✅ Filter active members exactly like Mattermost
+  const activeMembers = users.filter(user => {
+    const teamMember = teamMembers[user.id];
+    return teamMember && !teamMember.delete_at;
+  });
+  
+  // Pagination helpers
+  const totalPages = stats ? Math.ceil(stats.total_member_count / 50) : 0;
+  const hasNextPage = currentPage < totalPages - 1;
+  const hasPrevPage = currentPage > 0;
+  
+  const loadNextPage = useCallback(() => {
+    if (hasNextPage) {
+      loadTeamMembers(currentPage + 1);
+    }
+  }, [currentPage, hasNextPage, loadTeamMembers]);
+  
+  const loadPrevPage = useCallback(() => {
+    if (hasPrevPage) {
+      loadTeamMembers(currentPage - 1);
+    }
+  }, [currentPage, hasPrevPage, loadTeamMembers]);
+  
+  const goToPage = useCallback((page: number) => {
+    if (page >= 0 && page < totalPages) {
+      loadTeamMembers(page);
+    }
+  }, [totalPages, loadTeamMembers]);
+
+  // Actions pour mettre à jour le store (comme les autres hooks)
+  const updateMemberRole = useCallback(async (userId: string, isSchemeAdmin: boolean) => {
+    if (!teamId) return;
+    
+    try {
+      await dispatch(updateTeamMemberRoles({ teamId, userId, isSchemeAdmin })).unwrap();
+      // Mettre à jour l'état local pour refléter le changement immédiatement
+      setTeamMembers(prev => {
+        const updated = { ...prev };
+        if (updated[userId]) {
+          updated[userId] = {
+            ...updated[userId],
+            roles: isSchemeAdmin ? 'team_admin team_user' : 'team_user'
+          };
+        }
+        return updated;
+      });
+    } catch (error) {
+      handleError(error, {
+        component: 'useTeamMembers',
+        action: 'updateMemberRole',
+        showToast: true,
+      });
+      throw error;
+    }
+  }, [teamId, dispatch, handleError]);
+
+  const removeMember = useCallback(async (userId: string) => {
+    if (!teamId) return;
+    
+    try {
+      await dispatch(removeUserFromTeam({ teamId, userId })).unwrap();
+      // Supprimer de l'état local immédiatement
+      setUsers(prev => prev.filter(user => user.id !== userId));
+      setTeamMembers(prev => {
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
+      });
+    } catch (error) {
+      handleError(error, {
+        component: 'useTeamMembers',
+        action: 'removeMember',
+        showToast: true,
+      });
+      throw error;
+    }
+  }, [teamId, dispatch, handleError]);
+  
+  // ✅ Get admin count from teamMembers (not user roles)
+  const adminCount = Object.values(teamMembers).filter(member => 
+    member?.roles?.includes('team_admin')
+  ).length;
+  
+  return {
+    // ✅ Data exactly like Mattermost: separated, no conflicts
+    users,                    // UserProfile[] - system level data
+    teamMembers,             // { [userId]: TeamMember } - team level data
+    activeMembers,           // Filtered users that are active team members
+    stats,                   // Team statistics from useTeamStats
+    adminCount,              // Count from team roles (not user roles)
+    
+    // Pagination state
+    currentPage,
+    totalPages,
+    hasNextPage,
+    hasPrevPage,
+    
+    // State
+    loading: loading || statsLoading, // Combined loading state
+    
+    // Actions
+    loadTeamMembers,
+    loadNextPage,
+    loadPrevPage,
+    goToPage,
+    updateMemberRole,        // Update member role and store
+    removeMember,            // Remove member and update store
+  };
+};
+
+export default useTeamMembers;

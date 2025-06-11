@@ -9,7 +9,8 @@ export type {
 
 export type {
   Team,
-  TeamMembership as TeamMember
+  TeamMembership as TeamMember,
+  TeamStats
 } from '@mattermost/types/teams';
 
 export type {
