@@ -15,6 +15,7 @@ import {
   CircularProgress,
   Pagination,
   Divider,
+  Chip,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -26,8 +27,57 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectTeamById, selectCurrentUserId } from '../../store/selectors';
 import { SearchInput } from '../atoms/SearchInput';
 import { UserAvatar } from '../atoms/UserAvatar';
-import { displayUsername } from '../../utils/userUtils';
+import { displayUsername, getRoleChips, canChangeRole, isTeamAdmin, isSystemAdmin } from '../../utils/userUtils';
 import type { UserProfile } from '../../api/types';
+
+// ============================================================================
+// RENDER FUNCTIONS (outside component for performance)
+// ============================================================================
+
+const renderRoleChips = (
+  chips: any[], 
+  canChange: boolean, 
+  user: UserProfile,
+  isMobile: boolean,
+  isUpdating: boolean,
+  onRoleMenuOpen: (e: React.MouseEvent<HTMLElement>, user: UserProfile) => void
+) => (
+  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+    {chips.map((chip, chipIndex) => (
+      <Chip
+        key={chipIndex}
+        label={chip.label}
+        color={chip.color}
+        variant={chip.variant}
+        size="small"
+        sx={{ 
+          fontSize: '0.75rem',
+          borderRadius: 2,
+        }}
+      />
+    ))}
+    {canChange && (
+      <IconButton
+        size="small"
+        onClick={(e) => onRoleMenuOpen(e, user)}
+        disabled={isUpdating}
+        sx={{
+          ml: isMobile ? 0 : 0.5,
+          color: 'text.secondary',
+          '&:hover': {
+            bgcolor: 'action.hover',
+          }
+        }}
+      >
+        <ArrowDownIcon fontSize="small" />
+      </IconButton>
+    )}
+  </Box>
+);
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
 
 export interface ManageMembersDialogProps {
   open: boolean;
@@ -66,34 +116,18 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
 
   const canManage = team ? canManageTeam(team.id) : false;
 
-  // Helper functions pour les rôles exactement comme Mattermost
-  const isSystemAdmin = (user: UserProfile) => {
-    return user.roles?.includes('system_admin') || false;
-  };
-
-  const getTeamMemberRoles = (user: UserProfile) => {
-    const teamMember = teamMembers[user.id];
-    return teamMember?.roles || 'team_user';
-  };
-
-  const isTeamAdmin = (user: UserProfile) => {
-    return getTeamMemberRoles(user).includes('team_admin');
-  };
-
-  const getRoleDisplayName = (user: UserProfile) => {
-    if (isSystemAdmin(user)) return 'System Admin';
-    if (isTeamAdmin(user)) return 'Team Admin';
-    return 'Member';
-  };
-
-  const canChangeRole = (user: UserProfile) => {
-    // Exactement comme Mattermost: ne peut pas modifier un system admin
-    if (isSystemAdmin(user)) return false;
-    // Ne peut pas se modifier soi-même
-    if (user.id === currentUserId) return false;
-    // Doit avoir les permissions de gestion d'équipe
-    return canManage;
-  };
+  // Memoized member data with chips for performance
+  const members = React.useMemo(() => {
+    return activeMembers.map(user => {
+      const teamMember = teamMembers[user.id];
+      return {
+        user,
+        chips: getRoleChips(user, teamMembers),
+        canChange: canChangeRole(user, teamMembers, currentUserId || '', canManage),
+        isTeamAdmin: teamMember?.roles?.includes('team_admin') ?? false, // Pré-calculé
+      };
+    });
+  }, [activeMembers, teamMembers, currentUserId, canManage]);
 
   useEffect(() => {
     if (open && teamId) {
@@ -101,15 +135,17 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
     }
   }, [open, teamId, loadTeamMembers]);
 
-  const filteredMembers = activeMembers.filter(user => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      displayUsername(user, 'full_name_nickname', true).toLowerCase().includes(searchLower) ||
-      user.email?.toLowerCase().includes(searchLower) ||
-      user.username?.toLowerCase().includes(searchLower)
-    );
-  });
+  const filteredMembers = React.useMemo(() => {
+    return members.filter(({ user }) => {
+      if (!searchTerm) return true;
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        displayUsername(user, 'full_name_nickname', true).toLowerCase().includes(searchLower) ||
+        user.email?.toLowerCase().includes(searchLower) ||
+        user.username?.toLowerCase().includes(searchLower)
+      );
+    });
+  }, [members, searchTerm]);
 
   const handleClose = useCallback(() => {
     setSearchTerm('');
@@ -210,17 +246,22 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
             variant="h6"
             fontWeight={600}
           >
-            {team.display_name} Members
+{team.display_name}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {canManage && (
               <Button
                 variant="contained"
-                startIcon={<PersonAddIcon />}
+                startIcon={!isMobile ? <PersonAddIcon /> : undefined}
                 onClick={handleInvitePeople}
                 size="small"
+                sx={isMobile ? { 
+                  minWidth: 'auto', 
+                  px: 1, 
+                  borderRadius: 2 
+                } : undefined}
               >
-                Invite People
+                {isMobile ? <PersonAddIcon /> : 'Invite People'}
               </Button>
             )}
             <IconButton 
@@ -265,24 +306,28 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
               </Box>
             ) : (
               <List sx={{ py: 0 }}>
-                {filteredMembers.map((user, index) => {
-                  const roleDisplayName = getRoleDisplayName(user);
-                  const canChange = canChangeRole(user);
-                  
-                  return (
-                    <React.Fragment key={user.id}>
-                      <ListItem 
-                        sx={{ 
-                          py: 1.5,
-                          px: 3,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          }
-                        }}
-                      >
+                {filteredMembers.map(({ user, chips, canChange }, index) => (
+                  <React.Fragment key={user.id}>
+                    <ListItem 
+                      sx={{ 
+                        py: 1.5,
+                        px: 3,
+                        display: 'flex',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        alignItems: isMobile ? 'stretch' : 'center',
+                        gap: isMobile ? 1 : 2,
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        }
+                      }}
+                    >
+                      {/* Première ligne: Avatar + Info utilisateur (+ chips en desktop) */}
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 2,
+                        width: '100%'
+                      }}>
                         {/* Avatar avec statut */}
                         <UserAvatar 
                           user={user} 
@@ -307,39 +352,26 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
                           )}
                         </Box>
                         
-                        {/* Rôle cliquable */}
-                        <Box>
-                          {canChange ? (
-                            <Button
-                              variant="text"
-                              endIcon={<ArrowDownIcon />}
-                              onClick={(e) => handleRoleMenuOpen(e, user)}
-                              disabled={isUpdating}
-                              sx={{
-                                color: 'text.secondary',
-                                textTransform: 'none',
-                                '&:hover': {
-                                  bgcolor: 'action.hover',
-                                }
-                              }}
-                            >
-                              {roleDisplayName}
-                            </Button>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {roleDisplayName}
-                            </Typography>
-                          )}
+                        {/* Role chips en desktop seulement */}
+                        {!isMobile && renderRoleChips(chips, canChange, user, isMobile, isUpdating, handleRoleMenuOpen)}
+                      </Box>
+
+                      {/* Deuxième ligne en mobile: Role chips */}
+                      {isMobile && (
+                        <Box sx={{ 
+                          ml: 6 // Alignement avec le contenu (avatar width + gap)
+                        }}>
+                          {renderRoleChips(chips, canChange, user, isMobile, isUpdating, handleRoleMenuOpen)}
                         </Box>
-                      </ListItem>
-                      
-                      {/* Divider entre chaque membre sauf le dernier */}
-                      {index < filteredMembers.length - 1 && (
-                        <Divider sx={{ mx: 3 }} />
                       )}
-                    </React.Fragment>
-                  );
-                })}
+                    </ListItem>
+                    
+                    {/* Divider entre chaque membre sauf le dernier */}
+                    {index < filteredMembers.length - 1 && (
+                      <Divider sx={{ mx: 3 }} />
+                    )}
+                  </React.Fragment>
+                ))}
                 
                 {filteredMembers.length === 0 && !membersLoading && (
                   <Box sx={{ textAlign: 'center', py: 6 }}>
@@ -374,24 +406,29 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        {selectedMember && !isSystemAdmin(selectedMember) && (
-          <>
-            {!isTeamAdmin(selectedMember) && (
-              <MenuItem onClick={handleMakeAdmin}>
-                Make Team Admin
+        {selectedMember && !isSystemAdmin(selectedMember) && (() => {
+          const selectedMemberData = members.find(m => m.user.id === selectedMember.id);
+          const isSelectedTeamAdmin = selectedMemberData?.isTeamAdmin ?? false;
+          
+          return (
+            <>
+              {!isSelectedTeamAdmin && (
+                <MenuItem onClick={handleMakeAdmin}>
+                  Make Team Admin
+                </MenuItem>
+              )}
+              {isSelectedTeamAdmin && (
+                <MenuItem onClick={handleMakeMember}>
+                  Make Member
+                </MenuItem>
+              )}
+              <Divider />
+              <MenuItem onClick={handleRemoveMember} sx={{ color: 'error.main' }}>
+                Remove from Team
               </MenuItem>
-            )}
-            {isTeamAdmin(selectedMember) && (
-              <MenuItem onClick={handleMakeMember}>
-                Make Member
-              </MenuItem>
-            )}
-            <Divider />
-            <MenuItem onClick={handleRemoveMember} sx={{ color: 'error.main' }}>
-              Remove from Team
-            </MenuItem>
-          </>
-        )}
+            </>
+          );
+        })()}
       </Menu>
     </>
   );

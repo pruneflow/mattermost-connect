@@ -5,11 +5,12 @@ import {
   setCurrentUrl, 
   setNavigating, 
   setLastVisitedChannel, 
-  restoreLastVisitedChannels 
+  restoreLastVisitedChannels,
+  setLastVisited 
 } from '../store/slices/viewsSlice';
 import { useTeams } from './useTeams';
 import { useChannels } from './useChannels';
-import { selectTeamsById, selectCurrentTeamId, selectCurrentUrl, selectPreviousUrl, selectLastVisitedChannels, selectIsNavigating, selectChannelsForCurrentTeam, selectCurrentChannelId } from '../store/selectors';
+import { selectTeamsById, selectCurrentTeamId, selectCurrentUrl, selectPreviousUrl, selectLastVisitedChannels, selectLastVisited, selectIsNavigating, selectChannelsForCurrentTeam, selectCurrentChannelId } from '../store/selectors';
 import { selectChannelByRules } from '../utils/channelUtils';
 
 // URL parsing utilities following Mattermost pattern
@@ -69,6 +70,7 @@ export const useNavigation = () => {
   const currentUrl = useAppSelector(selectCurrentUrl);
   const previousUrl = useAppSelector(selectPreviousUrl);
   const lastVisitedChannels = useAppSelector(selectLastVisitedChannels);
+  const lastVisited = useAppSelector(selectLastVisited);
   const isNavigating = useAppSelector(selectIsNavigating);
   
   // Entity state for navigation - using memoized selectors
@@ -81,7 +83,7 @@ export const useNavigation = () => {
   const { switchTeam } = useTeams();
   const { switchToChannel } = useChannels();
   
-  // Restore last visited channels from localStorage on mount
+  // Restore last visited channels and last visited from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem('mattermostLastVisitedChannels');
@@ -89,8 +91,14 @@ export const useNavigation = () => {
         const parsed = JSON.parse(stored);
         dispatch(restoreLastVisitedChannels(parsed));
       }
+      
+      const storedLastVisited = localStorage.getItem('mattermostLastVisited');
+      if (storedLastVisited) {
+        const parsedLastVisited = JSON.parse(storedLastVisited);
+        dispatch(setLastVisited(parsedLastVisited));
+      }
     } catch (error) {
-      console.warn('Failed to restore last visited channels:', error);
+      console.warn('Failed to restore navigation state:', error);
     }
   }, [dispatch]);
   
@@ -102,6 +110,19 @@ export const useNavigation = () => {
       console.warn('Failed to save last visited channels:', error);
     }
   }, [lastVisitedChannels]);
+
+  // Save last visited to localStorage when updated
+  useEffect(() => {
+    try {
+      if (lastVisited) {
+        localStorage.setItem('mattermostLastVisited', JSON.stringify(lastVisited));
+      } else {
+        localStorage.removeItem('mattermostLastVisited');
+      }
+    } catch (error) {
+      console.warn('Failed to save last visited:', error);
+    }
+  }, [lastVisited]);
   
   // Navigate to URL - following Mattermost pattern (memory only)
   const navigateToUrl = useCallback((url: string) => {
@@ -139,6 +160,8 @@ export const useNavigation = () => {
   // Navigate to team - following Mattermost pattern
   const navigateToTeam = useCallback((teamId: string) => {
     const team = teams[teamId];
+    console.debug("Navigate To Team ", team )
+    console.debug("teams", teams)
     if (!team) return;
     
     // Get last visited channel for this team
@@ -146,7 +169,7 @@ export const useNavigation = () => {
     
     // Try to find best channel using our logic
     const bestChannelId = lastChannelId || selectChannelByRules(currentChannelId, allChannels);
-    
+    console.debug("bestChannelId", bestChannelId)
     if (bestChannelId) {
       // Navigate to specific channel
       navigateToChannel(teamId, bestChannelId);
@@ -170,6 +193,11 @@ export const useNavigation = () => {
   const getLastVisitedChannel = useCallback((teamId: string): string | null => {
     return lastVisitedChannels[teamId] || null;
   }, [lastVisitedChannels]);
+
+  // Get last visited team/channel globally
+  const getLastVisited = useCallback((): { teamId: string; channelId: string } | null => {
+    return lastVisited;
+  }, [lastVisited]);
   
   // Parse current URL
   const getCurrentLocation = useCallback((): ParsedUrl => {
@@ -200,6 +228,7 @@ export const useNavigation = () => {
     currentUrl,
     previousUrl,
     lastVisitedChannels,
+    lastVisited,
     isNavigating,
     
     // Navigation actions
@@ -211,6 +240,7 @@ export const useNavigation = () => {
     // Utilities
     getCurrentLocation,
     getLastVisitedChannel,
+    getLastVisited,
     isAtTeam,
     isAtChannel,
     parseUrl,

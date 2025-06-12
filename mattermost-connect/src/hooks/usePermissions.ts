@@ -8,7 +8,6 @@ import type { Team, Channel } from '../api/types';
 export const usePermissions = () => {
   const currentUser = useAppSelector(selectCurrentUser);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
-  const teams = useAppSelector(selectTeamsById);
   const teamMembers = useAppSelector(selectTeamMembers);
 
   // Helper to get user roles for a team

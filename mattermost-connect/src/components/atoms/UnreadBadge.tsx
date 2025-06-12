@@ -11,17 +11,18 @@ export interface UnreadBadgeProps {
   children?: React.ReactNode;
 }
 
-export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
+export const UnreadBadge = React.forwardRef<HTMLElement, UnreadBadgeProps>(({
   count,
   mentions = 0,
   size = 'md',
   className,
   sx,
-  children
-}) => {
+  children,
+  ...props
+}, ref) => {
   // Early return for empty badge
   if (count === 0 && mentions === 0) {
-    return children ? <>{children}</> : null;
+    return children || null;
   }
 
   // Memoized size configuration
@@ -95,14 +96,18 @@ export const UnreadBadge: React.FC<UnreadBadgeProps> = ({
 
   return (
     <Badge
+      ref={ref}
       badgeContent={badgeContent}
       color={badgeColor}
       className={className}
       sx={children ? childrenSx : standaloneSx}
+      {...props}
     >
       {children}
     </Badge>
   );
-};
+});
+
+UnreadBadge.displayName = 'UnreadBadge';
 
 export default UnreadBadge;

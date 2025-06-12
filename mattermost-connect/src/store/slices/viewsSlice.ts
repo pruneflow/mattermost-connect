@@ -6,6 +6,7 @@ export interface NavigationState {
   currentUrl: string;
   previousUrl: string;
   lastVisitedChannels: Record<string, string>; // teamId -> channelId
+  lastVisited: { teamId: string; channelId: string } | null; // Last visited team/channel globally
   isNavigating: boolean;
 }
 
@@ -45,6 +46,7 @@ const initialState: ViewsState = {
     currentUrl: '/',
     previousUrl: '/',
     lastVisitedChannels: {},
+    lastVisited: null,
     isNavigating: false,
   },
   channels: {
@@ -89,9 +91,13 @@ const viewsSlice = createSlice({
     setLastVisitedChannel: (state, action: PayloadAction<{ teamId: string; channelId: string }>) => {
       const { teamId, channelId } = action.payload;
       state.navigation.lastVisitedChannels[teamId] = channelId;
+      state.navigation.lastVisited = { teamId, channelId };
     },
     restoreLastVisitedChannels: (state, action: PayloadAction<Record<string, string>>) => {
       state.navigation.lastVisitedChannels = action.payload;
+    },
+    setLastVisited: (state, action: PayloadAction<{ teamId: string; channelId: string } | null>) => {
+      state.navigation.lastVisited = action.payload;
     },
 
     // Channel views
@@ -168,6 +174,7 @@ export const {
   setNavigating,
   setLastVisitedChannel,
   restoreLastVisitedChannels,
+  setLastVisited,
   
   // Channels
   setChannelSidebarOpen,

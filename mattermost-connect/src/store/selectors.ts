@@ -365,6 +365,7 @@ export const selectTeamMembers = (state: RootState) => state.entities.teams.myMe
 export const selectCurrentUrl = (state: RootState) => state.views.navigation.currentUrl;
 export const selectPreviousUrl = (state: RootState) => state.views.navigation.previousUrl;
 export const selectLastVisitedChannels = (state: RootState) => state.views.navigation.lastVisitedChannels;
+export const selectLastVisited = (state: RootState) => state.views.navigation.lastVisited;
 export const selectIsNavigating = (state: RootState) => state.views.navigation.isNavigating;
 
 // UI layout selectors
