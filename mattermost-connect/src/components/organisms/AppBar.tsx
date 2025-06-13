@@ -31,6 +31,7 @@ export interface AppBarProps {
    * Custom styles
    */
   sx?: SxProps<Theme>;
+  onLogout?: () => void;
 }
 
 /**
@@ -40,6 +41,7 @@ export interface AppBarProps {
 export const AppBar: React.FC<AppBarProps> = ({
   children,
   sx,
+  onLogout
 }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   
@@ -96,7 +98,7 @@ export const AppBar: React.FC<AppBarProps> = ({
             <UserMenu
               user={currentUser}
               size="medium"
-              showStatus={true}
+              onLogout={onLogout}
             />
           )}
         </Toolbar>

@@ -41,7 +41,15 @@ export const useAppInitialization = () => {
   const teams = useAppSelector(selectTeams);
 
   const initializeApp = useCallback(async () => {
+    console.log("🔍 App initialization check:", { 
+      isAuthenticated, 
+      currentUserId, 
+      hasToken: !!token, 
+      hasServerUrl: !!serverUrl 
+    });
+    
     if (!isAuthenticated || !currentUserId || !token || !serverUrl) {
+      console.log("❌ Missing required data for initialization");
       setIsInitialized(false);
       return;
     }

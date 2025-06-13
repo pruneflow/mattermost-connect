@@ -17,9 +17,10 @@ const serverUrl = localStorage.getItem('mattermostServerUrl');
 if (token && serverUrl) {
   client.setUrl(serverUrl);
   client.setToken(token);
-  // Disable cookies to avoid CORS issues with Access-Control-Allow-Origin: *
+  // NOTE: setIncludeCookies(false) to avoid CORS issues when server uses AllowCorsFrom: "*"
+  // If server is properly configured with specific origins, this can be set to true
   client.setIncludeCookies(false);
-  client.setEnableLogging(false);
+  client.setEnableLogging(true);
 }
 
 // Configure store inspired by Mattermost configureServiceStore()

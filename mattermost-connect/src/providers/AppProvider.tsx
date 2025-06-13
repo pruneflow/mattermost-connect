@@ -2,6 +2,8 @@ import React from 'react';
 import { Provider } from 'react-redux';
 import { store } from '../store';
 import { useAppInitialization } from '../hooks/useAppInitialization';
+import { useAppSelector } from '../hooks/useAppSelector';
+import { selectIsAuthenticated } from '../store/selectors';
 import { ThemeProvider } from './ThemeProvider';
 
 /**
@@ -9,9 +11,11 @@ import { ThemeProvider } from './ThemeProvider';
  */
 const AppInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isInitialized } = useAppInitialization();
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
   
-  // Following Mattermost pattern: don't render until properly initialized
-  if (!isInitialized) {
+  // Only show loading if we're authenticated but not yet initialized
+  // If not authenticated, let the app render (so LoginForm can be shown)
+  if (isAuthenticated && !isInitialized) {
     return <div style={{ padding: '20px', textAlign: 'center' }}>Initializing...</div>;
   }
   

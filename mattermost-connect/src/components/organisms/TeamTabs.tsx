@@ -25,6 +25,7 @@ export interface TeamTabsProps {
   sx?: SxProps<Theme>;
   onOpenSettings?: (team: Team) => void;
   onOpenMembers?: (team: Team) => void;
+  onOpenInvite?: (team: Team) => void;
   onOpenInfo?: (team: Team) => void;
   onLeaveTeam?: (team: Team) => void;
 }
@@ -39,6 +40,7 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
   sx,
   onOpenSettings,
   onOpenMembers,
+  onOpenInvite,
   onOpenInfo,
   onLeaveTeam,
 }) => {
@@ -180,6 +182,7 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
           const handleClick = () => handleTeamSelect(team);
           const handleSettings = () => onOpenSettings?.(team);
           const handleMembers = () => onOpenMembers?.(team);
+          const handleInvite = () => onOpenInvite?.(team);
           const handleInfo = () => onOpenInfo?.(team);
           const handleLeave = () => onLeaveTeam?.(team);
           return (
@@ -195,6 +198,7 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
                 onClick={handleClick}
                 onOpenSettings={handleSettings}
                 onOpenMembers={handleMembers}
+                onOpenInvite={handleInvite}
                 onOpenInfo={handleInfo}
                 onLeaveTeam={handleLeave}
               />

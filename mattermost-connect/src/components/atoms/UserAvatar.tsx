@@ -7,7 +7,7 @@ import type { UserProfile } from '../../api/types';
 
 export interface UserAvatarProps {
   user?: UserProfile;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'xs' | 'small' | 'medium' | 'large';
   showStatus?: boolean;
   onClick?: () => void;
   showTooltip?: boolean;
@@ -27,6 +27,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   const statusColor = getStatusColor(userStatus?.status);
   // Size mapping for MUI Avatar
   const sizeMap = {
+    xs: 24,
     small: 28,
     medium: 40,
     large: 56,
@@ -58,7 +59,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
         width: avatarSize,
         height: avatarSize,
         bgcolor: 'primary.main', // Use theme primary color (Mattermost blue in light)
-        fontSize: size === 'small' ? '12px' : size === 'medium' ? '14px' : '18px',
+        fontSize: size === 'xs' ? '10px' : size === 'small' ? '12px' : size === 'medium' ? '14px' : '18px',
         fontWeight: 600,
       }}
       onClick={onClick}
@@ -80,8 +81,8 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
       badgeContent={
         <Box
           sx={{
-            width: size === 'small' ? 8 : size === 'medium' ? 10 : 12,
-            height: size === 'small' ? 8 : size === 'medium' ? 10 : 12,
+            width: size === 'xs' ? 6 : size === 'small' ? 8 : size === 'medium' ? 10 : 12,
+            height: size === 'xs' ? 6 : size === 'small' ? 8 : size === 'medium' ? 10 : 12,
             borderRadius: '50%',
             bgcolor: statusColor,
             border: '2px solid',

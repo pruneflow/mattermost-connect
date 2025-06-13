@@ -15,8 +15,7 @@ import { useChannelLoader } from '../../hooks/useChannelLoader';
 import { useAutoChannelSelection } from '../../hooks/useAutoChannelSelection';
 import { useNavigation } from '../../hooks/useNavigation';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { selectCurrentTeam, selectCurrentChannelId } from '../../store/selectors';
-import type { Channel } from '../../api/types';
+import { selectCurrentTeam, selectCurrentChannelId, EnrichedChannel } from "../../store/selectors";
 
 export interface ChannelListProps {
   showSearch?: boolean;
@@ -62,14 +61,15 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   const { navigateToChannel } = useNavigation();
 
   // Filter function for search
-  const filterChannels = useCallback((channels: Channel[], query: string) => {
+  const filterChannels = useCallback((channels: EnrichedChannel[], query: string) => {
     if (!query.trim()) return channels;
     
     const q = query.toLowerCase().trim();
     return channels.filter(channel => 
       channel.display_name?.toLowerCase().includes(q) ||
       channel.name?.toLowerCase().includes(q) ||
-      channel.purpose?.toLowerCase().includes(q)
+      channel.purpose?.toLowerCase().includes(q) ||
+      channel.computedDisplayName?.toLowerCase().includes(q)
     );
   }, []);
 

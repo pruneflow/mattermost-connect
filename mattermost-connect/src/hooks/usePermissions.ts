@@ -101,6 +101,22 @@ export const usePermissions = () => {
     return haveITeamPermission(id, Permissions.CREATE_PRIVATE_CHANNEL);
   }, [currentTeamId, haveITeamPermission]);
 
+  const canInviteUser = useCallback((teamId?: string): boolean => {
+    const id = teamId || currentTeamId;
+    if (!id) return false;
+    return haveITeamPermission(id, Permissions.INVITE_USER);
+  }, [currentTeamId, haveITeamPermission]);
+
+  const canAddUserToTeam = useCallback((teamId?: string): boolean => {
+    const id = teamId || currentTeamId;
+    if (!id) return false;
+    return haveITeamPermission(id, Permissions.ADD_USER_TO_TEAM);
+  }, [currentTeamId, haveITeamPermission]);
+
+  const canInviteGuest = useCallback((): boolean => {
+    return haveISystemPermission(Permissions.INVITE_GUEST);
+  }, [haveISystemPermission]);
+
   const isSystemAdmin = useCallback((): boolean => {
     return haveISystemPermission(Permissions.MANAGE_SYSTEM);
   }, [haveISystemPermission]);
@@ -123,6 +139,9 @@ export const usePermissions = () => {
     canManageTeam,
     canCreatePublicChannel,
     canCreatePrivateChannel,
+    canInviteUser,
+    canAddUserToTeam,
+    canInviteGuest,
     isSystemAdmin,
     isTeamAdmin,
     

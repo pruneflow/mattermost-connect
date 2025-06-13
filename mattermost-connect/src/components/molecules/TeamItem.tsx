@@ -23,6 +23,7 @@ export interface TeamItemProps {
   onClick?: () => void;
   onOpenSettings?: (team: Team) => void;
   onOpenMembers?: (team: Team) => void;
+  onOpenInvite?: (team: Team) => void;
   onOpenInfo?: (team: Team) => void;
   onLeaveTeam?: (team: Team) => void;
   showMenu?: boolean;
@@ -38,6 +39,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   onClick,
   onOpenSettings,
   onOpenMembers,
+  onOpenInvite,
   onOpenInfo,
   onLeaveTeam,
   showMenu = false,
@@ -59,6 +61,10 @@ export const TeamItem: React.FC<TeamItemProps> = ({
   const handleOpenMembers = React.useCallback(() => {
     onOpenMembers?.(team);
   }, [onOpenMembers, team]);
+
+  const handleOpenInvite = React.useCallback(() => {
+    onOpenInvite?.(team);
+  }, [onOpenInvite, team]);
 
   const handleOpenInfo = React.useCallback(() => {
     onOpenInfo?.(team);
@@ -138,6 +144,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
             size="small"
             onOpenSettings={handleOpenSettings}
             onOpenMembers={handleOpenMembers}
+            onOpenInvite={handleOpenInvite}
             onOpenInfo={handleOpenInfo}
             onLeaveTeam={handleLeaveTeam}
           />
@@ -235,6 +242,7 @@ export const TeamItem: React.FC<TeamItemProps> = ({
               size="small"
               onOpenSettings={handleOpenSettings}
               onOpenMembers={handleOpenMembers}
+              onOpenInvite={handleOpenInvite}
               onOpenInfo={handleOpenInfo}
               onLeaveTeam={handleLeaveTeam}
             />

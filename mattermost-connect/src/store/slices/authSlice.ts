@@ -32,7 +32,7 @@ const initialState: AuthState = {
 
 // Async thunks for auth actions
 export const loginUser = createAsyncThunk<
-  { user: UserProfile; token: string },
+  { user: UserProfile; token: string; serverUrl: string },
   LoginRequest & { serverUrl: string },
   { rejectValue: APIError }
 >(
@@ -75,12 +75,19 @@ export const loginUser = createAsyncThunk<
       dispatch(setCurrentUserId(user.id));
       dispatch(setUser(user));
 
-      return { user, token };
+      return { user, token, serverUrl };
     } catch (error) {
-      const apiError = error as APIError;
-      dispatch(setLoginError(apiError.message));
-      dispatch(setAuthError(apiError));
-      return rejectWithValue(apiError);
+      // Serialize error for Redux (avoid non-serializable values)
+      const serializedError = {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        name: error instanceof Error ? error.name : 'Error',
+        status_code: (error as any)?.status_code || undefined,
+        url: (error as any)?.url || undefined,
+      };
+      
+      dispatch(setLoginError(serializedError.message));
+      dispatch(setAuthError(serializedError));
+      return rejectWithValue(serializedError);
     } finally {
       dispatch(setLoggingIn(false));
     }
@@ -108,6 +115,10 @@ export const logoutUser = createAsyncThunk<
       // Clear auth cookies
       document.cookie = 'MMAUTHTOKEN=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
       document.cookie = 'MMUSERID=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      
+      // Clear client token and URL
+      client.setToken('');
+      client.setUrl('');
       
       // Clear all Redux state
       dispatch(clearCurrentUser());
@@ -171,6 +182,7 @@ const authSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.isAuthenticated = true;
         state.token = action.payload.token;
+        state.serverUrl = action.payload.serverUrl;
       })
       .addCase(loginUser.rejected, (state) => {
         state.isAuthenticated = false;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   Box,
   Menu,
@@ -8,26 +8,30 @@ import {
   Typography,
   Divider,
   CircularProgress,
-} from '@mui/material';
+} from "@mui/material";
 import {
   AccountCircle as AccountCircleIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   Check as CheckIcon,
-} from '@mui/icons-material';
-import { UserAvatar } from '../atoms/UserAvatar';
-import { StatusBadge } from '../atoms/StatusBadge';
-import { UserMenuSkeleton } from '../atoms/SkeletonLoader';
-import { UserProfile } from './UserProfile';
-import { SettingsDialog } from './SettingsDialog';
-import { useUserStatus } from '../../hooks/useUserStatus';
-import { displayUsername } from '../../utils/userUtils';
-import { STATUS_OPTIONS } from '../../utils/statusUtils';
-import type { UserProfile as UserProfileType, UserStatus } from '../../api/types';
+} from "@mui/icons-material";
+import { UserAvatar } from "../atoms/UserAvatar";
+import { StatusBadge } from "../atoms/StatusBadge";
+import { UserMenuSkeleton } from "../atoms/SkeletonLoader";
+import { UserProfile } from "./UserProfile";
+import { SettingsDialog } from "./SettingsDialog";
+import { useUserStatus } from "../../hooks/useUserStatus";
+import { displayUsername } from "../../utils/userUtils";
+import { STATUS_OPTIONS } from "../../utils/statusUtils";
+import type {
+  UserProfile as UserProfileType,
+  UserStatus,
+} from "../../api/types";
+import { useAuth } from "../../hooks";
 
 export interface UserMenuProps {
   user?: UserProfileType;
-  size?: 'small' | 'medium' | 'large';
+  size?: "small" | "medium" | "large";
   showStatus?: boolean;
   showProfile?: boolean;
   onLogout?: () => void;
@@ -36,7 +40,7 @@ export interface UserMenuProps {
 
 export const UserMenu: React.FC<UserMenuProps> = ({
   user,
-  size = 'medium',
+  size = "medium",
   showStatus = true,
   showProfile = true,
   onLogout,
@@ -47,23 +51,27 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { status, updateStatus } = useUserStatus();
+  const { logout } = useAuth();
 
-  const handleAvatarClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    setMenuAnchor(event.currentTarget);
-  }, []);
+  const handleAvatarClick = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      setMenuAnchor(event.currentTarget);
+    },
+    [],
+  );
 
   const handleCloseMenu = useCallback(() => {
     setMenuAnchor(null);
   }, []);
 
   const handleStatusChange = useCallback(
-    async (newStatus: UserStatus['status']) => {
+    async (newStatus: UserStatus["status"]) => {
       setIsUpdatingStatus(true);
       try {
         await updateStatus(newStatus);
         handleCloseMenu();
       } catch (error) {
-        console.error('Failed to update status:', error);
+        console.error("Failed to update status:", error);
       } finally {
         setIsUpdatingStatus(false);
       }
@@ -72,6 +80,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   );
 
   const handleLogout = useCallback(() => {
+    void logout();
     if (onLogout) {
       onLogout();
     }
@@ -97,7 +106,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   }, []);
 
   const handleStatusSelect = (e: React.MouseEvent<HTMLLIElement>) => {
-    const status = e.currentTarget.dataset.status as UserStatus['status'];
+    const status = e.currentTarget.dataset.status as UserStatus["status"];
     if (status) {
       handleStatusChange(status);
     }
@@ -106,17 +115,17 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   // Show skeleton loader when loading or no user
   if (loading || !user) {
     return (
-      <Box 
-        sx={{ 
-          cursor: 'pointer',
-          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-          borderRadius: '50%',
-          minWidth: { xs: 44, sm: 'auto' },
-          minHeight: { xs: 44, sm: 'auto' },
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }} 
+      <Box
+        sx={{
+          cursor: "pointer",
+          transition: "transform 0.2s ease, box-shadow 0.2s ease",
+          borderRadius: "50%",
+          minWidth: { xs: 44, sm: "auto" },
+          minHeight: { xs: 44, sm: "auto" },
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
         <UserMenuSkeleton />
       </Box>
@@ -125,25 +134,25 @@ export const UserMenu: React.FC<UserMenuProps> = ({
 
   return (
     <>
-      <Box 
-        sx={{ 
-          cursor: 'pointer',
-          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-          borderRadius: '50%',
+      <Box
+        sx={{
+          cursor: "pointer",
+          transition: "transform 0.2s ease, box-shadow 0.2s ease",
+          borderRadius: "50%",
           // Mobile touch target
-          minWidth: { xs: 44, sm: 'auto' },
-          minHeight: { xs: 44, sm: 'auto' },
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          '&:hover': {
-            transform: { xs: 'none', sm: 'scale(1.05)' }, // Pas de scale sur mobile
-            boxShadow: { xs: 'none', sm: 4 },
+          minWidth: { xs: 44, sm: "auto" },
+          minHeight: { xs: 44, sm: "auto" },
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          "&:hover": {
+            transform: { xs: "none", sm: "scale(1.05)" }, // Pas de scale sur mobile
+            boxShadow: { xs: "none", sm: 4 },
           },
-          '&:active': {
-            transform: { xs: 'scale(0.95)', sm: 'scale(1.05)' }, // Feedback tactile mobile
-          }
-        }} 
+          "&:active": {
+            transform: { xs: "scale(0.95)", sm: "scale(1.05)" }, // Feedback tactile mobile
+          },
+        }}
         onClick={handleAvatarClick}
       >
         <UserAvatar user={user} size={size} showStatus={showStatus} />
@@ -151,27 +160,27 @@ export const UserMenu: React.FC<UserMenuProps> = ({
 
       <Menu
         anchorEl={menuAnchor}
-        anchorOrigin={{ 
-          vertical: 'bottom', 
-          horizontal: 'right'
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
         }}
-        transformOrigin={{ 
-          vertical: 'top', 
-          horizontal: 'right'
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "right",
         }}
         open={Boolean(menuAnchor)}
         onClose={handleCloseMenu}
         sx={{
-          '& .MuiPaper-root': {
+          "& .MuiPaper-root": {
             minWidth: { xs: 200, sm: 240 },
             maxWidth: { xs: 280, sm: 320 },
-          }
+          },
         }}
       >
         {/* User info */}
         <Box sx={{ py: 1, px: 2 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-            {displayUsername(user, 'full_name', true)}
+          <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+            {displayUsername(user, "full_name", true)}
           </Typography>
           {user.username && (
             <Typography variant="body2" color="text.secondary">
@@ -187,8 +196,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           sx={{
             px: 2,
             py: 0.5,
-            display: 'block',
-            color: 'text.secondary',
+            display: "block",
+            color: "text.secondary",
           }}
         >
           SET STATUS
@@ -200,7 +209,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             onClick={handleStatusSelect}
             selected={status === option.value}
             disabled={isUpdatingStatus}
-            sx={{ display: 'flex', justifyContent: 'space-between' }}
+            sx={{ display: "flex", justifyContent: "space-between" }}
           >
             <Box display="flex" alignItems="center">
               <ListItemIcon sx={{ color: option.color }}>
@@ -240,30 +249,26 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           </ListItemIcon>
           <ListItemText>Settings</ListItemText>
         </MenuItem>
-        {onLogout && (
-          <MenuItem onClick={handleLogout}>
+
+        {/* Logout section */}
+        <>
+          <Divider />
+          <MenuItem onClick={handleLogout} sx={{ color: "error.main" }}>
             <ListItemIcon>
-              <LogoutIcon fontSize="small" />
+              <LogoutIcon fontSize="small" sx={{ color: "error.main" }} />
             </ListItemIcon>
             <ListItemText>Logout</ListItemText>
           </MenuItem>
-        )}
+        </>
       </Menu>
 
       {/* User Profile Dialog */}
       {profileOpen && (
-        <UserProfile
-          user={user}
-          editable
-          onClose={handleProfileClose}
-        />
+        <UserProfile user={user} editable onClose={handleProfileClose} />
       )}
 
       {/* Settings Dialog */}
-      <SettingsDialog
-        open={settingsOpen}
-        onClose={handleSettingsClose}
-      />
+      <SettingsDialog open={settingsOpen} onClose={handleSettingsClose} />
     </>
   );
 };

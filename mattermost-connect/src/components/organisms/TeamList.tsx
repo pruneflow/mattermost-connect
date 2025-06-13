@@ -20,6 +20,7 @@ import TeamSettingsDialog from "./TeamSettingsDialog";
 import ManageMembersDialog from "./ManageMembersDialog";
 import TeamInfoDialog from "./TeamInfoDialog";
 import LeaveTeamDialog from "./LeaveTeamDialog";
+import { InvitePeopleDialog } from "./InvitePeopleDialog";
 import { TeamItemSkeleton, ListSkeleton } from "../atoms";
 import { TeamItem, CreateTeamButton } from "../molecules";
 import { TeamTabs } from "./TeamTabs";
@@ -46,10 +47,12 @@ export const TeamList: React.FC<TeamListProps> = ({
     selectedTeamId,
     openSettings,
     openMembers,
+    openInvite,
     openInfo,
     openLeave,
     isSettingsOpen,
     isMembersOpen,
+    isInviteOpen,
     isInfoOpen,
     isLeaveOpen,
     closeDialog,
@@ -147,6 +150,7 @@ export const TeamList: React.FC<TeamListProps> = ({
           onCreate={handleCreateTeamClick}
           onOpenSettings={openSettings}
           onOpenMembers={openMembers}
+          onOpenInvite={openInvite}
           onOpenInfo={openInfo}
           onLeaveTeam={openLeave}
         />
@@ -206,6 +210,7 @@ export const TeamList: React.FC<TeamListProps> = ({
                 onClick={handleClick}
                 onOpenSettings={openSettings}
                 onOpenMembers={openMembers}
+                onOpenInvite={openInvite}
                 onOpenInfo={openInfo}
                 onLeaveTeam={openLeave}
                 showMenu={showMenu}
@@ -260,6 +265,12 @@ export const TeamList: React.FC<TeamListProps> = ({
         open={isLeaveOpen}
         onClose={closeDialog}
         teamId={selectedTeamId}
+      />
+      
+      <InvitePeopleDialog
+        open={isInviteOpen}
+        onClose={closeDialog}
+        teamId={selectedTeamId || ''}
       />
     </>
   );

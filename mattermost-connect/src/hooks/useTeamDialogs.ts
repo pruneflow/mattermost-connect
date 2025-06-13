@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { Team } from '../api/types';
 
-export type TeamDialogType = 'settings' | 'members' | 'info' | 'leave';
+export type TeamDialogType = 'settings' | 'members' | 'info' | 'leave' | 'invite';
 
 /**
  * Hook pour gérer l'état des dialogs d'équipe
@@ -37,6 +37,10 @@ export const useTeamDialogs = () => {
     openTeamDialog(team, 'leave');
   }, [openTeamDialog]);
 
+  const openInvite = useCallback((team: Team) => {
+    openTeamDialog(team, 'invite');
+  }, [openTeamDialog]);
+
   return {
     // État
     selectedTeamId,
@@ -47,6 +51,7 @@ export const useTeamDialogs = () => {
     openMembers,
     openInfo,
     openLeave,
+    openInvite,
     closeDialog,
     
     // État booléens pour les composants
@@ -54,6 +59,7 @@ export const useTeamDialogs = () => {
     isMembersOpen: openDialog === 'members',
     isInfoOpen: openDialog === 'info',
     isLeaveOpen: openDialog === 'leave',
+    isInviteOpen: openDialog === 'invite',
   };
 };
 

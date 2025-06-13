@@ -8,10 +8,14 @@ const client = new Client4();
 export const setDefaultClient = (config: { serverUrl: string }): void => {
   client.setUrl(config.serverUrl);
   
-  // Configure client for cross-origin requests - disable cookies to avoid CORS issues
-  // with Access-Control-Allow-Origin: * servers
-  client.setIncludeCookies(false);
+  // Enable cookies for authentication (required by Mattermost)
+  client.setIncludeCookies(true);
   client.setEnableLogging(true);
+  
+  // Remove problematic headers that trigger CORS preflight
+  if (client.defaultHeaders) {
+    delete client.defaultHeaders['X-Requested-With'];
+  }
 };
 
 export const getDefaultClient = () => {

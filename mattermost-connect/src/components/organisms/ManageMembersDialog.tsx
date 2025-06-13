@@ -22,11 +22,12 @@ import {
   PersonAdd as PersonAddIcon,
   KeyboardArrowDown as ArrowDownIcon,
 } from '@mui/icons-material';
-import { useLayout, usePermissions, useTeamMembers } from '../../hooks';
+import { useLayout, usePermissions, useTeamMembers, useTeamDialogs } from '../../hooks';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectTeamById, selectCurrentUserId } from '../../store/selectors';
 import { SearchInput } from '../atoms/SearchInput';
 import { UserAvatar } from '../atoms/UserAvatar';
+import { InvitePeopleDialog } from './InvitePeopleDialog';
 import { displayUsername, getRoleChips, canChangeRole, isTeamAdmin, isSystemAdmin } from '../../utils/userUtils';
 import type { UserProfile } from '../../api/types';
 
@@ -91,7 +92,8 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
   teamId,
 }) => {
   const { isMobile } = useLayout();
-  const { canManageTeam } = usePermissions();
+  const { canManageTeam, canInviteUser, canAddUserToTeam } = usePermissions();
+  const { openInvite, isInviteOpen, closeDialog } = useTeamDialogs();
   
   const team = useAppSelector(selectTeamById(teamId));
   const currentUserId = useAppSelector(selectCurrentUserId);
@@ -115,6 +117,7 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
   const [isUpdating, setIsUpdating] = useState(false);
 
   const canManage = team ? canManageTeam(team.id) : false;
+  const canInvite = team ? (canInviteUser(team.id) || canAddUserToTeam(team.id)) : false;
 
   // Memoized member data with chips for performance
   const members = React.useMemo(() => {
@@ -169,9 +172,10 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
   }, []);
 
   const handleInvitePeople = useCallback(() => {
-    // TODO: Ouvrir le dialog d'invitation
-    console.log('Open invite dialog');
-  }, []);
+    if (team) {
+      openInvite(team);
+    }
+  }, [team, openInvite]);
 
   const handleRemoveMember = useCallback(async () => {
     if (!selectedMember) return;
@@ -249,7 +253,7 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
 {team.display_name}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {canManage && (
+            {canInvite && (
               <Button
                 variant="contained"
                 startIcon={!isMobile ? <PersonAddIcon /> : undefined}
@@ -430,6 +434,15 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
           );
         })()}
       </Menu>
+
+      {/* Invite People Dialog */}
+      {team && (
+        <InvitePeopleDialog
+          open={isInviteOpen}
+          onClose={closeDialog}
+          teamId={team.id}
+        />
+      )}
     </>
   );
 };

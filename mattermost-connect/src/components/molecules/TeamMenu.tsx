@@ -5,14 +5,25 @@ import {
   MenuItem,
   SxProps,
   Theme,
+  Divider,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
-import { MoreVert as MoreVertIcon } from '@mui/icons-material';
+import {
+  MoreVert as MoreVertIcon,
+  Settings as SettingsIcon,
+  People as PeopleIcon,
+  PersonAdd as PersonAddIcon,
+  Info as InfoIcon,
+  ExitToApp as ExitToAppIcon,
+} from '@mui/icons-material';
 import { usePermissions } from '../../hooks';
 import type { Team } from '../../api/types';
 
 export interface TeamMenuOptions {
   showSettings?: boolean;
   showMembers?: boolean;
+  showInvite?: boolean;
   showInfo?: boolean;
   showLeave?: boolean;
 }
@@ -24,6 +35,7 @@ export interface TeamMenuProps {
   options?: TeamMenuOptions; // Contrôle de visibilité en plus des permissions
   onOpenSettings?: (team: Team) => void;
   onOpenMembers?: (team: Team) => void;
+  onOpenInvite?: (team: Team) => void;
   onOpenInfo?: (team: Team) => void;
   onLeaveTeam?: (team: Team) => void;
 }
@@ -36,13 +48,14 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
   team,
   size = 'small',
   sx,
-  options = { showSettings: true, showMembers: true, showInfo: true, showLeave: true },
+  options = { showSettings: true, showMembers: true, showInvite: true, showInfo: true, showLeave: true },
   onOpenSettings,
   onOpenMembers,
+  onOpenInvite,
   onOpenInfo,
   onLeaveTeam,
 }) => {
-  const { canManageTeam } = usePermissions();
+  const { canManageTeam, canInviteUser, canAddUserToTeam } = usePermissions();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
 
   const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -77,6 +90,13 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
     handleMenuClose();
   }, [team, onOpenInfo, handleMenuClose]);
 
+  const handleInviteClick = useCallback(() => {
+    if (team && onOpenInvite) {
+      onOpenInvite(team);
+    }
+    handleMenuClose();
+  }, [team, onOpenInvite, handleMenuClose]);
+
   const handleLeaveClick = useCallback(() => {
     if (team && onLeaveTeam) {
       onLeaveTeam(team);
@@ -85,6 +105,9 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
   }, [team, onLeaveTeam, handleMenuClose]);
 
   if (!team) return null;
+
+  // Check invite permissions
+  const canInvite = canInviteUser(team.id) || canAddUserToTeam(team.id);
 
   return (
     <>
@@ -110,18 +133,71 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
         onClose={handleMenuClose}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        PaperProps={{
+          sx: {
+            minWidth: 200,
+            '& .MuiMenuItem-root': {
+              px: 2,
+              py: 1,
+            },
+          },
+        }}
       >
+        {/* Team Management Section */}
         {options.showSettings && onOpenSettings && canManageTeam(team.id) && (
-          <MenuItem onClick={handleSettingsClick}>Team Settings</MenuItem>
+          <MenuItem onClick={handleSettingsClick}>
+            <ListItemIcon>
+              <SettingsIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Team Settings</ListItemText>
+          </MenuItem>
         )}
         {options.showMembers && onOpenMembers && canManageTeam(team.id) && (
-          <MenuItem onClick={handleMembersClick}>Manage Members</MenuItem>
+          <MenuItem onClick={handleMembersClick}>
+            <ListItemIcon>
+              <PeopleIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Manage Members</ListItemText>
+          </MenuItem>
         )}
+        {options.showInvite && onOpenInvite && canInvite && (
+          <MenuItem onClick={handleInviteClick}>
+            <ListItemIcon>
+              <PersonAddIcon fontSize="small" sx={{ color: 'primary.main' }} />
+            </ListItemIcon>
+            <ListItemText>Invite People</ListItemText>
+          </MenuItem>
+        )}
+        
+        {/* Divider if any management options are shown */}
+        {((options.showSettings && onOpenSettings && canManageTeam(team.id)) ||
+          (options.showMembers && onOpenMembers && canManageTeam(team.id)) ||
+          (options.showInvite && onOpenInvite && canInvite)) &&
+          options.showInfo && onOpenInfo && (
+            <Divider />
+          )}
+        
+        {/* Information Section */}
         {options.showInfo && onOpenInfo && (
-          <MenuItem onClick={handleInfoClick}>View Team Info</MenuItem>
+          <MenuItem onClick={handleInfoClick}>
+            <ListItemIcon>
+              <InfoIcon fontSize="small" sx={{ color: 'info.main' }} />
+            </ListItemIcon>
+            <ListItemText>View Team Info</ListItemText>
+          </MenuItem>
         )}
+        
+        {/* Divider before leave action */}
         {options.showLeave && onLeaveTeam && (
-          <MenuItem onClick={handleLeaveClick}>Leave Team</MenuItem>
+          <>
+            <Divider />
+            <MenuItem onClick={handleLeaveClick} sx={{ color: 'error.main' }}>
+              <ListItemIcon>
+                <ExitToAppIcon fontSize="small" sx={{ color: 'error.main' }} />
+              </ListItemIcon>
+              <ListItemText>Leave Team</ListItemText>
+            </MenuItem>
+          </>
         )}
       </Menu>
     </>
