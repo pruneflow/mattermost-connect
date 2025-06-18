@@ -65,6 +65,7 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
     getInviteLink,
     copyInviteLink,
     validateEmails,
+    canSendEmailInvitationsServerSide,
     isLoading,
   } = useTeamInvitations(teamId);
 
@@ -77,13 +78,14 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
 
 
   // Memoize permissions to prevent unnecessary recalculations
+  // STEP 1: Server config check + STEP 2: User permissions check
   const permissions = useMemo(
     () => ({
-      canSendEmailInvitations: canInviteUser(teamId),
+      canSendEmailInvitations: canSendEmailInvitationsServerSide() && canInviteUser(teamId),
       canAddExistingUsers: canAddUserToTeam(teamId),
       canInviteGuestUsers: canInviteGuest(),
     }),
-    [canInviteUser, canAddUserToTeam, canInviteGuest, teamId],
+    [canInviteUser, canAddUserToTeam, canInviteGuest, canSendEmailInvitationsServerSide, teamId],
   );
 
   // Local state

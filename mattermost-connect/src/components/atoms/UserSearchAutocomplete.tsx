@@ -166,7 +166,7 @@ export const UserSearchAutocomplete = memo<UserSearchAutocompleteProps>(
         <Paper
           sx={{
             display: "flex",
-            justifyContent: "center",
+            justifyContent: "flex-start",
             flexWrap: "wrap",
             listStyle: "none",
             p: 0.5,

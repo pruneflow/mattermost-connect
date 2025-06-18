@@ -253,19 +253,14 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
 {team.display_name}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {canInvite && (
+            {canInvite && !isMobile && (
               <Button
                 variant="contained"
-                startIcon={!isMobile ? <PersonAddIcon /> : undefined}
+                startIcon={<PersonAddIcon />}
                 onClick={handleInvitePeople}
                 size="small"
-                sx={isMobile ? { 
-                  minWidth: 'auto', 
-                  px: 1, 
-                  borderRadius: 2 
-                } : undefined}
               >
-                {isMobile ? <PersonAddIcon /> : 'Invite People'}
+                Invite People
               </Button>
             )}
             <IconButton 
@@ -295,10 +290,32 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
               />
             )}
 
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              {stats?.total_member_count || 0} {stats?.total_member_count === 1 ? 'member' : 'members'}
-              {searchTerm && ` • ${filteredMembers.length} ${filteredMembers.length === 1 ? 'result' : 'results'}`}
-            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              mb: 1 
+            }}>
+              <Typography variant="body2" color="text.secondary">
+                {stats?.total_member_count || 0} {stats?.total_member_count === 1 ? 'member' : 'members'}
+                {searchTerm && ` • ${filteredMembers.length} ${filteredMembers.length === 1 ? 'result' : 'results'}`}
+              </Typography>
+              {canInvite && isMobile && (
+                <IconButton
+                  onClick={handleInvitePeople}
+                  size="small"
+                  sx={{ 
+                    color: 'primary.main',
+                    '&:hover': { 
+                      bgcolor: 'primary.main',
+                      color: 'white'
+                    }
+                  }}
+                >
+                  <PersonAddIcon />
+                </IconButton>
+              )}
+            </Box>
           </Box>
 
           <Divider />

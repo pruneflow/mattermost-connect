@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
+import { useServerConfig } from './useServerConfig';
 
 export interface InvitationResult {
   success: boolean;
@@ -20,6 +21,7 @@ export interface GuestInvitationParams {
  */
 export const useTeamInvitations = (teamId: string) => {
   const { handleError } = useErrorHandler();
+  const { canSendEmailInvitationsServerSide } = useServerConfig();
   
   // Loading states for different invitation types
   const [isEmailInviting, setIsEmailInviting] = useState(false);
@@ -33,10 +35,20 @@ export const useTeamInvitations = (teamId: string) => {
   /**
    * Send email invitations to new users (standard members)
    * Uses graceful endpoint to continue even if some emails fail
+   * STEP 1: Check server configuration
+   * STEP 2: User preferences should be checked by calling component if needed
    */
   const sendEmailInvitations = useCallback(async (emails: string[]): Promise<InvitationResult> => {
     if (!teamId || emails.length === 0) {
       return { success: false, message: 'Missing team ID or emails' };
+    }
+
+    // STEP 1: Check server-side email invitations capability
+    if (!canSendEmailInvitationsServerSide()) {
+      return { 
+        success: false, 
+        message: 'Email invitations are disabled on this server or SMTP is not configured' 
+      };
     }
 
     setIsEmailInviting(true);
@@ -65,10 +77,20 @@ export const useTeamInvitations = (teamId: string) => {
 
   /**
    * Send guest invitations with limited channel access
+   * STEP 1: Check server configuration
+   * STEP 2: User preferences should be checked by calling component if needed
    */
   const sendGuestInvitations = useCallback(async (params: GuestInvitationParams): Promise<InvitationResult> => {
     if (!teamId || params.emails.length === 0 || params.channelIds.length === 0) {
       return { success: false, message: 'Missing team ID, emails, or channels' };
+    }
+
+    // STEP 1: Check server-side email invitations capability
+    if (!canSendEmailInvitationsServerSide()) {
+      return { 
+        success: false, 
+        message: 'Email invitations are disabled on this server or SMTP is not configured' 
+      };
     }
 
     setIsGuestInviting(true);
@@ -199,6 +221,9 @@ export const useTeamInvitations = (teamId: string) => {
     getInviteLink,
     copyInviteLink,
     validateEmails,
+
+    // Server capabilities
+    canSendEmailInvitationsServerSide,
 
     // Computed
     isLoading: isEmailInviting || isGuestInviting || isAddingMembers || isLoadingInviteInfo,
