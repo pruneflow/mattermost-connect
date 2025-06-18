@@ -47,7 +47,7 @@ export const UserCard: React.FC<UserCardProps> = ({
         ...sx
       }}
     >
-      <UserAvatar user={user} size={size} />
+      <UserAvatar userId={user.id} size={size} />
       
       <Box sx={{ 
         display: 'flex', 

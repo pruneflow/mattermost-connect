@@ -159,8 +159,15 @@ const viewsSlice = createSlice({
       }
     },
 
-    // Clear views
-    clearViews: () => initialState,
+    // Clear views (but preserve navigation state across logouts)
+    clearViews: (state) => ({
+      ...initialState,
+      navigation: {
+        ...initialState.navigation,
+        lastVisitedChannels: state.navigation.lastVisitedChannels,
+        lastVisited: state.navigation.lastVisited,
+      }
+    }),
   },
 });
 

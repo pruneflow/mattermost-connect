@@ -123,7 +123,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = ({
         >
           {channel.type === 'D' && channel.otherUser ? (
             <UserAvatar
-              user={channel.otherUser}
+              userId={channel.otherUser.id}
               size="small"
               showStatus={true}
             />

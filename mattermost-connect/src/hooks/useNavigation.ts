@@ -111,14 +111,13 @@ export const useNavigation = () => {
     }
   }, [lastVisitedChannels]);
 
-  // Save last visited to localStorage when updated
+  // Save last visited to localStorage when updated (but don't remove on null)
   useEffect(() => {
     try {
       if (lastVisited) {
         localStorage.setItem('mattermostLastVisited', JSON.stringify(lastVisited));
-      } else {
-        localStorage.removeItem('mattermostLastVisited');
       }
+      // Don't remove localStorage on null - keep navigation state across logouts
     } catch (error) {
       console.warn('Failed to save last visited:', error);
     }

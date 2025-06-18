@@ -61,7 +61,7 @@ export const useTeamInvitations = (teamId: string) => {
     } finally {
       setIsEmailInviting(false);
     }
-  }, [teamId, handleError]);
+  }, [teamId]); // Remove handleError dependency
 
   /**
    * Send guest invitations with limited channel access

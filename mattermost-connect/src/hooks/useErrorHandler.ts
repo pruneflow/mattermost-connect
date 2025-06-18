@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { logoutUser } from '../store/slices/authSlice';
 import { normalizeError, requiresReauth, isRecoverableError, logError, getErrorMessage } from '../utils/errorUtils';
@@ -15,6 +15,10 @@ export interface ErrorHandlerOptions {
 // Global error handler following Mattermost patterns
 export const useErrorHandler = () => {
   const dispatch = useAppDispatch();
+
+  // Store dispatch in ref to avoid useCallback dependency issues
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
 
   // Main error handler - follows Mattermost error handling pattern
   const handleError = useCallback((
@@ -42,7 +46,7 @@ export const useErrorHandler = () => {
     // Handle auth errors - logout if token invalid
     if (requiresReauth(serverError)) {
       console.warn('Authentication error detected, logging out user');
-      dispatch(logoutUser());
+      dispatchRef.current(logoutUser());
     }
 
     // Show user-friendly error message
@@ -64,7 +68,7 @@ export const useErrorHandler = () => {
     }
 
     return serverError;
-  }, [dispatch]);
+  }, []); // No dependencies - use dispatchRef
 
   // Specialized handlers for different contexts
   const handleApiError = useCallback((error: any, operation: string) => {

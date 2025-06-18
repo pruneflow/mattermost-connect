@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
+import { useAppDispatch } from './useAppDispatch';
+import { setUsers } from '../store/slices/entitiesSlice';
 import type { UserProfile } from '../api/types';
 
 export interface UserSearchOptions {
@@ -16,9 +18,10 @@ export interface UserSearchOptions {
  */
 export const useUserSearch = (debounceMs: number = 300) => {
   const { handleError } = useErrorHandler();
+  const dispatch = useAppDispatch();
   
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [searchResults, setSearchResults] = useState<string[]>([]);
   const [lastSearchTerm, setLastSearchTerm] = useState<string>('');
   
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -30,7 +33,7 @@ export const useUserSearch = (debounceMs: number = 300) => {
   const performSearch = useCallback(async (
     term: string, 
     options: UserSearchOptions = {}
-  ): Promise<UserProfile[]> => {
+  ): Promise<string[]> => {
     if (!term.trim() || term.length < 2) {
       setSearchResults([]);
       setLastSearchTerm('');
@@ -41,7 +44,7 @@ export const useUserSearch = (debounceMs: number = 300) => {
       teamId,
       notInTeamId,
       notInChannelId,
-      limit = 10
+      limit = 100
     } = options;
 
     setIsSearching(true);
@@ -77,8 +80,15 @@ export const useUserSearch = (debounceMs: number = 300) => {
         .filter(user => !user.delete_at)
         .slice(0, limit);
 
-      setSearchResults(activeUsers);
-      return activeUsers;
+      // Store user profiles in Redux store
+      dispatch(setUsers(activeUsers));
+      
+      // Return IDs only
+      const userIds = activeUsers.map(user => user.id);
+      console.debug("useUserSearch - setting results:", userIds, "length:", userIds.length);
+
+      setSearchResults(userIds);
+      return userIds;
     } catch (error) {
       // Only handle error if this search is still current
       if (currentSearchRef.current === term) {
@@ -128,7 +138,7 @@ export const useUserSearch = (debounceMs: number = 300) => {
   const searchUsersNotInTeam = useCallback((
     term: string, 
     teamId: string,
-    limit: number = 10
+    limit: number = 100
   ): void => {
     searchUsers(term, { notInTeamId: teamId, limit });
   }, [searchUsers]);
@@ -140,7 +150,7 @@ export const useUserSearch = (debounceMs: number = 300) => {
     term: string,
     teamId: string,
     channelId: string,
-    limit: number = 10
+    limit: number = 100
   ): void => {
     searchUsers(term, { 
       teamId, 

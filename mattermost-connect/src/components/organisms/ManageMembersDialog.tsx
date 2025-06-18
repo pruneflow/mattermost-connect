@@ -334,7 +334,7 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
                       }}>
                         {/* Avatar avec statut */}
                         <UserAvatar 
-                          user={user} 
+                          userId={user.id} 
                           size="medium" 
                           showStatus={true}
                         />
@@ -435,8 +435,8 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
         })()}
       </Menu>
 
-      {/* Invite People Dialog */}
-      {team && (
+      {/* Invite People Dialog - Conditional rendering pour performance */}
+      {team && isInviteOpen && (
         <InvitePeopleDialog
           open={isInviteOpen}
           onClose={closeDialog}

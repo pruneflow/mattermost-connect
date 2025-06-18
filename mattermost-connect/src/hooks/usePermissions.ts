@@ -1,20 +1,28 @@
 import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
-import { selectCurrentUser, selectCurrentTeamId, selectTeamsById, selectTeamMembers } from '../store/selectors';
+import { 
+  selectCurrentUser, 
+  selectCurrentTeamId,
+  selectCurrentUserRoles,
+  selectIsSystemAdmin,
+  selectTeamMembers
+} from '../store/selectors';
 import { Permissions, RolePermissions, SystemRoles, TeamRoles, ChannelRoles } from '../constants/permissions';
 import type { Team, Channel } from '../api/types';
 
-// Following Mattermost pattern for permission checking
+// Simple Mattermost pattern for permission checking
 export const usePermissions = () => {
   const currentUser = useAppSelector(selectCurrentUser);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
+  const systemRoles = useAppSelector(selectCurrentUserRoles);
+  const isSystemAdmin = useAppSelector(selectIsSystemAdmin);
   const teamMembers = useAppSelector(selectTeamMembers);
 
-  // Helper to get user roles for a team
+  // Helper to get user roles for a team - simple approach
   const getUserTeamRoles = useCallback((teamId: string): string[] => {
     const member = teamMembers[teamId];
-    if (!member) return [];
-    return member.roles ? member.roles.split(' ') : [TeamRoles.TEAM_USER];
+    if (!member?.roles) return [TeamRoles.TEAM_USER];
+    return member.roles.split(' ').filter(Boolean);
   }, [teamMembers]);
 
   // Helper to get all permissions for given roles
@@ -27,23 +35,19 @@ export const usePermissions = () => {
     return Array.from(permissions);
   }, []);
 
-  // System permission check - following Mattermost selector pattern
+  // System permission check - simple approach
   const haveISystemPermission = useCallback((permission: string): boolean => {
     if (!currentUser) return false;
     
-    // Check if user is system admin
-    if (currentUser.roles?.includes(SystemRoles.SYSTEM_ADMIN)) {
-      return true; // System admin has all permissions
-    }
+    // System admin has all permissions
+    if (isSystemAdmin) return true;
     
-    // Get user system roles
-    const systemRoles = currentUser.roles ? currentUser.roles.split(' ') : [SystemRoles.SYSTEM_USER];
+    // Check system roles
     const permissions = getPermissionsForRoles(systemRoles);
-    
     return permissions.includes(permission);
-  }, [currentUser, getPermissionsForRoles]);
+  }, [currentUser, isSystemAdmin, systemRoles, getPermissionsForRoles]);
 
-  // Team permission check - following Mattermost selector pattern
+  // Team permission check - simple approach
   const haveITeamPermission = useCallback((teamId: string, permission: string): boolean => {
     if (!currentUser) return false;
     
@@ -52,7 +56,7 @@ export const usePermissions = () => {
       return true;
     }
     
-    // Get team roles for user
+    // Get team roles and check permissions
     const teamRoles = getUserTeamRoles(teamId);
     const permissions = getPermissionsForRoles(teamRoles);
     
@@ -78,7 +82,7 @@ export const usePermissions = () => {
     return haveICurrentTeamPermission(permission);
   }, [currentUser, haveISystemPermission, haveICurrentTeamPermission]);
 
-  // Convenience methods for common checks
+  // Convenience methods - simple and stable
   const canCreateTeam = useCallback((): boolean => {
     return haveISystemPermission(Permissions.CREATE_TEAM);
   }, [haveISystemPermission]);
@@ -117,10 +121,6 @@ export const usePermissions = () => {
     return haveISystemPermission(Permissions.INVITE_GUEST);
   }, [haveISystemPermission]);
 
-  const isSystemAdmin = useCallback((): boolean => {
-    return haveISystemPermission(Permissions.MANAGE_SYSTEM);
-  }, [haveISystemPermission]);
-
   const isTeamAdmin = useCallback((teamId?: string): boolean => {
     const id = teamId || currentTeamId;
     if (!id) return false;
@@ -142,7 +142,7 @@ export const usePermissions = () => {
     canInviteUser,
     canAddUserToTeam,
     canInviteGuest,
-    isSystemAdmin,
+    isSystemAdmin, // Direct value from selector
     isTeamAdmin,
     
     // Helper methods

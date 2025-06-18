@@ -350,6 +350,12 @@ export const selectTypingUsersInChannel = (channelId: string) => createSelector(
 export const selectUserStatuses = (state: RootState) => state.entities.users.statuses;
 export const selectUserProfiles = (state: RootState) => state.entities.users.profiles;
 
+// Select user by ID
+export const selectUserById = (userId: string) => createSelector(
+  [selectUserProfiles],
+  (profiles) => profiles[userId]
+);
+
 // WebSocket status selector
 export const selectWebSocketConnectionStatus = (state: RootState) => state.websocket.status;
 

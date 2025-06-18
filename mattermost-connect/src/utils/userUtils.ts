@@ -75,6 +75,13 @@ export const isBot = (user: UserProfile): boolean => {
 };
 
 /**
+ * Check if user is a system bot (built-in Mattermost bots)
+ */
+export const isSystemBot = (user: UserProfile): boolean => {
+  return user.is_bot === true;
+};
+
+/**
  * Check if user's role can be changed
  */
 export const canChangeRole = (
@@ -83,8 +90,6 @@ export const canChangeRole = (
   currentUserId: string, 
   canManage: boolean
 ): boolean => {
-  // Bots cannot have their roles changed
-  if (isBot(user)) return false;
   // System admins cannot have their roles changed by team admins
   if (isSystemAdmin(user)) return false;
   // Current user cannot change their own role
@@ -109,8 +114,15 @@ export interface RoleChip {
 export const getRoleChips = (user: UserProfile, teamMembers: Record<string, TeamMember>): RoleChip[] => {
   const chips: RoleChip[] = [];
   
-  // Bot chip (orange)
-  if (isBot(user)) {
+  // System Bot chip (priority over regular bot)
+  if (isSystemBot(user)) {
+    chips.push({
+      label: 'System Bot',
+      color: 'warning',
+      variant: 'filled',
+    });
+  } else if (isBot(user)) {
+    // Regular Bot chip (orange)
     chips.push({
       label: 'Bot',
       color: 'warning',
@@ -118,7 +130,7 @@ export const getRoleChips = (user: UserProfile, teamMembers: Record<string, Team
     });
   }
   
-  // Role chips
+  // Role chips (all users including bots have roles)
   if (isSystemAdmin(user)) {
     chips.push({
       label: 'System Admin',

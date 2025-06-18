@@ -155,7 +155,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         }}
         onClick={handleAvatarClick}
       >
-        <UserAvatar user={user} size={size} showStatus={showStatus} />
+        <UserAvatar userId={user.id} size={size} showStatus={showStatus} />
       </Box>
 
       <Menu

@@ -216,7 +216,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
             ) : null
           }
         >
-          <UserAvatar user={user} size="large" showStatus />
+          <UserAvatar userId={user.id} size="large" showStatus />
           
           {/* Hidden file input for profile picture upload */}
           <input

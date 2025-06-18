@@ -267,11 +267,14 @@ export const TeamList: React.FC<TeamListProps> = ({
         teamId={selectedTeamId}
       />
       
-      <InvitePeopleDialog
-        open={isInviteOpen}
-        onClose={closeDialog}
-        teamId={selectedTeamId || ''}
-      />
+      {/* Conditional rendering pour performance */}
+      {isInviteOpen && (
+        <InvitePeopleDialog
+          open={isInviteOpen}
+          onClose={closeDialog}
+          teamId={selectedTeamId || ''}
+        />
+      )}
     </>
   );
 };

@@ -3,10 +3,12 @@ import { Avatar, Badge, Box } from '@mui/material';
 import { displayUsername, getProfileImageUrl } from '../../utils/userUtils';
 import { getStatusColor } from '../../utils/statusUtils';
 import { useUserStatus } from '../../hooks/useUserStatus';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectUserById } from '../../store/selectors';
 import type { UserProfile } from '../../api/types';
 
 export interface UserAvatarProps {
-  user?: UserProfile;
+  userId: string;
   size?: 'xs' | 'small' | 'medium' | 'large';
   showStatus?: boolean;
   onClick?: () => void;
@@ -14,7 +16,7 @@ export interface UserAvatarProps {
 }
 
 export const UserAvatar: React.FC<UserAvatarProps> = ({
-  user,
+  userId,
   size = 'medium',
   showStatus = false,
   onClick,
@@ -22,8 +24,11 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
 }) => {
   const { getUserStatus } = useUserStatus();
   
+  // Get user from store
+  const user = useAppSelector(selectUserById(userId));
+  
   // Get user's current status and color
-  const userStatus = user?.id ? getUserStatus(user.id) : null;
+  const userStatus = userId ? getUserStatus(userId) : null;
   const statusColor = getStatusColor(userStatus?.status);
   // Size mapping for MUI Avatar
   const sizeMap = {
@@ -50,7 +55,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   };
 
   // Profile image URL if user exists (with cache busting timestamp)
-  const profileImageUrl = user?.id ? getProfileImageUrl(user.id, (user as any).last_picture_update) : undefined;
+  const profileImageUrl = user ? getProfileImageUrl(userId, (user as any).last_picture_update) : undefined;
 
   const avatar = (
     <Avatar
