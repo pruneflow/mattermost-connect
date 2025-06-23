@@ -1,69 +1,36 @@
-import { useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
-import { 
-  selectTypingEvents,
-  selectTypingEventsForChannel,
-  selectIsAnyoneTypingInChannel,
-  selectTypingUsersInChannel,
-  selectTypingMessageForChannel
-} from '../store/selectors';
 
 // Re-export type for convenience
 export type { TypingEvent } from '../store/slices/websocketSlice';
 
 /**
- * Hook for typing events management using optimized selectors
- * Following Mattermost patterns for typing indicators
- */
-export const useTypingEvents = () => {
-  // Get all typing events (memoized)
-  const typingEvents = useAppSelector(selectTypingEvents);
-
-  // Factory functions that return selector-based functions
-  const getTypingEventsForChannel = useCallback((channelId: string) => {
-    return (state: any) => selectTypingEventsForChannel(channelId)(state);
-  }, []);
-
-  const isAnyoneTypingInChannel = useCallback((channelId: string) => {
-    return (state: any) => selectIsAnyoneTypingInChannel(channelId)(state);
-  }, []);
-
-  const getTypingUsersInChannel = useCallback((channelId: string) => {
-    return (state: any) => selectTypingUsersInChannel(channelId)(state);
-  }, []);
-
-  const getTypingMessageForChannel = useCallback((channelId: string) => {
-    return (state: any) => selectTypingMessageForChannel(channelId)(state);
-  }, []);
-
-  return {
-    // All typing events
-    typingEvents,
-    
-    // Channel-specific functions (return selector functions)
-    getTypingEventsForChannel,
-    isAnyoneTypingInChannel,
-    getTypingUsersInChannel,
-    getTypingMessageForChannel,
-  };
-};
-
-/**
- * Hook for typing events in a specific channel (optimized for single channel)
- * Use this when you only need typing data for one channel
+ * Hook for typing events in a specific channel (Direct state access approach)
+ * Directly accesses the specific channel's typing events to avoid global re-renders
  */
 export const useTypingEventsForChannel = (channelId: string) => {
-  const typingEvents = useAppSelector(selectTypingEventsForChannel(channelId));
-  const isAnyoneTyping = useAppSelector(selectIsAnyoneTypingInChannel(channelId));
-  const typingUsers = useAppSelector(selectTypingUsersInChannel(channelId));
-  const typingMessage = useAppSelector(selectTypingMessageForChannel(channelId));
+  // Direct access to only this channel's typing events with stable empty array
+  const channelTypingEvents = useAppSelector(state => state.websocket.typingEventsByChannel[channelId]);
+  const currentUserId = useAppSelector(state => state.entities.users.currentUserId);
+
+  // Filter out current user and process data - handle undefined case
+  const otherUserEvents = channelTypingEvents ? channelTypingEvents.filter(event => event.user_id !== currentUserId) : [];
+  const uniqueUsernames = Array.from(
+    new Set(otherUserEvents.map(event => event.username))
+  ).filter(username => username !== 'Someone');
+  
+  const typingMessage = (() => {
+    if (uniqueUsernames.length === 0) return '';
+    if (uniqueUsernames.length === 1) return `${uniqueUsernames[0]} is typing...`;
+    if (uniqueUsernames.length === 2) return `${uniqueUsernames[0]} and ${uniqueUsernames[1]} are typing...`;
+    return 'Several people are typing...';
+  })();
 
   return {
-    typingEvents,
-    isAnyoneTyping,
-    typingUsers,
+    typingUsers: uniqueUsernames,
     typingMessage,
+    isAnyoneTyping: otherUserEvents.length > 0,
+    typingEvents: otherUserEvents,
   };
 };
 
-export default useTypingEvents;
+export default useTypingEventsForChannel;

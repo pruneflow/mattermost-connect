@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { WebSocketClient } from '@mattermost/client';
 import { useAppSelector } from './useAppSelector';
-import { selectWebSocketConnectionStatus } from '../store/selectors';
+import { selectWebSocketConnectionStatus } from "../store/selectors";
 import { useAppDispatch } from './useAppDispatch';
 import { setConnectionStatus, setConnectionError } from '../store/slices/websocketSlice';
 import { useUnreadCounts } from './useUnreadCounts';
 import { useChannelWebSocket } from './useChannelWebSocket';
 import { useTeamWebSocket } from './useTeamWebSocket';
+import { useTypingWebSocket } from './useTypingWebSocket';
+import { WebSocketClient } from '@mattermost/client';
 
 interface UseWebSocketReturn {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -17,7 +18,7 @@ interface UseWebSocketReturn {
 
 export const useWebSocket = (): UseWebSocketReturn => {
   const dispatch = useAppDispatch();
-  const wsClientRef = useRef<WebSocketClient | null>(null);
+  const wsClientRef = useRef<any>(null);
   const serverUrlRef = useRef<string>('');
   const tokenRef = useRef<string>('');
   
@@ -25,56 +26,63 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const { handleWebSocketEvent: handleUnreadEvent } = useUnreadCounts();
   const { handleChannelEvent } = useChannelWebSocket();
   const { handleTeamEvent } = useTeamWebSocket();
+  const { handleTypingEvent } = useTypingWebSocket();
 
   const connect = useCallback((serverUrl: string, token: string) => {
     if (wsClientRef.current) {
       wsClientRef.current.close();
     }
 
-    const wsUrl = serverUrl.replace(/^http/, 'ws') + '/api/v4/websocket';
-    const wsClient = new WebSocketClient();
-    
     serverUrlRef.current = serverUrl;
     tokenRef.current = token;
-    wsClientRef.current = wsClient;
     
     dispatch(setConnectionStatus('connecting'));
 
-    wsClient.addFirstConnectListener(() => {
+    // Use official @mattermost/client WebSocketClient
+    const wsClient = new WebSocketClient();
+    wsClientRef.current = wsClient;
+
+    // Convert HTTP to WebSocket URL
+    const wsProtocol = serverUrl.startsWith("https") ? "wss" : "ws";
+    const baseUrl = serverUrl.replace(/^https?:\/\//, "");
+    const wsUrl = `${wsProtocol}://${baseUrl}/api/v4/websocket`;
+
+    console.log('WebSocket: Connecting to:', wsUrl);
+
+    // Set up event handlers
+    wsClient.setEventCallback((msg: any) => {
+      if (msg.event && msg.data) {
+        // Route events to appropriate handlers
+        handleTypingEvent(msg);
+        handleUnreadEvent(msg.event, msg.data);
+        handleChannelEvent(msg.event, msg.data);
+        handleTeamEvent(msg.event, msg.data);
+      }
+    });
+
+    wsClient.setFirstConnectCallback(() => {
       console.log('WebSocket: First connection established');
       dispatch(setConnectionStatus('connected'));
     });
 
-    wsClient.addReconnectListener(() => {
-      console.log('WebSocket: Reconnected');
+    wsClient.setReconnectCallback(() => {
+      console.log('WebSocket: Reconnection established');
       dispatch(setConnectionStatus('connected'));
     });
 
-    wsClient.addCloseListener((event) => {
-      console.log('WebSocket: Connection closed', event);
+    wsClient.setCloseCallback(() => {
+      console.log('WebSocket: Connection closed');
       dispatch(setConnectionStatus('disconnected'));
     });
 
-    wsClient.addErrorListener((event) => {
-      console.error('WebSocket: Error', event);
-      dispatch(setConnectionError(event.toString()));
+    wsClient.setErrorCallback((error: any) => {
+      console.error('WebSocket: Error', error);
+      dispatch(setConnectionError('WebSocket connection error'));
     });
 
-    wsClient.addMessageListener((msg) => {
-      try {
-        if (msg.event && msg.data) {
-          // Route events to appropriate handlers
-          handleUnreadEvent(msg.event, msg.data);
-          handleChannelEvent(msg.event, msg.data);
-          handleTeamEvent(msg.event, msg.data);
-        }
-      } catch (error) {
-        console.error('WebSocket: Error handling message', error, msg);
-      }
-    });
-
+    // Connect with token
     wsClient.initialize(wsUrl, token);
-  }, [handleUnreadEvent, handleChannelEvent, handleTeamEvent, dispatch]);
+  }, [handleUnreadEvent, handleChannelEvent, handleTeamEvent, handleTypingEvent, dispatch]);
 
   const disconnect = useCallback(() => {
     if (wsClientRef.current) {

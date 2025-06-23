@@ -33,6 +33,41 @@ export type {
   Post
 } from '@mattermost/types/posts';
 
+// WebSocket event types
+export interface WebSocketEvent {
+  event: string;
+  data: Record<string, any>;
+  broadcast?: {
+    channel_id?: string;
+    team_id?: string;
+    user_id?: string;
+    omit_users?: string[] | null;
+  };
+  seq?: number;
+}
+
+// WebSocket message types
+export interface WebSocketMessage {
+  action: string;
+  seq: number;
+  data: Record<string, any>;
+}
+
+// Common WebSocket events
+export type WebSocketEventType = 
+  | 'typing'
+  | 'posted'
+  | 'channel_updated'
+  | 'channel_viewed'
+  | 'channel_created'
+  | 'channel_deleted'
+  | 'user_added'
+  | 'user_removed'
+  | 'user_updated'
+  | 'status_change'
+  | 'hello'
+  | 'authentication_challenge';
+
 // Auth types - keep our own for compatibility
 export interface LoginRequest {
   login_id: string;
@@ -59,18 +94,6 @@ export interface ChannelUnreadResponse {
   last_viewed_at: number;
 }
 
-// WebSocket Event Types
-export interface WebSocketMessage {
-  event: string;
-  data: Record<string, unknown>;
-  broadcast: {
-    omit_users: Record<string, boolean>;
-    user_id: string;
-    channel_id: string;
-    team_id: string;
-  };
-  seq: number;
-}
 
 export interface WSEventPosted {
   channel_display_name: string;

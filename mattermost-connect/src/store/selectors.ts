@@ -5,7 +5,6 @@ import { getChannelDisplayName } from '../utils/channelUtils';
 
 // Extended channel type with enriched data
 export interface EnrichedChannel extends Channel {
-  isActive: boolean;
   hasUnreads: boolean;
   unreadCount: number;
   mentionCount: number;
@@ -86,8 +85,19 @@ export const selectChannelsForCurrentTeam = createSelector(
       const isMuted = membership?.notify_props?.mark_unread === 'mention';
       const unread = channelUnreads[channel.id];
       
-      const unreadCount = isMuted ? 0 : (unread?.msg_count || 0);
-      const mentionCount = unread?.mention_count || 0;
+      let unreadCount: number;
+      let mentionCount: number;
+      
+      if (channel.type === 'D') {
+        // Direct Messages: all unreads are considered mentions (Mattermost pattern)
+        unreadCount = 0;
+        mentionCount = isMuted ? 0 : (unread?.msg_count || 0);
+      } else {
+        // Team channels: separate unreads and mentions
+        unreadCount = isMuted ? 0 : (unread?.msg_count || 0);
+        mentionCount = unread?.mention_count || 0;
+      }
+      
       const hasUnreads = unreadCount > 0 || mentionCount > 0;
 
       // Compute display name and user data for direct/group channels
@@ -270,11 +280,15 @@ export const selectMyChannelMember = (channelId: string) => createSelector(
 // ============================================================================
 
 /**
- * Get channel by ID with all data (unreads, user names, etc.)
+ * Get channel by ID with all data (factory pattern) - Following Mattermost pattern
+ * Usage: const getChannelById = useMemo(() => selectChannelByIdFactory(), []); const channel = useSelector(state => getChannelById(state, channelId));
  */
-export const selectChannelById = (channelId: string) => createSelector(
-  [selectChannelsForCurrentTeam],
-  (channels): EnrichedChannel | null => {
+export const selectChannelByIdFactory = () => createSelector(
+  [
+    selectChannelsForCurrentTeam,
+    (state: RootState, channelId: string) => channelId
+  ],
+  (channels: EnrichedChannel[], channelId: string): EnrichedChannel | null => {
     return channels.find(channel => channel.id === channelId) || null;
   }
 );
@@ -303,42 +317,38 @@ export const selectServerUrl = (state: RootState) => state.auth.serverUrl;
 export const selectIsLoggingIn = (state: RootState) => state.views.auth.isLoggingIn;
 export const selectLoginError = (state: RootState) => state.views.auth.loginError;
 
-/**
- * Get all typing events (memoized)
- */
-export const selectTypingEvents = createSelector(
-  [selectWebSocketState],
-  (websocketState) => websocketState.typingEvents
-);
 
 /**
- * Get typing events for specific channel (memoized)
- * Performance benefit: Avoids filtering on every render
+ * Simple direct selectors for typing events (Mattermost approach without factories)
+ * These selectors avoid the instability warnings by directly accessing state
  */
-export const selectTypingEventsForChannel = (channelId: string) => createSelector(
-  [selectTypingEvents],
-  (typingEvents) => typingEvents.filter(event => event.channel_id === channelId)
-);
-
-/**
- * Check if anyone is typing in channel (memoized)
- */
-export const selectIsAnyoneTypingInChannel = (channelId: string) => createSelector(
-  [selectTypingEventsForChannel(channelId)],
-  (channelTypingEvents) => channelTypingEvents.length > 0
-);
-
-/**
- * Get typing users for channel (memoized)
- * Performance benefit: Avoids Set creation and filtering on every render
- */
-export const selectTypingUsersInChannel = (channelId: string) => createSelector(
-  [selectTypingEventsForChannel(channelId)],
-  (channelTypingEvents) => {
+export const selectTypingEventsForChannel = createSelector(
+  [
+    (state: RootState) => state.websocket.typingEventsByChannel,
+    (state: RootState) => state.entities.users.currentUserId,
+    (state: RootState, channelId: string) => channelId
+  ],
+  (allTypingEvents, currentUserId, channelId) => {
+    const events = allTypingEvents[channelId] || [];
+    const otherUserEvents = events.filter(event => event.user_id !== currentUserId);
+    
     const uniqueUsernames = Array.from(
-      new Set(channelTypingEvents.map(event => event.username))
-    );
-    return uniqueUsernames.filter(username => username !== 'Someone');
+      new Set(otherUserEvents.map(event => event.username))
+    ).filter(username => username !== 'Someone');
+    
+    const typingMessage = (() => {
+      if (uniqueUsernames.length === 0) return '';
+      if (uniqueUsernames.length === 1) return `${uniqueUsernames[0]} is typing...`;
+      if (uniqueUsernames.length === 2) return `${uniqueUsernames[0]} and ${uniqueUsernames[1]} are typing...`;
+      return 'Several people are typing...';
+    })();
+    
+    return {
+      events: otherUserEvents,
+      isAnyoneTyping: otherUserEvents.length > 0,
+      typingUsers: uniqueUsernames,
+      typingMessage
+    };
   }
 );
 
@@ -378,17 +388,157 @@ export const selectIsNavigating = (state: RootState) => state.views.navigation.i
 export const selectIsMobile = (state: RootState) => state.views.ui.isMobile;
 export const selectSidebarWidth = (state: RootState) => state.views.ui.sidebarWidth;
 
+
+// ============================================================================
+// INDIVIDUAL CHANNEL SELECTORS (One selector per channelId)
+// ============================================================================
+
+// Cache for stable array references
+const emptyArrays = {
+  public: [],
+  private: [],
+  direct: [],
+  group: []
+};
+
 /**
- * Get typing message for channel (memoized)
- * Following Mattermost pattern for typing indicators
+ * Get channel IDs only (global selector for lists)
+ * Returns stable array references when content hasn't changed
  */
-export const selectTypingMessageForChannel = (channelId: string) => createSelector(
-  [selectTypingUsersInChannel(channelId)],
-  (typingUsers) => {
-    if (typingUsers.length === 0) return '';
-    if (typingUsers.length === 1) return `${typingUsers[0]} is typing...`;
-    if (typingUsers.length === 2) return `${typingUsers[0]} and ${typingUsers[1]} are typing...`;
-    return 'Several people are typing...';
+export const selectChannelIdsForCurrentTeam = createSelector(
+  [
+    selectChannelsData,
+    selectCurrentTeamId,
+    (state: RootState) => state.entities.channels.myMembers
+  ],
+  (channels, currentTeamId, myMembers) => {
+    if (!currentTeamId) return emptyArrays;
+
+    const teamChannels = Object.values(channels).filter((channel: any) =>
+      channel.team_id === currentTeamId || channel.type === 'D' || channel.type === 'G'
+    );
+
+    // Only filter by membership, return IDs only
+    const memberChannels = teamChannels.filter((channel: any) => 
+      myMembers[channel.id] || channel.type === 'D'
+    );
+
+    const publicIds = memberChannels.filter((c: any) => c.type === 'O').map((c: any) => c.id);
+    const privateIds = memberChannels.filter((c: any) => c.type === 'P').map((c: any) => c.id);
+    const directIds = memberChannels.filter((c: any) => c.type === 'D').map((c: any) => c.id);
+    const groupIds = memberChannels.filter((c: any) => c.type === 'G').map((c: any) => c.id);
+
+    // Return empty arrays references when empty to prevent re-renders
+    return {
+      public: publicIds.length > 0 ? publicIds : emptyArrays.public,
+      private: privateIds.length > 0 ? privateIds : emptyArrays.private,
+      direct: directIds.length > 0 ? directIds : emptyArrays.direct,
+      group: groupIds.length > 0 ? groupIds : emptyArrays.group,
+    };
+  }
+);
+
+/**
+ * Simple direct selector for channel by ID (Simplified stable approach)
+ * Avoids factory pattern to prevent selector instability warnings
+ */
+export const selectChannelById = createSelector(
+  [
+    (state: RootState, channelId: string) => state.entities.channels.channels[channelId],
+    (state: RootState, channelId: string) => state.entities.channels.unreads[channelId],
+    (state: RootState, channelId: string) => state.entities.channels.myMembers[channelId],
+    (state: RootState) => state.entities.users.currentUserId,
+    (state: RootState) => state.entities.users,
+    (state: RootState, channelId: string) => channelId,
+  ],
+  (channel, unread, myMember, currentUserId, usersState, channelId): EnrichedChannel | null => {
+    if (!channel) return null;
+
+    // Build enriched channel data (isolated per channel)
+    const isMuted = myMember?.notify_props?.mark_unread === 'mention';
+    
+    let unreadCount = 0;
+    let mentionCount = 0;
+    
+    if (unread) {
+      if (channel.type === 'D') {
+        // Direct Messages: all unreads are mentions
+        unreadCount = 0;
+        mentionCount = isMuted ? 0 : (unread.msg_count || 0);
+      } else {
+        // Team channels: separate unreads and mentions  
+        unreadCount = isMuted ? 0 : (unread.msg_count || 0);
+        mentionCount = unread.mention_count || 0;
+      }
+    }
+
+    const hasUnreads = unreadCount > 0 || mentionCount > 0;
+
+    // Use utility function for display name
+    const computedDisplayName = getChannelDisplayName(channel, usersState.profiles, currentUserId);
+    
+    // Get other user info for DMs
+    let otherUser: any = null;
+    let otherUserId: string | undefined;
+    if (channel.type === 'D' && currentUserId) {
+      const userIds = channel.name.split('__');
+      otherUserId = userIds.find(id => id !== currentUserId);
+      if (otherUserId) {
+        otherUser = usersState.profiles[otherUserId];
+      }
+    }
+
+    return {
+      ...channel,
+      hasUnreads,
+      unreadCount,
+      mentionCount,
+      isMuted,
+      computedDisplayName,
+      otherUser,
+      otherUserId,
+    };
+  }
+);
+
+/**
+ * Search channels by query (returns filtered channel IDs)
+ * Uses individual channel selectors to get display names for search
+ */
+export const createSelectFilteredChannelIds = () => createSelector(
+  [
+    selectChannelIdsForCurrentTeam,
+    (state: RootState, searchQuery: string) => searchQuery.toLowerCase().trim(),
+    (state: RootState) => state.entities.channels.channels,
+    (state: RootState) => state.entities.users,
+  ],
+  (channelIds, searchQuery, channels, usersState) => {
+    if (!searchQuery) return channelIds;
+
+    const filterIds = (ids: string[]) => {
+      return ids.filter(channelId => {
+        const channel = channels[channelId];
+        if (!channel) return false;
+
+        // Get display name using utility function
+        const displayName = getChannelDisplayName(channel, usersState.profiles, usersState.currentUserId);
+        
+        // Search in multiple fields
+        return (
+          displayName.toLowerCase().includes(searchQuery) ||
+          channel.display_name?.toLowerCase().includes(searchQuery) ||
+          channel.name?.toLowerCase().includes(searchQuery) ||
+          channel.purpose?.toLowerCase().includes(searchQuery)
+        );
+      });
+    };
+
+    return {
+      public: filterIds(channelIds.public),
+      private: filterIds(channelIds.private),
+      direct: filterIds(channelIds.direct),
+      group: filterIds(channelIds.group),
+    };
   }
 );
 

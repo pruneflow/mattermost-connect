@@ -12,14 +12,14 @@ export interface WebSocketState {
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
   lastError: string | null;
   reconnectAttempts: number;
-  typingEvents: TypingEvent[];
+  typingEventsByChannel: Record<string, TypingEvent[]>; // Keyed by channel_id
 }
 
 const initialState: WebSocketState = {
   status: 'disconnected',
   lastError: null,
   reconnectAttempts: 0,
-  typingEvents: [],
+  typingEventsByChannel: {},
 };
 
 const websocketSlice = createSlice({
@@ -44,33 +44,59 @@ const websocketSlice = createSlice({
       state.status = 'disconnected';
       state.lastError = null;
       state.reconnectAttempts = 0;
-      state.typingEvents = [];
+      state.typingEventsByChannel = {};
     },
     // Typing events management
     addTypingEvent: (state, action: PayloadAction<TypingEvent>) => {
+      const { channel_id, user_id } = action.payload;
+      
+      // Initialize channel typing events if not exists
+      if (!state.typingEventsByChannel[channel_id]) {
+        state.typingEventsByChannel[channel_id] = [];
+      }
+      
       // Remove existing typing event from same user in same channel
-      state.typingEvents = state.typingEvents.filter(
-        event => !(event.user_id === action.payload.user_id && event.channel_id === action.payload.channel_id)
+      state.typingEventsByChannel[channel_id] = state.typingEventsByChannel[channel_id].filter(
+        event => event.user_id !== user_id
       );
+      
       // Add new typing event
-      state.typingEvents.push(action.payload);
+      state.typingEventsByChannel[channel_id].push(action.payload);
     },
     removeTypingEvent: (state, action: PayloadAction<{ user_id: string; channel_id: string }>) => {
-      state.typingEvents = state.typingEvents.filter(
-        event => !(event.user_id === action.payload.user_id && event.channel_id === action.payload.channel_id)
-      );
+      const { channel_id, user_id } = action.payload;
+      if (state.typingEventsByChannel[channel_id]) {
+        state.typingEventsByChannel[channel_id] = state.typingEventsByChannel[channel_id].filter(
+          event => event.user_id !== user_id
+        );
+        // Clean up empty arrays
+        if (state.typingEventsByChannel[channel_id].length === 0) {
+          delete state.typingEventsByChannel[channel_id];
+        }
+      }
     },
     clearTypingEventsForChannel: (state, action: PayloadAction<string>) => {
-      state.typingEvents = state.typingEvents.filter(
-        event => event.channel_id !== action.payload
-      );
+      delete state.typingEventsByChannel[action.payload];
     },
     clearExpiredTypingEvents: (state, action: PayloadAction<number>) => {
       const currentTime = action.payload;
       const TYPING_TIMEOUT = 5000; // 5 seconds timeout
-      state.typingEvents = state.typingEvents.filter(
-        event => (currentTime - event.timestamp) < TYPING_TIMEOUT
-      );
+      
+      // Process each channel separately (only affects channels with expired events)
+      Object.keys(state.typingEventsByChannel).forEach(channelId => {
+        const channelEvents = state.typingEventsByChannel[channelId];
+        const validEvents = channelEvents.filter(
+          event => (currentTime - event.timestamp) < TYPING_TIMEOUT
+        );
+        
+        if (validEvents.length !== channelEvents.length) {
+          if (validEvents.length === 0) {
+            delete state.typingEventsByChannel[channelId];
+          } else {
+            state.typingEventsByChannel[channelId] = validEvents;
+          }
+        }
+      });
     },
   },
 });

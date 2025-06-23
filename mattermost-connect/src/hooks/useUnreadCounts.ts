@@ -28,11 +28,12 @@ export const useUnreadCounts = () => {
   const currentUser = useAppSelector(selectCurrentUser);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const channelUnreads = useAppSelector(state => state.entities.channels.unreads);
+  const channels = useAppSelector(state => state.entities.channels.channels);
   const { handleError } = useErrorHandler();
 
-  // Get channel data using new selector
+  // Get channel data using stable selector pattern
   const getChannelData = useCallback((channelId: string) => {
-    return selectChannelById(channelId);
+    return (state: any) => selectChannelById(state, channelId);
   }, []);
 
   const markChannelAsRead = useCallback(async (channelId: string): Promise<void> => {
@@ -75,7 +76,6 @@ export const useUnreadCounts = () => {
 
   // Handle WebSocket events for unreads - single source of truth updates
   const handleWebSocketEvent = useCallback((event: string, data: any) => {
-    console.debug(`event ${event}`, data)
     switch (event) {
       case 'posted':
         if (data.post) {
@@ -83,12 +83,25 @@ export const useUnreadCounts = () => {
           if(post.user_id !== currentUserId) {
             const channelId = post.channel_id;
             const teamId = data.team_id;
-            const mentionCount = post.message?.includes(`@${currentUser?.username}`) ? 1 : 0;
+            const channel = channels[channelId];
+            
+            let msgCount = 1;
+            let mentionCount = 0;
+            
+            if (channel?.type === 'D') {
+              // Direct Messages: all messages are mentions, don't increment msg_count
+              msgCount = 0;
+              mentionCount = 1; // Every DM message is a mention
+            } else {
+              // Team channels: normal logic
+              msgCount = 1;
+              mentionCount = post.message?.includes(`@${currentUser?.username}`) ? 1 : 0;
+            }
 
             // Update channel unread count in channels.unreads
             dispatch(incrementChannelUnreadCount({
               channelId,
-              msgCount: 1,
+              msgCount,
               mentionCount,
               fromCurrentUser: false,
             }));
@@ -97,7 +110,7 @@ export const useUnreadCounts = () => {
             if (teamId) {
               dispatch(incrementTeamUnreadCount({
                 teamId,
-                msgCount: 1,
+                msgCount,
                 mentionCount,
               }));
             }

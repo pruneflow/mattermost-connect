@@ -1,17 +1,16 @@
-import React from 'react';
+import React from "react";
 import { Box, SxProps, Theme } from '@mui/material';
 import { TypingDots } from '../atoms/TypingDots';
 import { UnreadBadge } from '../atoms/UnreadBadge';
 import { useTypingEventsForChannel } from '../../hooks/useTypingEvents';
-import { useAppSelector } from '../../hooks/useAppSelector';
-import { selectChannelById } from '../../store/selectors';
-import type { EnrichedChannel } from '../../store/selectors';
 
 export interface ChannelIndicatorProps {
   channelId: string;
+  hasUnreads?: boolean;
+  unreadCount?: number;
+  mentionCount?: number;
   sx?: SxProps<Theme>;
 }
-
 /**
  * ChannelIndicator component following Mattermost patterns
  * Shows either typing indicator or unread badge
@@ -19,18 +18,15 @@ export interface ChannelIndicatorProps {
  * 
  * Based on the original ChannelIndicators from src-old-backup but adapted to new architecture
  */
-export const ChannelIndicator: React.FC<ChannelIndicatorProps> = ({
+export const ChannelIndicator: React.FC<ChannelIndicatorProps> = React.memo(({
   channelId,
+  hasUnreads = false,
+  unreadCount = 0,
+  mentionCount = 0,
   sx
 }) => {
-  // Get typing status for this channel
+  // Get typing status for this channel - ONLY typing events subscription
   const { isAnyoneTyping } = useTypingEventsForChannel(channelId);
-  
-  // Get channel with all data
-  const channel: EnrichedChannel | null = useAppSelector(selectChannelById(channelId));
-  const hasUnreads = channel?.hasUnreads || false;
-  const unreadCount = channel?.unreadCount || 0;
-  const mentionCount = channel?.mentionCount || 0;
 
   return (
     <Box
@@ -58,6 +54,6 @@ export const ChannelIndicator: React.FC<ChannelIndicatorProps> = ({
       )}
     </Box>
   );
-};
+});
 
 export default ChannelIndicator;

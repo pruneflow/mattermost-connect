@@ -17,7 +17,6 @@ import type { Channel, UserProfile } from '../../api/types';
 
 export interface ChannelItemProps {
   channel: Channel & {
-    isActive?: boolean;
     hasUnreads?: boolean;
     unreadCount?: number;
     mentionCount?: number;
@@ -27,6 +26,7 @@ export interface ChannelItemProps {
     otherUser?: UserProfile | null;
     otherUserId?: string;
   };
+  isActive?: boolean;
   onClick?: (channelId: string) => void;
   compact?: boolean;
   sx?: SxProps<Theme>;
@@ -36,8 +36,9 @@ export interface ChannelItemProps {
  * ChannelItem component following Mattermost sidebar patterns
  * Displays channel with icon, name, and indicators (typing/unread)
  */
-export const ChannelItem: React.FC<ChannelItemProps> = ({
+export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
   channel,
+  isActive = false,
   onClick,
   compact = false,
   sx,
@@ -53,7 +54,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = ({
 
   // Channel name style based on state
   const getNameStyle = () => {
-    if (channel.isActive) {
+    if (isActive) {
       return {
         fontWeight: 600,
         color: 'primary.main',
@@ -106,7 +107,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = ({
       }}
     >
       <ListItemButton
-        selected={channel.isActive}
+        selected={isActive}
         onClick={handleClick}
         sx={{
           py: compact ? 0.25 : 0.5,
@@ -131,7 +132,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = ({
             <ChannelIcon
               channel={channel}
               size={compact ? 'small' : 'medium'}
-              color={channel.isActive ? 'inherit' : 'action'}
+              color={isActive ? 'inherit' : 'action'}
             />
           )}
         </ListItemIcon>
@@ -161,11 +162,16 @@ export const ChannelItem: React.FC<ChannelItemProps> = ({
 
         {/* Channel Indicator (Typing or Unread) */}
         <Box sx={{ ml: 'auto', pl: 1 }}>
-          <ChannelIndicator channelId={channel.id} />
+          <ChannelIndicator 
+            channelId={channel.id}
+            hasUnreads={channel.hasUnreads}
+            unreadCount={channel.unreadCount}
+            mentionCount={channel.mentionCount}
+          />
         </Box>
       </ListItemButton>
     </ListItem>
   );
-};
+});
 
 export default ChannelItem;
