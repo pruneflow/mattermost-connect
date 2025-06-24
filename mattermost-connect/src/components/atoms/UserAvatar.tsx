@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Avatar, Badge, Box } from '@mui/material';
 import { displayUsername, getProfileImageUrl } from '../../utils/userUtils';
 import { getStatusColor } from '../../utils/statusUtils';
@@ -6,6 +6,46 @@ import { useUserStatus } from '../../hooks/useUserStatus';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectUserById } from '../../store/selectors';
 import type { UserProfile } from '../../api/types';
+
+// Static styles and configurations extracted for performance
+const SIZE_MAP = {
+  xs: 24,
+  small: 28,
+  medium: 40,
+  large: 56,
+} as const;
+
+const FONT_SIZE_MAP = {
+  xs: '10px',
+  small: '12px', 
+  medium: '14px',
+  large: '18px',
+} as const;
+
+const STATUS_BADGE_SIZE_MAP = {
+  xs: 6,
+  small: 8,
+  medium: 10, 
+  large: 12,
+} as const;
+
+const STATIC_STYLES = {
+  badge: {
+    overlap: 'circular' as const,
+    anchorOrigin: { vertical: 'bottom' as const, horizontal: 'right' as const },
+  },
+  
+  statusIndicator: {
+    borderRadius: '50%',
+    border: '2px solid',
+    borderColor: 'background.paper',
+  } as const,
+  
+  avatarBase: {
+    bgcolor: 'primary.main',
+    fontWeight: 600,
+  } as const,
+};
 
 export interface UserAvatarProps {
   userId: string;
@@ -30,15 +70,28 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   // Get user's current status and color
   const userStatus = userId ? getUserStatus(userId) : null;
   const statusColor = getStatusColor(userStatus?.status);
-  // Size mapping for MUI Avatar
-  const sizeMap = {
-    xs: 24,
-    small: 28,
-    medium: 40,
-    large: 56,
-  };
-
-  const avatarSize = sizeMap[size];
+  
+  // Memoized styles based on size and statusColor
+  const styles = useMemo(() => {
+    const avatarSize = SIZE_MAP[size];
+    const statusBadgeSize = STATUS_BADGE_SIZE_MAP[size];
+    
+    return {
+      avatar: {
+        ...STATIC_STYLES.avatarBase,
+        width: avatarSize,
+        height: avatarSize,
+        fontSize: FONT_SIZE_MAP[size],
+      },
+      
+      statusIndicator: {
+        ...STATIC_STYLES.statusIndicator,
+        width: statusBadgeSize,
+        height: statusBadgeSize,
+        bgcolor: statusColor,
+      },
+    };
+  }, [size, statusColor]);
 
   // Generate initials using official Mattermost display name
   const getInitials = (user: UserProfile): string => {
@@ -60,13 +113,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   const avatar = (
     <Avatar
       src={profileImageUrl}
-      sx={{
-        width: avatarSize,
-        height: avatarSize,
-        bgcolor: 'primary.main', // Use theme primary color (Mattermost blue in light)
-        fontSize: size === 'xs' ? '10px' : size === 'small' ? '12px' : size === 'medium' ? '14px' : '18px',
-        fontWeight: 600,
-      }}
+      sx={styles.avatar}
       onClick={onClick}
     >
       {user ? getInitials(user) : '?'}
@@ -81,19 +128,10 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   // Wrap with status badge
   return (
     <Badge
-      overlap="circular"
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      overlap={STATIC_STYLES.badge.overlap}
+      anchorOrigin={STATIC_STYLES.badge.anchorOrigin}
       badgeContent={
-        <Box
-          sx={{
-            width: size === 'xs' ? 6 : size === 'small' ? 8 : size === 'medium' ? 10 : 12,
-            height: size === 'xs' ? 6 : size === 'small' ? 8 : size === 'medium' ? 10 : 12,
-            borderRadius: '50%',
-            bgcolor: statusColor,
-            border: '2px solid',
-            borderColor: 'background.paper',
-          }}
-        />
+        <Box sx={styles.statusIndicator} />
       }
     >
       {avatar}

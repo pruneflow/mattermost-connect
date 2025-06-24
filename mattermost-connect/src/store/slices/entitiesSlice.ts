@@ -30,6 +30,27 @@ export const updateTeamMemberRoles = createAsyncThunk(
 );
 
 /**
+ * Load user statuses by IDs with debounced batching (Mattermost pattern)
+ */
+export const loadUserStatuses = createAsyncThunk(
+  'entities/loadUserStatuses',
+  async (userIds: string[], { rejectWithValue }) => {
+    try {
+      if (userIds.length === 0) {
+        return { statuses: [] };
+      }
+
+      console.log(`Loading statuses for ${userIds.length} users`);
+      const statuses = await client.getStatusesByIds(userIds);
+      
+      return { statuses: statuses || [] };
+    } catch (error) {
+      return rejectWithValue({ userIds, error: error instanceof Error ? error.message : 'Failed to load user statuses' });
+    }
+  }
+);
+
+/**
  * Remove user from team
  */
 export const removeUserFromTeam = createAsyncThunk(
@@ -97,13 +118,29 @@ export const loadChannelsForTeam = createAsyncThunk(
 
       // Load missing users if any
       let missingUsers: UserProfile[] = [];
+      let missingUserStatuses: Record<string, UserStatus> = {};
+      
       if (userIdsToLoad.size > 0) {
         const existingUserIds = Object.keys(state.entities.users.profiles);
         const missingUserIds = Array.from(userIdsToLoad).filter(id => !existingUserIds.includes(id));
         
         if (missingUserIds.length > 0) {
-          console.log(`Loading ${missingUserIds.length} missing users for direct/group channels`);
-          missingUsers = await client.getProfilesByIds(missingUserIds);
+          console.log(`Loading ${missingUserIds.length} missing users and their statuses for direct/group channels`);
+          
+          // Parallel loading: users and their statuses (Mattermost pattern)
+          const [users, statuses] = await Promise.all([
+            client.getProfilesByIds(missingUserIds),
+            client.getStatusesByIds(missingUserIds)
+          ]);
+          
+          missingUsers = users;
+          
+          // Transform status array to Record<userId, UserStatus>
+          if (statuses && Array.isArray(statuses)) {
+            statuses.forEach((status: UserStatus) => {
+              missingUserStatuses[status.user_id] = status;
+            });
+          }
         }
       }
 
@@ -133,6 +170,7 @@ export const loadChannelsForTeam = createAsyncThunk(
         channels: teamChannels,
         members: myChannelMembers,
         users: missingUsers,
+        userStatuses: missingUserStatuses,
         unreads: initialUnreads,
         skipped: false
       };
@@ -470,7 +508,7 @@ const entitiesSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(loadChannelsForTeam.fulfilled, (state, action) => {
-        const { teamId, channels, members, users, unreads, skipped } = action.payload;
+        const { teamId, channels, members, users, userStatuses, unreads, skipped } = action.payload;
         
         if (skipped) {
           // Data already loaded, no action needed
@@ -501,6 +539,11 @@ const entitiesSlice = createSlice({
         users?.forEach((user: UserProfile) => {
           state.users.profiles[user.id] = user;
         });
+        
+        // Store user statuses loaded with users
+        if (userStatuses) {
+          Object.assign(state.users.statuses, userStatuses);
+        }
       })
       .addCase(loadChannelsForTeam.rejected, (state, action) => {
         console.error('Failed to load channels for team:', action.payload);

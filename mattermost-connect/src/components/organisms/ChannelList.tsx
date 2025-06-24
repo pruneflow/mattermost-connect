@@ -11,6 +11,26 @@ import { SearchInput } from '../atoms/SearchInput';
 import { TeamHeader } from '../molecules/TeamHeader';
 import { ChannelSection } from '../molecules/ChannelSection';
 import { useChannelLoader } from '../../hooks/useChannelLoader';
+
+// Static styles extracted for performance
+const STATIC_STYLES = {
+  container: {
+    width: '100%',
+  } as const,
+  
+  searchBox: {
+    p: 1,
+  } as const,
+  
+  channelsContainer: {
+    flex: 1,
+    overflow: 'auto',
+  } as const,
+  
+  divider: {
+    my: 1,
+  } as const,
+};
 import { useAutoChannelSelection } from '../../hooks/useAutoChannelSelection';
 import { useNavigation } from '../../hooks/useNavigation';
 import { useAppSelector } from '../../hooks/useAppSelector';
@@ -42,6 +62,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 }) => {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Memoized container styles with custom sx
+  const containerStyles = useMemo(() => ({
+    ...STATIC_STYLES.container,
+    ...sx,
+  }), [sx]);
 
   // Use current team and channel
   const currentTeam = useAppSelector(selectCurrentTeam);
@@ -86,7 +112,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
 
   return (
-    <Box sx={{ width: '100%', ...sx }}>
+    <Box sx={containerStyles}>
       {/* Team Header */}
       {showTeamHeader && (
         <TeamHeader team={currentTeam} compact={compact} />
@@ -94,7 +120,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       
       {/* Search Bar */}
       {showSearch && (
-        <Box sx={{ p: 1 }}>
+        <Box sx={STATIC_STYLES.searchBox}>
           <SearchInput
             placeholder="Find channels"
             value={searchQuery}
@@ -106,7 +132,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       )}
 
       {/* Channel Categories */}
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box sx={STATIC_STYLES.channelsContainer}>
         {/* Public Channels */}
         <ChannelSection
           title="Public Channels"
@@ -127,7 +153,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
         {/* Divider before Direct Messages */}
         {(channelIds.public.length > 0 || channelIds.private.length > 0) && channelIds.direct.length > 0 && (
-          <Divider sx={{ my: 1 }} />
+          <Divider sx={STATIC_STYLES.divider} />
         )}
 
         {/* Direct Messages */}

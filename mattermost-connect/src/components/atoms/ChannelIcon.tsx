@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Box, SvgIcon, SxProps, Theme } from '@mui/material';
 import {
   Public as PublicIcon,
@@ -8,6 +8,28 @@ import {
   Forum as ForumIcon,
 } from '@mui/icons-material';
 import type { Channel } from '../../api/types';
+
+// Static configuration extracted for performance  
+const SIZE_MAP = {
+  small: 16,
+  medium: 20,
+  large: 24,
+} as const;
+
+const CHANNEL_ICON_MAP: Record<string, typeof PublicIcon> = {
+  'O': PublicIcon,   // Open/Public channel
+  'P': PrivateIcon,  // Private channel
+  'D': PersonIcon,   // Direct message
+  'G': GroupIcon,    // Group message
+};
+
+const STATIC_STYLES = {
+  container: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as const,
+};
 
 export interface ChannelIconProps {
   channel: Channel;
@@ -26,49 +48,29 @@ export const ChannelIcon: React.FC<ChannelIconProps> = ({
   color = 'inherit',
   sx
 }) => {
-  // Icon size mapping
-  const sizeMap = {
-    small: 16,
-    medium: 20,
-    large: 24,
-  };
-
-  const iconSize = sizeMap[size];
-
-  // Get appropriate icon based on channel type
-  const getChannelIcon = () => {
-    switch (channel.type) {
-      case 'O': // Open/Public channel
-        return PublicIcon;
-      case 'P': // Private channel
-        return PrivateIcon;
-      case 'D': // Direct message
-        return PersonIcon;
-      case 'G': // Group message
-        return GroupIcon;
-      default:
-        return ForumIcon; // Fallback
-    }
-  };
-
-  const IconComponent = getChannelIcon();
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...sx,
-      }}
-    >
-      <SvgIcon
-        component={IconComponent}
-        sx={{
+  // Memoized icon component and styles
+  const { IconComponent, styles } = useMemo(() => {
+    const iconSize = SIZE_MAP[size];
+    const IconComponent = CHANNEL_ICON_MAP[channel.type] || ForumIcon;
+    
+    return {
+      IconComponent,
+      styles: {
+        container: {
+          ...STATIC_STYLES.container,
+          ...sx,
+        },
+        icon: {
           fontSize: iconSize,
           color: color === 'inherit' ? 'text.secondary' : `${color}.main`,
-        }}
-      />
+        },
+      },
+    };
+  }, [channel.type, size, color, sx]);
+
+  return (
+    <Box sx={styles.container}>
+      <SvgIcon component={IconComponent} sx={styles.icon} />
     </Box>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   IconButton,
@@ -15,6 +15,64 @@ import { Sidebar } from '../organisms/Sidebar';
 import { ChannelHeader } from '../molecules/ChannelHeader';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentChannel } from '../../store/selectors';
+
+// Static styles extracted for performance
+const STATIC_STYLES = {
+  container: {
+    display: 'flex',
+    height: '100vh',
+    overflow: 'hidden',
+  } as const,
+  
+  mainContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    minWidth: 0,
+  } as const,
+  
+  mobileAppBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    p: 2,
+    borderBottom: 1,
+    borderColor: 'divider',
+    backgroundColor: 'primary.main',
+    color: 'white',
+  } as const,
+  
+  mobileMenuButton: {
+    mr: 2,
+    color: 'inherit',
+  } as const,
+  
+  mobileTitle: {
+    flex: 1,
+  } as const,
+  
+  channelHeader: {
+    flexShrink: 0,
+  } as const,
+  
+  contentArea: {
+    flex: 1,
+    overflow: 'auto',
+    backgroundColor: 'background.default',
+    display: 'flex',
+    flexDirection: 'column',
+  } as const,
+  
+  welcomeMessage: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'text.secondary',
+    typography: 'h6',
+  } as const,
+};
 
 export interface AppLayoutProps {
   children?: React.ReactNode;
@@ -39,6 +97,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const currentChannel = useAppSelector(selectCurrentChannel);
 
+  // Memoized container styles with custom sx
+  const containerStyles = useMemo(() => ({
+    ...STATIC_STYLES.container,
+    ...sx,
+  }), [sx]);
+
   const handleDrawerToggle = () => {
     setMobileDrawerOpen(!mobileDrawerOpen);
   };
@@ -48,14 +112,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        height: '100vh',
-        overflow: 'hidden',
-        ...sx,
-      }}
-    >
+    <Box sx={containerStyles}>
       {/* Sidebar */}
       <Sidebar
         open={isMobile ? mobileDrawerOpen : true}
@@ -66,39 +123,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       />
 
       {/* Main Content Area */}
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          minWidth: 0, // Allow content to shrink
-        }}
-      >
+      <Box sx={STATIC_STYLES.mainContent}>
         {/* Mobile App Bar */}
         {isMobile && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              p: 2,
-              borderBottom: 1,
-              borderColor: 'divider',
-              backgroundColor: 'primary.main',
-              color: 'white',
-            }}
-          >
+          <Box sx={STATIC_STYLES.mobileAppBar}>
             <IconButton
               onClick={handleDrawerToggle}
               edge="start"
               aria-label="toggle sidebar"
-              sx={{ mr: 2, color: 'inherit' }}
+              sx={STATIC_STYLES.mobileMenuButton}
             >
               <MenuIcon />
             </IconButton>
             
-            <Typography variant="h6" sx={{ flex: 1 }}>
+            <Typography variant="h6" sx={STATIC_STYLES.mobileTitle}>
               MattermostConnect
             </Typography>
             
@@ -110,33 +148,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {showChannelHeader && currentChannel && (
           <ChannelHeader
             channel={currentChannel}
-            sx={{
-              flexShrink: 0,
-            }}
+            sx={STATIC_STYLES.channelHeader}
           />
         )}
 
         {/* Main Content */}
-        <Box
-          sx={{
-            flex: 1,
-            overflow: 'auto',
-            backgroundColor: 'background.default',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
+        <Box sx={STATIC_STYLES.contentArea}>
           {children || (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'text.secondary',
-                typography: 'h6',
-              }}
-            >
+            <Box sx={STATIC_STYLES.welcomeMessage}>
               {currentChannel ? (
                 `Welcome to ${currentChannel.display_name}`
               ) : (

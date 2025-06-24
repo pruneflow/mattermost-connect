@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   TextField,
   InputAdornment,
@@ -10,6 +10,38 @@ import {
   Search as SearchIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
+
+// Static styles extracted for performance
+const STATIC_STYLES = {
+  clearButton: {
+    color: 'text.secondary',
+    '&:hover': {
+      color: 'text.primary',
+    },
+  } as const,
+  
+  textFieldBase: {
+    '& .MuiOutlinedInput-root': {
+      backgroundColor: 'background.paper',
+      '& fieldset': {
+        borderColor: 'divider',
+      },
+      '&:hover fieldset': {
+        borderColor: 'primary.main',
+      },
+      '&.Mui-focused fieldset': {
+        borderColor: 'primary.main',
+        borderWidth: 1,
+      },
+    },
+    '& .MuiInputBase-input': {
+      '&::placeholder': {
+        color: 'text.secondary',
+        opacity: 0.7,
+      },
+    },
+  } as const,
+};
 
 export interface SearchInputProps {
   value?: string;
@@ -39,6 +71,27 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   sx,
 }) => {
   const [searchQuery, setSearchQuery] = useState(value);
+
+  // Memoized styles based on size
+  const styles = useMemo(() => ({
+    searchIcon: {
+      color: 'text.secondary',
+      fontSize: size === 'small' ? 18 : 20,
+    },
+    
+    textField: {
+      ...STATIC_STYLES.textFieldBase,
+      '& .MuiOutlinedInput-root': {
+        ...STATIC_STYLES.textFieldBase['& .MuiOutlinedInput-root'],
+        borderRadius: size === 'small' ? 1 : 1.5,
+      },
+      '& .MuiInputBase-input': {
+        ...STATIC_STYLES.textFieldBase['& .MuiInputBase-input'],
+        fontSize: size === 'small' ? '0.875rem' : '0.9375rem',
+      },
+      ...sx,
+    },
+  }), [size, sx]);
 
   // Handle input change with immediate update
   const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,12 +130,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
       InputProps={{
         startAdornment: (
           <InputAdornment position="start">
-            <SearchIcon
-              sx={{
-                color: 'text.secondary',
-                fontSize: size === 'small' ? 18 : 20,
-              }}
-            />
+            <SearchIcon sx={styles.searchIcon} />
           </InputAdornment>
         ),
         endAdornment: searchQuery && (
@@ -92,42 +140,14 @@ export const SearchInput: React.FC<SearchInputProps> = ({
               size={size}
               edge="end"
               aria-label="clear search"
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  color: 'text.primary',
-                },
-              }}
+              sx={STATIC_STYLES.clearButton}
             >
               <ClearIcon fontSize="small" />
             </IconButton>
           </InputAdornment>
         ),
       }}
-      sx={{
-        '& .MuiOutlinedInput-root': {
-          borderRadius: size === 'small' ? 1 : 1.5,
-          backgroundColor: 'background.paper',
-          '& fieldset': {
-            borderColor: 'divider',
-          },
-          '&:hover fieldset': {
-            borderColor: 'primary.main',
-          },
-          '&.Mui-focused fieldset': {
-            borderColor: 'primary.main',
-            borderWidth: 1,
-          },
-        },
-        '& .MuiInputBase-input': {
-          fontSize: size === 'small' ? '0.875rem' : '0.9375rem',
-          '&::placeholder': {
-            color: 'text.secondary',
-            opacity: 0.7,
-          },
-        },
-        ...sx,
-      }}
+      sx={styles.textField}
     />
   );
 };

@@ -2,6 +2,24 @@ import React from 'react';
 import { Typography, List } from '@mui/material';
 import isEqual from 'react-fast-compare';
 
+// Static styles extracted for performance
+const STATIC_STYLES = {
+  sectionTitle: {
+    display: 'block',
+    px: 2,
+    py: 1,
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: 'text.secondary',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  } as const,
+  
+  channelList: {
+    py: 0,
+  } as const,
+};
+
 export interface ChannelSectionProps {
   title: string;
   channelIds: string[];
@@ -28,7 +46,7 @@ const ChannelItemsList: React.FC<ChannelItemsListProps> = React.memo(({
   compact = false
 }) => {
   return (
-    <List dense sx={{ py: 0 }}>
+    <List dense sx={STATIC_STYLES.channelList}>
       {channelIds.map((channelId) => (
         <ChannelItemContainer
           key={channelId}
@@ -60,16 +78,7 @@ export const ChannelSection: React.FC<ChannelSectionProps> = React.memo(({
     <>
       <Typography
         variant="overline"
-        sx={{
-          display: 'block',
-          px: 2,
-          py: 1,
-          fontSize: '0.75rem',
-          fontWeight: 600,
-          color: 'text.secondary',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-        }}
+        sx={STATIC_STYLES.sectionTitle}
       >
         {title}
       </Typography>

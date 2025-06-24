@@ -1,8 +1,19 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Box, SxProps, Theme } from '@mui/material';
 import { TypingDots } from '../atoms/TypingDots';
 import { UnreadBadge } from '../atoms/UnreadBadge';
 import { useTypingEventsForChannel } from '../../hooks/useTypingEvents';
+
+// Static styles extracted for performance
+const STATIC_STYLES = {
+  container: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 'auto',
+    height: '100%',
+  } as const,
+};
 
 export interface ChannelIndicatorProps {
   channelId: string;
@@ -28,17 +39,14 @@ export const ChannelIndicator: React.FC<ChannelIndicatorProps> = React.memo(({
   // Get typing status for this channel - ONLY typing events subscription
   const { isAnyoneTyping } = useTypingEventsForChannel(channelId);
 
+  // Memoized styles with custom sx prop
+  const containerStyles = useMemo(() => ({
+    ...STATIC_STYLES.container,
+    ...sx,
+  }), [sx]);
+
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 'auto',
-        height: '100%',
-        ...sx,
-      }}
-    >
+    <Box sx={containerStyles}>
       {/* Priority 1: If someone is typing, show typing indicator */}
       {isAnyoneTyping && (
         <TypingDots size="small" />
