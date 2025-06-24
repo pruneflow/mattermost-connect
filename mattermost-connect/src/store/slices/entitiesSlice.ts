@@ -89,6 +89,7 @@ export const loadChannelsForTeam = createAsyncThunk(
       // Fetch channels, members and unreads in parallel (Mattermost pattern)
       const [teamChannels, myChannelMembers] = await Promise.all([
         client.getMyChannels(teamId),
+        client.getChannelCategoryOrder()
         client.getMyChannelMembers(teamId)
       ]);
 

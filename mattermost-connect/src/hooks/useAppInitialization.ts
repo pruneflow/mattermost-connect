@@ -7,21 +7,20 @@ import {
   selectAuthToken,
   selectServerUrl,
   selectCurrentTeamId,
-  selectTeamsById,
   selectTeams,
 } from "../store/selectors";
 import {
   setUsersStatus,
   setTeams,
-  setCurrentTeamId,
   setTeamUnreads,
 } from "../store/slices/entitiesSlice";
-import { selectAllUserIds } from "../store/selectors";
 import { client } from "../api/client";
 import { store } from "../store";
 import { useWebSocket } from "./useWebSocket";
 import { useNavigation } from "./useNavigation";
 import { useUserStatus } from "./useUserStatus";
+
+const STATUS_INTERVAL = 60000;
 
 /**
  * Centralised app initialization hook following Mattermost pattern
@@ -45,7 +44,6 @@ export const useAppInitialization = () => {
   const currentUserId = useAppSelector(selectCurrentUserId);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const teams = useAppSelector(selectTeams);
-  const allUserIds = useAppSelector(selectAllUserIds);
 
   // Periodic status polling function
   const startPeriodicStatusPolling = useCallback(() => {
@@ -83,8 +81,8 @@ export const useAppInitialization = () => {
     // Poll immediately
     pollStatuses();
 
-    // Then poll every 30 seconds
-    const interval = setInterval(pollStatuses, 30000);
+    // Then poll every 60 seconds
+    const interval = setInterval(pollStatuses, STATUS_INTERVAL);
 
     // Return cleanup function (could be stored in ref if needed)
     return () => clearInterval(interval);
@@ -169,7 +167,7 @@ export const useAppInitialization = () => {
       // Start periodic status polling after initialization
       setTimeout(() => {
         startPeriodicStatusPolling();
-      }, 30000); // 30 seconds after initialization
+      }, STATUS_INTERVAL);
     } catch (error) {
       console.error("❌ Failed to initialize app:", error);
       setIsInitialized(false);
