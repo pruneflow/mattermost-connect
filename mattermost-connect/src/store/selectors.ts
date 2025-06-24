@@ -403,6 +403,12 @@ export const selectUserProfiles = (state: RootState) =>
 export const selectUserById = (userId: string) =>
   createSelector([selectUserProfiles], (profiles) => profiles[userId]);
 
+// Select all user IDs (for status polling)
+export const selectAllUserIds = createSelector(
+  [selectUserProfiles],
+  (profiles): string[] => Object.keys(profiles)
+);
+
 // WebSocket status selector
 export const selectWebSocketConnectionStatus = (state: RootState) =>
   state.websocket.status;

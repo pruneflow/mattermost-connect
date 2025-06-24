@@ -16,9 +16,12 @@ import {
   setCurrentTeamId,
   setTeamUnreads,
 } from "../store/slices/entitiesSlice";
+import { selectAllUserIds } from "../store/selectors";
 import { client } from "../api/client";
+import { store } from "../store";
 import { useWebSocket } from "./useWebSocket";
 import { useNavigation } from "./useNavigation";
+import { useUserStatus } from "./useUserStatus";
 
 /**
  * Centralised app initialization hook following Mattermost pattern
@@ -29,6 +32,9 @@ export const useAppInitialization = () => {
   const { connect: connectWebSocket, disconnect: disconnectWebSocket } =
     useWebSocket();
   const { navigateToTeam, getLastVisited } = useNavigation();
+  
+  // Initialize user status management (includes periodic polling)
+  useUserStatus();
 
   // Mattermost pattern: track initialization state
   const [isInitialized, setIsInitialized] = useState(false);
@@ -39,6 +45,50 @@ export const useAppInitialization = () => {
   const currentUserId = useAppSelector(selectCurrentUserId);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const teams = useAppSelector(selectTeams);
+  const allUserIds = useAppSelector(selectAllUserIds);
+
+  // Periodic status polling function
+  const startPeriodicStatusPolling = useCallback(() => {
+    console.log(`🚀 Starting periodic status polling`);
+
+    const pollStatuses = async () => {
+      try {
+        // Get current userIds from store (not captured at creation time)
+        const currentState = store.getState();
+        const currentUserIds = Object.keys(currentState.entities.users.profiles);
+        
+        if (currentUserIds.length === 0) {
+          console.log('⏭️ No users to poll for status');
+          return;
+        }
+
+        console.log(`🔄 Polling statuses for ${currentUserIds.length} users`);
+        const statuses = await client.getStatusesByIds(currentUserIds);
+        
+        if (statuses && Array.isArray(statuses)) {
+          // Transform to Record format for store
+          const statusRecord: Record<string, any> = {};
+          statuses.forEach((status: any) => {
+            statusRecord[status.user_id] = status;
+          });
+
+          dispatch(setUsersStatus(statusRecord));
+          console.log(`✅ Updated ${statuses.length} user statuses`);
+        }
+      } catch (error) {
+        console.error('❌ Failed to poll user statuses:', error);
+      }
+    };
+
+    // Poll immediately
+    pollStatuses();
+
+    // Then poll every 30 seconds
+    const interval = setInterval(pollStatuses, 30000);
+
+    // Return cleanup function (could be stored in ref if needed)
+    return () => clearInterval(interval);
+  }, [dispatch]);
 
   const initializeApp = useCallback(async () => {
     console.log("🔍 App initialization check:", { 
@@ -48,7 +98,9 @@ export const useAppInitialization = () => {
       hasServerUrl: !!serverUrl 
     });
     
-    if (!isAuthenticated || !currentUserId || !token || !serverUrl) {
+    // Mattermost pattern: only require authentication, userId and serverUrl
+    // Token is optional (cookie-based authentication)
+    if (!isAuthenticated || !currentUserId || !serverUrl) {
       console.log("❌ Missing required data for initialization");
       setIsInitialized(false);
       return;
@@ -60,14 +112,17 @@ export const useAppInitialization = () => {
     try {
       console.log("🚀 Initializing app data (Mattermost pattern)...");
 
-      // Configure client
-      if (client.getToken() !== token) {
-        client.setUrl(serverUrl);
+      // Configure client exactly like Mattermost
+      client.setUrl(serverUrl);
+      client.setIncludeCookies(true);
+      
+      // Set token only if we have one (cookie-based auth might not have token)
+      if (token && client.getToken() !== token) {
         client.setToken(token);
       }
 
-      // Initialize WebSocket
-      connectWebSocket(serverUrl, token);
+      // Initialize WebSocket (use token if available, empty string otherwise)
+      connectWebSocket(serverUrl, token || '');
 
       // Load all initial data in parallel (Mattermost pattern)
       const [userTeams, teamUnreads, userStatus] = await Promise.all([
@@ -110,11 +165,16 @@ export const useAppInitialization = () => {
       // Mark as initialized (Mattermost pattern)
       setIsInitialized(true);
       console.log("✅ App initialization completed");
+
+      // Start periodic status polling after initialization
+      setTimeout(() => {
+        startPeriodicStatusPolling();
+      }, 30000); // 30 seconds after initialization
     } catch (error) {
       console.error("❌ Failed to initialize app:", error);
       setIsInitialized(false);
     }
-  }, [isAuthenticated, currentUserId, token, serverUrl]);
+  }, [isAuthenticated, currentUserId, token, serverUrl, isInitialized, connectWebSocket]);
 
   // Single effect for initialization
   useEffect(() => {

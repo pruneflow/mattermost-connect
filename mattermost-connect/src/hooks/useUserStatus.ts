@@ -112,17 +112,18 @@ export const useUserStatus = (): {
     };
   }, [currentUserId, checkAwayStatus, updateLastActivity]);
 
+
   // Actions
   const loadUsersStatus = useCallback(async (userIds: string[]) => {
     try {
       const statuses = await client.getStatusesByIds(userIds);
-      
+
       // Convert array to record format expected by the store
       const statusRecord: Record<string, UserStatus> = {};
       statuses.forEach((status: UserStatus) => {
         statusRecord[status.user_id] = status;
       });
-      
+
       dispatch(setUsersStatus(statusRecord));
       return statuses;
     } catch (error) {
@@ -130,6 +131,8 @@ export const useUserStatus = (): {
       throw error;
     }
   }, [dispatch]);
+
+
 
   // Helper functions
   const getUserStatus = useCallback((userId: string): UserStatus | null => {

@@ -25,7 +25,8 @@ export interface AuthState {
 }
 
 const initialState: AuthState = {
-  isAuthenticated: !!localStorage.getItem('mattermostToken'),
+  // Mattermost uses 'logged_in' flag, not just token presence
+  isAuthenticated: localStorage.getItem('logged_in') === 'true',
   token: localStorage.getItem('mattermostToken'),
   serverUrl: localStorage.getItem('mattermostServerUrl'),
 };
@@ -43,39 +44,49 @@ export const loginUser = createAsyncThunk<
       dispatch(setLoginError(null));
       dispatch(setAuthError(null));
 
-      // Configure Client4 with server URL
+      // Configure Client4 exactly like Mattermost
       client.setUrl(serverUrl);
+      client.setIncludeCookies(true);
       
-      const user = await client.login(login_id, password);
+      // Call login exactly like Mattermost does (loginId, password, token='', ldapOnly=false)
+      const user = await client.login(login_id, password, '', false);
+      console.debug("Login response - user:", user);
+      
+      // Get token exactly like Mattermost does
       const token = client.getToken();
+      console.debug("Token from client:", token);
       
+      // Mattermost only throws error if user is not returned, not token
+      // Token might be in cookies only on some server configurations
+      if (!user) {
+        throw new Error('Login failed - no user returned');
+      }
+      
+      // If we have a token, great. If not, continue anyway (cookie-based auth)
       if (!token) {
-        throw new Error('No token received from server');
+        console.warn('No token in client.getToken(), using cookie-based authentication');
       }
 
-      // Store credentials in localStorage
-      localStorage.setItem('mattermostToken', token);
+      // Store credentials in localStorage exactly like Mattermost 
+      if (token) {
+        localStorage.setItem('mattermostToken', token);
+      }
       localStorage.setItem('mattermostServerUrl', serverUrl);
       
-      // Store user for easier restore
+      // Store login state like Mattermost does
+      localStorage.setItem('logged_in', 'true');
+      
+      // Store user for easier restore (same as Mattermost)
       localStorage.setItem('mattermostUser', JSON.stringify(user));
       
-      // Set auth cookies for direct mode to allow image loading
-      // This cookie will be used by the browser to authenticate image requests
-      const now = new Date();
-      const time = now.getTime();
-      const expireTime = time + 1000*3600*24*30; // 30 days
-      now.setTime(expireTime);
-      document.cookie = `MMAUTHTOKEN=${token}; path=/; expires=${now.toUTCString()}; SameSite=Lax`;
-      
-      // Set user ID cookie for auth
-      document.cookie = `MMUSERID=${user.id}; path=/; SameSite=Lax`;
+      // Cookies are set by server via Set-Cookie headers, not manually by client
+      // This is the exact Mattermost behavior
 
       // Update entities
       dispatch(setCurrentUserId(user.id));
       dispatch(setUser(user));
 
-      return { user, token, serverUrl };
+      return { user, token: token || '', serverUrl };
     } catch (error) {
       // Serialize error for Redux (avoid non-serializable values)
       const serializedError = {
@@ -102,23 +113,23 @@ export const logoutUser = createAsyncThunk<
   'auth/logout',
   async (_, { dispatch, rejectWithValue }) => {
     try {
+      // Call logout API exactly like Mattermost
       await client.logout();
     } catch (error) {
-      // Continue with logout even if API call fails
+      // Continue with logout even if API call fails (same as Mattermost)
       console.warn('Logout API call failed:', error);
     } finally {
-      // Always clear local state
+      // Clear localStorage exactly like Mattermost
       localStorage.removeItem('mattermostToken');
       localStorage.removeItem('mattermostServerUrl');
       localStorage.removeItem('mattermostUser');
+      localStorage.removeItem('logged_in'); // Mattermost also removes this
       
-      // Clear auth cookies
-      document.cookie = 'MMAUTHTOKEN=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      document.cookie = 'MMUSERID=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      // Cookies are cleared by server on logout, not manually by client
+      // This is the exact Mattermost behavior
       
-      // Clear client token and URL
+      // Clear client token (Mattermost doesn't clear URL on logout)
       client.setToken('');
-      client.setUrl('');
       
       // Clear all Redux state
       dispatch(clearCurrentUser());
@@ -157,6 +168,59 @@ export const getCurrentUser = createAsyncThunk<
   }
 );
 
+/**
+ * Restore authentication state from localStorage exactly like Mattermost
+ * Called on app startup to restore user session
+ */
+export const restoreAuthFromStorage = createAsyncThunk<
+  { user: UserProfile; token: string | null; serverUrl: string | null } | null,
+  void,
+  { rejectValue: string }
+>(
+  'auth/restoreFromStorage',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      // Check if user was logged in (Mattermost pattern)
+      const isLoggedIn = localStorage.getItem('logged_in') === 'true';
+      if (!isLoggedIn) {
+        return null; // Not logged in, nothing to restore
+      }
+
+      const token = localStorage.getItem('mattermostToken');
+      const serverUrl = localStorage.getItem('mattermostServerUrl');
+      const userJson = localStorage.getItem('mattermostUser');
+
+      if (!userJson || !serverUrl) {
+        // Clear invalid state
+        dispatch(logoutUser());
+        return rejectWithValue('Invalid stored auth data');
+      }
+
+      const user = JSON.parse(userJson) as UserProfile;
+
+      // Configure client exactly like Mattermost
+      client.setUrl(serverUrl);
+      client.setIncludeCookies(true);
+      if (token) {
+        client.setToken(token);
+      }
+
+      // Restore user state
+      dispatch(setCurrentUserId(user.id));
+      dispatch(setUser(user));
+
+      console.log('✅ Restored auth from localStorage:', { userId: user.id, hasToken: !!token });
+
+      return { user, token, serverUrl };
+    } catch (error) {
+      console.error('Failed to restore auth from localStorage:', error);
+      // Clear invalid state
+      dispatch(logoutUser());
+      return rejectWithValue('Failed to parse stored auth data');
+    }
+  }
+);
+
 
 const authSlice = createSlice({
   name: 'auth',
@@ -171,9 +235,16 @@ const authSlice = createSlice({
       }
     },
     clearAuth: () => {
+      // Clear exactly like Mattermost logout
       localStorage.removeItem('mattermostToken');
       localStorage.removeItem('mattermostServerUrl');
-      return initialState;
+      localStorage.removeItem('mattermostUser');
+      localStorage.removeItem('logged_in');
+      return {
+        isAuthenticated: false,
+        token: null,
+        serverUrl: null,
+      };
     },
   },
   extraReducers: (builder) => {
@@ -202,6 +273,21 @@ const authSlice = createSlice({
       })
       .addCase(getCurrentUser.rejected, (state) => {
         // Keep auth state, error is handled in thunk
+      })
+      
+      // Restore from storage
+      .addCase(restoreAuthFromStorage.fulfilled, (state, action) => {
+        if (action.payload) {
+          state.isAuthenticated = true;
+          state.token = action.payload.token;
+          state.serverUrl = action.payload.serverUrl;
+        }
+      })
+      .addCase(restoreAuthFromStorage.rejected, (state) => {
+        // State already cleared in thunk
+        state.isAuthenticated = false;
+        state.token = null;
+        state.serverUrl = null;
       })
   },
 });
