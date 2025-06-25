@@ -1,19 +1,19 @@
 import { useMemo, useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { setCurrentChannelId } from '../store/slices/entitiesSlice';
+import { setCurrentChannelId, markChannelAsUnreadAction, toggleChannelFavoriteAction, moveChannelToCategoryAction } from '../store/slices/entitiesSlice';
 import { useUnreadCounts } from './useUnreadCounts';
 import {
   selectCurrentTeamId,
   selectChannelsForCurrentTeam,
-  selectPublicChannelsInCurrentTeam,
-  selectPrivateChannelsInCurrentTeam,
-  selectDirectChannelsInCurrentTeam,
-  selectGroupChannelsInCurrentTeam, selectCurrentChannel
+  selectCurrentChannel,
+  selectCategoriesForCurrentTeam,
 } from "../store/selectors";
+import { ChannelCategory } from "@mattermost/types/channel_categories";
 
 /**
  * Read-only hook for accessing channel data from Redux store
+ * Updated to use categories-based approach
  * 
  * IMPORTANT: This hook does NOT load data - it only reads from store
  * To load channels, use useChannelLoader hook or dispatch loadChannelsForTeam action
@@ -27,24 +27,21 @@ export const useChannels = () => {
   
   // Get all enriched channels for current team
   const allChannels = useAppSelector(selectChannelsForCurrentTeam);
-  
-  // Get channels by type (memoized for performance)
-  const publicChannels = useAppSelector(selectPublicChannelsInCurrentTeam);
-  const privateChannels = useAppSelector(selectPrivateChannelsInCurrentTeam);
-  const directChannels = useAppSelector(selectDirectChannelsInCurrentTeam);
-  const groupChannels = useAppSelector(selectGroupChannelsInCurrentTeam);
   const currentChannel = useAppSelector(selectCurrentChannel);
-
-  // Computed data (memoized)
-  const channelCounts = useMemo(() => ({
-    total: allChannels.length,
-    public: publicChannels.length,
-    private: privateChannels.length,
-    direct: directChannels.length,
-    group: groupChannels.length,
-  }), [allChannels.length, publicChannels.length, privateChannels.length, directChannels.length, groupChannels.length]);
+  const categories = useAppSelector(selectCategoriesForCurrentTeam);
 
   const hasChannels = useMemo(() => allChannels.length > 0, [allChannels.length]);
+
+  // Helper function to check if channel is favorite
+  const isChannelFavorite = useCallback((channelId: string) => {
+    const favoritesCategory = categories.find(cat => cat.type === 'favorites');
+    return favoritesCategory?.channel_ids.includes(channelId) || false;
+  }, [categories]);
+
+  // Helper function to get category for a channel
+  const getChannelCategory = useCallback((channelId: string) => {
+    return categories.find(cat => cat.channel_ids.includes(channelId));
+  }, [categories]);
 
   // Actions
   const switchToChannel = useCallback((channelId: string) => {
@@ -53,17 +50,54 @@ export const useChannels = () => {
     markChannelAsRead(channelId);
   }, [dispatch, markChannelAsRead]);
 
+  // Mark channel as unread action
+  const markAsUnread = useCallback((channelId: string) => {
+    dispatch(markChannelAsUnreadAction({ channelId }));
+  }, [dispatch]);
+
+  // Toggle favorite status action
+  const toggleFavorite = useCallback((channelId: string, isFavorite: boolean) => {
+    if (!currentTeamId) return;
+    const favoritesCategory = categories.find(cat => cat.type === 'favorites');
+    let categoryId = null;
+    if(isFavorite) {
+      const channel = allChannels.find(c => c.id === channelId);
+      if(channel && channel.type === 'D') {
+        const directCategory = categories.find(c => c.type === 'direct_messages');
+        categoryId = directCategory?.id;
+      }
+      else {
+        const channelsCategory = categories.find(c => c.type === 'channels');
+        categoryId = channelsCategory?.id;
+      }
+    }
+    else {
+      categoryId = favoritesCategory?.id;
+    }
+    if(categoryId) {
+      moveToCategory(channelId, categoryId);
+    }
+  }, [currentTeamId, isChannelFavorite, categories]);
+
+  // Move channel to category action
+  const moveToCategory = useCallback((channelId: string, toCategoryId: string) => {
+    const fromCategory = getChannelCategory(channelId);
+    if (!fromCategory || fromCategory.id === toCategoryId) return; // Don't move if same category
+    
+    dispatch(moveChannelToCategoryAction({ 
+      channelId, 
+      fromCategoryId: fromCategory.id, 
+      toCategoryId 
+    }));
+  }, [dispatch, getChannelCategory]);
+
   return {
     currentChannel,
     // Channel lists (enriched with unread counts, user names, etc.)
     allChannels,
-    publicChannels,
-    privateChannels,
-    directChannels,
-    groupChannels,
+    categories, // Expose categories for move menu
     
     // Computed data
-    channelCounts,
     hasChannels,
     currentTeamId,
     
@@ -72,6 +106,13 @@ export const useChannels = () => {
     
     // Actions
     switchToChannel,
+    markAsUnread,
+    toggleFavorite,
+    moveToCategory,
+    
+    // Helpers
+    isChannelFavorite,
+    getChannelCategory,
   };
 };
 

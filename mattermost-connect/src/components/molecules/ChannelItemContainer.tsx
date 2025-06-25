@@ -8,6 +8,7 @@ export interface ChannelItemContainerProps {
   isActive?: boolean;
   onClick?: (channelId: string) => void;
   compact?: boolean;
+  draggable?: boolean;
 }
 
 /**
@@ -19,7 +20,8 @@ export const ChannelItemContainer: React.FC<ChannelItemContainerProps> = React.m
   channelId,
   isActive = false,
   onClick,
-  compact = false
+  compact = false,
+  draggable = true
 }) => {
   // Subscribe to individual channel data using stable selector
   const channel = useAppSelector(state => selectChannelById(state, channelId));
@@ -33,6 +35,7 @@ export const ChannelItemContainer: React.FC<ChannelItemContainerProps> = React.m
       isActive={isActive}
       onClick={onClick}
       compact={compact}
+      draggable={draggable}
     />
   );
 });

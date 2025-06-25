@@ -11,8 +11,7 @@ import {
   useErrorHandler,
   useNavigation,
   useTeamCreation,
-  useTeams, 
-  useChannels,
+  useTeams,
   useTeamDialogs
 } from "../../hooks";
 import { CreateTeamDialog, type CreateTeamData } from "./CreateTeamDialog";

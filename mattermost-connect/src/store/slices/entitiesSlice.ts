@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { UserProfile, Team, Channel, Post, TeamMember, ChannelMember, UserStatus, TeamStats } from '../../api/types';
+import { UserProfile, Team, Channel, Post, TeamMember, ChannelMember, UserStatus, TeamStats, ChannelCategory } from '../../api/types';
 import { client } from '../../api/client';
 
 // ============================================================================
@@ -70,6 +70,298 @@ export const removeUserFromTeam = createAsyncThunk(
 );
 
 /**
+ * Load channel categories for team (Mattermost pattern)
+ */
+export const loadChannelCategories = createAsyncThunk(
+  'entities/loadChannelCategories',
+  async (teamId: string, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ teamId, error: 'No current user' });
+      }
+
+      // Single API call returns categories with order (Mattermost pattern)
+      const categoriesResponse = await client.getChannelCategories(currentUserId, teamId);
+
+      return {
+        teamId,
+        categories: categoriesResponse.categories,
+        order: categoriesResponse.order
+      };
+    } catch (error) {
+      return rejectWithValue({ teamId, error: error instanceof Error ? error.message : 'Failed to load channel categories' });
+    }
+  }
+);
+
+/**
+ * Toggle channel favorite status (Mattermost pattern)  
+ */
+export const toggleChannelFavoriteAction = createAsyncThunk(
+  'entities/toggleChannelFavorite',
+  async ({ channelId, teamId, isFavorite }: { channelId: string; teamId: string; isFavorite: boolean }, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ channelId, teamId, error: 'No current user' });
+      }
+
+      // Find favorites category (always exists in Mattermost)
+      const favoritesCategory = Object.values(state.entities.channels.categories).find(
+        cat => cat.team_id === teamId && cat.type === 'favorites'
+      );
+
+      if (!favoritesCategory) {
+        return rejectWithValue({ channelId, teamId, error: 'Favorites category not found' });
+      }
+
+      // Update channel_ids array
+      const updatedChannelIds = isFavorite 
+        ? [...favoritesCategory.channel_ids.filter(id => id !== channelId), channelId]
+        : favoritesCategory.channel_ids.filter(id => id !== channelId);
+
+      const updatedCategory = {
+        ...favoritesCategory,
+        channel_ids: updatedChannelIds
+      };
+
+      // API call to update category
+      await client.updateChannelCategory(currentUserId, teamId, updatedCategory);
+
+      // Optimistic update
+      dispatch(toggleChannelFavorite({ channelId, teamId, isFavorite }));
+
+      return { channelId, teamId, isFavorite };
+    } catch (error) {
+      return rejectWithValue({ channelId, teamId, error: error instanceof Error ? error.message : 'Failed to toggle favorite' });
+    }
+  }
+);
+
+/**
+ * Update channel categories (for drag & drop)
+ */
+export const updateChannelCategoriesAction = createAsyncThunk(
+  'entities/updateChannelCategories',
+  async ({ teamId, categories }: { teamId: string; categories: ChannelCategory[] }, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ teamId, error: 'No current user' });
+      }
+
+      await client.updateChannelCategories(currentUserId, teamId, categories);
+      
+      return { teamId, categories };
+    } catch (error) {
+      return rejectWithValue({ teamId, error: error instanceof Error ? error.message : 'Failed to update categories' });
+    }
+  }
+);
+
+/**
+ * Reorder channel categories (for drag & drop)
+ */
+export const reorderCategoriesAction = createAsyncThunk(
+  'entities/reorderCategories',
+  async ({ teamId, categoryOrder }: { teamId: string; categoryOrder: string[] }, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ teamId, error: 'No current user' });
+      }
+
+      // API call to update category order
+      await client.updateChannelCategoryOrder(currentUserId, teamId, categoryOrder);
+      
+      // Optimistic update
+      dispatch(reorderCategories({ teamId, categoryOrder }));
+      
+      return { teamId, categoryOrder };
+    } catch (error) {
+      return rejectWithValue({ teamId, error: error instanceof Error ? error.message : 'Failed to reorder categories' });
+    }
+  }
+);
+
+/**
+ * Toggle channel category collapsed state (Mattermost pattern)
+ */
+export const toggleCategoryCollapsedAction = createAsyncThunk(
+  'entities/toggleCategoryCollapsed',
+  async ({ categoryId, isCollapsed }: { categoryId: string; isCollapsed: boolean }, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ categoryId, error: 'No current user' });
+      }
+
+      const category = state.entities.channels.categories[categoryId];
+      if (!category) {
+        return rejectWithValue({ categoryId, error: 'Category not found' });
+      }
+
+      // Create updated category with new collapsed state
+      const updatedCategory = {
+        ...category,
+        collapsed: isCollapsed
+      };
+
+      // API call to update category
+      await client.updateChannelCategory(currentUserId, category.team_id, updatedCategory);
+      
+      // Optimistic update
+      dispatch(toggleCategoryCollapsed({ categoryId, isCollapsed }));
+      
+      return { categoryId, isCollapsed };
+    } catch (error) {
+      return rejectWithValue({ categoryId, error: error instanceof Error ? error.message : 'Failed to toggle category collapsed state' });
+    }
+  }
+);
+
+/**
+ * Mark channel as unread (Mattermost pattern)
+ */
+export const markChannelAsUnreadAction = createAsyncThunk(
+  'entities/markChannelAsUnread',
+  async ({ channelId }: { channelId: string }, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ channelId, error: 'No current user' });
+      }
+
+      // Get the latest posts in the channel to find the most recent one
+      const posts = await client.getPosts(channelId, 0, 1);
+      
+      if (!posts.posts || Object.keys(posts.posts).length === 0) {
+        return rejectWithValue({ channelId, error: 'No posts found in channel' });
+      }
+
+      // Get the latest post ID
+      const latestPostId = posts.order[0];
+      
+      // Mark channel as unread from this post
+      const channelUnread = await client.markPostAsUnread(currentUserId, latestPostId);
+      
+      // Update local store with the returned unread counts
+      dispatch(setChannelUnreads({ 
+        [channelId]: { 
+          msg_count: channelUnread.msg_count, 
+          mention_count: channelUnread.mention_count 
+        } 
+      }));
+      
+      return { channelId, channelUnread };
+    } catch (error) {
+      return rejectWithValue({ channelId, error: error instanceof Error ? error.message : 'Failed to mark channel as unread' });
+    }
+  }
+);
+
+/**
+ * Move channel to another category (Mattermost pattern)
+ */
+export const moveChannelToCategoryAction = createAsyncThunk(
+  'entities/moveChannelToCategory',
+  async ({ channelId, fromCategoryId, toCategoryId }: { channelId: string; fromCategoryId: string; toCategoryId: string }, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ channelId, error: 'No current user' });
+      }
+
+      const fromCategory = state.entities.channels.categories[fromCategoryId];
+      const toCategory = state.entities.channels.categories[toCategoryId];
+
+      if (!fromCategory || !toCategory) {
+        return rejectWithValue({ channelId, error: 'Category not found' });
+      }
+
+      // Remove channel from source category
+      const updatedFromCategory = {
+        ...fromCategory,
+        channel_ids: fromCategory.channel_ids.filter(id => id !== channelId)
+      };
+
+      // Add channel to destination category
+      const updatedToCategory = {
+        ...toCategory,
+        channel_ids: [...toCategory.channel_ids, channelId]
+      };
+
+      // API call to update both categories
+      await client.updateChannelCategories(currentUserId, fromCategory.team_id, [
+        updatedFromCategory,
+        updatedToCategory
+      ]);
+      
+      // Optimistic updates
+      dispatch(updateChannelCategory(updatedFromCategory));
+      dispatch(updateChannelCategory(updatedToCategory));
+      
+      return { channelId, fromCategoryId, toCategoryId };
+    } catch (error) {
+      return rejectWithValue({ channelId, error: error instanceof Error ? error.message : 'Failed to move channel to category' });
+    }
+  }
+);
+
+/**
+ * Reorder channels within a category (Mattermost pattern)
+ */
+export const reorderChannelsAction = createAsyncThunk(
+  'entities/reorderChannels',
+  async ({ categoryId, newChannelOrder }: { categoryId: string; newChannelOrder: string[] }, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ categoryId, error: 'No current user' });
+      }
+
+      const category = state.entities.channels.categories[categoryId];
+      if (!category) {
+        return rejectWithValue({ categoryId, error: 'Category not found' });
+      }
+
+      // Update category with new channel order
+      const updatedCategory = {
+        ...category,
+        channel_ids: newChannelOrder
+      };
+
+      // API call to update category
+      await client.updateChannelCategory(currentUserId, category.team_id, updatedCategory);
+      
+      // Optimistic update
+      dispatch(updateChannelCategory(updatedCategory));
+      
+      return { categoryId, newChannelOrder };
+    } catch (error) {
+      return rejectWithValue({ categoryId, error: error instanceof Error ? error.message : 'Failed to reorder channels' });
+    }
+  }
+);
+
+/**
  * Load channels for specific team with store verification
  * Only fetches if channels not already loaded for this team
  */
@@ -89,7 +381,6 @@ export const loadChannelsForTeam = createAsyncThunk(
       // Fetch channels, members and unreads in parallel (Mattermost pattern)
       const [teamChannels, myChannelMembers] = await Promise.all([
         client.getMyChannels(teamId),
-        client.getChannelCategoryOrder()
         client.getMyChannelMembers(teamId)
       ]);
 
@@ -128,19 +419,21 @@ export const loadChannelsForTeam = createAsyncThunk(
         if (missingUserIds.length > 0) {
           console.log(`Loading ${missingUserIds.length} missing users and their statuses for direct/group channels`);
           
-          // Parallel loading: users and their statuses (Mattermost pattern)
-          const [users, statuses] = await Promise.all([
-            client.getProfilesByIds(missingUserIds),
-            client.getStatusesByIds(missingUserIds)
-          ]);
-          
+          // First load users (this works with invalid IDs)
+          const users = await client.getProfilesByIds(missingUserIds);
           missingUsers = users;
           
-          // Transform status array to Record<userId, UserStatus>
-          if (statuses && Array.isArray(statuses)) {
-            statuses.forEach((status: UserStatus) => {
-              missingUserStatuses[status.user_id] = status;
-            });
+          // Then load statuses using only the valid user IDs returned from getProfilesByIds
+          if (users && users.length > 0) {
+            const validUserIds = users.map(user => user.id);
+            const statuses = await client.getStatusesByIds(validUserIds);
+            
+            // Transform status array to Record<userId, UserStatus>
+            if (statuses && Array.isArray(statuses)) {
+              statuses.forEach((status: UserStatus) => {
+                missingUserStatuses[status.user_id] = status;
+              });
+            }
           }
         }
       }
@@ -206,6 +499,9 @@ export interface EntitiesState {
     myMembers: Record<string, ChannelMember>;
     channelsInTeam: Record<string, string[]>;
     unreads: Record<string, { msg_count: number; mention_count: number }>;
+    categories: Record<string, ChannelCategory>; // category_id -> ChannelCategory
+    categoriesInTeam: Record<string, string[]>; // team_id -> category_ids (in order)
+    categoryOrder: Record<string, string[]>; // team_id -> category_ids (user's custom order)
   };
   posts: {
     posts: Record<string, Post>;
@@ -234,6 +530,9 @@ const initialState: EntitiesState = {
     myMembers: {},
     channelsInTeam: {},
     unreads: {},
+    categories: {},
+    categoriesInTeam: {},
+    categoryOrder: {},
   },
   posts: {
     posts: {},
@@ -495,6 +794,63 @@ const entitiesSlice = createSlice({
       }
     },
 
+    // Channel Categories (following Mattermost patterns)
+    setChannelCategories: (state, action: PayloadAction<{ teamId: string; categories: ChannelCategory[]; order: string[] }>) => {
+      const { teamId, categories, order } = action.payload;
+      
+      // Store categories by ID
+      categories.forEach(category => {
+        state.channels.categories[category.id] = category;
+      });
+      
+      // Store category IDs for team
+      state.channels.categoriesInTeam[teamId] = categories.map(c => c.id);
+      
+      // Store user's custom order
+      state.channels.categoryOrder[teamId] = order;
+    },
+    
+    updateChannelCategory: (state, action: PayloadAction<ChannelCategory>) => {
+      const category = action.payload;
+      state.channels.categories[category.id] = category;
+    },
+    
+    reorderCategories: (state, action: PayloadAction<{ teamId: string; categoryOrder: string[] }>) => {
+      const { teamId, categoryOrder } = action.payload;
+      state.channels.categoryOrder[teamId] = categoryOrder;
+    },
+    
+    // Simple favorites toggle (Mattermost pattern)
+    toggleChannelFavorite: (state, action: PayloadAction<{ channelId: string; teamId: string; isFavorite: boolean }>) => {
+      const { channelId, teamId, isFavorite } = action.payload;
+      
+      // Find favorites category for this team
+      const favoritesCategory = Object.values(state.channels.categories).find(
+        cat => cat.team_id === teamId && cat.type === 'favorites'
+      );
+      
+      if (favoritesCategory) {
+        if (isFavorite) {
+          // Add to favorites if not already there
+          if (!favoritesCategory.channel_ids.includes(channelId)) {
+            favoritesCategory.channel_ids.push(channelId);
+          }
+        } else {
+          // Remove from favorites
+          favoritesCategory.channel_ids = favoritesCategory.channel_ids.filter(id => id !== channelId);
+        }
+      }
+    },
+
+    // Toggle category collapsed state (Mattermost pattern)
+    toggleCategoryCollapsed: (state, action: PayloadAction<{ categoryId: string; isCollapsed: boolean }>) => {
+      const { categoryId, isCollapsed } = action.payload;
+      
+      if (state.channels.categories[categoryId]) {
+        state.channels.categories[categoryId].collapsed = isCollapsed;
+      }
+    },
+
     // Clear actions
     clearCurrentUser: (state) => {
       state.users.currentUserId = '';
@@ -548,6 +904,35 @@ const entitiesSlice = createSlice({
       })
       .addCase(loadChannelsForTeam.rejected, (state, action) => {
         console.error('Failed to load channels for team:', action.payload);
+      })
+      // Channel categories thunks
+      .addCase(loadChannelCategories.fulfilled, (state, action) => {
+        const { teamId, categories, order } = action.payload;
+        
+        // Store categories by ID
+        categories.forEach(category => {
+          state.channels.categories[category.id] = category;
+        });
+        
+        // Store category IDs for team
+        state.channels.categoriesInTeam[teamId] = categories.map(c => c.id);
+        
+        // Store user's custom order
+        state.channels.categoryOrder[teamId] = order;
+      })
+      .addCase(loadChannelCategories.rejected, (state, action) => {
+        console.error('Failed to load channel categories:', action.payload);
+      })
+      .addCase(updateChannelCategoriesAction.fulfilled, (state, action) => {
+        const { teamId, categories } = action.payload;
+        
+        // Update categories in store
+        categories.forEach(category => {
+          state.channels.categories[category.id] = category;
+        });
+      })
+      .addCase(updateChannelCategoriesAction.rejected, (state, action) => {
+        console.error('Failed to update channel categories:', action.payload);
       });
   },
 });
@@ -591,6 +976,13 @@ export const {
   setChannelUnreads,
   incrementChannelUnreadCount,
   resetChannelUnreadCount,
+  
+  // Channel Categories
+  setChannelCategories,
+  updateChannelCategory,
+  reorderCategories,
+  toggleChannelFavorite,
+  toggleCategoryCollapsed,
   
   // Posts
   setPost,

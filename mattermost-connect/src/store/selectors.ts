@@ -164,41 +164,6 @@ export const selectChannelsForCurrentTeam = createSelector(
   },
 );
 
-/**
- * Get public channels in current team with all data (unreads, etc.)
- */
-export const selectPublicChannelsInCurrentTeam = createSelector(
-  [selectChannelsForCurrentTeam],
-  (allChannels): EnrichedChannel[] =>
-    allChannels.filter((channel) => channel.type === "O"),
-);
-
-/**
- * Get private channels in current team with all data (unreads, etc.)
- */
-export const selectPrivateChannelsInCurrentTeam = createSelector(
-  [selectChannelsForCurrentTeam],
-  (allChannels): EnrichedChannel[] =>
-    allChannels.filter((channel) => channel.type === "P"),
-);
-
-/**
- * Get direct channels in current team with all data (unreads, user names, etc.)
- */
-export const selectDirectChannelsInCurrentTeam = createSelector(
-  [selectChannelsForCurrentTeam],
-  (allChannels): EnrichedChannel[] =>
-    allChannels.filter((channel) => channel.type === "D"),
-);
-
-/**
- * Get group channels in current team with all data (unreads, user names, etc.)
- */
-export const selectGroupChannelsInCurrentTeam = createSelector(
-  [selectChannelsForCurrentTeam],
-  (allChannels): EnrichedChannel[] =>
-    allChannels.filter((channel) => channel.type === "G"),
-);
 
 /**
  * Get current team object (memoized)
@@ -443,61 +408,6 @@ export const selectSidebarWidth = (state: RootState) =>
 // INDIVIDUAL CHANNEL SELECTORS (One selector per channelId)
 // ============================================================================
 
-// Cache for stable array references
-const emptyArrays = {
-  public: [],
-  private: [],
-  direct: [],
-  group: [],
-};
-
-/**
- * Get channel IDs only (global selector for lists)
- * Returns stable array references when content hasn't changed
- */
-export const selectChannelIdsForCurrentTeam = createSelector(
-  [
-    selectChannelsData,
-    selectCurrentTeamId,
-    (state: RootState) => state.entities.channels.myMembers,
-  ],
-  (channels, currentTeamId, myMembers) => {
-    if (!currentTeamId) return emptyArrays;
-
-    const teamChannels = Object.values(channels).filter(
-      (channel: any) =>
-        channel.team_id === currentTeamId ||
-        channel.type === "D" ||
-        channel.type === "G",
-    );
-
-    // Only filter by membership, return IDs only
-    const memberChannels = teamChannels.filter(
-      (channel: any) => myMembers[channel.id] || channel.type === "D",
-    );
-
-    const publicIds = memberChannels
-      .filter((c: any) => c.type === "O")
-      .map((c: any) => c.id);
-    const privateIds = memberChannels
-      .filter((c: any) => c.type === "P")
-      .map((c: any) => c.id);
-    const directIds = memberChannels
-      .filter((c: any) => c.type === "D")
-      .map((c: any) => c.id);
-    const groupIds = memberChannels
-      .filter((c: any) => c.type === "G")
-      .map((c: any) => c.id);
-
-    // Return empty arrays references when empty to prevent re-renders
-    return {
-      public: publicIds.length > 0 ? publicIds : emptyArrays.public,
-      private: privateIds.length > 0 ? privateIds : emptyArrays.private,
-      direct: directIds.length > 0 ? directIds : emptyArrays.direct,
-      group: groupIds.length > 0 ? groupIds : emptyArrays.group,
-    };
-  },
-);
 
 /**
  * Simple direct selector for channel by ID (Simplified stable approach)
@@ -574,50 +484,97 @@ export const selectChannelById = createSelector(
   },
 );
 
+// ============================================================================
+// CATEGORIES-BASED SELECTORS (New Mattermost approach)
+// ============================================================================
+
 /**
- * Search channels by query (returns filtered channel IDs)
- * Uses individual channel selectors to get display names for search
+ * Get categories for current team (ordered)
+ */
+export const selectCategoriesForCurrentTeam = createSelector(
+  [
+    selectCurrentTeamId,
+    (state: RootState) => state.entities.channels.categories,
+    (state: RootState) => state.entities.channels.categoriesInTeam,
+    (state: RootState) => state.entities.channels.categoryOrder,
+  ],
+  (currentTeamId, categories, categoriesInTeam, categoryOrder) => {
+    if (!currentTeamId) return [];
+    
+    const categoryIds = categoriesInTeam[currentTeamId] || [];
+    const orderedIds = categoryOrder[currentTeamId] || categoryIds;
+    
+    return orderedIds
+      .map(id => categories[id])
+      .filter(Boolean);
+  }
+);
+
+/**
+ * Get all channel IDs from categories
+ */
+export const selectChannelIdsForCurrentTeam = createSelector(
+  [selectCategoriesForCurrentTeam],
+  (categories) => {
+    const allChannelIds = categories.flatMap(cat => cat.channel_ids);
+    return [...new Set(allChannelIds)]; // Remove duplicates
+  }
+);
+
+/**
+ * Get favorites category for current team
+ */
+export const selectFavoritesCategory = createSelector(
+  [selectCategoriesForCurrentTeam],
+  (categories) => categories.find(cat => cat.type === 'favorites') || null
+);
+
+/**
+ * Check if channel is favorite
+ */
+export const selectIsChannelFavorite = createSelector(
+  [
+    selectFavoritesCategory,
+    (state: RootState, channelId: string) => channelId,
+  ],
+  (favoritesCategory, channelId) => {
+    return favoritesCategory?.channel_ids.includes(channelId) || false;
+  }
+);
+
+/**
+ * Search channels by query using categories
  */
 export const createSelectFilteredChannelIds = () =>
   createSelector(
     [
       selectChannelIdsForCurrentTeam,
-      (state: RootState, searchQuery: string) =>
-        searchQuery.toLowerCase().trim(),
+      (state: RootState, searchQuery: string) => searchQuery.toLowerCase().trim(),
       (state: RootState) => state.entities.channels.channels,
       (state: RootState) => state.entities.users,
     ],
-    (channelIds, searchQuery, channels, usersState) => {
-      if (!searchQuery) return channelIds;
+    (allChannelIds, searchQuery, channels, usersState) => {
+      if (!searchQuery) return allChannelIds;
 
-      const filterIds = (ids: string[]) => {
-        return ids.filter((channelId) => {
-          const channel = channels[channelId];
-          if (!channel) return false;
+      return allChannelIds.filter((channelId) => {
+        const channel = channels[channelId];
+        if (!channel) return false;
 
-          // Get display name using utility function
-          const displayName = getChannelDisplayName(
-            channel,
-            usersState.profiles,
-            usersState.currentUserId,
-          );
+        // Get display name using utility function
+        const displayName = getChannelDisplayName(
+          channel,
+          usersState.profiles,
+          usersState.currentUserId,
+        );
 
-          // Search in multiple fields
-          return (
-            displayName.toLowerCase().includes(searchQuery) ||
-            channel.display_name?.toLowerCase().includes(searchQuery) ||
-            channel.name?.toLowerCase().includes(searchQuery) ||
-            channel.purpose?.toLowerCase().includes(searchQuery)
-          );
-        });
-      };
-
-      return {
-        public: filterIds(channelIds.public),
-        private: filterIds(channelIds.private),
-        direct: filterIds(channelIds.direct),
-        group: filterIds(channelIds.group),
-      };
+        // Search in multiple fields
+        return (
+          displayName.toLowerCase().includes(searchQuery) ||
+          channel.display_name?.toLowerCase().includes(searchQuery) ||
+          channel.name?.toLowerCase().includes(searchQuery) ||
+          channel.purpose?.toLowerCase().includes(searchQuery)
+        );
+      });
     },
   );
 

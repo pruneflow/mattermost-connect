@@ -117,3 +117,17 @@ export interface WSEventTyping {
   parent_id: string;
   user_id: string;
 }
+
+// Channel Categories - Use official Mattermost types
+export type {
+  ChannelCategory,
+  CategorySorting
+} from '@mattermost/types/channel_categories';
+
+// Import for local use
+import type { ChannelCategory } from '@mattermost/types/channel_categories';
+
+export interface ChannelCategoriesResponse {
+  categories: ChannelCategory[];
+  order: string[]; // Category IDs in display order
+}
