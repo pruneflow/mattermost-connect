@@ -70,6 +70,7 @@ export interface ChannelCategoryProps {
   currentChannelId?: string;
   onChannelSelect?: (channelId: string) => void;
   onToggleCollapse?: (categoryId: string) => void;
+  onAddChannelMembers?: (channelId: string) => void;
   compact?: boolean;
   isDragging?: boolean;
   sx?: SxProps<Theme>;
@@ -79,6 +80,7 @@ interface ChannelCategoryItemsProps {
   channelIds: string[];
   currentChannelId?: string;
   onChannelSelect?: (channelId: string) => void;
+  onAddChannelMembers?: (channelId: string) => void;
   compact?: boolean;
 }
 
@@ -89,6 +91,7 @@ const ChannelCategoryItems: React.FC<ChannelCategoryItemsProps> = React.memo(({
   channelIds,
   currentChannelId,
   onChannelSelect,
+  onAddChannelMembers,
   compact = false,
 }) => {
   return (
@@ -100,6 +103,7 @@ const ChannelCategoryItems: React.FC<ChannelCategoryItemsProps> = React.memo(({
             channelId={channelId}
             isActive={channelId === currentChannelId}
             onClick={onChannelSelect}
+            onAddChannelMembers={onAddChannelMembers}
             compact={compact}
             draggable
           />
@@ -118,6 +122,7 @@ export const ChannelCategory: React.FC<ChannelCategoryProps> = React.memo(({
   currentChannelId,
   onChannelSelect,
   onToggleCollapse,
+  onAddChannelMembers,
   compact = false,
   isDragging = false,
   sx,
@@ -149,9 +154,6 @@ export const ChannelCategory: React.FC<ChannelCategoryProps> = React.memo(({
     }
   }, [onToggleCollapse, category.id]);
 
-  if(!isDragging) {
-    console.debug("category", category)
-  }
   const isCollapsed = category.collapsed;
   const hasChannels = category.channel_ids.length > 0;
 
@@ -210,6 +212,7 @@ export const ChannelCategory: React.FC<ChannelCategoryProps> = React.memo(({
               channelIds={category.channel_ids}
               currentChannelId={currentChannelId}
               onChannelSelect={onChannelSelect}
+              onAddChannelMembers={onAddChannelMembers}
               compact={compact}
             />
           )}
@@ -223,6 +226,7 @@ export const ChannelCategory: React.FC<ChannelCategoryProps> = React.memo(({
             channelIds={[currentChannelId]}
             currentChannelId={currentChannelId}
             onChannelSelect={onChannelSelect}
+            onAddChannelMembers={onAddChannelMembers}
             compact={compact}
           />
         </Box>

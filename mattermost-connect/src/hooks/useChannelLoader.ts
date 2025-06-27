@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
 import { loadChannelsForTeam } from "../store";
-import { selectCurrentTeamId, selectChannelsState } from '../store/selectors';
+import { selectCurrentTeamId } from '../store/selectors';
 
 /**
  * Hook for loading channel data with smart lazy loading
@@ -15,14 +15,14 @@ import { selectCurrentTeamId, selectChannelsState } from '../store/selectors';
 export const useChannelLoader = () => {
   const dispatch = useAppDispatch();
   const currentTeamId = useAppSelector(selectCurrentTeamId);
-  const channelsState = useAppSelector(selectChannelsState);
+  const channelsInTeam = useAppSelector(state => state.entities.channels.channelsInTeam);
 
   // Check if channels are loaded for a specific team
   const isTeamChannelsLoaded = useCallback((teamId: string | null) => {
     if (!teamId) return false;
-    const channelsInTeam = channelsState.channelsInTeam[teamId];
-    return channelsInTeam && channelsInTeam.length > 0;
-  }, [channelsState.channelsInTeam]);
+    const teamChannels = channelsInTeam[teamId];
+    return teamChannels && teamChannels.length > 0;
+  }, [channelsInTeam]);
 
   // Load channels for specific team
   const loadTeamChannels = useCallback(async (teamId: string) => {

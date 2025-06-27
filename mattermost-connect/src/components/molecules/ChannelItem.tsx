@@ -32,6 +32,7 @@ import { ChannelIcon } from '../atoms/ChannelIcon';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { ChannelIndicator } from './ChannelIndicator';
 import { useChannels } from '../../hooks/useChannels';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Channel, UserProfile } from '../../api/types';
@@ -135,6 +136,7 @@ export interface ChannelItemProps {
   };
   isActive?: boolean;
   onClick?: (channelId: string) => void;
+  onAddChannelMembers?: (channelId: string) => void;
   compact?: boolean;
   draggable?: boolean;
   sx?: SxProps<Theme>;
@@ -148,6 +150,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
   channel,
   isActive = false,
   onClick,
+  onAddChannelMembers,
   compact = false,
   draggable = true,
   sx,
@@ -186,6 +189,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
   const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
+    setMoveMenuAnchorEl(null); // Close submenu when opening main menu
   }, []);
 
   const handleMenuClose = useCallback(() => {
@@ -231,9 +235,13 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
   // Get channel actions from useChannels hook
   const { markAsUnread, toggleFavorite, moveToCategory, isChannelFavorite, getChannelCategory, categories } = useChannels();
   
+  // Get permissions
+  const { canManageChannelMembers } = usePermissions();
+  
   // Get current favorite status and category
   const isFavorite = isChannelFavorite(channel.id);
   const currentCategory = getChannelCategory(channel.id);
+  const canAddMembers = canManageChannelMembers(channel);
 
   // Stable menu action handlers
   const handleMarkUnread = useCallback(() => {
@@ -263,9 +271,15 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
 
   const handleAddMembers = useCallback(() => {
     handleMenuClose();
-    // TODO: Implement add members
-    console.log(`Add members to channel ${channel.id}`);
-  }, [channel.id]);
+    onAddChannelMembers?.(channel.id);
+  }, [channel.id, onAddChannelMembers]);
+
+  // Close submenu when hovering over other menu items
+  const handleOtherMenuItemHover = useCallback(() => {
+    if (!isMobile) {
+      setMoveMenuAnchorEl(null);
+    }
+  }, [isMobile]);
 
   const handleLeaveChannel = useCallback(() => {
     handleMenuClose();
@@ -298,6 +312,12 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
       ...STATIC_STYLES.listItemButton,
       ...STATIC_STYLES.listItemButtonWithMenu,
       py: compact ? 0.25 : 0.5,
+      ...(draggable && {
+        cursor: 'grab',
+        '&:active': {
+          cursor: 'grabbing',
+        },
+      }),
     },
     
     listItemIcon: {
@@ -314,7 +334,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
              (channel.hasUnreads && !channel.isMuted) ? 'text.primary' :
              channel.isMuted ? 'text.disabled' : 'text.secondary',
     },
-  }), [compact, sx, isActive, channel.hasUnreads, channel.isMuted]);
+  }), [compact, sx, isActive, channel.hasUnreads, channel.isMuted, draggable]);
 
   return (
     <ListItem
@@ -401,15 +421,15 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handleMarkUnread} sx={STATIC_STYLES.menuItem}>
+        <MenuItem onClick={handleMarkUnread} onMouseEnter={handleOtherMenuItemHover} sx={STATIC_STYLES.menuItem}>
           <MarkAsUnread fontSize="small" />
           Mark as unread
         </MenuItem>
-        <MenuItem onClick={handleToggleFavorite} sx={STATIC_STYLES.menuItem}>
+        <MenuItem onClick={handleToggleFavorite} onMouseEnter={handleOtherMenuItemHover} sx={STATIC_STYLES.menuItem}>
           {isFavorite ? <Star fontSize="small" /> : <StarBorder fontSize="small" />}
           {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         </MenuItem>
-        <MenuItem onClick={handleMuteChannel} sx={STATIC_STYLES.menuItem}>
+        <MenuItem onClick={handleMuteChannel} onMouseEnter={handleOtherMenuItemHover} sx={STATIC_STYLES.menuItem}>
           <VolumeOff fontSize="small" />
           Mute channel
         </MenuItem>
@@ -434,12 +454,16 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(({
         
         <Divider />
         
-        <MenuItem onClick={handleAddMembers} sx={STATIC_STYLES.menuItem}>
-          <PersonAdd fontSize="small" />
-          Add members
-        </MenuItem>
+        {/* Add Members - only shown if user has permissions */}
+        {canAddMembers && (
+          <MenuItem onClick={handleAddMembers} onMouseEnter={handleOtherMenuItemHover} sx={STATIC_STYLES.menuItem}>
+            <PersonAdd fontSize="small" />
+            Add members
+          </MenuItem>
+        )}
         <MenuItem 
           onClick={handleLeaveChannel} 
+          onMouseEnter={handleOtherMenuItemHover}
           sx={{
             ...STATIC_STYLES.menuItem,
             ...STATIC_STYLES.menuItemDanger,

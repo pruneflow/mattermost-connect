@@ -15,15 +15,16 @@ import {
 import type { PreferenceType } from '../api/types';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
-import { selectCurrentUserId } from '../store/selectors';
+import { selectCurrentUserId, selectPreferences } from '../store/selectors';
 import type { RootState } from '../store';
 
 const useUserPreferences = () => {
   const dispatch = useAppDispatch();
   const currentUserId = useAppSelector(selectCurrentUserId);
-  const { preferences, isLoading, isUpdating, lastSynced } = useAppSelector(
-    (state: RootState) => state.preferences
-  );
+  const preferences = useAppSelector(selectPreferences);
+  const isLoading = useAppSelector((state: RootState) => state.preferences.isLoading);
+  const isUpdating = useAppSelector((state: RootState) => state.preferences.isUpdating);
+  const lastSynced = useAppSelector((state: RootState) => state.preferences.lastSynced);
 
   // Get current theme preference
   const currentTheme = getPreference(preferences, 'display_settings', 'theme', 'auto') as 'light' | 'dark' | 'auto';

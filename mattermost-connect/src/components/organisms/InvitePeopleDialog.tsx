@@ -69,7 +69,7 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
     isLoading,
   } = useTeamInvitations(teamId);
 
-  const {  clearSearch } =
+  const { searchUsersNotInTeam, clearSearch } =
     useUserSearch();
   const { canInviteUser, canAddUserToTeam, canInviteGuest } = usePermissions();
 
@@ -90,7 +90,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
 
   // Local state
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [userSearchTerm, setUserSearchTerm] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [emails, setEmails] = useState<string[]>([]);
   const [inviteLink, setInviteLink] = useState<string>("");
@@ -108,6 +107,13 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
       setSelectedUserIds(userIds);
     },
     [],
+  );
+
+  const handleUserSearch = useCallback(
+    (term: string) => {
+      searchUsersNotInTeam(term, teamId);
+    },
+    [searchUsersNotInTeam, teamId],
   );
 
   // Handle email input and validation
@@ -231,7 +237,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
         // Reset form
         setSelectedUserIds([]);
         setEmails([]);
-        setUserSearchTerm("");
         clearSearch();
         // Close dialog after success
         setTimeout(() => onClose(), 1500);
@@ -264,7 +269,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
     if (!open) {
       setSelectedUserIds([]);
       setEmails([]);
-      setUserSearchTerm("");
       setEmailInput("");
       clearSearch();
     }
@@ -357,8 +361,7 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
                 teamId={teamId}
                 selectedUserIds={selectedUserIds}
                 onUserSelectionChange={handleUserSelectionChange}
-                onSearchTermChange={setUserSearchTerm}
-                searchTerm={userSearchTerm}
+                search={handleUserSearch}
               />
             </Box>
           )}

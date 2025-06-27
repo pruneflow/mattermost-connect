@@ -35,6 +35,12 @@ export interface ViewsState {
   typing: {
     [channelId: string]: string[]; // userIds typing in channel
   };
+  userSearch: {
+    searchTerm: string;
+    searchResults: string[]; // user IDs
+    isSearching: boolean;
+    lastSearchTerm: string;
+  };
 }
 
 const initialState: ViewsState = {
@@ -66,6 +72,12 @@ const initialState: ViewsState = {
     sidebarWidth: 240,
   },
   typing: {},
+  userSearch: {
+    searchTerm: '',
+    searchResults: [],
+    isSearching: false,
+    lastSearchTerm: '',
+  },
 };
 
 const viewsSlice = createSlice({
@@ -159,6 +171,25 @@ const viewsSlice = createSlice({
       }
     },
 
+    // User Search
+    setUserSearching: (state, action: PayloadAction<boolean>) => {
+      state.userSearch.isSearching = action.payload;
+    },
+    setUserSearchTerm: (state, action: PayloadAction<string>) => {
+      state.userSearch.searchTerm = action.payload;
+    },
+    setUserSearchResults: (state, action: PayloadAction<{ term: string; results: string[] }>) => {
+      state.userSearch.searchResults = action.payload.results;
+      state.userSearch.lastSearchTerm = action.payload.term;
+      state.userSearch.isSearching = false;
+    },
+    clearUserSearch: (state) => {
+      state.userSearch.searchTerm = '';
+      state.userSearch.searchResults = [];
+      state.userSearch.isSearching = false;
+      state.userSearch.lastSearchTerm = '';
+    },
+
     // Clear views (but preserve navigation state across logouts)
     clearViews: (state) => ({
       ...initialState,
@@ -203,6 +234,12 @@ export const {
   setUsersTyping,
   addUserTyping,
   removeUserTyping,
+  
+  // User Search
+  setUserSearching,
+  setUserSearchTerm,
+  setUserSearchResults,
+  clearUserSearch,
   
   // Clear
   clearViews,

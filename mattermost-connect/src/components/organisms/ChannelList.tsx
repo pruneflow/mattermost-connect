@@ -15,6 +15,7 @@ import {
   DragOverlay,
   DragStartEvent,
   closestCenter,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -31,7 +32,9 @@ import { SearchInput } from '../atoms/SearchInput';
 import { TeamHeader } from '../molecules/TeamHeader';
 import { ChannelSection } from '../molecules/ChannelSection';
 import { ChannelCategory } from '../molecules/ChannelCategory';
+import { AddChannelMembersDialog } from './AddChannelMembersDialog';
 import { useChannelLoader } from '../../hooks/useChannelLoader';
+import { usePermissions } from '../../hooks/usePermissions';
 
 // Static styles extracted for performance
 const STATIC_STYLES = {
@@ -94,6 +97,10 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
+  
+  // Add channel members dialog state  
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const isInviteOpen = Boolean(selectedChannelId);
 
   // Memoized container styles with custom sx
   const containerStyles = useMemo(() => ({
@@ -164,6 +171,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   // Get navigation
   const { navigateToChannel } = useNavigation();
+  
+  // Get permissions
+  const { canManageChannelMembers } = usePermissions();
 
   // Drag & drop sensors - simple and direct
   const sensors = useSensors(
@@ -208,6 +218,15 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       }));
     }
   }, [categories, dispatch]);
+
+  // Handle add channel members
+  const handleAddChannelMembers = useCallback((channelId: string) => {
+    setSelectedChannelId(channelId);
+  }, []);
+
+  const closeDialog = useCallback(() => {
+    setSelectedChannelId(null);
+  }, []);
 
   // Handle drag start
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -260,13 +279,13 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         targetCategory = categories.find(cat => cat.id === over.id);
       }
       
-      // Case 2: Over a channel in another category
+      // Case 2: Over a channel - prioritize reordering within same category
       if (over.data.current?.type === 'channel') {
         const overChannelId = over.id as string;
-        targetCategory = categories.find(cat => cat.channel_ids.includes(overChannelId));
+        const overTargetCategory = categories.find(cat => cat.channel_ids.includes(overChannelId));
         
-        // If same category, handle reordering
-        if (targetCategory && targetCategory.id === sourceCategory.id) {
+        // Prioritize reordering within same category
+        if (overTargetCategory && overTargetCategory.id === sourceCategory.id) {
           const oldIndex = sourceCategory.channel_ids.indexOf(channelId);
           const newIndex = sourceCategory.channel_ids.indexOf(overChannelId);
           
@@ -280,8 +299,11 @@ export const ChannelList: React.FC<ChannelListProps> = ({
               newChannelOrder 
             }));
           }
-          return;
+          return; // Exit early for reordering
         }
+        
+        // For cross-category moves over channels, use the target category
+        targetCategory = overTargetCategory;
       }
       
       // Handle move between categories
@@ -325,7 +347,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       <Box sx={STATIC_STYLES.channelsContainer}>
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={rectIntersection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -337,6 +359,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                 currentChannelId={currentChannelId}
                 onChannelSelect={handleChannelSelect}
                 onToggleCollapse={handleToggleCollapse}
+                onAddChannelMembers={handleAddChannelMembers}
                 compact={compact}
                 isDragging={draggedCategory === category.id}
               />
@@ -344,6 +367,13 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           </SortableContext>
         </DndContext>
       </Box>
+
+      {/* Add Channel Members Dialog */}
+      <AddChannelMembersDialog
+        open={isInviteOpen}
+        onClose={closeDialog}
+        channelId={selectedChannelId || ''}
+      />
     </Box>
   );
 };

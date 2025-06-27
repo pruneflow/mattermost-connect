@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   Autocomplete,
   TextField,
@@ -25,15 +25,16 @@ interface UserSearchAutocompleteProps {
   teamId: string;
   selectedUserIds: string[];
   onUserSelectionChange: (userIds: string[]) => void;
-  onSearchTermChange: (term: string) => void;
-  searchTerm: string;
+  search: (term: string) => void;
+  renderOption?: (props: React.HTMLAttributes<HTMLLIElement> & { key: any }, userId: string) => React.ReactNode;
+  renderCustomChip?: (userId: string) => React.ReactNode;
 }
 
 const filterOptions = (options: string[]) => options;
 
 // Memoized option component
 const UserOption = memo(
-  ({ userId, listItemProps }: { userId: string; listItemProps: any }) => {
+  ({ userId, listItemProps, renderCustomChip }: { userId: string; listItemProps: any; renderCustomChip?: (userId: string) => React.ReactNode }) => {
     const userProfiles = useAppSelector(selectUserProfiles);
     const user = userProfiles[userId];
 
@@ -81,6 +82,7 @@ const UserOption = memo(
                   sx={{ fontSize: "0.65rem", height: 20 }}
                 />
               )}
+              {renderCustomChip && renderCustomChip(userId)}
             </Box>
           }
           secondary={user.email}
@@ -102,26 +104,29 @@ export const UserSearchAutocomplete = memo<UserSearchAutocompleteProps>(
     teamId,
     selectedUserIds,
     onUserSelectionChange,
-    onSearchTermChange,
-    searchTerm,
+    search,
+    renderOption: customRenderOption,
+    renderCustomChip,
   }) => {
     const userProfiles = useAppSelector(selectUserProfiles);
-    const { searchUsersNotInTeam, searchResults, isSearching, clearSearch } =
-      useUserSearch();
+    const { searchResults, isSearching, clearSearch, searchTerm, setSearchTerm } = useUserSearch();
+    const [showLoading, setShowLoading] = useState(false);
 
     // Stable handlers
     const handleSearchChange = useCallback(
       (event: React.SyntheticEvent, value: string) => {
-        onSearchTermChange(value);
+        // Always update the search term for input control
+        setSearchTerm(value);
+        
         if (value.length >= 2) {
-          searchUsersNotInTeam(value, teamId);
+          search(value);
         } else if (value.length === 0) {
           // Only clear when completely empty, not on blur
           clearSearch();
         }
         // For values with 1 character, keep the term but don't search
       },
-      [onSearchTermChange, searchUsersNotInTeam, teamId, clearSearch],
+      [search, clearSearch, setSearchTerm],
     );
 
     const handleSelectionChange = useCallback(
@@ -137,12 +142,22 @@ export const UserSearchAutocomplete = memo<UserSearchAutocompleteProps>(
         props: React.HTMLAttributes<HTMLLIElement> & { key: any },
         userId: string,
       ) => {
+        // Use custom render option if provided
+        if (customRenderOption) {
+          return customRenderOption(props, userId);
+        }
+        
         const { key, ...listItemProps } = props;
         return (
-          <UserOption key={key} userId={userId} listItemProps={listItemProps} />
+          <UserOption 
+            key={key} 
+            userId={userId} 
+            listItemProps={listItemProps}
+            renderCustomChip={renderCustomChip}
+          />
         );
       },
-      [],
+      [customRenderOption, renderCustomChip],
     );
 
     const renderInput = (params: any) => (
@@ -220,23 +235,56 @@ export const UserSearchAutocomplete = memo<UserSearchAutocompleteProps>(
       }).filter(Boolean);
     },
     [],
-  )*/ const getOptionLabel = useCallback(
-      (userId: string) => userProfiles[userId]?.username || userId,
-      [userProfiles],
-    );
+  )*/
+  
+  // Cleanup search state on unmount
+  useEffect(() => {
+    return () => {
+      clearSearch();
+    };
+  }, [clearSearch]);
+
+  // Delayed loading state to avoid flickering
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    
+    if (isSearching) {
+      // Show loading only after 300ms delay
+      timer = setTimeout(() => {
+        setShowLoading(true);
+      }, 300);
+    } else {
+      // Hide loading immediately when search completes
+      setShowLoading(false);
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isSearching]);
+
+  // Filter out selected users from search results
+  const filteredSearchResults = searchResults.filter(userId => !selectedUserIds.includes(userId));
+
+  const getOptionLabel = useCallback(
+    (userId: string) => userProfiles[userId]?.username || userId,
+    [userProfiles],
+  );
 
     const noOptionsText =
       searchTerm.length < 2
         ? "Type at least 2 characters to search"
-        : isSearching
+        : showLoading
           ? "Searching..."
-          : "No users found";
+          : filteredSearchResults.length === 0
+            ? "No users found"
+            : undefined;
     return (
       <Autocomplete
         multiple
         id="tags-filled"
-        options={searchResults}
-        freeSolo
+        options={filteredSearchResults}
+        freeSolo={false}
         inputValue={searchTerm}
         onInputChange={handleSearchChange}
         onChange={handleSelectionChange}
@@ -244,11 +292,12 @@ export const UserSearchAutocomplete = memo<UserSearchAutocompleteProps>(
         renderInput={renderInput}
         renderValue={renderValue}
         noOptionsText={noOptionsText}
-        loading={isSearching}
+        loading={showLoading}
         getOptionLabel={getOptionLabel}
         filterOptions={filterOptions}
         clearOnBlur={false}
         blurOnSelect={false}
+        open={searchTerm.length >= 2 || showLoading}
       />
     );
   },

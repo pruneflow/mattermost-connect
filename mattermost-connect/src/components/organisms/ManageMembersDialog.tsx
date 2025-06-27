@@ -28,6 +28,7 @@ import { selectTeamById, selectCurrentUserId } from '../../store/selectors';
 import { SearchInput } from '../atoms/SearchInput';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { InvitePeopleDialog } from './InvitePeopleDialog';
+import { userMatchesSearchTerm } from '../../utils/searchUtils';
 import { displayUsername, getRoleChips, canChangeRole, isTeamAdmin, isSystemAdmin } from '../../utils/userUtils';
 import type { UserProfile } from '../../api/types';
 
@@ -139,15 +140,8 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
   }, [open, teamId, loadTeamMembers]);
 
   const filteredMembers = React.useMemo(() => {
-    return members.filter(({ user }) => {
-      if (!searchTerm) return true;
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        displayUsername(user, 'full_name_nickname', true).toLowerCase().includes(searchLower) ||
-        user.email?.toLowerCase().includes(searchLower) ||
-        user.username?.toLowerCase().includes(searchLower)
-      );
-    });
+    if (!searchTerm) return members;
+    return members.filter(({ user }) => userMatchesSearchTerm(user, searchTerm));
   }, [members, searchTerm]);
 
   const handleClose = useCallback(() => {

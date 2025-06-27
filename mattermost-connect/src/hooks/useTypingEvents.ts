@@ -1,4 +1,5 @@
 import { useAppSelector } from './useAppSelector';
+import { selectCurrentUserId, selectTypingEventsByChannel } from '../store/selectors';
 
 // Re-export type for convenience
 export type { TypingEvent } from '../store/slices/websocketSlice';
@@ -9,8 +10,9 @@ export type { TypingEvent } from '../store/slices/websocketSlice';
  */
 export const useTypingEventsForChannel = (channelId: string) => {
   // Direct access to only this channel's typing events with stable empty array
-  const channelTypingEvents = useAppSelector(state => state.websocket.typingEventsByChannel[channelId]);
-  const currentUserId = useAppSelector(state => state.entities.users.currentUserId);
+  const typingEventsByChannel = useAppSelector(selectTypingEventsByChannel);
+  const currentUserId = useAppSelector(selectCurrentUserId);
+  const channelTypingEvents = typingEventsByChannel[channelId];
 
   // Filter out current user and process data - handle undefined case
   const otherUserEvents = channelTypingEvents ? channelTypingEvents.filter(event => event.user_id !== currentUserId) : [];

@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
 import { useErrorHandler } from './useErrorHandler';
+import { selectTeamStatsById } from '../store/selectors';
 import { setTeamStats, incrementTeamMemberCount, decrementTeamMemberCount } from '../store/slices/entitiesSlice';
 import { client } from '../api/client';
 import type { TeamStats } from '../api/types';
@@ -10,9 +11,7 @@ export const useTeamStats = (teamId: string) => {
   const dispatch = useAppDispatch();
   const { handleError } = useErrorHandler();
   
-  const stats = useAppSelector(state => 
-    state.entities.teams.stats[teamId]
-  );
+  const stats = useAppSelector(state => selectTeamStatsById(teamId)(state));
   
   const loadStats = useCallback(async () => {
     if (!teamId || stats) return;

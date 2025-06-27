@@ -1,9 +1,25 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
 import { useAppDispatch } from './useAppDispatch';
+import { useAppSelector } from './useAppSelector';
 import { setUsers } from '../store/slices/entitiesSlice';
-import type { UserProfile } from '../api/types';
+import { 
+  setUserSearching, 
+  setUserSearchResults, 
+  clearUserSearch,
+  setUserSearchTerm 
+} from '../store/slices/viewsSlice';
+import { 
+  selectChannelsForCurrentTeam,
+  selectUserSearchResults,
+  selectIsUserSearching,
+  selectUserSearchTerm,
+  selectLastUserSearchTerm,
+  selectChannelMembers,
+  selectUserProfiles
+} from '../store/selectors';
+import { filterUsersBySearchTerm } from '../utils/searchUtils';
 
 export interface UserSearchOptions {
   teamId?: string;
@@ -19,10 +35,14 @@ export interface UserSearchOptions {
 export const useUserSearch = (debounceMs: number = 300) => {
   const { handleError } = useErrorHandler();
   const dispatch = useAppDispatch();
+  const enrichedChannels = useAppSelector(selectChannelsForCurrentTeam);
+  const userProfiles = useAppSelector(selectUserProfiles);
   
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<string[]>([]);
-  const [lastSearchTerm, setLastSearchTerm] = useState<string>('');
+  // Redux state
+  const searchResults = useAppSelector(selectUserSearchResults);
+  const isSearching = useAppSelector(selectIsUserSearching);
+  const searchTerm = useAppSelector(selectUserSearchTerm);
+  const lastSearchTerm = useAppSelector(selectLastUserSearchTerm);
   
   const debounceRef = useRef<NodeJS.Timeout>();
   const currentSearchRef = useRef<string>('');
@@ -35,8 +55,7 @@ export const useUserSearch = (debounceMs: number = 300) => {
     options: UserSearchOptions = {}
   ): Promise<string[]> => {
     if (!term.trim() || term.length < 2) {
-      setSearchResults([]);
-      setLastSearchTerm('');
+      dispatch(clearUserSearch());
       return [];
     }
 
@@ -47,8 +66,7 @@ export const useUserSearch = (debounceMs: number = 300) => {
       limit = 100
     } = options;
 
-    setIsSearching(true);
-    setLastSearchTerm(term);
+    dispatch(setUserSearching(true));
     currentSearchRef.current = term;
 
     try {
@@ -87,21 +105,21 @@ export const useUserSearch = (debounceMs: number = 300) => {
       const userIds = activeUsers.map(user => user.id);
       console.debug("useUserSearch - setting results:", userIds, "length:", userIds.length);
 
-      setSearchResults(userIds);
+      dispatch(setUserSearchResults({ term, results: userIds }));
       return userIds;
     } catch (error) {
       // Only handle error if this search is still current
       if (currentSearchRef.current === term) {
         handleError('Failed to search users', error as any);
-        setSearchResults([]);
+        dispatch(setUserSearchResults({ term, results: [] }));
       }
       return [];
     } finally {
       if (currentSearchRef.current === term) {
-        setIsSearching(false);
+        dispatch(setUserSearching(false));
       }
     }
-  }, [handleError]);
+  }, [handleError, dispatch]);
 
   /**
    * Debounced search users function
@@ -117,14 +135,13 @@ export const useUserSearch = (debounceMs: number = 300) => {
 
     // Clear results immediately if term is too short
     if (!term.trim() || term.length < 2) {
-      setSearchResults([]);
-      setLastSearchTerm('');
-      setIsSearching(false);
+      dispatch(clearUserSearch());
       return;
     }
 
     // Set searching state immediately for UX
-    setIsSearching(true);
+    dispatch(setUserSearching(true));
+    dispatch(setUserSearchTerm(term));
 
     // Debounce the actual search
     debounceRef.current = setTimeout(() => {
@@ -160,17 +177,102 @@ export const useUserSearch = (debounceMs: number = 300) => {
   }, [searchUsers]);
 
   /**
+   * Advanced search for adding users to channel (API + DM contacts + channel members)
+   */
+  const searchUsersToAddInChannel = useCallback(async (
+    term: string,
+    teamId: string,
+    channelId: string,
+    channelMemberIds: string[] = [],
+    limit: number = 100
+  ): Promise<void> => {
+    if (!term || term.length < 2) {
+      dispatch(clearUserSearch());
+      return;
+    }
+
+    dispatch(setUserSearching(true));
+    dispatch(setUserSearchTerm(term));
+    currentSearchRef.current = term;
+    
+    try {
+      // 1. Recherche API : team members not in channel with allow_inactive = false
+      const apiUsers = await client.searchUsers(term, {
+        team_id: teamId,
+        not_in_channel_id: channelId,
+        allow_inactive: false,
+        group_constrained: false,
+        limit
+      });
+      
+      // 2. Get DM contacts from enriched channels (otherUser already calculated)
+      const dmContacts = enrichedChannels
+        .filter(channel => channel.type === 'D' && channel.otherUser)
+        .map(channel => channel.otherUser!)
+        .filter(Boolean);
+      
+      // 3. Get channel members from passed IDs
+      const channelMembersUsers = channelMemberIds
+        .map(userId => userProfiles[userId])
+        .filter(Boolean);
+      
+      // 4. Filter users that match search term (including nickname)
+      const dmMatches = filterUsersBySearchTerm(dmContacts, term);
+      const channelMatches = filterUsersBySearchTerm(channelMembersUsers, term);
+      
+      // 5. Combine and deduplicate
+      const apiUserIds = apiUsers.map(user => user.id);
+      const dmUserIds = dmMatches
+        .filter(user => !apiUserIds.includes(user.id))
+        .map(user => user.id);
+      const channelUserIds = channelMatches
+        .filter(user => !apiUserIds.includes(user.id) && !dmUserIds.includes(user.id))
+        .map(user => user.id);
+      
+      // 6. Store all users in profiles
+      const allUsers = [
+        ...apiUsers, 
+        ...dmMatches.filter(user => !apiUserIds.includes(user.id)),
+        ...channelMatches.filter(user => !apiUserIds.includes(user.id) && !dmUserIds.includes(user.id))
+      ];
+      if (allUsers.length > 0) {
+        dispatch(setUsers(allUsers));
+      }
+      
+      // 7. Final combined result: API users + unique DM users + unique channel members
+      const combinedResults = [...apiUserIds, ...dmUserIds, ...channelUserIds];
+      
+      // Only update if this is still the current search
+      if (currentSearchRef.current === term) {
+        dispatch(setUserSearchResults({ term, results: combinedResults }));
+      }
+      
+    } catch (error) {
+      if (currentSearchRef.current === term) {
+        handleError('User search failed', error as any);
+        dispatch(setUserSearchResults({ term, results: [] }));
+      }
+    } finally {
+      if (currentSearchRef.current === term) {
+        dispatch(setUserSearching(false));
+      }
+    }
+  }, [dispatch, handleError, enrichedChannels]);
+
+  /**
    * Clear search results and cancel pending searches
    */
   const clearSearch = useCallback(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
-    setSearchResults([]);
-    setLastSearchTerm('');
-    setIsSearching(false);
+    dispatch(clearUserSearch());
     currentSearchRef.current = '';
-  }, []);
+  }, [dispatch]);
+
+  const setSearchTerm = useCallback((term: string) => {
+    dispatch(setUserSearchTerm(term));
+  }, [dispatch]);
 
   /**
    * Check if search term matches current results
@@ -192,13 +294,16 @@ export const useUserSearch = (debounceMs: number = 300) => {
     // State
     isSearching,
     searchResults,
+    searchTerm,
     lastSearchTerm,
 
     // Actions
     searchUsers,
     searchUsersNotInTeam,
     searchTeamMembersNotInChannel,
+    searchUsersToAddInChannel,
     clearSearch,
+    setSearchTerm,
 
     // Utilities
     isCurrentSearch,

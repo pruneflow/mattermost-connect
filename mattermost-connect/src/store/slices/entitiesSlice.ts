@@ -30,6 +30,85 @@ export const updateTeamMemberRoles = createAsyncThunk(
 );
 
 /**
+ * Load team members for a specific team (only if not already loaded)
+ */
+export const loadTeamMembers = createAsyncThunk(
+  'entities/loadTeamMembers',
+  async (teamId: string, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      
+      // Always load fresh data (no cache check)
+
+      console.log(`Loading members for team ${teamId}`);
+      const members = await client.getTeamMembers(teamId, 0, 200, {
+        sort: 'Username',
+        exclude_deleted_users: true,
+      });
+      return { teamId, members: members || [], skipped: false };
+    } catch (error) {
+      return rejectWithValue({ teamId, error: error instanceof Error ? error.message : 'Failed to load team members' });
+    }
+  }
+);
+
+/**
+ * Load user profiles for a team (with pagination support)
+ */
+export const loadTeamUserProfiles = createAsyncThunk(
+  'entities/loadTeamUserProfiles',
+  async ({ teamId, page = 0, perPage = 100 }: { teamId: string; page?: number; perPage?: number }, { rejectWithValue }) => {
+    try {
+      console.log(`Loading user profiles for team ${teamId}, page ${page}`);
+      const profiles = await client.getProfilesInTeam(teamId, page, perPage, '', {
+        active: true,
+      });
+      return { teamId, profiles: profiles || [], page };
+    } catch (error) {
+      return rejectWithValue({ teamId, page, error: error instanceof Error ? error.message : 'Failed to load team user profiles' });
+    }
+  }
+);
+
+/**
+ * Load channel members for a specific channel (only if not already loaded)
+ */
+export const loadChannelMembers = createAsyncThunk(
+  'entities/loadChannelMembers',
+  async (channelId: string, { getState, dispatch, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      
+      // Always load fresh data (no cache check)
+
+      console.log(`Loading members for channel ${channelId}`);
+      const members = await client.getChannelMembers(channelId, 0, 200);
+      
+      // Extract user IDs and load their profiles if needed
+      const userIds = (members || []).map(member => member.user_id);
+      const existingUserIds = Object.keys(state.entities.users.profiles);
+      const missingUserIds = userIds.filter(id => !existingUserIds.includes(id));
+      
+      // Load missing user profiles
+      if (missingUserIds.length > 0) {
+        console.log(`Loading ${missingUserIds.length} missing user profiles for channel members`);
+        try {
+          const users = await client.getProfilesByIds(missingUserIds);
+          // Store users in state (will be handled by the fulfilled reducer)
+          dispatch(setUsers(users || []));
+        } catch (userError) {
+          console.warn('Failed to load some user profiles:', userError);
+        }
+      }
+      
+      return { channelId, members: members || [], skipped: false };
+    } catch (error) {
+      return rejectWithValue({ channelId, error: error instanceof Error ? error.message : 'Failed to load channel members' });
+    }
+  }
+);
+
+/**
  * Load user statuses by IDs with debounced batching (Mattermost pattern)
  */
 export const loadUserStatuses = createAsyncThunk(
@@ -490,6 +569,7 @@ export interface EntitiesState {
     currentTeamId: string;
     teams: Record<string, Team>;
     myMembers: Record<string, TeamMember>;
+    membersInTeam: Record<string, Record<string, TeamMember>>; // teamId -> { userId -> TeamMember }
     unreads: Record<string, { msg_count: number; mention_count: number }>;
     stats: Record<string, TeamStats>;
   };
@@ -497,6 +577,7 @@ export interface EntitiesState {
     currentChannelId: string;
     channels: Record<string, Channel>;
     myMembers: Record<string, ChannelMember>;
+    membersInChannel: Record<string, Record<string, ChannelMember>>; // channelId -> { userId -> ChannelMember }
     channelsInTeam: Record<string, string[]>;
     unreads: Record<string, { msg_count: number; mention_count: number }>;
     categories: Record<string, ChannelCategory>; // category_id -> ChannelCategory
@@ -521,6 +602,7 @@ const initialState: EntitiesState = {
     currentTeamId: '',
     teams: {},
     myMembers: {},
+    membersInTeam: {},
     unreads: {},
     stats: {},
   },
@@ -528,6 +610,7 @@ const initialState: EntitiesState = {
     currentChannelId: '',
     channels: {},
     myMembers: {},
+    membersInChannel: {},
     channelsInTeam: {},
     unreads: {},
     categories: {},
@@ -922,6 +1005,56 @@ const entitiesSlice = createSlice({
       })
       .addCase(loadChannelCategories.rejected, (state, action) => {
         console.error('Failed to load channel categories:', action.payload);
+      })
+      // Team members thunks
+      .addCase(loadTeamMembers.fulfilled, (state, action) => {
+        const { teamId, members, skipped } = action.payload;
+        
+        // Skip if already loaded
+        if (skipped) {
+          return;
+        }
+        
+        // Store members in team
+        const membersObj: Record<string, TeamMember> = {};
+        (members || []).forEach(member => {
+          membersObj[member.user_id] = member;
+        });
+        state.teams.membersInTeam[teamId] = membersObj;
+      })
+      .addCase(loadTeamMembers.rejected, (state, action) => {
+        console.error('Failed to load team members:', action.payload);
+      })
+      // Team user profiles thunk
+      .addCase(loadTeamUserProfiles.fulfilled, (state, action) => {
+        const { profiles } = action.payload;
+        
+        // Store user profiles in users.profiles
+        (profiles || []).forEach(profile => {
+          state.users.profiles[profile.id] = profile;
+        });
+      })
+      .addCase(loadTeamUserProfiles.rejected, (state, action) => {
+        console.error('Failed to load team user profiles:', action.payload);
+      })
+      // Channel members thunks
+      .addCase(loadChannelMembers.fulfilled, (state, action) => {
+        const { channelId, members, skipped } = action.payload;
+        
+        // Skip if already loaded
+        if (skipped) {
+          return;
+        }
+        
+        // Store members in channel
+        const membersObj: Record<string, ChannelMember> = {};
+        (members || []).forEach(member => {
+          membersObj[member.user_id] = member;
+        });
+        state.channels.membersInChannel[channelId] = membersObj;
+      })
+      .addCase(loadChannelMembers.rejected, (state, action) => {
+        console.error('Failed to load channel members:', action.payload);
       })
       .addCase(updateChannelCategoriesAction.fulfilled, (state, action) => {
         const { teamId, categories } = action.payload;

@@ -3,7 +3,7 @@ import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/st
 import CssBaseline from '@mui/material/CssBaseline';
 import { useAppSelector } from '../hooks/useAppSelector';
 import { getPreference } from '../store/slices/preferencesSlice';
-import type { RootState } from '../store';
+import { selectPreferences } from '../store/selectors';
 
 export interface ThemeProviderProps {
   children: React.ReactNode;
@@ -17,7 +17,7 @@ const getSystemTheme = (): 'light' | 'dark' => {
 };
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const preferences = useAppSelector((state: RootState) => state.preferences.preferences);
+  const preferences = useAppSelector(selectPreferences);
   const themePreference = getPreference(preferences, 'display_settings', 'theme', 'auto') as 'light' | 'dark' | 'auto';
   
   const [systemTheme, setSystemTheme] = React.useState<'light' | 'dark'>(getSystemTheme);

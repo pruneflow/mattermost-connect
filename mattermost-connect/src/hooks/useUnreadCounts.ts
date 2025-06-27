@@ -6,6 +6,8 @@ import {
   selectCurrentUser,
   selectCurrentTeamId,
   selectChannelById,
+  selectChannelUnreads,
+  selectChannelsData,
 } from '../store/selectors';
 import {
   incrementChannelUnreadCount,
@@ -27,8 +29,8 @@ export const useUnreadCounts = () => {
   const currentUserId = useAppSelector(selectCurrentUserId);
   const currentUser = useAppSelector(selectCurrentUser);
   const currentTeamId = useAppSelector(selectCurrentTeamId);
-  const channelUnreads = useAppSelector(state => state.entities.channels.unreads);
-  const channels = useAppSelector(state => state.entities.channels.channels);
+  const channelUnreads = useAppSelector(selectChannelUnreads);
+  const channels = useAppSelector(selectChannelsData);
   const { handleError } = useErrorHandler();
 
   // Get channel data using stable selector pattern

@@ -21,16 +21,13 @@ export interface EnrichedChannel extends Channel {
 // Usage: const data = useAppSelector(selectChannelsData);
 // ============================================================================
 
-export const selectTeamsState = (state: RootState) => state.entities.teams;
-export const selectUsersState = (state: RootState) => state.entities.users;
+// Individual property selectors instead of broad state objects
 export const selectCurrentTeamId = (state: RootState) =>
   state.entities.teams.currentTeamId;
 export const selectCurrentUserId = (state: RootState) =>
   state.entities.users.currentUserId;
 
 // Channels state selectors (Pattern 1)
-export const selectChannelsState = (state: RootState) =>
-  state.entities.channels;
 export const selectCurrentChannelId = (state: RootState) =>
   state.entities.channels.currentChannelId;
 export const selectChannelsData = (state: RootState) =>
@@ -43,18 +40,23 @@ export const selectChannelsData = (state: RootState) =>
 /**
  * Get teams as an array (memoized) - Following Mattermost pattern
  */
-export const selectTeams = createSelector([selectTeamsState], (teamsState) =>
-  Object.values(teamsState.teams),
+export const selectTeams = createSelector(
+  [(state: RootState) => state.entities.teams.teams], 
+  (teamsById) => Object.values(teamsById),
 );
 
 /**
- * Get teams as an object/dictionary (memoized)
- * Performance benefit: Avoids creating new object reference on every render
+ * Get teams as an object/dictionary (direct selector)
+ * Since this returns the state property directly, no memoization needed
  */
-export const selectTeamsById = createSelector(
-  [selectTeamsState],
-  (teamsState) => teamsState.teams,
-);
+export const selectTeamsById = (state: RootState) => state.entities.teams.teams;
+
+// Create stable empty arrays to avoid unnecessary re-renders
+const EMPTY_CHANNELS_ARRAY = [] as const;
+const EMPTY_CHANNEL_IDS = [] as const;
+
+// Create stable empty objects to avoid unnecessary re-renders
+const EMPTY_UNREAD_DATA = { msg_count: 0, mention_count: 0 } as const;
 
 /**
  * Get channels in current team - Exact Mattermost pattern
@@ -67,8 +69,8 @@ export const selectChannelsInCurrentTeam = createSelector(
     (state: RootState) => state.entities.channels.channelsInTeam,
   ],
   (allChannels, currentTeamId, channelsInTeam) => {
-    if (!currentTeamId) return [];
-    const channelIds = channelsInTeam[currentTeamId] || [];
+    if (!currentTeamId) return EMPTY_CHANNELS_ARRAY;
+    const channelIds = channelsInTeam[currentTeamId] || EMPTY_CHANNEL_IDS;
     return channelIds.map((id) => allChannels[id]).filter(Boolean);
   },
 );
@@ -83,7 +85,7 @@ export const selectChannelsForCurrentTeam = createSelector(
     (state: RootState) => state.entities.channels.unreads,
     (state: RootState) => state.entities.channels.myMembers,
     selectCurrentChannelId,
-    selectUsersState,
+    (state: RootState) => state.entities.users.profiles,
     selectCurrentUserId,
   ],
   (
@@ -91,7 +93,7 @@ export const selectChannelsForCurrentTeam = createSelector(
     channelUnreads,
     channelMembers,
     currentChannelId,
-    usersState,
+    userProfiles,
     currentUserId,
   ): EnrichedChannel[] => {
     return teamChannels.map((channel) => {
@@ -126,10 +128,10 @@ export const selectChannelsForCurrentTeam = createSelector(
         // Direct channel - extract other user
         const channelUserIds = channel.name.split("__");
         otherUserId = channelUserIds.find((id) => id !== currentUserId);
-        otherUser = otherUserId ? usersState.profiles[otherUserId] : null;
+        otherUser = otherUserId ? userProfiles[otherUserId] : null;
         computedDisplayName = getChannelDisplayName(
           channel,
-          usersState.profiles,
+          userProfiles,
           currentUserId,
         );
       } else if (channel.type === "G" && currentUserId) {
@@ -137,10 +139,10 @@ export const selectChannelsForCurrentTeam = createSelector(
         userIds = channel.name
           .split("__")
           .filter((id) => id !== "G" && id !== "" && id !== currentUserId);
-        users = userIds.map((id) => usersState.profiles[id]).filter(Boolean);
+        users = userIds.map((id) => userProfiles[id]).filter(Boolean);
         computedDisplayName = getChannelDisplayName(
           channel,
-          usersState.profiles,
+          userProfiles,
           currentUserId,
         );
       }
@@ -170,9 +172,9 @@ export const selectChannelsForCurrentTeam = createSelector(
  * Performance benefit: Avoids lookup on every render
  */
 export const selectCurrentTeam = createSelector(
-  [selectTeamsState, selectCurrentTeamId],
-  (teamsState, currentTeamId) => {
-    return currentTeamId ? teamsState.teams[currentTeamId] : null;
+  [(state: RootState) => state.entities.teams.teams, selectCurrentTeamId],
+  (teamsById, currentTeamId) => {
+    return currentTeamId ? teamsById[currentTeamId] : null;
   },
 );
 
@@ -181,8 +183,9 @@ export const selectCurrentTeam = createSelector(
  * Usage: const selectTeam = selectTeamById(teamId)
  */
 export const selectTeamById = (teamId: string | null) =>
-  createSelector([selectTeamsState], (teamsState) =>
-    teamId ? teamsState.teams[teamId] : null,
+  createSelector(
+    [(state: RootState) => state.entities.teams.teams], 
+    (teamsById) => teamId ? teamsById[teamId] : null,
   );
 
 /**
@@ -197,7 +200,7 @@ export const selectTeamUnreads = (state: RootState) =>
 export const selectTeamUnreadData = (teamId: string) =>
   createSelector(
     [selectTeamUnreads],
-    (teamUnreads) => teamUnreads[teamId] || { msg_count: 0, mention_count: 0 },
+    (teamUnreads) => teamUnreads[teamId] || EMPTY_UNREAD_DATA,
   );
 
 // ============================================================================
@@ -209,9 +212,9 @@ export const selectTeamUnreadData = (teamId: string) =>
  * Performance benefit: Avoids lookup on every render
  */
 export const selectCurrentUser = createSelector(
-  [selectUsersState, selectCurrentUserId],
-  (usersState, currentUserId) => {
-    return currentUserId ? usersState.profiles[currentUserId] : null;
+  [(state: RootState) => state.entities.users.profiles, selectCurrentUserId],
+  (userProfiles, currentUserId) => {
+    return currentUserId ? userProfiles[currentUserId] : null;
   },
 );
 
@@ -220,8 +223,8 @@ export const selectCurrentUser = createSelector(
  * Performance benefit: Avoids Object.values() recalculation
  */
 export const selectUsersArray = createSelector(
-  [selectUsersState],
-  (usersState) => Object.values(usersState.profiles),
+  [(state: RootState) => state.entities.users.profiles],
+  (userProfiles) => Object.values(userProfiles),
 );
 
 // ============================================================================
@@ -250,10 +253,14 @@ export const selectCurrentChannel = createSelector(
  */
 export const makeSelectChannelsInTeam = () =>
   createSelector(
-    [selectChannelsState, (state: RootState, teamId: string) => teamId],
-    (channelsState, teamId) => {
-      const channelIds = channelsState.channelsInTeam[teamId] || [];
-      return channelIds.map((id) => channelsState.channels[id]).filter(Boolean);
+    [
+      (state: RootState) => state.entities.channels.channelsInTeam,
+      (state: RootState) => state.entities.channels.channels,
+      (state: RootState, teamId: string) => teamId
+    ],
+    (channelsInTeam, channelsById, teamId) => {
+      const channelIds = channelsInTeam[teamId] || EMPTY_CHANNEL_IDS;
+      return channelIds.map((id) => channelsById[id]).filter(Boolean);
     },
   );
 
@@ -262,8 +269,8 @@ export const makeSelectChannelsInTeam = () =>
  */
 export const selectMyChannelMember = (channelId: string) =>
   createSelector(
-    [selectChannelsState],
-    (channelsState) => channelsState.myMembers[channelId] || null,
+    [(state: RootState) => state.entities.channels.myMembers],
+    (myMembers) => myMembers[channelId] || null,
   );
 
 // ============================================================================
@@ -327,7 +334,7 @@ export const selectTypingEventsForChannel = createSelector(
     (state: RootState, channelId: string) => channelId,
   ],
   (allTypingEvents, currentUserId, channelId) => {
-    const events = allTypingEvents[channelId] || [];
+    const events = allTypingEvents[channelId] || EMPTY_CHANNELS_ARRAY;
     const otherUserEvents = events.filter(
       (event) => event.user_id !== currentUserId,
     );
@@ -364,6 +371,14 @@ export const selectUserStatuses = (state: RootState) =>
 export const selectUserProfiles = (state: RootState) =>
   state.entities.users.profiles;
 
+// Additional specific selectors
+export const selectChannelUnreads = (state: RootState) =>
+  state.entities.channels.unreads;
+export const selectChannelMyMembers = (state: RootState) =>
+  state.entities.channels.myMembers;
+export const selectTeamStats = (state: RootState) =>
+  state.entities.teams.stats;
+
 // Select user by ID
 export const selectUserById = (userId: string) =>
   createSelector([selectUserProfiles], (profiles) => profiles[userId]);
@@ -383,8 +398,8 @@ export const selectLoadingState = (state: RootState) => state.loading;
 
 // (Moved to Pattern 1 section above)
 
-// Team members selector
-export const selectTeamMembers = (state: RootState) =>
+// My team memberships selector
+export const selectMyTeamMembers = (state: RootState) =>
   state.entities.teams.myMembers;
 
 // Navigation state selectors
@@ -422,14 +437,14 @@ export const selectChannelById = createSelector(
     (state: RootState, channelId: string) =>
       state.entities.channels.myMembers[channelId],
     (state: RootState) => state.entities.users.currentUserId,
-    (state: RootState) => state.entities.users,
+    (state: RootState) => state.entities.users.profiles,
   ],
   (
     channel,
     unread,
     myMember,
     currentUserId,
-    usersState,
+    userProfiles,
   ): EnrichedChannel | null => {
     if (!channel) return null;
 
@@ -456,7 +471,7 @@ export const selectChannelById = createSelector(
     // Use utility function for display name
     const computedDisplayName = getChannelDisplayName(
       channel,
-      usersState.profiles,
+      userProfiles,
       currentUserId,
     );
 
@@ -467,7 +482,7 @@ export const selectChannelById = createSelector(
       const userIds = channel.name.split("__");
       otherUserId = userIds.find((id) => id !== currentUserId);
       if (otherUserId) {
-        otherUser = usersState.profiles[otherUserId];
+        otherUser = userProfiles[otherUserId];
       }
     }
 
@@ -499,9 +514,9 @@ export const selectCategoriesForCurrentTeam = createSelector(
     (state: RootState) => state.entities.channels.categoryOrder,
   ],
   (currentTeamId, categories, categoriesInTeam, categoryOrder) => {
-    if (!currentTeamId) return [];
+    if (!currentTeamId) return EMPTY_CHANNELS_ARRAY;
     
-    const categoryIds = categoriesInTeam[currentTeamId] || [];
+    const categoryIds = categoriesInTeam[currentTeamId] || EMPTY_CHANNEL_IDS;
     const orderedIds = categoryOrder[currentTeamId] || categoryIds;
     
     return orderedIds
@@ -551,9 +566,10 @@ export const createSelectFilteredChannelIds = () =>
       selectChannelIdsForCurrentTeam,
       (state: RootState, searchQuery: string) => searchQuery.toLowerCase().trim(),
       (state: RootState) => state.entities.channels.channels,
-      (state: RootState) => state.entities.users,
+      (state: RootState) => state.entities.users.profiles,
+      (state: RootState) => state.entities.users.currentUserId,
     ],
-    (allChannelIds, searchQuery, channels, usersState) => {
+    (allChannelIds, searchQuery, channels, userProfiles, currentUserId) => {
       if (!searchQuery) return allChannelIds;
 
       return allChannelIds.filter((channelId) => {
@@ -563,8 +579,8 @@ export const createSelectFilteredChannelIds = () =>
         // Get display name using utility function
         const displayName = getChannelDisplayName(
           channel,
-          usersState.profiles,
-          usersState.currentUserId,
+          userProfiles,
+          currentUserId,
         );
 
         // Search in multiple fields
@@ -607,9 +623,101 @@ export const selectIsSystemAdmin = createSelector(
  * Get team member roles for current user (memoized)
  * Performance benefit: Avoids team member lookup on every permission check
  */
+// Create a stable array for default team user role
+const DEFAULT_TEAM_USER_ROLES = ["team_user"] as const;
+
 export const selectCurrentUserTeamRoles = (teamId: string) =>
-  createSelector([selectTeamsState], (teamsState) => {
-    const member = teamsState.myMembers[teamId];
-    if (!member?.roles) return ["team_user"];
-    return member.roles.split(" ").filter(Boolean);
+  createSelector(
+    [(state: RootState) => state.entities.teams.myMembers],
+    (myMembers) => {
+      const member = myMembers[teamId];
+      if (!member?.roles) return DEFAULT_TEAM_USER_ROLES;
+      return member.roles.split(" ").filter(Boolean);
+    }
+  );
+
+// User Search Selectors
+export const selectUserSearchState = (state: RootState) => state.views.userSearch;
+
+export const selectUserSearchResults = createSelector(
+  [selectUserSearchState],
+  (userSearch) => userSearch.searchResults
+);
+
+export const selectIsUserSearching = createSelector(
+  [selectUserSearchState],
+  (userSearch) => userSearch.isSearching
+);
+
+export const selectUserSearchTerm = createSelector(
+  [selectUserSearchState],
+  (userSearch) => userSearch.searchTerm
+);
+
+export const selectLastUserSearchTerm = createSelector(
+  [selectUserSearchState],
+  (userSearch) => userSearch.lastSearchTerm
+);
+
+// Channel Members Selectors
+// Create a stable empty object to avoid unnecessary re-renders
+const EMPTY_CHANNEL_MEMBERS = {};
+
+export const selectChannelMembers = createSelector(
+  [
+    (state: RootState) => state.entities.channels.membersInChannel,
+    (state: RootState, channelId: string) => channelId,
+  ],
+  (membersInChannel, channelId) => membersInChannel[channelId] || EMPTY_CHANNEL_MEMBERS
+);
+
+export const selectIsUserInChannel = createSelector(
+  [
+    (state: RootState, userId: string, channelId: string) => 
+      selectChannelMembers(state, channelId),
+    (state: RootState, userId: string, channelId: string) => userId,
+  ],
+  (channelMembers, userId) => {
+    return !!channelMembers[userId];
+  }
+);
+
+// Team membership selectors
+// Create a stable empty object to avoid unnecessary re-renders
+const EMPTY_TEAM_MEMBERS = {};
+
+export const selectTeamMembers = createSelector(
+  [
+    (state: RootState) => state.entities.teams.membersInTeam,
+    (state: RootState, teamId: string) => teamId,
+  ],
+  (membersInTeam, teamId) => membersInTeam[teamId] || EMPTY_TEAM_MEMBERS
+);
+
+export const selectIsUserInTeam = createSelector(
+  [
+    (state: RootState, teamId: string, userId: string) => 
+      selectTeamMembers(state, teamId),
+    (state: RootState, teamId: string, userId: string) => userId,
+  ],
+  (teamMembers, userId) => {
+    return !!teamMembers[userId];
+  }
+);
+
+// Team stats selector
+// Create a stable empty stats object to avoid unnecessary re-renders
+const EMPTY_TEAM_STATS = { total_member_count: 0, active_member_count: 0 };
+
+export const selectTeamStatsById = (teamId: string) =>
+  createSelector([selectTeamStats], (teamStats) => {
+    return teamStats[teamId] || EMPTY_TEAM_STATS;
   });
+
+// Preferences selector
+export const selectPreferences = (state: RootState) =>
+  state.preferences.preferences;
+
+// Typing events selector
+export const selectTypingEventsByChannel = (state: RootState) =>
+  state.websocket.typingEventsByChannel;

@@ -8,6 +8,7 @@ import {
   selectServerUrl,
   selectCurrentTeamId,
   selectTeams,
+  selectUserProfiles,
 } from "../store/selectors";
 import {
   setUsersStatus,
@@ -53,7 +54,7 @@ export const useAppInitialization = () => {
       try {
         // Get current userIds from store (not captured at creation time)
         const currentState = store.getState();
-        const currentUserIds = Object.keys(currentState.entities.users.profiles);
+        const currentUserIds = Object.keys(selectUserProfiles(currentState));
         
         if (currentUserIds.length === 0) {
           console.log('⏭️ No users to poll for status');

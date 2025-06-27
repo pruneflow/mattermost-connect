@@ -5,7 +5,8 @@ import {
   selectCurrentTeamId,
   selectCurrentUserRoles,
   selectIsSystemAdmin,
-  selectTeamMembers
+  selectMyTeamMembers,
+  selectChannelById
 } from '../store/selectors';
 import { Permissions, RolePermissions, SystemRoles, TeamRoles, ChannelRoles } from '../constants/permissions';
 import type { Team, Channel } from '../api/types';
@@ -16,14 +17,14 @@ export const usePermissions = () => {
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const systemRoles = useAppSelector(selectCurrentUserRoles);
   const isSystemAdmin = useAppSelector(selectIsSystemAdmin);
-  const teamMembers = useAppSelector(selectTeamMembers);
+  const myTeamMembers = useAppSelector(selectMyTeamMembers);
 
   // Helper to get user roles for a team - simple approach
   const getUserTeamRoles = useCallback((teamId: string): string[] => {
-    const member = teamMembers[teamId];
+    const member = myTeamMembers[teamId];
     if (!member?.roles) return [TeamRoles.TEAM_USER];
     return member.roles.split(' ').filter(Boolean);
-  }, [teamMembers]);
+  }, [myTeamMembers]);
 
   // Helper to get all permissions for given roles
   const getPermissionsForRoles = useCallback((roles: string[]): string[] => {
@@ -127,6 +128,25 @@ export const usePermissions = () => {
     return haveITeamPermission(id, Permissions.MANAGE_TEAM);
   }, [currentTeamId, haveITeamPermission]);
 
+  const canManageChannelMembers = useCallback((channel: Channel): boolean => {
+    if (!channel || !currentUser) return false;
+
+    // Direct channels (type 'D') cannot have members added
+    if (channel.type === 'D') return false;
+
+    // System admin has all permissions
+    if (haveISystemPermission(Permissions.MANAGE_SYSTEM)) {
+      return true;
+    }
+
+    // Check appropriate permission based on channel type
+    const permission = channel.type === 'P' 
+      ? Permissions.MANAGE_PRIVATE_CHANNEL_MEMBERS 
+      : Permissions.MANAGE_PUBLIC_CHANNEL_MEMBERS;
+    
+    return haveIChannelPermission(channel.id, permission);
+  }, [currentUser, haveISystemPermission, haveIChannelPermission]);
+
   return {
     // Core permission checks (Mattermost pattern)
     haveISystemPermission,
@@ -142,6 +162,7 @@ export const usePermissions = () => {
     canInviteUser,
     canAddUserToTeam,
     canInviteGuest,
+    canManageChannelMembers,
     isSystemAdmin, // Direct value from selector
     isTeamAdmin,
     

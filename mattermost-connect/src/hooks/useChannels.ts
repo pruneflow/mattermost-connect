@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { setCurrentChannelId, markChannelAsUnreadAction, toggleChannelFavoriteAction, moveChannelToCategoryAction } from '../store/slices/entitiesSlice';
+import { setCurrentChannelId, markChannelAsUnreadAction, toggleChannelFavoriteAction, moveChannelToCategoryAction, loadChannelMembers } from '../store/slices/entitiesSlice';
 import { useUnreadCounts } from './useUnreadCounts';
 import {
   selectCurrentTeamId,
@@ -48,7 +48,13 @@ export const useChannels = () => {
     dispatch(setCurrentChannelId(channelId));
     // Mark channel as read when switching to it
     markChannelAsRead(channelId);
-  }, [dispatch, markChannelAsRead]);
+    
+    // Load channel members only for non-direct channels (will skip if already loaded)
+    const channel = allChannels.find(ch => ch.id === channelId);
+    if (channel && channel.type !== 'D') {
+      dispatch(loadChannelMembers(channelId));
+    }
+  }, [dispatch, markChannelAsRead, allChannels]);
 
   // Mark channel as unread action
   const markAsUnread = useCallback((channelId: string) => {
