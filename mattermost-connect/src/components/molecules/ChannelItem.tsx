@@ -169,6 +169,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
   }) => {
     // Menu state
     const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+    const [moveToMenuOpen, setMoveToMenuOpen] = useState(false);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const isMenuOpen = Boolean(menuAnchorEl);
@@ -208,7 +209,14 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     const handleMenuClose = useCallback(() => {
       setMenuAnchorEl(null);
+      setMoveToMenuOpen(false);
     }, []);
+
+    const handleMoveToMenuToggle = useCallback(() => {
+      if (isMobile) {
+        setMoveToMenuOpen(!moveToMenuOpen);
+      }
+    }, [isMobile, moveToMenuOpen]);
 
     // Get channel actions from useChannels hook
     const {
@@ -417,7 +425,12 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
               padding: 0,
               border: `1px solid ${alpha(theme.palette.divider, 0.12)}`,
               // Position relative to anchor
-              left: menuAnchorEl ? `${menuAnchorEl.getBoundingClientRect().right + 8}px` : 0,
+              left: menuAnchorEl ? (
+                // Mobile: position from right edge with padding, Desktop: position from right + offset
+                isMobile 
+                  ? `${Math.max(8, menuAnchorEl.getBoundingClientRect().left - 200)}px`
+                  : `${menuAnchorEl.getBoundingClientRect().right + 8}px`
+              ) : 0,
               top: menuAnchorEl ? `${menuAnchorEl.getBoundingClientRect().top}px` : 0,
             }}
           >
@@ -475,6 +488,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
           <Box
             component="li"
+            onClick={handleMoveToMenuToggle}
             sx={{
               ...STATIC_STYLES.menuItem,
               justifyContent: "space-between",
@@ -499,7 +513,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
             <Box
               component="ul"
               sx={{
-                display: "none",
+                display: isMobile ? (moveToMenuOpen ? "block" : "none") : "none",
                 position: "absolute",
                 backgroundColor: "background.paper",
                 boxShadow: theme.shadows[12],
