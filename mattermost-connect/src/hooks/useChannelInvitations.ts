@@ -5,7 +5,7 @@ import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { usePermissions } from './usePermissions';
 import { selectIsUserInTeam, selectIsUserInChannel, selectChannelById, selectCurrentTeamId, selectUserProfiles, selectTeamMembers, selectChannelMembers } from '../store/selectors';
-import { loadTeamMembers, loadChannelMembers } from '../store/slices/entitiesSlice';
+import { loadTeamMembers, loadChannelMembers, addUsersToTeam } from '../store/slices/entitiesSlice';
 
 /**
  * Generate Mattermost-style user feedback messages based on invitation results
@@ -165,7 +165,8 @@ export const useChannelInvitations = (channelId: string) => {
           result.noTeamPermission = true;
         } else {
           try {
-            await client.addUsersToTeam(currentTeamId, usersNotInTeam);
+            // Use Redux action instead of direct client call to ensure store sync
+            await dispatch(addUsersToTeam({ teamId: currentTeamId, userIds: usersNotInTeam })).unwrap();
             result.addedToTeam.push(...usersNotInTeam);
             // Now these users can be added to channel
             usersInTeamNotInChannel.push(...usersNotInTeam);

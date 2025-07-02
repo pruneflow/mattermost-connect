@@ -48,13 +48,7 @@ export const useChannels = () => {
     dispatch(setCurrentChannelId(channelId));
     // Mark channel as read when switching to it
     markChannelAsRead(channelId);
-    
-    // Load channel members only for non-direct channels (will skip if already loaded)
-    const channel = allChannels.find(ch => ch.id === channelId);
-    if (channel && channel.type !== 'D') {
-      dispatch(loadChannelMembers(channelId));
-    }
-  }, [dispatch, markChannelAsRead, allChannels]);
+  }, [dispatch, markChannelAsRead]);
 
   // Mark channel as unread action
   const markAsUnread = useCallback((channelId: string) => {

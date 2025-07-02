@@ -14,7 +14,9 @@ export const useTeamStats = (teamId: string) => {
   const stats = useAppSelector(state => selectTeamStatsById(teamId)(state));
   
   const loadStats = useCallback(async () => {
-    if (!teamId || stats) return;
+    if (!teamId) return;
+    // Only skip if we have real stats (not the default EMPTY_TEAM_STATS)
+    if (stats && stats.total_member_count > 0) return;
     
     try {
       const teamStats = await client.getTeamStats(teamId);

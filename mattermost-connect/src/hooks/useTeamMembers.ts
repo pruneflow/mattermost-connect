@@ -1,8 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAppDispatch } from './useAppDispatch';
+import { useAppSelector } from './useAppSelector';
 import { useErrorHandler } from './useErrorHandler';
 import { useTeamStats } from './useTeamStats';
 import { updateTeamMemberRoles, removeUserFromTeam } from '../store/slices/entitiesSlice';
+import { selectTeamMembers } from '../store/selectors';
 import { client } from '../api/client';
 import type { UserProfile, TeamMember } from '../api/types';
 
@@ -16,11 +18,15 @@ export const useTeamMembers = (teamId: string | null) => {
   const { handleError } = useErrorHandler();
   const { stats, loading: statsLoading } = useTeamStats(teamId || '');
   
+  // Watch Redux store for team member changes to trigger reload
+  const reduxTeamMembers = useAppSelector(state => selectTeamMembers(state, teamId || ''));
+  
   const [loading, setLoading] = useState(false);
   // ✅ Exactly like Mattermost: separate arrays, no conflicts
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teamMembers, setTeamMembers] = useState<{ [userId: string]: TeamMember }>({});
   const [currentPage, setCurrentPage] = useState(0);
+  const [lastReduxUpdateTime, setLastReduxUpdateTime] = useState(Date.now());
   
   /**
    * Load team members for specific page - following Mattermost's exact pattern:
@@ -72,6 +78,22 @@ export const useTeamMembers = (teamId: string | null) => {
       setLoading(false);
     }
   }, [teamId, handleError]);
+  
+  // ✅ Sync with Redux store changes (when members are added/removed)
+  useEffect(() => {
+    // Only reload if we have data already loaded and Redux store changed
+    if (users.length > 0 && reduxTeamMembers && Object.keys(reduxTeamMembers).length > 0) {
+      const reduxMemberCount = Object.keys(reduxTeamMembers).length;
+      const localMemberCount = Object.keys(teamMembers).length;
+      
+      // If member counts differ, Redux was updated - reload current page
+      if (reduxMemberCount !== localMemberCount) {
+        console.log(`Team members changed in Redux (${localMemberCount} -> ${reduxMemberCount}), reloading page ${currentPage}`);
+        setLastReduxUpdateTime(Date.now());
+        loadTeamMembers(currentPage);
+      }
+    }
+  }, [reduxTeamMembers, users.length, teamMembers, currentPage, loadTeamMembers]);
   
   // ✅ Filter active members exactly like Mattermost
   const activeMembers = users.filter(user => {

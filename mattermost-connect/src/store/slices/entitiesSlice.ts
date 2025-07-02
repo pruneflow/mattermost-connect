@@ -130,6 +130,29 @@ export const loadUserStatuses = createAsyncThunk(
 );
 
 /**
+ * Add users to team
+ */
+export const addUsersToTeam = createAsyncThunk(
+  'entities/addUsersToTeam',
+  async ({ teamId, userIds }: { teamId: string; userIds: string[] }, { dispatch, rejectWithValue }) => {
+    try {
+      await client.addUsersToTeam(teamId, userIds);
+      
+      // Update store - increment team member count
+      console.log(`Adding ${userIds.length} users to team ${teamId}, updating stats`);
+      dispatch(adjustTeamMemberCount({ teamId, count: userIds.length }));
+      
+      // Optionally reload team members to get fresh data
+      dispatch(loadTeamMembers(teamId));
+      
+      return { teamId, userIds };
+    } catch (error) {
+      return rejectWithValue({ teamId, userIds, error: error instanceof Error ? error.message : 'Failed to add users to team' });
+    }
+  }
+);
+
+/**
  * Remove user from team
  */
 export const removeUserFromTeam = createAsyncThunk(
@@ -138,8 +161,10 @@ export const removeUserFromTeam = createAsyncThunk(
     try {
       await client.removeFromTeam(teamId, userId);
       
-      // Update store - remove user from team
+      // Update store - remove user from team (WebSocket will handle stats)
+      console.log(`Removing user ${userId} from team ${teamId}, WebSocket will update stats`);
       dispatch(removeUserFromTeamAction({ teamId, userId }));
+      // Note: Don't decrement here - WebSocket 'leave_team' event will do it
       
       return { teamId, userId };
     } catch (error) {
@@ -722,10 +747,16 @@ const entitiesSlice = createSlice({
     },
     removeUserFromTeamAction: (state, action: PayloadAction<{ teamId: string; userId: string }>) => {
       const { teamId, userId } = action.payload;
+      
+      // Remove from my team memberships if it's me
       if (state.teams.myMembers[teamId] && state.teams.myMembers[teamId].user_id === userId) {
         delete state.teams.myMembers[teamId];
       }
-      // Note: User profiles are managed separately via useTeamMembers hook
+      
+      // Remove from team members list (this was missing!)
+      if (state.teams.membersInTeam[teamId]) {
+        delete state.teams.membersInTeam[teamId][userId];
+      }
     },
 
     // Team Stats
@@ -745,6 +776,14 @@ const entitiesSlice = createSlice({
       if (state.teams.stats[teamId]) {
         state.teams.stats[teamId].total_member_count = Math.max(0, state.teams.stats[teamId].total_member_count - 1);
         state.teams.stats[teamId].active_member_count = Math.max(0, state.teams.stats[teamId].active_member_count - 1);
+      }
+    },
+    // Bulk operations for better performance
+    adjustTeamMemberCount: (state, action: PayloadAction<{ teamId: string; count: number }>) => {
+      const { teamId, count } = action.payload;
+      if (state.teams.stats[teamId]) {
+        state.teams.stats[teamId].total_member_count = Math.max(0, state.teams.stats[teamId].total_member_count + count);
+        state.teams.stats[teamId].active_member_count = Math.max(0, state.teams.stats[teamId].active_member_count + count);
       }
     },
 
@@ -1096,6 +1135,7 @@ export const {
   setTeamStats,
   incrementTeamMemberCount,
   decrementTeamMemberCount,
+  adjustTeamMemberCount,
   
   // Channels
   setCurrentChannelId,

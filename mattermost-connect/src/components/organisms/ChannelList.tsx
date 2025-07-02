@@ -171,9 +171,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   // Get navigation
   const { navigateToChannel } = useNavigation();
-  
-  // Get permissions
-  const { canManageChannelMembers } = usePermissions();
 
   // Drag & drop sensors - simple and direct
   const sensors = useSensors(
@@ -369,11 +366,13 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       </Box>
 
       {/* Add Channel Members Dialog */}
-      <AddChannelMembersDialog
-        open={isInviteOpen}
-        onClose={closeDialog}
-        channelId={selectedChannelId || ''}
-      />
+      {isInviteOpen && (
+        <AddChannelMembersDialog
+          open={true}
+          onClose={closeDialog}
+          channelId={selectedChannelId || ''}
+        />
+      )}
     </Box>
   );
 };

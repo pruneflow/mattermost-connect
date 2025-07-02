@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
 import { useServerConfig } from './useServerConfig';
+import { useAppDispatch } from './useAppDispatch';
+import { addUsersToTeam } from '../store/slices/entitiesSlice';
 
 export interface InvitationResult {
   success: boolean;
@@ -20,6 +22,7 @@ export interface GuestInvitationParams {
  * Provides email invitations, guest invitations, and invite link management
  */
 export const useTeamInvitations = (teamId: string) => {
+  const dispatch = useAppDispatch();
   const { handleError } = useErrorHandler();
   const { canSendEmailInvitationsServerSide } = useServerConfig();
   
@@ -131,8 +134,8 @@ export const useTeamInvitations = (teamId: string) => {
 
     setIsAddingMembers(true);
     try {
-      // Add users to team
-      await client.addUsersToTeam(teamId, userIds);
+      // Use Redux action instead of direct client call to ensure store sync
+      await dispatch(addUsersToTeam({ teamId, userIds })).unwrap();
       
       return {
         success: true,
@@ -144,7 +147,7 @@ export const useTeamInvitations = (teamId: string) => {
     } finally {
       setIsAddingMembers(false);
     }
-  }, [teamId, handleError]);
+  }, [teamId, dispatch, handleError]);
 
   /**
    * Get team invite link information

@@ -235,36 +235,50 @@ export const TeamList: React.FC<TeamListProps> = ({
     <>
       {renderTeamList()}
       {/* Create team modal */}
-      <CreateTeamDialog
-        open={createModalOpen}
-        onClose={handleCloseModal}
-        onCreateTeam={handleCreateTeam}
-      />
+      { createModalOpen && (
+        <CreateTeamDialog
+          open={createModalOpen}
+          onClose={handleCloseModal}
+          onCreateTeam={handleCreateTeam}
+        />
+      )}
+
 
       {/* Team dialogs - gérés par useTeamDialogs */}
-      <TeamSettingsDialog
-        open={isSettingsOpen}
-        onClose={closeDialog}
-        teamId={selectedTeamId}
-      />
-      
-      <ManageMembersDialog
-        open={isMembersOpen}
-        onClose={closeDialog}
-        teamId={selectedTeamId}
-      />
-      
-      <TeamInfoDialog
-        open={isInfoOpen}
-        onClose={closeDialog}
-        teamId={selectedTeamId}
-      />
-      
-      <LeaveTeamDialog
-        open={isLeaveOpen}
-        onClose={closeDialog}
-        teamId={selectedTeamId}
-      />
+      { isSettingsOpen && (
+        <TeamSettingsDialog
+          open={isSettingsOpen}
+          onClose={closeDialog}
+          teamId={selectedTeamId}
+        />
+      )}
+
+      { isMembersOpen && (
+        <ManageMembersDialog
+          open={isMembersOpen}
+          onClose={closeDialog}
+          teamId={selectedTeamId}
+        />
+      )}
+
+
+      { isInfoOpen && (
+        <TeamInfoDialog
+          open={isInfoOpen}
+          onClose={closeDialog}
+          teamId={selectedTeamId}
+        />
+      )}
+
+
+      { isLeaveOpen && (
+        <LeaveTeamDialog
+          open={isLeaveOpen}
+          onClose={closeDialog}
+          teamId={selectedTeamId}
+        />
+      )}
+
       
       {/* Conditional rendering pour performance */}
       {isInviteOpen && (
