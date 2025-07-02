@@ -1,7 +1,6 @@
 import React, {
   useCallback,
   useMemo,
-  useState,
 } from "react";
 import {
   Box,
@@ -11,20 +10,15 @@ import {
   ListItemIcon,
   ListItemText,
   IconButton,
-  Menu,
-  MenuItem,
-  Divider,
   SxProps,
   Theme,
-  alpha,
   useTheme,
   useMediaQuery,
-  ClickAwayListener,
+  alpha,
 } from "@mui/material";
 import {
   MoreVert,
   Check,
-  ChevronRight,
   MarkAsUnread,
   Star,
   StarBorder,
@@ -36,6 +30,7 @@ import {
 import { ChannelIcon } from "../atoms/ChannelIcon";
 import { UserAvatar } from "../atoms/UserAvatar";
 import { ChannelIndicator } from "./ChannelIndicator";
+import { Menu, useMenu, type MenuItemConfig } from "../common";
 import { useChannels } from "../../hooks/useChannels";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useSortable } from "@dnd-kit/sortable";
@@ -97,32 +92,6 @@ const STATIC_STYLES = {
     },
   } as const,
 
-  menuItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 1.5,
-    minHeight: 44,
-    px: 2,
-    py: 1.5,
-    borderRadius: 1,
-    transition: "all 0.15s ease-in-out",
-    fontSize: "0.875rem",
-    fontWeight: 500,
-  } as const,
-
-  menuItemDanger: {
-    color: "error.main",
-    "&:hover": {
-      backgroundColor: "error.light",
-      color: "error.contrastText",
-    },
-    "& .MuiSvgIcon-root": {
-      color: "error.main",
-    },
-    "&:hover .MuiSvgIcon-root": {
-      color: "error.contrastText",
-    },
-  } as const,
 
   listItemButton: {
     px: 1,
@@ -167,12 +136,10 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     draggable = true,
     sx,
   }) => {
-    // Menu state
-    const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-    const [moveToMenuOpen, setMoveToMenuOpen] = useState(false);
+    // Menu state using generic hook with unique ID
+    const { anchorEl, isOpen, openMenu, closeMenu } = useMenu(`channel-menu-${channel.id}`);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-    const isMenuOpen = Boolean(menuAnchorEl);
 
     // Drag & drop setup
     const {
@@ -197,26 +164,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       }
     }, [onClick, channel.id]);
 
-    const handleMenuOpen = useCallback(
-      (event: React.MouseEvent<HTMLElement>) => {
-        event.stopPropagation();
-        event.preventDefault();
-        console.debug("handleMenuOpen");
-        setMenuAnchorEl(event.currentTarget);
-      },
-      [],
-    );
-
-    const handleMenuClose = useCallback(() => {
-      setMenuAnchorEl(null);
-      setMoveToMenuOpen(false);
-    }, []);
-
-    const handleMoveToMenuToggle = useCallback(() => {
-      if (isMobile) {
-        setMoveToMenuOpen(!moveToMenuOpen);
-      }
-    }, [isMobile, moveToMenuOpen]);
 
     // Get channel actions from useChannels hook
     const {
@@ -238,44 +185,126 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     // Stable menu action handlers
     const handleMarkUnread = useCallback(() => {
-      handleMenuClose();
+      closeMenu();
       markAsUnread(channel.id);
-    }, [markAsUnread, channel.id]);
+    }, [closeMenu, markAsUnread, channel.id]);
 
     const handleToggleFavorite = useCallback(() => {
-      handleMenuClose();
+      closeMenu();
       toggleFavorite(channel.id, isFavorite);
-    }, [toggleFavorite, channel.id]);
+    }, [closeMenu, toggleFavorite, channel.id, isFavorite]);
 
     const handleMuteChannel = useCallback(() => {
-      handleMenuClose();
+      closeMenu();
       // TODO: Implement mute channel
       console.log(`Mute channel ${channel.id}`);
-    }, [channel.id]);
+    }, [closeMenu, channel.id]);
 
     const handleMoveToCategory = useCallback(
       (categoryId: string) => {
-        handleMenuClose();
+        closeMenu();
         if (currentCategory?.id === categoryId) {
           // If same category, just close menu
           return;
         }
         moveToCategory(channel.id, categoryId);
       },
-      [moveToCategory, channel.id, currentCategory?.id],
+      [closeMenu, moveToCategory, channel.id, currentCategory?.id],
     );
 
     const handleAddMembers = useCallback(() => {
-      handleMenuClose();
+      closeMenu();
       onAddChannelMembers?.(channel.id);
-    }, [channel.id, onAddChannelMembers]);
-
+    }, [closeMenu, channel.id, onAddChannelMembers]);
 
     const handleLeaveChannel = useCallback(() => {
-      handleMenuClose();
+      closeMenu();
       // TODO: Implement leave channel
       console.log(`Leave channel ${channel.id}`);
-    }, [channel.id]);
+    }, [closeMenu, channel.id]);
+
+    // Create menu items configuration
+    const menuItems = useMemo((): MenuItemConfig[] => {
+      const items: MenuItemConfig[] = [
+        {
+          id: 'mark-unread',
+          label: 'Mark as unread',
+          icon: <MarkAsUnread fontSize="small" />,
+          onClick: handleMarkUnread,
+        },
+        {
+          id: 'toggle-favorite',
+          label: isFavorite ? 'Remove from favorites' : 'Add to favorites',
+          icon: isFavorite ? <Star fontSize="small" /> : <StarBorder fontSize="small" />,
+          onClick: handleToggleFavorite,
+        },
+        {
+          id: 'mute-channel',
+          label: 'Mute channel',
+          icon: <VolumeOff fontSize="small" />,
+          onClick: handleMuteChannel,
+        },
+        {
+          id: 'divider-1',
+          type: 'divider',
+        },
+        {
+          id: 'move-to',
+          label: 'Move to...',
+          icon: <DriveFileMove fontSize="small" />,
+          submenu: categories
+            .filter((category) => {
+              // If current channel is not a DM, don't show DM categories
+              return !(
+                channel.type !== "D" && category.type === "direct_messages"
+              );
+            })
+            .map((category) => ({
+              id: `move-to-${category.id}`,
+              label: category.display_name,
+              onClick: () => handleMoveToCategory(category.id),
+              icon: currentCategory?.id === category.id ? <Check fontSize="small" color="primary" /> : undefined,
+            })),
+        },
+        {
+          id: 'divider-2',
+          type: 'divider',
+        },
+      ];
+
+      // Add members option if user has permissions
+      if (canAddMembers) {
+        items.push({
+          id: 'add-members',
+          label: 'Add members',
+          icon: <PersonAdd fontSize="small" />,
+          onClick: handleAddMembers,
+        });
+      }
+
+      // Leave channel option
+      items.push({
+        id: 'leave-channel',
+        label: 'Leave channel',
+        icon: <ExitToApp fontSize="small" />,
+        onClick: handleLeaveChannel,
+        variant: 'danger',
+      });
+
+      return items;
+    }, [
+      isFavorite,
+      handleMarkUnread,
+      handleToggleFavorite,
+      handleMuteChannel,
+      categories,
+      channel.type,
+      currentCategory?.id,
+      handleMoveToCategory,
+      canAddMembers,
+      handleAddMembers,
+      handleLeaveChannel,
+    ]);
 
 
     // Get display name (computed by selector following Mattermost pattern)
@@ -396,7 +425,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
             {/* Three Dots Menu Button */}
             <IconButton
               size="small"
-              onClick={handleMenuOpen}
+              onClick={openMenu}
               className={`menu-button ${isMobile ? "mobile-visible" : ""}`}
               sx={STATIC_STYLES.menuButton}
             >
@@ -405,211 +434,13 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           </Box>
         </ListItemButton>
 
-        {/* Context Menu - HTML/CSS style with ul/li structure */}
-        <ClickAwayListener onClickAway={handleMenuClose}>
-          <Box
-            component="ul"
-            sx={{
-              display: isMenuOpen ? "block" : "none",
-              position: "fixed",
-              backgroundColor: "background.paper",
-              boxShadow: theme.shadows[12],
-              borderRadius: 2,
-              minWidth: 220,
-              maxWidth: 280,
-              zIndex: 1300,
-              py: 1.5,
-              px: 0.5,
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-              border: `1px solid ${alpha(theme.palette.divider, 0.12)}`,
-              // Position relative to anchor
-              left: menuAnchorEl ? (
-                // Mobile: position from right edge with padding, Desktop: position from right + offset
-                isMobile 
-                  ? `${Math.max(8, menuAnchorEl.getBoundingClientRect().left - 200)}px`
-                  : `${menuAnchorEl.getBoundingClientRect().right + 8}px`
-              ) : 0,
-              top: menuAnchorEl ? `${menuAnchorEl.getBoundingClientRect().top}px` : 0,
-            }}
-          >
-          <Box
-            component="li"
-            onClick={handleMarkUnread}
-            sx={{
-              ...STATIC_STYLES.menuItem,
-              cursor: "pointer",
-              "&:hover": { 
-                backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                transform: "translateX(2px)",
-              },
-            }}
-          >
-            <MarkAsUnread fontSize="small" />
-            Mark as unread
-          </Box>
-          <Box
-            component="li"
-            onClick={handleToggleFavorite}
-            sx={{
-              ...STATIC_STYLES.menuItem,
-              cursor: "pointer",
-              "&:hover": { 
-                backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                transform: "translateX(2px)",
-              },
-            }}
-          >
-            {isFavorite ? (
-              <Star fontSize="small" />
-            ) : (
-              <StarBorder fontSize="small" />
-            )}
-            {isFavorite ? "Remove from favorites" : "Add to favorites"}
-          </Box>
-          <Box
-            component="li"
-            onClick={handleMuteChannel}
-            sx={{
-              ...STATIC_STYLES.menuItem,
-              cursor: "pointer",
-              "&:hover": { 
-                backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                transform: "translateX(2px)",
-              },
-            }}
-          >
-            <VolumeOff fontSize="small" />
-            Mute channel
-          </Box>
-
-          <Divider />
-
-          <Box
-            component="li"
-            onClick={handleMoveToMenuToggle}
-            sx={{
-              ...STATIC_STYLES.menuItem,
-              justifyContent: "space-between",
-              position: "relative",
-              cursor: "pointer",
-              "&:hover": {
-                backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                transform: "translateX(2px)",
-              },
-              "&:hover > ul": {
-                display: "block",
-              },
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <DriveFileMove fontSize="small" />
-              Move to...
-            </Box>
-            <ChevronRight fontSize="small" />
-            
-            {/* CSS-only submenu */}
-            <Box
-              component="ul"
-              sx={{
-                display: isMobile ? (moveToMenuOpen ? "block" : "none") : "none",
-                position: "absolute",
-                backgroundColor: "background.paper",
-                boxShadow: theme.shadows[12],
-                borderRadius: 2,
-                minWidth: 200,
-                maxWidth: 280,
-                zIndex: 1400,
-                py: 1.5,
-                px: 0.5,
-                listStyle: "none",
-                margin: 0,
-                padding: 0,
-                border: `1px solid ${alpha(theme.palette.divider, 0.12)}`,
-                // Desktop: à droite avec gap minimal
-                left: "calc(100%)",
-                top: 0,
-                // Mobile: en bas avec décalage
-                [theme.breakpoints.down("md")]: {
-                  left: "8px",
-                  top: "calc(100% + 4px)",
-                  width: "calc(100vw - 48px)",
-                  maxWidth: 320,
-                },
-              }}
-            >
-              {categories
-                .filter((category) => {
-                  // If current channel is not a DM, don't show DM categories
-                  return !(
-                    channel.type !== "D" && category.type === "direct_messages"
-                  );
-                })
-                .map((category) => {
-                  const isCurrent = category.id === currentCategory?.id;
-                  const handleMove = () => handleMoveToCategory(category.id);
-                  return (
-                    <Box
-                      component="li"
-                      key={category.id}
-                      onClick={handleMove}
-                      sx={{
-                        ...STATIC_STYLES.menuItem,
-                        justifyContent: "space-between",
-                        backgroundColor: isCurrent
-                          ? "action.selected"
-                          : "transparent",
-                        fontWeight: isCurrent ? 600 : 400,
-                        cursor: "pointer",
-                        "&:hover": {
-                          backgroundColor: isCurrent
-                            ? "action.selected"
-                            : "action.hover",
-                        },
-                      }}
-                    >
-                      <Typography variant="body2" noWrap>
-                        {category.display_name}
-                      </Typography>
-                      {isCurrent && <Check fontSize="small" color="primary" />}
-                    </Box>
-                  );
-                })}
-            </Box>
-          </Box>
-
-          <Divider />
-
-          {/* Add Members - only shown if user has permissions */}
-          {canAddMembers && (
-            <Box
-              component="li"
-              onClick={handleAddMembers}
-              sx={{
-                ...STATIC_STYLES.menuItem,
-                cursor: "pointer",
-                "&:hover": { backgroundColor: "action.hover" },
-              }}
-            >
-              <PersonAdd fontSize="small" />
-              Add members
-            </Box>
-          )}
-          <Box
-            component="li"
-            onClick={handleLeaveChannel}
-            sx={{
-              ...STATIC_STYLES.menuItem,
-              ...STATIC_STYLES.menuItemDanger,
-              cursor: "pointer",
-            }}
-          >
-            <ExitToApp fontSize="small" />
-            Leave channel
-          </Box>
-        </Box>
-        </ClickAwayListener>
+        {/* Context Menu using generic Menu component */}
+        <Menu
+          open={isOpen}
+          anchorEl={anchorEl}
+          onClose={closeMenu}
+          items={menuItems}
+        />
       </ListItem>
     );
   },
