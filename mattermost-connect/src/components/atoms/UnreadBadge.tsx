@@ -6,6 +6,7 @@ export interface UnreadBadgeProps {
   count: number;
   mentions?: number;
   size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
   className?: string;
   sx?: SxProps<Theme>;
   children?: React.ReactNode;
@@ -15,6 +16,7 @@ export const UnreadBadge = React.forwardRef<HTMLElement, UnreadBadgeProps>(({
   count,
   mentions = 0,
   size = 'md',
+  disabled = false,
   className,
   sx,
   children,
@@ -36,7 +38,7 @@ export const UnreadBadge = React.forwardRef<HTMLElement, UnreadBadgeProps>(({
   }, [size]);
 
   // Memoized badge logic
-  const { displayCount, badgeColor, badgeContent } = useMemo(() => {
+  const { badgeColor, badgeContent } = useMemo(() => {
     let displayCount: number;
     let badgeColor: 'error' | 'warning' | 'default';
     
@@ -73,10 +75,13 @@ export const UnreadBadge = React.forwardRef<HTMLElement, UnreadBadgeProps>(({
     minWidth: sizeConfig.minWidth,
     height: sizeConfig.height,
     fontWeight: 600,
-    backgroundColor: badgeColor === 'error' ? 'error.main' : 
-                     badgeColor === 'warning' ? 'deepOrange.800' : 'action.disabled',
+    backgroundColor: disabled 
+      ? 'action.disabled'  // Disabled = always gray
+      : badgeColor === 'error' ? 'error.main' : 
+        badgeColor === 'warning' ? 'deepOrange.800' : 'action.disabled',
     color: 'common.white',
-  }), [sizeConfig, badgeColor]);
+    opacity: disabled ? 0.7 : 1, // Transparency for disabled
+  }), [sizeConfig, badgeColor, disabled]);
 
   // Memoized sx for children (with badge positioning)
   const childrenSx = useMemo(() => ({

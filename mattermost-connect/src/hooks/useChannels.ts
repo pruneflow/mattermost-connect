@@ -1,15 +1,17 @@
 import { useMemo, useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { setCurrentChannelId, markChannelAsUnreadAction, toggleChannelFavoriteAction, moveChannelToCategoryAction, loadChannelMembers } from '../store/slices/entitiesSlice';
+import { setCurrentChannelId, markChannelAsUnreadAction, toggleChannelFavoriteAction, moveChannelToCategoryAction, loadChannelMembers, muteChannelAction, leaveChannelAction } from '../store/slices/entitiesSlice';
 import { useUnreadCounts } from './useUnreadCounts';
 import {
   selectCurrentTeamId,
   selectChannelsForCurrentTeam,
   selectCurrentChannel,
   selectCategoriesForCurrentTeam,
+  selectCurrentUserId,
 } from "../store/selectors";
 import { ChannelCategory } from "@mattermost/types/channel_categories";
+import { selectChannelByRules } from "../utils/channelUtils";
 
 /**
  * Read-only hook for accessing channel data from Redux store
@@ -23,6 +25,7 @@ import { ChannelCategory } from "@mattermost/types/channel_categories";
 export const useChannels = () => {
   const dispatch = useAppDispatch();
   const currentTeamId = useAppSelector(selectCurrentTeamId);
+  const currentUserId = useAppSelector(selectCurrentUserId);
   const { markChannelAsRead } = useUnreadCounts();
   
   // Get all enriched channels for current team
@@ -91,6 +94,32 @@ export const useChannels = () => {
     }));
   }, [dispatch, getChannelCategory]);
 
+  // Mute/unmute channel action
+  const muteChannel = useCallback((channelId: string, muted: boolean) => {
+    if (!currentUserId) return;
+    
+    dispatch(muteChannelAction({ channelId, userId: currentUserId, muted }));
+  }, [dispatch, currentUserId]);
+
+  // Leave channel action (confirmation should be handled in UI)
+  const leaveChannel = useCallback(async (channelId: string) => {
+    if (!currentUserId) return;
+    
+    // Check if leaving current channel for redirection
+    const leavingCurrentChannel = currentChannel?.id === channelId;
+    
+    // Dispatch leave action
+    await dispatch(leaveChannelAction({ channelId, userId: currentUserId }));
+    
+    // Handle channel redirection if needed
+    if (leavingCurrentChannel) {
+      const newChannelId = selectChannelByRules(channelId, allChannels, true);
+      if (newChannelId) {
+        switchToChannel(newChannelId);
+      }
+    }
+  }, [dispatch, currentUserId, currentChannel, allChannels, switchToChannel]);
+
   return {
     currentChannel,
     // Channel lists (enriched with unread counts, user names, etc.)
@@ -109,6 +138,8 @@ export const useChannels = () => {
     markAsUnread,
     toggleFavorite,
     moveToCategory,
+    muteChannel,
+    leaveChannel,
     
     // Helpers
     isChannelFavorite,

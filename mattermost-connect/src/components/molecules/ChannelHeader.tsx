@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material';
 import { ChannelIcon } from '../atoms/ChannelIcon';
 import { useAppSelector } from '../../hooks/useAppSelector';
+import { useChannels } from '../../hooks/useChannels';
 import { selectCurrentUserId, selectMyChannelMember } from '../../store/selectors';
 import { displayUsername } from '../../utils/userUtils';
 import type { Channel, UserProfile } from '../../api/types';
@@ -60,6 +61,7 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
 
   const currentUserId = useAppSelector(selectCurrentUserId);
   const channelMember = useAppSelector(selectMyChannelMember(channel.id));
+  const { isChannelFavorite } = useChannels();
 
   const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -91,7 +93,7 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
     ? (channel.otherUser?.username ? `@${channel.otherUser.username}` : 'Direct Message')
     : (channel.purpose || channel.header || (channel.type === 'G' ? 'Group Message' : 'Channel'));
   const isMuted = channelMember?.notify_props?.mark_unread === 'mention';
-  const isFavorite = false; // TODO: Implement favorites when available
+  const isFavorite = isChannelFavorite(channel.id);
 
   return (
     <Box

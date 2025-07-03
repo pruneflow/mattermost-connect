@@ -108,7 +108,7 @@ export const selectChannelsForCurrentTeam = createSelector(
       if (channel.type === "D") {
         // Direct Messages: all unreads are considered mentions (Mattermost pattern)
         unreadCount = 0;
-        mentionCount = isMuted ? 0 : unread?.msg_count || 0;
+        mentionCount = unread?.msg_count || 0; // DMs: always show mentions even if muted
       } else {
         // Team channels: separate unreads and mentions
         unreadCount = isMuted ? 0 : unread?.msg_count || 0;
@@ -458,7 +458,7 @@ export const selectChannelById = createSelector(
       if (channel.type === "D") {
         // Direct Messages: all unreads are mentions
         unreadCount = 0;
-        mentionCount = isMuted ? 0 : unread.msg_count || 0;
+        mentionCount = unread.msg_count || 0; // DMs: always show mentions even if muted
       } else {
         // Team channels: separate unreads and mentions
         unreadCount = isMuted ? 0 : unread.msg_count || 0;

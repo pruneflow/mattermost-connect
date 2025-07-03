@@ -166,35 +166,44 @@ export const getChannelDisplayName = (
  */
 export const selectChannelByRules = (
   currentChannelId: string | null,
-  allChannels: EnrichedChannel[]
+  allChannels: EnrichedChannel[],
+  excludeCurrentChannel: boolean = false
 ): string | null => {
   if (allChannels.length === 0) return null;
 
   // Rule: If current channel is direct or group, keep it (they're global)
-  if (currentChannelId) {
+  // Only apply this rule if we're not excluding the current channel
+  if (!excludeCurrentChannel && currentChannelId) {
     const currentChannel = allChannels.find(ch => ch.id === currentChannelId);
     if (currentChannel && (currentChannel.type === 'D' || currentChannel.type === 'G')) {
       return currentChannelId; // Keep direct/group channels
     }
   }
 
+  // Filter out current channel if requested
+  const channelsToUse = excludeCurrentChannel && currentChannelId
+    ? allChannels.filter(ch => ch.id !== currentChannelId)
+    : allChannels;
+
+  if (channelsToUse.length === 0) return null;
+
   // Priority: Public > Private > Direct > Group
-  const publicChannels = allChannels.filter(ch => ch.type === 'O');
+  const publicChannels = channelsToUse.filter(ch => ch.type === 'O');
   if (publicChannels.length > 0) {
     return publicChannels[0].id;
   }
 
-  const privateChannels = allChannels.filter(ch => ch.type === 'P');
+  const privateChannels = channelsToUse.filter(ch => ch.type === 'P');
   if (privateChannels.length > 0) {
     return privateChannels[0].id;
   }
 
-  const directChannels = allChannels.filter(ch => ch.type === 'D');
+  const directChannels = channelsToUse.filter(ch => ch.type === 'D');
   if (directChannels.length > 0) {
     return directChannels[0].id;
   }
 
-  const groupChannels = allChannels.filter(ch => ch.type === 'G');
+  const groupChannels = channelsToUse.filter(ch => ch.type === 'G');
   if (groupChannels.length > 0) {
     return groupChannels[0].id;
   }

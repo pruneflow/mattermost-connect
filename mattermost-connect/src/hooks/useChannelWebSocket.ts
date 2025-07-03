@@ -5,7 +5,8 @@ import {
   setChannel,
   setChannelMember,
   addChannelToTeam,
-  removeChannelFromTeam
+  removeChannelFromTeam,
+  addSingleChannelToTeam
 } from '../store/slices/entitiesSlice';
 import { selectCurrentUserId } from '../store/selectors';
 import { client } from '../api/client';
@@ -21,7 +22,7 @@ export const useChannelWebSocket = () => {
   const currentUserId = useAppSelector(selectCurrentUserId);
 
   // Handle incoming WebSocket events for channels
-  const handleChannelEvent = useCallback((event: string, data: Record<string, any>) => {
+  const handleChannelEvent = useCallback((event: string, data: Record<string, any>, broadcast?: Record<string, any>) => {
     switch (event) {
       case 'channel_created':
         if (data.channel) {
@@ -42,13 +43,16 @@ export const useChannelWebSocket = () => {
         break;
 
       case 'user_added':
-        if (data.user_id === currentUserId && data.channel_id) {
-          // Current user was added to a channel - fetch member info
-          client.getChannelMember(data.channel_id, currentUserId)
-            .then(member => {
-              dispatch(setChannelMember(member));
-            })
-            .catch(error => handleError(error, { action: 'Failed to fetch channel member' }));
+        const channelId = broadcast?.channel_id;
+        const addedUserId = data.user_id;
+        const teamId = data.team_id;
+        
+        if (!channelId || !addedUserId || !teamId) break;
+        
+        if (addedUserId === currentUserId) {
+          // Current user was added to a channel - use complete setup like loadChannelsForTeam
+          dispatch(addSingleChannelToTeam({ channelId, teamId }))
+            .catch(error => handleError(error, { action: 'Failed to add channel after user_added event' }));
         }
         break;
 

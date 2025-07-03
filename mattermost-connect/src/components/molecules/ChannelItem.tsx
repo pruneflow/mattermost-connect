@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useMemo,
+  useState,
 } from "react";
 import {
   Box,
@@ -22,7 +23,8 @@ import {
   MarkAsUnread,
   Star,
   StarBorder,
-  VolumeOff,
+  Notifications,
+  NotificationsOff,
   DriveFileMove,
   PersonAdd,
   ExitToApp,
@@ -31,8 +33,11 @@ import { ChannelIcon } from "../atoms/ChannelIcon";
 import { UserAvatar } from "../atoms/UserAvatar";
 import { ChannelIndicator } from "./ChannelIndicator";
 import { Menu, useMenu, type MenuItemConfig } from "../common";
+import { LeaveChannelDialog } from "../organisms/LeaveChannelDialog";
 import { useChannels } from "../../hooks/useChannels";
 import { usePermissions } from "../../hooks/usePermissions";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectCurrentUserId } from "../../store/selectors";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Channel, UserProfile } from "../../api/types";
@@ -138,6 +143,9 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
   }) => {
     // Menu state using generic hook with unique ID
     const { anchorEl, isOpen, openMenu, closeMenu } = useMenu(`channel-menu-${channel.id}`);
+    
+    // Leave channel dialog state
+    const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -170,6 +178,8 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       markAsUnread,
       toggleFavorite,
       moveToCategory,
+      muteChannel,
+      leaveChannel,
       isChannelFavorite,
       getChannelCategory,
       categories,
@@ -177,11 +187,26 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     // Get permissions
     const { canManageChannelMembers } = usePermissions();
+    
+    // Get current user ID for channel member lookup
+    const currentUserId = useAppSelector(selectCurrentUserId);
+    
+    // Get channel member data from Redux store
+    const channelMember = useAppSelector(state => 
+      currentUserId ? state.entities.channels.membersInChannel[channel.id]?.[currentUserId] : null
+    );
 
     // Get current favorite status and category
     const isFavorite = isChannelFavorite(channel.id);
     const currentCategory = getChannelCategory(channel.id);
     const canAddMembers = canManageChannelMembers(channel);
+    
+    // Default values for enriched properties
+    const hasUnreads = channel.hasUnreads ?? false;
+    const unreadCount = channel.unreadCount ?? 0;
+    const mentionCount = channel.mentionCount ?? 0;
+    const isMuted = channel.isMuted ?? false;
+    
 
     // Stable menu action handlers
     const handleMarkUnread = useCallback(() => {
@@ -196,9 +221,8 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     const handleMuteChannel = useCallback(() => {
       closeMenu();
-      // TODO: Implement mute channel
-      console.log(`Mute channel ${channel.id}`);
-    }, [closeMenu, channel.id]);
+      muteChannel(channel.id, !isMuted);
+    }, [closeMenu, muteChannel, channel.id, isMuted]);
 
     const handleMoveToCategory = useCallback(
       (categoryId: string) => {
@@ -219,9 +243,17 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     const handleLeaveChannel = useCallback(() => {
       closeMenu();
-      // TODO: Implement leave channel
-      console.log(`Leave channel ${channel.id}`);
-    }, [closeMenu, channel.id]);
+      setIsLeaveDialogOpen(true);
+    }, [closeMenu]);
+
+    const handleLeaveChannelConfirm = useCallback(() => {
+      leaveChannel(channel.id);
+    }, [leaveChannel, channel.id]);
+
+    const handleLeaveDialogClose = useCallback(() => {
+      setIsLeaveDialogOpen(false);
+    }, []);
+
 
     // Create menu items configuration
     const menuItems = useMemo((): MenuItemConfig[] => {
@@ -240,8 +272,8 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
         },
         {
           id: 'mute-channel',
-          label: 'Mute channel',
-          icon: <VolumeOff fontSize="small" />,
+          label: isMuted ? 'Unmute channel' : 'Mute channel',
+          icon: isMuted ? <NotificationsOff fontSize="small" /> : <Notifications fontSize="small" />,
           onClick: handleMuteChannel,
         },
         {
@@ -351,19 +383,22 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           lineHeight: compact ? 1.2 : 1.4,
           fontWeight: isActive
             ? 600
-            : channel.hasUnreads && !channel.isMuted
-              ? 600
-              : 400,
+            : isMuted
+              ? (mentionCount > 0 ? 600 : 400) // Muted with mentions = bold
+              : hasUnreads
+                ? 600
+                : 400,
           color: isActive
             ? "primary.main"
-            : channel.hasUnreads && !channel.isMuted
-              ? "text.primary"
-              : channel.isMuted
-                ? "text.disabled"
+            : isMuted
+              ? "text.disabled"  // Muted = always grayed out
+              : hasUnreads
+                ? "text.primary"
                 : "text.secondary",
+          opacity: isMuted ? 0.6 : 1,
         },
       }),
-      [compact, sx, isActive, channel.hasUnreads, channel.isMuted, draggable],
+      [compact, sx, isActive, hasUnreads, isMuted, mentionCount, draggable],
     );
 
     return (
@@ -413,13 +448,14 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
             sx={STATIC_STYLES.listItemText}
           />
 
-          {/* Channel Indicator (Typing or Unread) */}
+          {/* Channel Indicator (Typing, Unread, or Mute icon) */}
           <Box sx={STATIC_STYLES.channelIndicatorBox}>
             <ChannelIndicator
               channelId={channel.id}
-              hasUnreads={channel.hasUnreads}
-              unreadCount={channel.unreadCount}
-              mentionCount={channel.mentionCount}
+              hasUnreads={hasUnreads}
+              unreadCount={unreadCount}
+              mentionCount={mentionCount}
+              isMuted={isMuted}
             />
 
             {/* Three Dots Menu Button */}
@@ -441,6 +477,16 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           onClose={closeMenu}
           items={menuItems}
         />
+
+        {/* Leave Channel Confirmation Dialog */}
+        {isLeaveDialogOpen && (
+          <LeaveChannelDialog
+            open={isLeaveDialogOpen}
+            onClose={handleLeaveDialogClose}
+            onConfirm={handleLeaveChannelConfirm}
+            channel={channel}
+          />
+        )}
       </ListItem>
     );
   },

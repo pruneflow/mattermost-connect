@@ -248,6 +248,44 @@ export const toggleChannelFavoriteAction = createAsyncThunk(
 );
 
 /**
+ * Mute/unmute a channel by updating notify props
+ */
+export const muteChannelAction = createAsyncThunk(
+  'entities/muteChannel',
+  async ({ channelId, userId, muted }: { channelId: string; userId: string; muted: boolean }, { rejectWithValue }) => {
+    try {
+      const notifyProps = {
+        user_id: userId,
+        channel_id: channelId,
+        mark_unread: muted ? 'mention' : 'all'
+      };
+      
+      await client.updateChannelNotifyProps(notifyProps);
+      
+      return { channelId, userId, muted };
+    } catch (error) {
+      return rejectWithValue({ channelId, userId, error: error instanceof Error ? error.message : 'Failed to mute channel' });
+    }
+  }
+);
+
+/**
+ * Leave a channel by removing current user from it
+ */
+export const leaveChannelAction = createAsyncThunk(
+  'entities/leaveChannel',
+  async ({ channelId, userId }: { channelId: string; userId: string }, { rejectWithValue }) => {
+    try {
+      await client.removeFromChannel(userId, channelId);
+      
+      return { channelId, userId };
+    } catch (error) {
+      return rejectWithValue({ channelId, userId, error: error instanceof Error ? error.message : 'Failed to leave channel' });
+    }
+  }
+);
+
+/**
  * Update channel categories (for drag & drop)
  */
 export const updateChannelCategoriesAction = createAsyncThunk(
@@ -466,6 +504,161 @@ export const reorderChannelsAction = createAsyncThunk(
 );
 
 /**
+ * Store users and their statuses in Redux state
+ * Shared by both loadChannelsForTeam and addSingleChannelToTeam reducers
+ */
+const storeUsersAndStatuses = (
+  state: EntitiesState,
+  users?: UserProfile[],
+  userStatuses?: Record<string, UserStatus>
+) => {
+  // Store users
+  if (users) {
+    users.forEach((user: UserProfile) => {
+      state.users.profiles[user.id] = user;
+    });
+  }
+  
+  // Store user statuses
+  if (userStatuses) {
+    Object.assign(state.users.statuses, userStatuses);
+  }
+};
+
+/**
+ * Load missing users and their statuses
+ * Shared logic between loadChannelsForTeam and addSingleChannelToTeam
+ */
+const loadMissingUsers = async (
+  userIdsToLoad: string[], 
+  existingUserProfiles: Record<string, UserProfile>
+): Promise<{
+  users: UserProfile[];
+  userStatuses: Record<string, UserStatus>;
+}> => {
+  let missingUsers: UserProfile[] = [];
+  let missingUserStatuses: Record<string, UserStatus> = {};
+  
+  if (userIdsToLoad.length > 0) {
+    const existingUserIds = Object.keys(existingUserProfiles);
+    const missingUserIds = userIdsToLoad.filter(id => !existingUserIds.includes(id));
+    
+    if (missingUserIds.length > 0) {
+      // First load users (this works with invalid IDs)
+      const users = await client.getProfilesByIds(missingUserIds);
+      missingUsers = users || [];
+      
+      // Then load statuses using only the valid user IDs returned from getProfilesByIds
+      if (users && users.length > 0) {
+        const validUserIds = users.map(user => user.id);
+        const statuses = await client.getStatusesByIds(validUserIds);
+        
+        // Transform status array to Record<userId, UserStatus>
+        if (statuses && Array.isArray(statuses)) {
+          statuses.forEach((status: UserStatus) => {
+            missingUserStatuses[status.user_id] = status;
+          });
+        }
+      }
+    }
+  }
+  
+  return { users: missingUsers, userStatuses: missingUserStatuses };
+};
+
+/**
+ * Process a single channel to extract user IDs and calculate unreads
+ * Shared logic between loadChannelsForTeam and addSingleChannelToTeam
+ */
+const processChannelData = (
+  channel: Channel, 
+  membership: ChannelMember | null, 
+  currentUserId: string | null
+): {
+  userIdsToLoad: string[];
+  unreadData: { msg_count: number; mention_count: number } | null;
+} => {
+  const userIdsToLoad: string[] = [];
+  let unreadData: { msg_count: number; mention_count: number } | null = null;
+  
+  // 1. Extract user IDs for direct/group channels
+  if (channel.type === 'D' && currentUserId) {
+    const userIds = channel.name.split('__');
+    const otherUserId = userIds.find(id => id !== currentUserId);
+    if (otherUserId) {
+      userIdsToLoad.push(otherUserId);
+    }
+  } else if (channel.type === 'G') {
+    const userIds = channel.name.split('__');
+    userIds.forEach(id => {
+      if (id && id !== currentUserId) {
+        userIdsToLoad.push(id);
+      }
+    });
+  }
+  
+  // 2. Calculate initial unreads from channel/member data
+  if (membership) {
+    const channelTotalMsg = (channel as any).total_msg_count || 0;
+    const memberMsgCount = membership.msg_count || 0;
+    const memberMentionCount = membership.mention_count || 0;
+    
+    const unreadMsgCount = Math.max(0, channelTotalMsg - memberMsgCount);
+    
+    unreadData = {
+      msg_count: unreadMsgCount,
+      mention_count: memberMentionCount
+    };
+  }
+  
+  return { userIdsToLoad, unreadData };
+};
+
+/**
+ * Add a single channel to team with complete setup (like loadChannelsForTeam)
+ * Used by WebSocket events when user is added to a channel
+ */
+export const addSingleChannelToTeam = createAsyncThunk(
+  'entities/addSingleChannelToTeam',
+  async ({ channelId, teamId }: { channelId: string; teamId: string }, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { entities: EntitiesState };
+      const currentUserId = state.entities.users.currentUserId;
+      
+      if (!currentUserId) {
+        return rejectWithValue({ channelId, teamId, error: 'No current user' });
+      }
+
+      // Fetch channel and member data
+      const [channel, member] = await Promise.all([
+        client.getChannel(channelId),
+        client.getChannelMember(channelId, currentUserId)
+      ]);
+
+      // Process channel using same logic as loadChannelsForTeam
+      const { userIdsToLoad, unreadData } = processChannelData(channel, member, currentUserId);
+      
+      // Load missing users using same logic as loadChannelsForTeam
+      const { users: missingUsers, userStatuses: missingUserStatuses } = await loadMissingUsers(
+        userIdsToLoad, 
+        state.entities.users.profiles
+      );
+
+      return {
+        teamId,
+        channel,
+        member,
+        users: missingUsers,
+        userStatuses: missingUserStatuses,
+        unreadData,
+      };
+    } catch (error) {
+      return rejectWithValue({ channelId, teamId, error: error instanceof Error ? error.message : 'Failed to add channel to team' });
+    }
+  }
+);
+
+/**
  * Load channels for specific team with store verification
  * Only fetches if channels not already loaded for this team
  */
@@ -488,80 +681,30 @@ export const loadChannelsForTeam = createAsyncThunk(
         client.getMyChannelMembers(teamId)
       ]);
 
-      // Find users needed for direct/group channels
+      // Process all channels using extracted logic (single loop optimization)
       const currentUserId = state.entities.users.currentUserId;
       const userIdsToLoad = new Set<string>();
-      
-      teamChannels.forEach((channel: Channel) => {
-        if (channel.type === 'D' && currentUserId) {
-          // For direct channels, extract other user ID
-          const userIds = channel.name.split('__');
-          const otherUserId = userIds.find(id => id !== currentUserId);
-          if (otherUserId) {
-            userIdsToLoad.add(otherUserId);
-          }
-        } else if (channel.type === 'G') {
-          // For group channels, extract all user IDs from channel name
-          // Group channel names follow format: user1__user2__user3
-          const userIds = channel.name.split('__');
-          userIds.forEach(id => {
-            if (id && id !== currentUserId) {
-              userIdsToLoad.add(id);
-            }
-          });
-        }
-      });
-
-      // Load missing users if any
-      let missingUsers: UserProfile[] = [];
-      let missingUserStatuses: Record<string, UserStatus> = {};
-      
-      if (userIdsToLoad.size > 0) {
-        const existingUserIds = Object.keys(state.entities.users.profiles);
-        const missingUserIds = Array.from(userIdsToLoad).filter(id => !existingUserIds.includes(id));
-        
-        if (missingUserIds.length > 0) {
-          console.log(`Loading ${missingUserIds.length} missing users and their statuses for direct/group channels`);
-          
-          // First load users (this works with invalid IDs)
-          const users = await client.getProfilesByIds(missingUserIds);
-          missingUsers = users;
-          
-          // Then load statuses using only the valid user IDs returned from getProfilesByIds
-          if (users && users.length > 0) {
-            const validUserIds = users.map(user => user.id);
-            const statuses = await client.getStatusesByIds(validUserIds);
-            
-            // Transform status array to Record<userId, UserStatus>
-            if (statuses && Array.isArray(statuses)) {
-              statuses.forEach((status: UserStatus) => {
-                missingUserStatuses[status.user_id] = status;
-              });
-            }
-          }
-        }
-      }
-
-      // Calculate initial unreads from channel/member data (Mattermost pattern)
       const initialUnreads: Record<string, { msg_count: number; mention_count: number }> = {};
       
       teamChannels.forEach((channel: Channel) => {
         const membership = myChannelMembers.find((member: ChannelMember) => member.channel_id === channel.id);
+        const { userIdsToLoad: channelUserIds, unreadData } = processChannelData(channel, membership || null, currentUserId);
         
-        if (membership) {
-          const channelTotalMsg = (channel as any).total_msg_count || 0;
-          const memberMsgCount = membership.msg_count || 0;
-          const memberMentionCount = membership.mention_count || 0;
-          
-          // Calculate unread count: channel total - member read count
-          const unreadMsgCount = Math.max(0, channelTotalMsg - memberMsgCount);
-          
-          initialUnreads[channel.id] = {
-            msg_count: unreadMsgCount,
-            mention_count: memberMentionCount
-          };
+        // Collect user IDs
+        channelUserIds.forEach(userId => userIdsToLoad.add(userId));
+        
+        // Store unread data
+        if (unreadData) {
+          initialUnreads[channel.id] = unreadData;
         }
       });
+
+      // Load missing users using extracted logic
+      const { users: missingUsers, userStatuses: missingUserStatuses } = await loadMissingUsers(
+        Array.from(userIdsToLoad), 
+        state.entities.users.profiles
+      );
+
 
       return {
         teamId,
@@ -1014,18 +1157,56 @@ const entitiesSlice = createSlice({
           Object.assign(state.channels.unreads, unreads);
         }
         
-        // Store loaded users for direct/group channels
-        users?.forEach((user: UserProfile) => {
-          state.users.profiles[user.id] = user;
-        });
-        
-        // Store user statuses loaded with users
-        if (userStatuses) {
-          Object.assign(state.users.statuses, userStatuses);
-        }
+        // Store users and statuses using extracted function
+        storeUsersAndStatuses(state, users, userStatuses);
       })
       .addCase(loadChannelsForTeam.rejected, (state, action) => {
         console.error('Failed to load channels for team:', action.payload);
+      })
+      // Add single channel thunk
+      .addCase(addSingleChannelToTeam.fulfilled, (state, action) => {
+        const { teamId, channel, member, users, userStatuses, unreadData } = action.payload;
+        const currentUserId = state.users.currentUserId;
+        
+        // Store channel (ADD to existing team's channel list)
+        state.channels.channels[channel.id] = channel;
+        if (!state.channels.channelsInTeam[teamId]) {
+          state.channels.channelsInTeam[teamId] = [];
+        }
+        if (!state.channels.channelsInTeam[teamId].includes(channel.id)) {
+          state.channels.channelsInTeam[teamId].push(channel.id);
+        }
+        
+        // Store member in membersInChannel (always)
+        if (!state.channels.membersInChannel[channel.id]) {
+          state.channels.membersInChannel[channel.id] = {};
+        }
+        state.channels.membersInChannel[channel.id][member.user_id] = member;
+        
+        // Store in myMembers only if it's the current user
+        if (member.user_id === currentUserId) {
+          state.channels.myMembers[channel.id] = member;
+        }
+        
+        // Store unread data
+        if (unreadData) {
+          state.channels.unreads[channel.id] = unreadData;
+        }
+        
+        // Add to appropriate category
+        const categoryType = channel.type === 'D' || channel.type === 'G' ? 'direct_messages' : 'channels';
+        const category = Object.values(state.channels.categories).find(
+          cat => cat.team_id === teamId && cat.type === categoryType
+        );
+        if (category && !category.channel_ids.includes(channel.id)) {
+          category.channel_ids.push(channel.id);
+        }
+        
+        // Store users and statuses using extracted function
+        storeUsersAndStatuses(state, users, userStatuses);
+      })
+      .addCase(addSingleChannelToTeam.rejected, (state, action) => {
+        console.error('Failed to add single channel to team:', action.payload);
       })
       // Channel categories thunks
       .addCase(loadChannelCategories.fulfilled, (state, action) => {
@@ -1105,6 +1286,59 @@ const entitiesSlice = createSlice({
       })
       .addCase(updateChannelCategoriesAction.rejected, (state, action) => {
         console.error('Failed to update channel categories:', action.payload);
+      })
+      // Mute channel thunk
+      .addCase(muteChannelAction.fulfilled, (state, action) => {
+        const { channelId, userId, muted } = action.payload;
+        
+        // Update notify_props in channel member (membersInChannel)
+        if (state.channels.membersInChannel[channelId]?.[userId]) {
+          if (!state.channels.membersInChannel[channelId][userId].notify_props) {
+            state.channels.membersInChannel[channelId][userId].notify_props = {};
+          }
+          state.channels.membersInChannel[channelId][userId].notify_props.mark_unread = 
+            muted ? 'mention' : 'all';
+        }
+        
+        // ALSO update myMembers (what the selector reads from)
+        if (state.channels.myMembers[channelId] && state.channels.myMembers[channelId].user_id === userId) {
+          if (!state.channels.myMembers[channelId].notify_props) {
+            state.channels.myMembers[channelId].notify_props = {};
+          }
+          state.channels.myMembers[channelId].notify_props.mark_unread = 
+            muted ? 'mention' : 'all';
+        }
+      })
+      .addCase(muteChannelAction.rejected, (state, action) => {
+        console.error('Failed to mute channel:', action.payload);
+      })
+      // Leave channel thunk
+      .addCase(leaveChannelAction.fulfilled, (state, action) => {
+        const { channelId, userId } = action.payload;
+        
+        // Remove from channel members
+        if (state.channels.membersInChannel[channelId]) {
+          delete state.channels.membersInChannel[channelId][userId];
+        }
+        
+        // If current user is leaving, remove from team's channel list
+        if (userId === state.users.currentUserId) {
+          // Find which team this channel belongs to and remove it
+          Object.keys(state.channels.channelsInTeam).forEach(teamId => {
+            state.channels.channelsInTeam[teamId] = state.channels.channelsInTeam[teamId].filter(id => id !== channelId);
+          });
+          
+          // Also remove from categories
+          Object.values(state.channels.categories).forEach(category => {
+            category.channel_ids = category.channel_ids.filter(id => id !== channelId);
+          });
+          
+          // Note: Channel switching will be handled in the hook using selectChannelByRules
+          // We don't modify currentChannelId here to respect separation of concerns
+        }
+      })
+      .addCase(leaveChannelAction.rejected, (state, action) => {
+        console.error('Failed to leave channel:', action.payload);
       });
   },
 });

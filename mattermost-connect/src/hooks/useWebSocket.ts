@@ -55,7 +55,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
         // Route events to appropriate handlers
         handleTypingEvent(msg);
         handleUnreadEvent(msg.event, msg.data);
-        handleChannelEvent(msg.event, msg.data);
+        handleChannelEvent(msg.event, msg.data, msg.broadcast);
         handleTeamEvent(msg.event, msg.data);
       }
     });
