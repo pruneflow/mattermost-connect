@@ -1,7 +1,7 @@
 import { createSelector } from "@reduxjs/toolkit";
 import type { RootState } from "./index";
 import type { Channel, UserProfile } from "../api/types";
-import { getChannelDisplayName } from "../utils/channelUtils";
+import { getChannelDisplayName, processChannelData, shouldDisplayGroupChannel } from "../utils/channelUtils";
 
 // Extended channel type with enriched data
 export interface EnrichedChannel extends Channel {
@@ -86,7 +86,9 @@ export const selectChannelsForCurrentTeam = createSelector(
     (state: RootState) => state.entities.channels.myMembers,
     selectCurrentChannelId,
     (state: RootState) => state.entities.users.profiles,
+    (state: RootState) => state.entities.users.profilesInChannel,
     selectCurrentUserId,
+    (state: RootState) => state.preferences.preferences,
   ],
   (
     teamChannels,
@@ -94,9 +96,12 @@ export const selectChannelsForCurrentTeam = createSelector(
     channelMembers,
     currentChannelId,
     userProfiles,
+    profilesInChannel,
     currentUserId,
+    preferences,
   ): EnrichedChannel[] => {
-    return teamChannels.map((channel) => {
+    return teamChannels
+      .map((channel) => {
       // Unread data from single source of truth: channels.unreads
       const membership = channelMembers[channel.id];
       const isMuted = membership?.notify_props?.mark_unread === "mention";
@@ -117,35 +122,12 @@ export const selectChannelsForCurrentTeam = createSelector(
 
       const hasUnreads = unreadCount > 0 || mentionCount > 0;
 
-      // Compute display name and user data for direct/group channels
-      let computedDisplayName = channel.display_name;
-      let otherUser: UserProfile | null = null;
-      let otherUserId: string | undefined = undefined;
-      let users: UserProfile[] = [];
-      let userIds: string[] = [];
-
-      if (channel.type === "D" && currentUserId) {
-        // Direct channel - extract other user
-        const channelUserIds = channel.name.split("__");
-        otherUserId = channelUserIds.find((id) => id !== currentUserId);
-        otherUser = otherUserId ? userProfiles[otherUserId] : null;
-        computedDisplayName = getChannelDisplayName(
-          channel,
-          userProfiles,
-          currentUserId,
-        );
-      } else if (channel.type === "G" && currentUserId) {
-        // Group channel - extract all users except current
-        userIds = channel.name
-          .split("__")
-          .filter((id) => id !== "G" && id !== "" && id !== currentUserId);
-        users = userIds.map((id) => userProfiles[id]).filter(Boolean);
-        computedDisplayName = getChannelDisplayName(
-          channel,
-          userProfiles,
-          currentUserId,
-        );
-      }
+      // Use unified channel processing logic
+      const {
+        computedDisplayName,
+        otherUser,
+        otherUserId,
+      } = processChannelData(channel, userProfiles, currentUserId);
 
       return {
         ...channel,
@@ -159,9 +141,11 @@ export const selectChannelsForCurrentTeam = createSelector(
         computedDisplayName,
         otherUser,
         otherUserId,
-        users,
-        userIds,
       } as EnrichedChannel;
+    })
+    .filter((channel) => {
+      // Filter group channels based on preferences
+      return shouldDisplayGroupChannel(channel, preferences, channel.hasUnreads);
     });
   },
 );
@@ -438,6 +422,7 @@ export const selectChannelById = createSelector(
       state.entities.channels.myMembers[channelId],
     (state: RootState) => state.entities.users.currentUserId,
     (state: RootState) => state.entities.users.profiles,
+    (state: RootState) => state.preferences.preferences,
   ],
   (
     channel,
@@ -445,6 +430,7 @@ export const selectChannelById = createSelector(
     myMember,
     currentUserId,
     userProfiles,
+    preferences,
   ): EnrichedChannel | null => {
     if (!channel) return null;
 
@@ -468,25 +454,14 @@ export const selectChannelById = createSelector(
 
     const hasUnreads = unreadCount > 0 || mentionCount > 0;
 
-    // Use utility function for display name
-    const computedDisplayName = getChannelDisplayName(
-      channel,
-      userProfiles,
-      currentUserId,
-    );
+    // Use unified channel processing logic
+    const {
+      computedDisplayName,
+      otherUser,
+      otherUserId,
+    } = processChannelData(channel, userProfiles, currentUserId);
 
-    // Get other user info for DMs
-    let otherUser: any = null;
-    let otherUserId: string | undefined;
-    if (channel.type === "D" && currentUserId) {
-      const userIds = channel.name.split("__");
-      otherUserId = userIds.find((id) => id !== currentUserId);
-      if (otherUserId) {
-        otherUser = userProfiles[otherUserId];
-      }
-    }
-
-    return {
+    const enrichedChannel = {
       ...channel,
       hasUnreads,
       unreadCount,
@@ -496,6 +471,13 @@ export const selectChannelById = createSelector(
       otherUser,
       otherUserId,
     };
+
+    // Apply group channel visibility filter
+    if (!shouldDisplayGroupChannel(enrichedChannel, preferences, hasUnreads)) {
+      return null;
+    }
+
+    return enrichedChannel;
   },
 );
 
@@ -648,6 +630,13 @@ export const selectIsUserSearching = createSelector(
   [selectUserSearchState],
   (userSearch) => userSearch.isSearching
 );
+
+// Group Channel Selectors
+export const selectChannelMemberCount = (channelId: string) =>
+  createSelector(
+    [(state: RootState) => state.entities.channels.memberCounts],
+    (memberCounts) => memberCounts[channelId] || 0
+  );
 
 export const selectUserSearchTerm = createSelector(
   [selectUserSearchState],

@@ -4,7 +4,7 @@ import { useErrorHandler } from './useErrorHandler';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
 import { usePermissions } from './usePermissions';
-import { selectIsUserInTeam, selectIsUserInChannel, selectChannelById, selectCurrentTeamId, selectUserProfiles, selectTeamMembers, selectChannelMembers } from '../store/selectors';
+import { selectChannelById, selectCurrentTeamId, selectUserProfiles, selectTeamMembers, selectChannelMembers } from '../store/selectors';
 import { loadTeamMembers, loadChannelMembers, addUsersToTeam } from '../store/slices/entitiesSlice';
 
 /**

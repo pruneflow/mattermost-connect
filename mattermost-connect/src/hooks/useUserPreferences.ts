@@ -11,6 +11,8 @@ import {
   updatePreference,
   updatePreferences,
   getPreference,
+  closeGroupChannelConversation,
+  openGroupChannelConversation,
 } from '../store/slices/preferencesSlice';
 import type { PreferenceType } from '../api/types';
 import { useAppDispatch } from './useAppDispatch';
@@ -186,6 +188,47 @@ const useUserPreferences = () => {
     [preferences]
   );
 
+  // Group channel conversation actions
+  const closeGroupConversation = useCallback(
+    async (channelId: string) => {
+      if (!currentUserId) return;
+      
+      try {
+        await dispatch(closeGroupChannelConversation({ 
+          channelId, 
+          userId: currentUserId 
+        })).unwrap();
+      } catch (error) {
+        console.error('Failed to close group channel conversation:', error);
+      }
+    },
+    [dispatch, currentUserId]
+  );
+
+  const openGroupConversation = useCallback(
+    async (channelId: string) => {
+      if (!currentUserId) return;
+      
+      try {
+        await dispatch(openGroupChannelConversation({ 
+          channelId, 
+          userId: currentUserId 
+        })).unwrap();
+      } catch (error) {
+        console.error('Failed to open group channel conversation:', error);
+      }
+    },
+    [dispatch, currentUserId]
+  );
+
+  // Check if group channel should be displayed
+  const isGroupChannelVisible = useCallback(
+    (channelId: string) => {
+      return getPreference(preferences, 'group_channel_show', channelId, 'true') === 'true';
+    },
+    [preferences]
+  );
+
   return {
     // State
     isLoading,
@@ -209,6 +252,11 @@ const useUserPreferences = () => {
     updateMentionKeys,
     updatePreferenceValue,
     getPreferenceValue,
+    
+    // Group channel conversation actions
+    closeGroupConversation,
+    openGroupConversation,
+    isGroupChannelVisible,
     
     // Raw preferences for advanced usage
     preferences,

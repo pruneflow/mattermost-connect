@@ -15,11 +15,13 @@ import {
   setTeams,
   setTeamUnreads,
 } from "../store/slices/entitiesSlice";
+import { setPreferences } from "../store/slices/preferencesSlice";
 import { client } from "../api/client";
 import { store } from "../store";
 import { useWebSocket } from "./useWebSocket";
 import { useNavigation } from "./useNavigation";
 import { useUserStatus } from "./useUserStatus";
+import { loadPreferences } from "../store/slices/preferencesSlice";
 
 const STATUS_INTERVAL = 60000;
 
@@ -124,16 +126,14 @@ export const useAppInitialization = () => {
       connectWebSocket(serverUrl, token || '');
 
       // Load all initial data in parallel (Mattermost pattern)
-      const [userTeams, teamUnreads, userStatus] = await Promise.all([
+      const [userTeams, teamUnreads, userStatus, userPreferences] = await Promise.all([
         client.getMyTeams(),
         client.getMyTeamUnreads(),
         client.getStatus(currentUserId),
+        client.getUserPreferences(currentUserId),
       ]);
 
-      console.log("✅ Initial data loaded:", {
-        teams: userTeams.length,
-        unreads: teamUnreads.length,
-      });
+      console.log("✅ Initial data loaded:")
 
       // Update store with all data
       const teamsById = userTeams.reduce(
@@ -160,6 +160,9 @@ export const useAppInitialization = () => {
 
       // Set user status
       dispatch(setUsersStatus({ [currentUserId]: userStatus }));
+
+      // Set user preferences
+      dispatch(setPreferences(userPreferences));
 
       // Mark as initialized (Mattermost pattern)
       setIsInitialized(true);

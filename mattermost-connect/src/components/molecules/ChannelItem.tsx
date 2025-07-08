@@ -1,8 +1,4 @@
-import React, {
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Box,
   Typography,
@@ -31,13 +27,20 @@ import {
 } from "@mui/icons-material";
 import { ChannelIcon } from "../atoms/ChannelIcon";
 import { UserAvatar } from "../atoms/UserAvatar";
+import { GroupAvatar } from "../atoms/GroupAvatar";
+import { Tooltip } from "@mui/material";
 import { ChannelIndicator } from "./ChannelIndicator";
 import { Menu, useMenu, type MenuItemConfig } from "../common";
 import { LeaveChannelDialog } from "../organisms/LeaveChannelDialog";
 import { useChannels } from "../../hooks/useChannels";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useAppSelector } from "../../hooks/useAppSelector";
-import { selectCurrentUserId } from "../../store/selectors";
+import {
+  selectCurrentUserId,
+  selectChannelMemberCount,
+} from "../../store/selectors";
+import { getChannelDisplayName } from "../../utils/channelUtils";
+import useUserPreferences from "../../hooks/useUserPreferences";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Channel, UserProfile } from "../../api/types";
@@ -76,27 +79,40 @@ const STATIC_STYLES = {
 
   channelIndicatorBox: {
     ml: "auto",
-    pl: 1,
     display: "flex",
     alignItems: "center",
-    gap: 0.5,
+    position: "relative",
+    minWidth: 32, // Reserve space for menu button
+    justifyContent: "flex-end",
   } as const,
 
   menuButton: {
     p: 0.25,
-    ml: 0.5,
+    position: "absolute",
+    top: "50%",
+    right: 0,
+    transform: "translateY(-50%)",
     visibility: "hidden",
     "&.mobile-visible": {
       visibility: "visible",
     },
   } as const,
 
+  channelIndicator: {
+    position: "absolute",
+    top: "50%",
+    right: 0,
+    transform: "translateY(-50%)",
+  } as const,
+
   listItemButtonWithMenu: {
     "&:hover .menu-button": {
       visibility: "visible",
     },
+    "&:hover .channel-indicator": {
+      visibility: "hidden",
+    },
   } as const,
-
 
   listItemButton: {
     px: 1,
@@ -127,6 +143,49 @@ export interface ChannelItemProps {
   sx?: SxProps<Theme>;
 }
 
+const ChannelName = ({
+  name,
+  compact,
+  dynamicStyles,
+  showTooltip = false,
+}: {
+  name: string;
+  compact: boolean;
+  dynamicStyles: any;
+  showTooltip?: boolean;
+}) => {
+  const typography = (
+    <Typography
+      variant={compact ? "body2" : "body1"}
+      noWrap
+      sx={dynamicStyles.typography}
+    >
+      {name}
+    </Typography>
+  );
+
+  return (
+    <ListItemText
+      primary={
+        showTooltip ? (
+          <Tooltip
+            placement="top-start"
+            enterDelay={250}
+            leaveDelay={0}
+            title={name}
+            arrow
+          >
+            <span>{typography}</span>
+          </Tooltip>
+        ) : (
+          typography
+        )
+      }
+      sx={STATIC_STYLES.listItemText}
+    />
+  );
+};
+
 /**
  * ChannelItem component following Mattermost sidebar patterns
  * Displays channel with icon, name, and indicators (typing/unread)
@@ -142,8 +201,10 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     sx,
   }) => {
     // Menu state using generic hook with unique ID
-    const { anchorEl, isOpen, openMenu, closeMenu } = useMenu(`channel-menu-${channel.id}`);
-    
+    const { anchorEl, isOpen, openMenu, closeMenu } = useMenu(
+      `channel-menu-${channel.id}`,
+    );
+
     // Leave channel dialog state
     const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
     const theme = useTheme();
@@ -172,7 +233,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       }
     }, [onClick, channel.id]);
 
-
     // Get channel actions from useChannels hook
     const {
       markAsUnread,
@@ -185,28 +245,35 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       categories,
     } = useChannels();
 
+    // Get preferences actions for group channels
+    const { closeGroupConversation } = useUserPreferences();
+
     // Get permissions
     const { canManageChannelMembers } = usePermissions();
-    
+
     // Get current user ID for channel member lookup
     const currentUserId = useAppSelector(selectCurrentUserId);
-    
+
     // Get channel member data from Redux store
-    const channelMember = useAppSelector(state => 
-      currentUserId ? state.entities.channels.membersInChannel[channel.id]?.[currentUserId] : null
+    const channelMember = useAppSelector((state) =>
+      currentUserId
+        ? state.entities.channels.membersInChannel[channel.id]?.[currentUserId]
+        : null,
     );
+
+    // Get member count for group channels
+    const memberCount = useAppSelector(selectChannelMemberCount(channel.id));
 
     // Get current favorite status and category
     const isFavorite = isChannelFavorite(channel.id);
     const currentCategory = getChannelCategory(channel.id);
     const canAddMembers = canManageChannelMembers(channel);
-    
+
     // Default values for enriched properties
     const hasUnreads = channel.hasUnreads ?? false;
     const unreadCount = channel.unreadCount ?? 0;
     const mentionCount = channel.mentionCount ?? 0;
     const isMuted = channel.isMuted ?? false;
-    
 
     // Stable menu action handlers
     const handleMarkUnread = useCallback(() => {
@@ -243,8 +310,14 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     const handleLeaveChannel = useCallback(() => {
       closeMenu();
-      setIsLeaveDialogOpen(true);
-    }, [closeMenu]);
+      if (channel.type === "G") {
+        // For group channels, close conversation instead of leaving
+        closeGroupConversation(channel.id);
+      } else {
+        // For other channels, show leave dialog
+        setIsLeaveDialogOpen(true);
+      }
+    }, [closeMenu, channel.type, channel.id, closeGroupConversation]);
 
     const handleLeaveChannelConfirm = useCallback(() => {
       leaveChannel(channel.id);
@@ -254,35 +327,42 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       setIsLeaveDialogOpen(false);
     }, []);
 
-
     // Create menu items configuration
     const menuItems = useMemo((): MenuItemConfig[] => {
       const items: MenuItemConfig[] = [
         {
-          id: 'mark-unread',
-          label: 'Mark as unread',
+          id: "mark-unread",
+          label: "Mark as unread",
           icon: <MarkAsUnread fontSize="small" />,
           onClick: handleMarkUnread,
         },
         {
-          id: 'toggle-favorite',
-          label: isFavorite ? 'Remove from favorites' : 'Add to favorites',
-          icon: isFavorite ? <Star fontSize="small" /> : <StarBorder fontSize="small" />,
+          id: "toggle-favorite",
+          label: isFavorite ? "Remove from favorites" : "Add to favorites",
+          icon: isFavorite ? (
+            <Star fontSize="small" />
+          ) : (
+            <StarBorder fontSize="small" />
+          ),
           onClick: handleToggleFavorite,
         },
         {
-          id: 'mute-channel',
-          label: isMuted ? 'Unmute channel' : 'Mute channel',
-          icon: isMuted ? <NotificationsOff fontSize="small" /> : <Notifications fontSize="small" />,
+          id: "mute-channel",
+          label: isMuted ? "Unmute channel" : "Mute channel",
+          icon: isMuted ? (
+            <NotificationsOff fontSize="small" />
+          ) : (
+            <Notifications fontSize="small" />
+          ),
           onClick: handleMuteChannel,
         },
         {
-          id: 'divider-1',
-          type: 'divider',
+          id: "divider-1",
+          type: "divider",
         },
         {
-          id: 'move-to',
-          label: 'Move to...',
+          id: "move-to",
+          label: "Move to...",
           icon: <DriveFileMove fontSize="small" />,
           submenu: categories
             .filter((category) => {
@@ -295,32 +375,35 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
               id: `move-to-${category.id}`,
               label: category.display_name,
               onClick: () => handleMoveToCategory(category.id),
-              icon: currentCategory?.id === category.id ? <Check fontSize="small" color="primary" /> : undefined,
+              icon:
+                currentCategory?.id === category.id ? (
+                  <Check fontSize="small" color="primary" />
+                ) : undefined,
             })),
         },
         {
-          id: 'divider-2',
-          type: 'divider',
+          id: "divider-2",
+          type: "divider",
         },
       ];
 
       // Add members option if user has permissions
       if (canAddMembers) {
         items.push({
-          id: 'add-members',
-          label: 'Add members',
+          id: "add-members",
+          label: "Add members",
           icon: <PersonAdd fontSize="small" />,
           onClick: handleAddMembers,
         });
       }
 
-      // Leave channel option
+      // Leave channel or close conversation option
       items.push({
-        id: 'leave-channel',
-        label: 'Leave channel',
+        id: "leave-channel",
+        label: channel.type === "G" ? "Close conversation" : "Leave channel",
         icon: <ExitToApp fontSize="small" />,
         onClick: handleLeaveChannel,
-        variant: 'danger',
+        variant: "danger",
       });
 
       return items;
@@ -337,7 +420,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       handleAddMembers,
       handleLeaveChannel,
     ]);
-
 
     // Get display name (computed by selector following Mattermost pattern)
     const displayName = channel.computedDisplayName || channel.display_name;
@@ -384,14 +466,16 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           fontWeight: isActive
             ? 600
             : isMuted
-              ? (mentionCount > 0 ? 600 : 400) // Muted with mentions = bold
+              ? mentionCount > 0
+                ? 600
+                : 400 // Muted with mentions = bold
               : hasUnreads
                 ? 600
                 : 400,
           color: isActive
             ? "primary.main"
             : isMuted
-              ? "text.disabled"  // Muted = always grayed out
+              ? "text.disabled" // Muted = always grayed out
               : hasUnreads
                 ? "text.primary"
                 : "text.secondary",
@@ -401,7 +485,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       [compact, sx, isActive, hasUnreads, isMuted, mentionCount, draggable],
     );
 
-    return (
+    const channelItemContent = (
       <ListItem
         ref={setNodeRef}
         disablePadding
@@ -417,13 +501,19 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           sx={dynamicStyles.listItemButton}
           {...(draggable ? listeners : {})}
         >
-          {/* Channel Icon or User Avatar for Direct Channels */}
+          {/* Channel Icon, User Avatar for Direct Channels, or Group Avatar for Group Channels */}
           <ListItemIcon sx={dynamicStyles.listItemIcon}>
             {channel.type === "D" && channel.otherUser ? (
               <UserAvatar
                 userId={channel.otherUser.id}
                 size="medium"
                 showStatus={true}
+              />
+            ) : channel.type === "G" ? (
+              <GroupAvatar
+                channelId={channel.id}
+                size="medium"
+                showMemberCount={true}
               />
             ) : (
               <ChannelIcon
@@ -435,30 +525,30 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           </ListItemIcon>
 
           {/* Channel Name */}
-          <ListItemText
-            primary={
-              <Typography
-                variant={compact ? "body2" : "body1"}
-                noWrap
-                sx={dynamicStyles.typography}
-              >
-                {displayName}
-              </Typography>
-            }
-            sx={STATIC_STYLES.listItemText}
+          <ChannelName 
+            name={displayName} 
+            compact={compact} 
+            dynamicStyles={dynamicStyles} 
+            showTooltip={channel.type === "G"}
           />
 
-          {/* Channel Indicator (Typing, Unread, or Mute icon) */}
+          {/* Channel Indicator and Menu - same position */}
           <Box sx={STATIC_STYLES.channelIndicatorBox}>
-            <ChannelIndicator
-              channelId={channel.id}
-              hasUnreads={hasUnreads}
-              unreadCount={unreadCount}
-              mentionCount={mentionCount}
-              isMuted={isMuted}
-            />
+            {/* Channel Indicator (hidden on hover) */}
+            <Box
+              className="channel-indicator"
+              sx={STATIC_STYLES.channelIndicator}
+            >
+              <ChannelIndicator
+                channelId={channel.id}
+                hasUnreads={hasUnreads}
+                unreadCount={unreadCount}
+                mentionCount={mentionCount}
+                isMuted={isMuted}
+              />
+            </Box>
 
-            {/* Three Dots Menu Button */}
+            {/* Three Dots Menu Button (shown on hover) */}
             <IconButton
               size="small"
               onClick={openMenu}
@@ -489,6 +579,8 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
         )}
       </ListItem>
     );
+
+    return channelItemContent;
   },
 );
 

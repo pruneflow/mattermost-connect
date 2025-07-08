@@ -7,16 +7,7 @@ import {
   Button,
   Box,
   Typography,
-  Alert,
   Divider,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Avatar,
 } from '@mui/material';
 import { PersonAdd } from '@mui/icons-material';
 import { UserSearchAutocomplete } from '../atoms/UserSearchAutocomplete';
@@ -25,7 +16,7 @@ import { useChannelInvitations } from '../../hooks/useChannelInvitations';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
-import { selectChannelById, selectChannelMembers, selectIsUserInChannel, selectUserProfiles } from '../../store/selectors';
+import { selectChannelById, selectChannelMembers } from '../../store/selectors';
 import { loadChannelMembers, loadTeamMembers } from '../../store/slices/entitiesSlice';
 import { Chip } from '@mui/material';
 import { InvitationResultsTable, type InvitationResultRow } from '../molecules/InvitationResultsTable';

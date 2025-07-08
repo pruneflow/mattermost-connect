@@ -21,6 +21,7 @@ export { default as useAppInitialization } from './useAppInitialization';
 export { default as useChannels } from './useChannels';
 export { default as useChannelWebSocket } from './useChannelWebSocket';
 export { default as useTeamWebSocket } from './useTeamWebSocket';
+export { default as usePreferencesWebSocket } from './usePreferencesWebSocket';
 export { default as useChannelLoader } from './useChannelLoader';
 export { default as useTypingEvents, useTypingEventsForChannel } from './useTypingEvents';
 

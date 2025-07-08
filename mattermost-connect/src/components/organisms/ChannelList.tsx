@@ -40,6 +40,10 @@ import { usePermissions } from '../../hooks/usePermissions';
 const STATIC_STYLES = {
   container: {
     width: '100%',
+    bgcolor: "background.paper",
+    borderRight: 1,
+    borderColor: "divider",
+    overflow: "auto",
   } as const,
   
   searchBox: {
@@ -80,6 +84,7 @@ export interface ChannelListProps {
   onChannelSelect?: (channelId: string) => void;
   compact?: boolean;
   showTeamHeader?: boolean; // Show team name and menu at top
+  width?: number;
   sx?: SxProps<Theme>;
 }
 
@@ -92,6 +97,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   onChannelSelect,
   compact = false,
   showTeamHeader = false,
+  width = 320,
   sx,
 }) => {
   // Search and filter state
@@ -105,8 +111,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   // Memoized container styles with custom sx
   const containerStyles = useMemo(() => ({
     ...STATIC_STYLES.container,
-    ...sx,
-  }), [sx]);
+    width: width,
+    ...sx, // sx can override width if needed
+  }), [sx, width]);
 
   // Use current team and channel
   const dispatch = useAppDispatch();

@@ -6,6 +6,7 @@ import { client } from '../../api/client';
 // ASYNC THUNKS - Centralized Data Loading (Mattermost pattern)
 // ============================================================================
 
+
 /**
  * Update team member scheme roles (like Mattermost)
  */
@@ -526,6 +527,83 @@ const storeUsersAndStatuses = (
 };
 
 /**
+ * Unified function to load group channel members and remaining missing users
+ * Optimizes API calls by avoiding duplicate user loading
+ */
+const loadGroupChannelMembersAndUsers = async (
+  groupChannelIds: string[],
+  allUserIdsToLoad: string[],
+  dispatch: any,
+  currentState: EntitiesState
+): Promise<{
+  groupChannelData?: {
+    profilesByChannelId: Record<string, UserProfile[]>;
+    memberCounts: Record<string, number>;
+  };
+  users: UserProfile[];
+  userStatuses: Record<string, UserStatus>;
+}> => {
+  let groupChannelData: any = undefined;
+  let loadedUserIds: Set<string> = new Set();
+  
+  // Step 1: Load group channel members first if there are group channels
+  if (groupChannelIds.length > 0) {
+    const profilesByChannelId = await client.getProfilesInGroupChannels(groupChannelIds);
+    // Extract all user profiles from group channels
+    const groupChannelProfiles: UserProfile[] = [];
+
+    Object.values(profilesByChannelId).forEach(profiles => {
+      profiles.forEach(profile => {
+        if (!loadedUserIds.has(profile.id)) {
+          groupChannelProfiles.push(profile);
+          loadedUserIds.add(profile.id);
+        }
+      });
+    });
+    
+    // Store group channel users in state
+    if (groupChannelProfiles.length > 0) {
+      dispatch(setUsers(groupChannelProfiles));
+    }
+    
+    // Load statuses for group channel users
+    const groupUserIds = groupChannelProfiles.map(user => user.id);
+    const missingStatusIds = groupUserIds.filter(userId => !currentState.users.statuses[userId]);
+    if (missingStatusIds.length > 0) {
+      const statuses = await client.getStatusesByIds(missingStatusIds);
+      const statusRecord: Record<string, UserStatus> = {};
+      statuses.forEach((status: UserStatus) => {
+        statusRecord[status.user_id] = status;
+      });
+      dispatch(setUsersStatus(statusRecord));
+    }
+    
+    groupChannelData = {
+      profilesByChannelId,
+      memberCounts: Object.fromEntries(
+        Object.entries(profilesByChannelId).map(([channelId, profiles]) => [
+          channelId, 
+          profiles.length
+        ])
+      )
+    };
+  }
+  
+  // Step 2: Load remaining missing users (excluding those already loaded from group channels)
+  const remainingUserIds = allUserIdsToLoad.filter(id => !loadedUserIds.has(id));
+  const { users: additionalUsers, userStatuses } = await loadMissingUsers(
+    remainingUserIds,
+    currentState.users.profiles
+  );
+  
+  return {
+    groupChannelData,
+    users: additionalUsers,
+    userStatuses
+  };
+};
+
+/**
  * Load missing users and their statuses
  * Shared logic between loadChannelsForTeam and addSingleChannelToTeam
  */
@@ -581,7 +659,7 @@ const processChannelData = (
   const userIdsToLoad: string[] = [];
   let unreadData: { msg_count: number; mention_count: number } | null = null;
   
-  // 1. Extract user IDs for direct/group channels
+  // 1. Extract user IDs for direct channels
   if (channel.type === 'D' && currentUserId) {
     const userIds = channel.name.split('__');
     const otherUserId = userIds.find(id => id !== currentUserId);
@@ -589,12 +667,9 @@ const processChannelData = (
       userIdsToLoad.push(otherUserId);
     }
   } else if (channel.type === 'G') {
-    const userIds = channel.name.split('__');
-    userIds.forEach(id => {
-      if (id && id !== currentUserId) {
-        userIdsToLoad.push(id);
-      }
-    });
+    // Group channel names are hashes, not user ID lists
+    // Cannot extract user IDs by parsing - would need /api/v4/users/group_channels API
+    // For now, skip user loading for group channels
   }
   
   // 2. Calculate initial unreads from channel/member data
@@ -620,7 +695,7 @@ const processChannelData = (
  */
 export const addSingleChannelToTeam = createAsyncThunk(
   'entities/addSingleChannelToTeam',
-  async ({ channelId, teamId }: { channelId: string; teamId: string }, { getState, rejectWithValue }) => {
+  async ({ channelId, teamId }: { channelId: string; teamId: string }, { getState, dispatch, rejectWithValue }) => {
     try {
       const state = getState() as { entities: EntitiesState };
       const currentUserId = state.entities.users.currentUserId;
@@ -638,10 +713,18 @@ export const addSingleChannelToTeam = createAsyncThunk(
       // Process channel using same logic as loadChannelsForTeam
       const { userIdsToLoad, unreadData } = processChannelData(channel, member, currentUserId);
       
-      // Load missing users using same logic as loadChannelsForTeam
-      const { users: missingUsers, userStatuses: missingUserStatuses } = await loadMissingUsers(
-        userIdsToLoad, 
-        state.entities.users.profiles
+      // Load group channel members and missing users with optimized API calls
+      const groupChannelIds = channel.type === 'G' ? [channelId] : [];
+      
+      const { 
+        groupChannelData: singleGroupChannelData, 
+        users: missingUsers, 
+        userStatuses: missingUserStatuses 
+      } = await loadGroupChannelMembersAndUsers(
+        groupChannelIds,
+        userIdsToLoad,
+        dispatch,
+        state.entities
       );
 
       return {
@@ -651,6 +734,7 @@ export const addSingleChannelToTeam = createAsyncThunk(
         users: missingUsers,
         userStatuses: missingUserStatuses,
         unreadData,
+        groupChannelData: singleGroupChannelData,
       };
     } catch (error) {
       return rejectWithValue({ channelId, teamId, error: error instanceof Error ? error.message : 'Failed to add channel to team' });
@@ -664,7 +748,7 @@ export const addSingleChannelToTeam = createAsyncThunk(
  */
 export const loadChannelsForTeam = createAsyncThunk(
   'entities/loadChannelsForTeam',
-  async (teamId: string, { getState, rejectWithValue }) => {
+  async (teamId: string, { getState, dispatch, rejectWithValue }) => {
     try {
       const state = getState() as { entities: EntitiesState };
       
@@ -685,7 +769,7 @@ export const loadChannelsForTeam = createAsyncThunk(
       const currentUserId = state.entities.users.currentUserId;
       const userIdsToLoad = new Set<string>();
       const initialUnreads: Record<string, { msg_count: number; mention_count: number }> = {};
-      
+
       teamChannels.forEach((channel: Channel) => {
         const membership = myChannelMembers.find((member: ChannelMember) => member.channel_id === channel.id);
         const { userIdsToLoad: channelUserIds, unreadData } = processChannelData(channel, membership || null, currentUserId);
@@ -699,12 +783,20 @@ export const loadChannelsForTeam = createAsyncThunk(
         }
       });
 
-      // Load missing users using extracted logic
-      const { users: missingUsers, userStatuses: missingUserStatuses } = await loadMissingUsers(
-        Array.from(userIdsToLoad), 
-        state.entities.users.profiles
+      // Load group channel members and missing users with optimized API calls
+      const groupChannels = teamChannels.filter((channel: Channel) => channel.type === 'G');
+      const groupChannelIds = groupChannels.map(channel => channel.id);
+      
+      const { 
+        groupChannelData, 
+        users: missingUsers, 
+        userStatuses: missingUserStatuses 
+      } = await loadGroupChannelMembersAndUsers(
+        groupChannelIds,
+        Array.from(userIdsToLoad),
+        dispatch,
+        state.entities
       );
-
 
       return {
         teamId,
@@ -713,6 +805,7 @@ export const loadChannelsForTeam = createAsyncThunk(
         users: missingUsers,
         userStatuses: missingUserStatuses,
         unreads: initialUnreads,
+        groupChannelData,
         skipped: false
       };
     } catch (error) {
@@ -748,6 +841,7 @@ export interface EntitiesState {
     membersInChannel: Record<string, Record<string, ChannelMember>>; // channelId -> { userId -> ChannelMember }
     channelsInTeam: Record<string, string[]>;
     unreads: Record<string, { msg_count: number; mention_count: number }>;
+    memberCounts: Record<string, number>; // channelId -> member count
     categories: Record<string, ChannelCategory>; // category_id -> ChannelCategory
     categoriesInTeam: Record<string, string[]>; // team_id -> category_ids (in order)
     categoryOrder: Record<string, string[]>; // team_id -> category_ids (user's custom order)
@@ -781,6 +875,7 @@ const initialState: EntitiesState = {
     membersInChannel: {},
     channelsInTeam: {},
     unreads: {},
+    memberCounts: {},
     categories: {},
     categoriesInTeam: {},
     categoryOrder: {},
@@ -1130,23 +1225,13 @@ const entitiesSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(loadChannelsForTeam.fulfilled, (state, action) => {
-        const { teamId, channels, members, users, userStatuses, unreads, skipped } = action.payload;
+        const { teamId, channels, members, users, userStatuses, unreads, groupChannelData, skipped } = action.payload;
         
         if (skipped) {
           // Data already loaded, no action needed
           return;
         }
-        
-        // Normalize and store channels
-        const channelIds: string[] = [];
-        channels?.forEach((channel: Channel) => {
-          state.channels.channels[channel.id] = channel;
-          channelIds.push(channel.id);
-        });
-        
-        // Store channel IDs for this team
-        state.channels.channelsInTeam[teamId] = channelIds;
-        
+
         // Normalize and store members
         members?.forEach((member: ChannelMember) => {
           state.channels.myMembers[member.channel_id] = member;
@@ -1159,13 +1244,36 @@ const entitiesSlice = createSlice({
         
         // Store users and statuses using extracted function
         storeUsersAndStatuses(state, users, userStatuses);
+
+        // Store group channel data if available
+        if (groupChannelData) {
+          const { profilesByChannelId, memberCounts } = groupChannelData;
+          
+          // Store the member counts for each channel
+          Object.assign(state.channels.memberCounts, memberCounts);
+          
+          // Store user profiles in channel mapping
+          Object.entries(profilesByChannelId).forEach(([channelId, profiles]) => {
+            state.users.profilesInChannel[channelId] = profiles.map(p => p.id);
+          });
+        }
+        
+        // Store all channel IDs for this team (API already filters group channels by membership)
+        const channelIds: string[] = [];
+        channels?.forEach((channel: Channel) => {
+          state.channels.channels[channel.id] = channel;
+          channelIds.push(channel.id);
+        });
+        
+        // Store channel IDs for this team
+        state.channels.channelsInTeam[teamId] = channelIds;
       })
       .addCase(loadChannelsForTeam.rejected, (state, action) => {
         console.error('Failed to load channels for team:', action.payload);
       })
       // Add single channel thunk
       .addCase(addSingleChannelToTeam.fulfilled, (state, action) => {
-        const { teamId, channel, member, users, userStatuses, unreadData } = action.payload;
+        const { teamId, channel, member, users, userStatuses, unreadData, groupChannelData } = action.payload;
         const currentUserId = state.users.currentUserId;
         
         // Store channel (ADD to existing team's channel list)
@@ -1204,6 +1312,19 @@ const entitiesSlice = createSlice({
         
         // Store users and statuses using extracted function
         storeUsersAndStatuses(state, users, userStatuses);
+        
+        // Store group channel data if available
+        if (groupChannelData) {
+          const { profilesByChannelId, memberCounts } = groupChannelData;
+          
+          // Store the member counts for each channel
+          Object.assign(state.channels.memberCounts, memberCounts);
+          
+          // Store user profiles in channel mapping
+          Object.entries(profilesByChannelId).forEach(([channelId, profiles]) => {
+            state.users.profilesInChannel[channelId] = profiles.map(p => p.id);
+          });
+        }
       })
       .addCase(addSingleChannelToTeam.rejected, (state, action) => {
         console.error('Failed to add single channel to team:', action.payload);
@@ -1277,7 +1398,7 @@ const entitiesSlice = createSlice({
         console.error('Failed to load channel members:', action.payload);
       })
       .addCase(updateChannelCategoriesAction.fulfilled, (state, action) => {
-        const { teamId, categories } = action.payload;
+        const { categories } = action.payload;
         
         // Update categories in store
         categories.forEach(category => {

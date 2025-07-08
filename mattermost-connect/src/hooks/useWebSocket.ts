@@ -7,6 +7,7 @@ import { useUnreadCounts } from './useUnreadCounts';
 import { useChannelWebSocket } from './useChannelWebSocket';
 import { useTeamWebSocket } from './useTeamWebSocket';
 import { useTypingWebSocket } from './useTypingWebSocket';
+import { usePreferencesWebSocket } from './usePreferencesWebSocket';
 import { WebSocketClient } from '@mattermost/client';
 
 interface UseWebSocketReturn {
@@ -27,6 +28,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const { handleChannelEvent } = useChannelWebSocket();
   const { handleTeamEvent } = useTeamWebSocket();
   const { handleTypingEvent } = useTypingWebSocket();
+  const { handlePreferencesEvent } = usePreferencesWebSocket();
 
   const connect = useCallback((serverUrl: string, token: string) => {
     if (wsClientRef.current) {
@@ -57,6 +59,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
         handleUnreadEvent(msg.event, msg.data);
         handleChannelEvent(msg.event, msg.data, msg.broadcast);
         handleTeamEvent(msg.event, msg.data);
+        handlePreferencesEvent(msg.event, msg.data);
       }
     });
 
@@ -81,7 +84,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
     // Connect with token
     wsClient.initialize(wsUrl, token);
-  }, [handleUnreadEvent, handleChannelEvent, handleTeamEvent, handleTypingEvent, dispatch]);
+  }, [handleUnreadEvent, handleChannelEvent, handleTeamEvent, handleTypingEvent, handlePreferencesEvent, dispatch]);
 
   const disconnect = useCallback(() => {
     if (wsClientRef.current) {

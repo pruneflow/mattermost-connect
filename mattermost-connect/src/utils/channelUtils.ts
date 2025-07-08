@@ -1,4 +1,4 @@
-import type { Channel, UserProfile } from '../api/types';
+import type { Channel, UserProfile, PreferenceType } from '../api/types';
 import { displayUsername } from './userUtils';
 import type { EnrichedChannel } from '../store/selectors';
 
@@ -42,31 +42,6 @@ export const getUserIdsFromDirectChannel = (channelName: string): string[] => {
   return userIds.filter((id) => id !== '');
 };
 
-/**
- * Extract user IDs from a group channel name
- */
-export const getUserIdsFromGroupChannel = (channel: Channel): string[] => {
-  if (channel.type === 'G' || channel.type === 'D') {
-    let channelName = channel.name;
-    if (channelName.startsWith('G__')) {
-      channelName = channelName.substring(3);
-    }
-    
-    const userIds = channelName.split('__').filter((id) => {
-      return (
-        id !== '' &&
-        id !== 'me' &&
-        id !== 'G' &&
-        id !== 'group' &&
-        !id.startsWith('uid')
-      );
-    });
-    
-    return userIds;
-  }
-  
-  return [];
-};
 
 /**
  * Get the other user ID in a direct channel
@@ -94,31 +69,49 @@ export const getDirectChannelDisplayName = (
   return displayUsername(user, 'nickname_full_name', true);
 };
 
+
 /**
- * Format group channel display name
+ * Extract usernames from group channel display name
+ */
+export const extractUsernamesFromDisplayName = (displayName: string): string[] => {
+  if (!displayName) {
+    return [];
+  }
+  
+  return displayName
+    .split(',')
+    .map(name => name.trim())
+    .filter(name => name.length > 0);
+};
+
+/**
+ * Get group channel display name using displayUsername for consistency
  */
 export const getGroupChannelDisplayName = (
-  users: (UserProfile | null | undefined)[],
-  fallback = 'Group Message'
+  displayName: string,
+  currentUsername: string,
+  userProfiles: Record<string, UserProfile>
 ): string => {
-  if (!users || users.length === 0) {
-    return fallback;
+  const usernames = extractUsernamesFromDisplayName(displayName);
+  const filteredUsernames = usernames.filter(username => username !== currentUsername);
+  
+  if (filteredUsernames.length === 0) {
+    return 'Group Message';
   }
+
+  // Extract user profiles once for better performance
+  const userProfilesList = Object.values(userProfiles);
   
-  const userNames = users
-    .filter((user) => !!user)
-    .map((user) => displayUsername(user!, 'full_name', true))
-    .filter((name) => !!name);
-  
-  if (userNames.length === 0) {
-    return fallback;
-  }
-  
-  if (userNames.length > 3) {
-    return `${userNames.slice(0, 3).join(', ')} +${userNames.length - 3}`;
-  }
-  
-  return userNames.join(', ');
+  // Find UserProfile for each username and use displayUsername
+  const displayNames = filteredUsernames
+    .map(username => {
+      // Find user by username in userProfiles
+      const user = userProfilesList.find(profile => profile.username === username);
+      return user ? displayUsername(user, 'nickname_full_name', true) : username;
+    })
+    .filter(name => name); // Remove any null/undefined values
+
+  return displayNames.length > 0 ? displayNames.join(', ') : 'Group Message';
 };
 
 /**
@@ -152,12 +145,51 @@ export const getChannelDisplayName = (
   }
   
   if (channel.type === 'G') {
-    const userIds = getUserIdsFromGroupChannel(channel);
-    const users = userIds.map(id => userProfiles[id]);
-    return getGroupChannelDisplayName(users);
+    // For group channels, remove current user from display_name
+    if (channel.display_name && currentUserId) {
+      const currentUser = userProfiles[currentUserId];
+      if (currentUser) {
+        return getGroupChannelDisplayName(channel.display_name, currentUser.username, userProfiles);
+      }
+    }
+    return channel.display_name || 'Group Message';
   }
   
   return channel.display_name || channel.name;
+};
+
+/**
+ * Simplified channel processing logic
+ */
+export interface ProcessedChannelData {
+  computedDisplayName: string;
+  otherUser?: UserProfile | null;
+  otherUserId?: string;
+}
+
+
+/**
+ * Process channel data for display - simplified version
+ */
+export const processChannelData = (
+  channel: Channel,
+  userProfiles: Record<string, UserProfile>,
+  currentUserId: string | null
+): ProcessedChannelData => {
+  const result: ProcessedChannelData = {
+    computedDisplayName: getChannelDisplayName(channel, userProfiles, currentUserId),
+  };
+
+  if (channel.type === 'D' && currentUserId) {
+    // Direct channel - extract other user
+    const otherUserId = getOtherUserIdFromDirectChannel(channel.name, currentUserId);
+    const otherUser = otherUserId ? userProfiles[otherUserId] : null;
+    
+    result.otherUserId = otherUserId || undefined;
+    result.otherUser = otherUser;
+  }
+
+  return result;
 };
 
 /**
@@ -209,4 +241,62 @@ export const selectChannelByRules = (
   }
 
   return null;
+};
+
+/**
+ * Check if a group channel should be displayed based on Mattermost preferences
+ * Pure utility function - no Redux dependencies
+ */
+export const shouldDisplayGroupChannel = (
+  channel: Channel,
+  preferences: PreferenceType[],
+  hasUnreads: boolean = false
+): boolean => {
+  // Only apply to group channels
+  if (channel.type !== 'G') {
+    return true;
+  }
+
+  // Find group_channel_show preference for this channel
+  const showPreference = preferences.find(
+    p => p.category === 'group_channel_show' && p.name === channel.id
+  );
+
+  // If preference is set to hide ('false'), only show if there are unread messages
+  if (showPreference?.value === 'false') {
+    return hasUnreads;
+  }
+
+  // If preference is 'true' or not set, always show
+  return true;
+};
+
+/**
+ * Helper to create preference object for closing group channel conversation
+ */
+export const createCloseGroupChannelPreference = (
+  channelId: string,
+  userId: string
+): PreferenceType => {
+  return {
+    user_id: userId,
+    category: 'group_channel_show',
+    name: channelId,
+    value: 'false'
+  };
+};
+
+/**
+ * Helper to create preference object for opening group channel conversation
+ */
+export const createOpenGroupChannelPreference = (
+  channelId: string,
+  userId: string
+): PreferenceType => {
+  return {
+    user_id: userId,
+    category: 'group_channel_show',
+    name: channelId,
+    value: 'true'
+  };
 };

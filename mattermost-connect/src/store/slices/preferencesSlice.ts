@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { client } from '../../api/client';
 import type { ServerError, PreferenceType } from '../../api/types';
+import { createCloseGroupChannelPreference, createOpenGroupChannelPreference } from '../../utils/channelUtils';
 
 // Preferences state
 export interface PreferencesState {
@@ -113,6 +114,61 @@ export const savePreferences = createAsyncThunk<
       await client.savePreferences(userId, preferences);
     } catch (error) {
       console.warn('Failed to save preferences to server:', error);
+      return rejectWithValue(error as ServerError);
+    }
+  }
+);
+
+// Group channel conversation actions
+export const closeGroupChannelConversation = createAsyncThunk<
+  void,
+  { channelId: string; userId: string },
+  { rejectValue: ServerError }
+>(
+  'preferences/closeGroupChannelConversation',
+  async ({ channelId, userId }, { dispatch, rejectWithValue }) => {
+    try {
+      const preference = createCloseGroupChannelPreference(channelId, userId);
+      
+      // Update local state immediately
+      dispatch(updatePreference({
+        userId,
+        category: 'group_channel_show',
+        name: channelId,
+        value: 'false'
+      }));
+      
+      // Save to server
+      await client.savePreferences(userId, [preference]);
+    } catch (error) {
+      console.warn('Failed to close group channel conversation:', error);
+      return rejectWithValue(error as ServerError);
+    }
+  }
+);
+
+export const openGroupChannelConversation = createAsyncThunk<
+  void,
+  { channelId: string; userId: string },
+  { rejectValue: ServerError }
+>(
+  'preferences/openGroupChannelConversation',
+  async ({ channelId, userId }, { dispatch, rejectWithValue }) => {
+    try {
+      const preference = createOpenGroupChannelPreference(channelId, userId);
+      
+      // Update local state immediately
+      dispatch(updatePreference({
+        userId,
+        category: 'group_channel_show',
+        name: channelId,
+        value: 'true'
+      }));
+      
+      // Save to server
+      await client.savePreferences(userId, [preference]);
+    } catch (error) {
+      console.warn('Failed to open group channel conversation:', error);
       return rejectWithValue(error as ServerError);
     }
   }
@@ -247,7 +303,7 @@ const preferencesSlice = createSlice({
     },
     
     // Bulk replace all preferences (from server)
-    replaceAllPreferences: (
+    setPreferences: (
       state,
       action: PayloadAction<PreferenceType[]>
     ) => {
@@ -303,7 +359,7 @@ export const {
   setSoundNotifications,
   setEmailNotifications,
   setMentionKeys,
-  replaceAllPreferences,
+  setPreferences,
   clearAllPreferences,
 } = preferencesSlice.actions;
 

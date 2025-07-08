@@ -7,13 +7,7 @@ import {
 } from "@mui/material";
 import {
   LoginForm,
-  TeamList,
-  ChannelList,
-  AppBar,
   useAuth,
-  useTeams,
-  useChannels,
-  useLayout,
   AppProvider,
   AppLayout,
 } from "mattermost-connect";
@@ -96,191 +90,12 @@ const Phase3Demo: React.FC = () => {
       </Box>
 
       {/* Conditional Layout Rendering */}
-      {layoutMode === "mattermost" ? <AppLayout /> : <CustomLayoutContent />}
+      <AppLayout layout={layoutMode} />
     </Box>
   );
 };
 
 
-const CustomLayoutContent = () => {
-  const { isMobile } = useLayout();
-  const { currentChannel } = useChannels()
-  const { currentTeam } = useTeams()
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        flex: 1,
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      {/* AppBar with mobile drawer built-in */}
-      <AppBar />
-
-      {/* Teams Tabs - Hidden on mobile (they're in AppBar drawer) */}
-      {!isMobile && (
-        <Box
-          sx={{
-            bgcolor: "background.paper",
-            borderBottom: 1,
-            borderColor: "divider",
-          }}
-        >
-          <TeamList layout="tabs" />
-        </Box>
-      )}
-
-      {/* Main Content */}
-      <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Channels Sidebar - Hidden on mobile (they're in AppBar drawer) */}
-        {!isMobile && (
-          <Box
-            sx={{
-              width: 240,
-              bgcolor: "background.paper",
-              borderRight: 1,
-              borderColor: "divider",
-              overflow: "auto",
-            }}
-          >
-            <ChannelList showSearch={true} compact={false} />
-          </Box>
-        )}
-
-        {/* Main Content - Current Team + Channel Info */}
-        <Box
-          sx={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
-          {/* Header */}
-          <Box
-            sx={{
-              p: 2,
-              bgcolor: "background.paper",
-              borderBottom: 1,
-              borderColor: "divider",
-            }}
-          >
-            <Typography variant="h6">
-              {currentTeam?.display_name || "No Team Selected"}
-            </Typography>
-          </Box>
-
-          {/* Content Area */}
-          <Box
-            sx={{
-              flex: 1,
-              p: 3,
-              overflow: "auto",
-              bgcolor: "background.default",
-            }}
-          >
-            {/* Current Team Info */}
-            <Box
-              sx={{
-                p: 2,
-                mb: 3,
-                border: 1,
-                borderColor: "divider",
-                borderRadius: 1,
-                bgcolor: "background.paper",
-              }}
-            >
-              <Typography variant="h6" sx={{ mb: 2, color: "text.primary" }}>
-                Current Team
-              </Typography>
-              {currentTeam ? (
-                <Box>
-                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                    <strong>Name:</strong> {currentTeam.display_name}
-                  </Typography>
-                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                    <strong>Description:</strong>{" "}
-                    {currentTeam.description || "No description"}
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontSize: "12px",
-                      color: "text.secondary",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    ID: {currentTeam.id}
-                  </Typography>
-                </Box>
-              ) : (
-                <Typography sx={{ color: "text.secondary" }}>
-                  No team selected
-                </Typography>
-              )}
-            </Box>
-
-            {/* Current Channel Info */}
-            <Box
-              sx={{
-                p: 2,
-                mb: 3,
-                border: 1,
-                borderColor: "divider",
-                borderRadius: 1,
-                bgcolor: "background.paper",
-              }}
-            >
-              <Typography variant="h6" sx={{ mb: 2, color: "text.primary" }}>
-                Current Channel
-              </Typography>
-              {currentChannel ? (
-                <Box>
-                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                    <strong>Name:</strong> {currentChannel.display_name}
-                  </Typography>
-                  <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                    <strong>Type:</strong>{" "}
-                    {currentChannel.type === "O"
-                      ? "Public"
-                      : currentChannel.type === "P"
-                        ? "Private"
-                        : currentChannel.type === "D"
-                          ? "Direct Message"
-                          : "Group Message"}
-                  </Typography>
-                  {currentChannel.purpose && (
-                    <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                      <strong>Purpose:</strong> {currentChannel.purpose}
-                    </Typography>
-                  )}
-                  {currentChannel.header && (
-                    <Typography sx={{ mb: 1, wordBreak: "break-word" }}>
-                      <strong>Header:</strong> {currentChannel.header}
-                    </Typography>
-                  )}
-                  <Typography
-                    sx={{
-                      fontSize: "12px",
-                      color: "text.secondary",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    ID: {currentChannel.id}
-                  </Typography>
-                </Box>
-              ) : (
-                <Typography sx={{ color: "text.secondary" }}>
-                  No channel selected
-                </Typography>
-              )}
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-    </Box>
-  );
-};
 
 // Auth status component
 const AuthStatus: React.FC = () => {

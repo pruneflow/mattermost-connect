@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { setCurrentChannelId, markChannelAsUnreadAction, toggleChannelFavoriteAction, moveChannelToCategoryAction, loadChannelMembers, muteChannelAction, leaveChannelAction } from '../store/slices/entitiesSlice';
+import { setCurrentChannelId, markChannelAsUnreadAction, moveChannelToCategoryAction, muteChannelAction, leaveChannelAction } from '../store/slices/entitiesSlice';
 import { useUnreadCounts } from './useUnreadCounts';
 import {
   selectCurrentTeamId,
@@ -10,7 +10,6 @@ import {
   selectCategoriesForCurrentTeam,
   selectCurrentUserId,
 } from "../store/selectors";
-import { ChannelCategory } from "@mattermost/types/channel_categories";
 import { selectChannelByRules } from "../utils/channelUtils";
 
 /**

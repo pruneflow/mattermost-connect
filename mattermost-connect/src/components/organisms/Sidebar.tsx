@@ -26,7 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   open = true,
   onClose,
   variant = 'permanent',
-  width = 280,
+  width = 320,
   compact = false,
   sx,
 }) => {
