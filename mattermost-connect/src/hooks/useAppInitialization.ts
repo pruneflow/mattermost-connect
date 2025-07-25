@@ -203,12 +203,6 @@ export const useAppInitialization = () => {
     // Try to restore last visited team/channel
     const lastVisited = getLastVisited();
     if (lastVisited && teams.some((team) => team.id === lastVisited.teamId)) {
-      console.log(
-        "🔄 Restored navigation to team:",
-        lastVisited.teamId,
-        "channel:",
-        lastVisited.channelId,
-      );
       navigateToTeam(lastVisited.teamId);
     } else {
       // Fallback: navigate to first team (will auto-select best channel)

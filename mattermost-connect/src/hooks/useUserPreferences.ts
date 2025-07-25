@@ -37,7 +37,7 @@ const useUserPreferences = () => {
   const soundNotifications = getPreference(preferences, 'notifications', 'sound', 'true') === 'true';
   const emailFrequency = getPreference(preferences, 'notifications', 'email', 'immediate') as 'never' | 'immediate' | 'hourly';
   const mentionKeysString = getPreference(preferences, 'notifications', 'mention_keys', '');
-  const mentionKeys = mentionKeysString ? mentionKeysString.split(',').filter(k => k.trim()) : [];
+  const mentionKeys = mentionKeysString ? mentionKeysString.split(',').filter((k: string) => k.trim()) : [];
 
   // Load preferences on mount
   useEffect(() => {

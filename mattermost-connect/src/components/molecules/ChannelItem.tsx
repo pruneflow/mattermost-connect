@@ -35,11 +35,7 @@ import { LeaveChannelDialog } from "../organisms/LeaveChannelDialog";
 import { useChannels } from "../../hooks/useChannels";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useAppSelector } from "../../hooks/useAppSelector";
-import {
-  selectCurrentUserId,
-  selectChannelMemberCount,
-} from "../../store/selectors";
-import { getChannelDisplayName } from "../../utils/channelUtils";
+import { selectCurrentUserId } from "../../store/selectors";
 import useUserPreferences from "../../hooks/useUserPreferences";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -253,16 +249,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
     // Get current user ID for channel member lookup
     const currentUserId = useAppSelector(selectCurrentUserId);
-
-    // Get channel member data from Redux store
-    const channelMember = useAppSelector((state) =>
-      currentUserId
-        ? state.entities.channels.membersInChannel[channel.id]?.[currentUserId]
-        : null,
-    );
-
-    // Get member count for group channels
-    const memberCount = useAppSelector(selectChannelMemberCount(channel.id));
 
     // Get current favorite status and category
     const isFavorite = isChannelFavorite(channel.id);
@@ -525,10 +511,10 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
           </ListItemIcon>
 
           {/* Channel Name */}
-          <ChannelName 
-            name={displayName} 
-            compact={compact} 
-            dynamicStyles={dynamicStyles} 
+          <ChannelName
+            name={displayName}
+            compact={compact}
+            dynamicStyles={dynamicStyles}
             showTooltip={channel.type === "G"}
           />
 

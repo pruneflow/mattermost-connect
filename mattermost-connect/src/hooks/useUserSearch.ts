@@ -20,6 +20,7 @@ import {
   selectUserProfiles
 } from '../store/selectors';
 import { filterUsersBySearchTerm } from '../utils/searchUtils';
+import type { EnrichedChannel } from '../api/types';
 
 export interface UserSearchOptions {
   teamId?: string;
@@ -206,9 +207,9 @@ export const useUserSearch = (debounceMs: number = 300) => {
       });
       
       // 2. Get DM contacts from enriched channels (otherUser already calculated)
-      const dmContacts = enrichedChannels
-        .filter(channel => channel.type === 'D' && channel.otherUser)
-        .map(channel => channel.otherUser!)
+      const dmContacts = (enrichedChannels as EnrichedChannel[] || [])
+        .filter((channel: EnrichedChannel) => channel.type === 'D' && channel.otherUser)
+        .map((channel: EnrichedChannel) => channel.otherUser!)
         .filter(Boolean);
       
       // 3. Get channel members from passed IDs

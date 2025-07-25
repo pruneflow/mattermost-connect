@@ -11,6 +11,7 @@ import {
   selectCurrentUserId,
 } from "../store/selectors";
 import { selectChannelByRules } from "../utils/channelUtils";
+import type { EnrichedChannel } from '../api/types';
 
 /**
  * Read-only hook for accessing channel data from Redux store
@@ -28,11 +29,11 @@ export const useChannels = () => {
   const { markChannelAsRead } = useUnreadCounts();
   
   // Get all enriched channels for current team
-  const allChannels = useAppSelector(selectChannelsForCurrentTeam);
+  const allChannels = useAppSelector(selectChannelsForCurrentTeam) as EnrichedChannel[];
   const currentChannel = useAppSelector(selectCurrentChannel);
   const categories = useAppSelector(selectCategoriesForCurrentTeam);
 
-  const hasChannels = useMemo(() => allChannels.length > 0, [allChannels.length]);
+  const hasChannels = useMemo(() => allChannels ? allChannels.length > 0 : false, [allChannels]);
 
   // Helper function to check if channel is favorite
   const isChannelFavorite = useCallback((channelId: string) => {
@@ -63,7 +64,7 @@ export const useChannels = () => {
     const favoritesCategory = categories.find(cat => cat.type === 'favorites');
     let categoryId = null;
     if(isFavorite) {
-      const channel = allChannels.find(c => c.id === channelId);
+      const channel = allChannels?.find((c: EnrichedChannel) => c.id === channelId);
       if(channel && channel.type === 'D') {
         const directCategory = categories.find(c => c.type === 'direct_messages');
         categoryId = directCategory?.id;
@@ -112,7 +113,7 @@ export const useChannels = () => {
     
     // Handle channel redirection if needed
     if (leavingCurrentChannel) {
-      const newChannelId = selectChannelByRules(channelId, allChannels, true);
+      const newChannelId = selectChannelByRules(channelId, allChannels as EnrichedChannel[], true);
       if (newChannelId) {
         switchToChannel(newChannelId);
       }

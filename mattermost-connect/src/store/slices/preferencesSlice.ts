@@ -53,8 +53,8 @@ export const getPreference = (
   preferences: PreferenceType[],
   category: string,
   name: string,
-  defaultValue: string = ''
-): string => {
+  defaultValue: any
+): any => {
   const pref = preferences.find(p => p.category === category && p.name === name);
   return pref?.value || defaultValue;
 };

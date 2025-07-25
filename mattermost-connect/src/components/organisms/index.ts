@@ -14,6 +14,9 @@ export { default as Sidebar } from './Sidebar';
 export { default as TeamTabs } from './TeamTabs';
 export { default as AppBar } from './AppBar';
 
+// PostView components
+export { ToastWrapper } from './PostView';
+
 export type { LoginFormProps } from './LoginForm';
 export type { TeamListProps } from './TeamList';
 export type { UserMenuProps } from './UserMenu';
@@ -28,3 +31,4 @@ export type { ChannelListProps } from './ChannelList';
 export type { SidebarProps } from './Sidebar';
 export type { TeamTabsProps } from './TeamTabs';
 export type { AppBarProps } from './AppBar';
+export type { PostViewProps } from './PostView/types';

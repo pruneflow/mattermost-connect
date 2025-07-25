@@ -12,6 +12,7 @@ import { useTeams } from './useTeams';
 import { useChannels } from './useChannels';
 import { selectTeamsById, selectCurrentTeamId, selectCurrentUrl, selectPreviousUrl, selectLastVisitedChannels, selectLastVisited, selectIsNavigating, selectChannelsForCurrentTeam, selectCurrentChannelId } from '../store/selectors';
 import { selectChannelByRules } from '../utils/channelUtils';
+import type { EnrichedChannel } from '../api/types';
 
 // URL parsing utilities following Mattermost pattern
 export interface ParsedUrl {
@@ -159,16 +160,13 @@ export const useNavigation = () => {
   // Navigate to team - following Mattermost pattern
   const navigateToTeam = useCallback((teamId: string) => {
     const team = teams[teamId];
-    console.debug("Navigate To Team ", team )
-    console.debug("teams", teams)
     if (!team) return;
     
     // Get last visited channel for this team
     const lastChannelId = lastVisitedChannels[teamId];
     
     // Try to find best channel using our logic
-    const bestChannelId = lastChannelId || selectChannelByRules(currentChannelId, allChannels);
-    console.debug("bestChannelId", bestChannelId)
+    const bestChannelId = lastChannelId || selectChannelByRules(currentChannelId, allChannels as EnrichedChannel[]);
     if (bestChannelId) {
       // Navigate to specific channel
       navigateToChannel(teamId, bestChannelId);

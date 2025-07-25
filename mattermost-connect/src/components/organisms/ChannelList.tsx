@@ -1,40 +1,39 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import {
-  Box,
-  List,
-  Typography,
-  Divider,
-  SxProps,
-  Theme,
-  IconButton,
-  Tooltip,
-} from '@mui/material';
+import React, { useCallback, useMemo, useState } from "react";
+import { Box, SxProps, Theme } from "@mui/material";
 import {
   DndContext,
   DragEndEvent,
-  DragOverlay,
   DragStartEvent,
-  closestCenter,
-  rectIntersection,
   KeyboardSensor,
   PointerSensor,
+  rectIntersection,
   useSensor,
-  useSensors,
-  DragOverEvent,
-  MeasuringStrategy,
-} from '@dnd-kit/core';
+  useSensors
+} from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SearchInput } from "../atoms/SearchInput";
+import { TeamHeader } from "../molecules/TeamHeader";
+import { ChannelCategory } from "../molecules/ChannelCategory";
+import { AddChannelMembersDialog } from "./AddChannelMembersDialog";
+import { useChannelLoader } from "../../hooks/useChannelLoader";
+import { useAutoChannelSelection } from "../../hooks/useAutoChannelSelection";
+import { useNavigation } from "../../hooks/useNavigation";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { useAppDispatch } from "../../hooks/useAppDispatch";
 import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { SearchInput } from '../atoms/SearchInput';
-import { TeamHeader } from '../molecules/TeamHeader';
-import { ChannelSection } from '../molecules/ChannelSection';
-import { ChannelCategory } from '../molecules/ChannelCategory';
-import { AddChannelMembersDialog } from './AddChannelMembersDialog';
-import { useChannelLoader } from '../../hooks/useChannelLoader';
-import { usePermissions } from '../../hooks/usePermissions';
+  createSelectFilteredChannelIds,
+  selectCategoriesForCurrentTeam,
+  selectChannelIdsForCurrentTeam,
+  selectCurrentChannelId,
+  selectCurrentTeam
+} from "../../store/selectors";
+import {
+  loadChannelCategories,
+  moveChannelToCategoryAction,
+  reorderCategoriesAction,
+  reorderChannelsAction,
+  toggleCategoryCollapsedAction
+} from "../../store/slices/entitiesSlice";
 
 // Static styles extracted for performance
 const STATIC_STYLES = {
@@ -59,25 +58,6 @@ const STATIC_STYLES = {
     my: 1,
   } as const,
 };
-import { useAutoChannelSelection } from '../../hooks/useAutoChannelSelection';
-import { useNavigation } from '../../hooks/useNavigation';
-import { useAppSelector } from '../../hooks/useAppSelector';
-import { useAppDispatch } from '../../hooks/useAppDispatch';
-import { 
-  selectCurrentTeam, 
-  selectCurrentChannelId, 
-  selectCategoriesForCurrentTeam,
-  selectChannelIdsForCurrentTeam,
-  createSelectFilteredChannelIds
-} from "../../store/selectors";
-import { 
-  loadChannelCategories,
-  updateChannelCategoriesAction,
-  reorderCategoriesAction,
-  toggleCategoryCollapsedAction,
-  moveChannelToCategoryAction,
-  reorderChannelsAction
-} from '../../store/slices/entitiesSlice';
 
 export interface ChannelListProps {
   showSearch?: boolean;
@@ -137,11 +117,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   }, [dispatch, currentTeam?.id]);
 
-  // Get all channel IDs from categories using selector
-  const allChannelIds = useAppSelector(selectChannelIdsForCurrentTeam);
-
   // Get base channel IDs for search
-  const baseChannelIds = allChannelIds;
+  const baseChannelIds = useAppSelector(selectChannelIdsForCurrentTeam);
 
   // Create search selector instance once  
   const selectFilteredChannelIds = useMemo(() => createSelectFilteredChannelIds(), []);

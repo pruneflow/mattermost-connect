@@ -21,6 +21,7 @@ export interface ViewsState {
     isRightSidebarOpen: boolean;
     rightSidebarType: 'thread' | 'search' | 'files' | null;
     threadsInView: string[];
+    lastViewedAtByChannel: Record<string, number>;
   };
   posts: {
     isLoadingPosts: boolean;
@@ -60,6 +61,7 @@ const initialState: ViewsState = {
     isRightSidebarOpen: false,
     rightSidebarType: null,
     threadsInView: [],
+    lastViewedAtByChannel: {}
   },
   posts: {
     isLoadingPosts: false,
@@ -199,6 +201,13 @@ const viewsSlice = createSlice({
         lastVisited: state.navigation.lastVisited,
       }
     }),
+    updateNewMessagesAtInChannel(
+      state,
+      action: PayloadAction<{ channelId: string; lastViewedAt: number }>
+    ) {
+      const { channelId, lastViewedAt } = action.payload;
+      state.channels.lastViewedAtByChannel[channelId] = lastViewedAt;
+    },
   },
 });
 
@@ -243,6 +252,7 @@ export const {
   
   // Clear
   clearViews,
+  updateNewMessagesAtInChannel
 } = viewsSlice.actions;
 
 export default viewsSlice.reducer;

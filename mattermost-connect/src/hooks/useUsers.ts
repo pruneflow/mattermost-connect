@@ -99,7 +99,7 @@ export const useUsers = (): {
 
   return {
     // State
-    users,
+    users: users as UserProfile[],
     usersById: profiles,
     currentUser,
     currentUserId,

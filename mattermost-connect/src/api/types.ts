@@ -4,7 +4,8 @@ import type { UserProfile } from '@mattermost/types/users';
 export type {
   UserProfile as User,
   UserProfile,
-  UserStatus
+  UserStatus,
+  UserTimezone
 } from '@mattermost/types/users';
 
 export type {
@@ -24,14 +25,38 @@ import type { Team } from '@mattermost/types/teams';
 export type TeamCreationRequest = Pick<Team, 'name' | 'display_name' | 'type'> & 
   Partial<Pick<Team, 'description' | 'company_name' | 'allow_open_invite'>>;
 
+import type { Channel } from '@mattermost/types/channels'
+
 export type {
   Channel,
   ChannelMembership as ChannelMember
 } from '@mattermost/types/channels';
 
+// Extended channel type with enriched data
+export interface EnrichedChannel extends Channel {
+  hasUnreads: boolean;
+  unreadCount: number;
+  mentionCount: number;
+  isMuted: boolean;
+  computedDisplayName?: string;
+  otherUser?: UserProfile | null;
+  otherUserId?: string;
+  users?: UserProfile[];
+  userIds?: string[];
+}
+
+export type { PostOrderBlock } from '@mattermost/types/posts'
+
 export type {
-  Post
+  Post,
+  PostList,
+  PaginatedPostList,
+  PostType
 } from '@mattermost/types/posts';
+
+export type {
+  Reaction
+} from '@mattermost/types/reactions';
 
 // WebSocket event types
 export interface WebSocketEvent {
@@ -130,4 +155,30 @@ import type { ChannelCategory } from '@mattermost/types/channel_categories';
 export interface ChannelCategoriesResponse {
   categories: ChannelCategory[];
   order: string[]; // Category IDs in display order
+}
+
+export const PostRequestTypes = {
+  BEFORE_ID: 'BEFORE_ID' as const,
+  AFTER_ID: 'AFTER_ID' as const,
+};
+
+/**
+ * ActionResult should be the return value of most Thunk action creators.
+ */
+export type ActionResult<Data = any, Error = any> = {
+  data?: Data;
+  error?: Error;
+};
+
+export interface LoadPostsReturnValue {
+  error?: string;
+  moreToLoad: boolean;
+}
+
+export type CanLoadMorePosts = typeof PostRequestTypes[keyof typeof PostRequestTypes] | undefined
+
+export interface LoadPostsParameters {
+  channelId: string;
+  postId: string;
+  type: CanLoadMorePosts;
 }

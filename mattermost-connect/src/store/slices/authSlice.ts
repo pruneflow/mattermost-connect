@@ -209,8 +209,6 @@ export const restoreAuthFromStorage = createAsyncThunk<
       dispatch(setCurrentUserId(user.id));
       dispatch(setUser(user));
 
-      console.log('✅ Restored auth from localStorage:', { userId: user.id, hasToken: !!token });
-
       return { user, token, serverUrl };
     } catch (error) {
       console.error('Failed to restore auth from localStorage:', error);

@@ -8,6 +8,7 @@ export interface AppLayoutProps {
   layout?: 'mattermost' | 'custom';
   showChannelHeader?: boolean;
   sidebarWidth?: number;
+  focusedPostId?: string; // For permalink navigation
   sx?: SxProps<Theme>;
 }
 
@@ -20,11 +21,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   layout = 'mattermost',
   showChannelHeader = true,
   sidebarWidth = 320,
+  focusedPostId,
   sx,
 }) => {
   if (layout === 'custom') {
     return (
-      <CustomLayout sx={sx}>
+      <CustomLayout 
+        focusedPostId={focusedPostId}
+        sx={sx}
+      >
         {children}
       </CustomLayout>
     );

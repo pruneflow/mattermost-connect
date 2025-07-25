@@ -1,6 +1,5 @@
-import type { Channel, UserProfile, PreferenceType } from '../api/types';
+import type { Channel, UserProfile, PreferenceType, EnrichedChannel } from '../api/types';
 import { displayUsername } from './userUtils';
-import type { EnrichedChannel } from '../store/selectors';
 
 /**
  * Channel utility functions following Mattermost patterns

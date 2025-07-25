@@ -8,6 +8,7 @@ import {
   selectLastVisitedChannels
 } from '../store/selectors';
 import { selectChannelByRules } from '../utils/channelUtils';
+import type { EnrichedChannel } from '../api/types';
 
 /**
  * Hook for auto-selecting channels after team changes
@@ -20,25 +21,25 @@ import { selectChannelByRules } from '../utils/channelUtils';
 export const useAutoChannelSelection = () => {
   const currentTeamId = useAppSelector(selectCurrentTeamId);
   const currentChannelId = useAppSelector(selectCurrentChannelId);
-  const allChannels = useAppSelector(selectChannelsForCurrentTeam);
+  const allChannels = useAppSelector(selectChannelsForCurrentTeam) as EnrichedChannel[];
   const lastVisitedChannels = useAppSelector(selectLastVisitedChannels);
   const { switchToChannel } = useChannels();
 
   // Auto-select channel when team changes and channels are loaded
   useEffect(() => {
     // Skip if no team or no channels loaded yet
-    if (!currentTeamId || allChannels.length === 0) return;
+    if (!currentTeamId || !allChannels || allChannels.length === 0) return;
 
     // 1. Try lastVisitedChannel for this team
     const lastChannelId = lastVisitedChannels[currentTeamId];
     
     // Check that lastChannel exists in current channels
-    const lastChannelExists = lastChannelId && allChannels.some(ch => ch.id === lastChannelId);
+    const lastChannelExists = lastChannelId && allChannels.some((ch: EnrichedChannel) => ch.id === lastChannelId);
     
     // 2. Otherwise use selectChannelByRules
     const bestChannelId = lastChannelExists 
       ? lastChannelId 
-      : selectChannelByRules(currentChannelId, allChannels);
+      : selectChannelByRules(currentChannelId, allChannels as EnrichedChannel[]);
 
     // Switch if different from current
     if (bestChannelId && bestChannelId !== currentChannelId) {
@@ -48,8 +49,8 @@ export const useAutoChannelSelection = () => {
 
   return {
     // Status info (for debugging if needed)
-    hasChannels: allChannels.length > 0,
-    currentChannelValid: allChannels.some(ch => ch.id === currentChannelId),
+    hasChannels: allChannels ? allChannels.length > 0 : false,
+    currentChannelValid: allChannels ? allChannels.some((ch: EnrichedChannel) => ch.id === currentChannelId) : false,
   };
 };
 
