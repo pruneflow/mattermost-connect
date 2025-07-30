@@ -1,0 +1,181 @@
+import React, { useRef, useCallback, useEffect, useState } from 'react';
+import { Box, SxProps, Theme } from '@mui/material';
+import { MessageItem } from './MessageItem';
+import { ScrollToBottomFab } from './ScrollToBottomFab';
+import { UnreadDivider } from '../Dividers/UnreadDivider';
+import { useAutoScroll } from '../hooks/useAutoScroll';
+import { useVirtualizedMessages } from '../hooks/useVirtualizedMessages';
+import { useMessages } from '../../../../hooks/useMessages';
+
+export interface MessageListProps {
+  channelId: string;
+  autoLoad?: boolean;
+  unreadChunkTimeStamp?: number;
+  shouldStartFromBottomWhenUnread: boolean;
+  onChangeUnreadChunkTimeStamp: (timestamp: number) => void;
+  onToggleShouldStartFromBottomWhenUnread: () => void;
+  sx?: SxProps<Theme>;
+}
+
+const containerStyles: SxProps<Theme> = {
+  height: '100%',
+  width: '100%',
+  position: 'relative',
+  overflow: 'hidden',
+};
+
+const scrollContainerStyles: SxProps<Theme> = {
+  height: '100%',
+  width: '100%',
+  overflow: 'auto',
+};
+
+export const VirtualizedMessageList: React.FC<MessageListProps> = ({
+  channelId,
+  autoLoad = false,
+  unreadChunkTimeStamp,
+  shouldStartFromBottomWhenUnread,
+  onChangeUnreadChunkTimeStamp,
+  onToggleShouldStartFromBottomWhenUnread,
+  sx,
+}) => {
+  const scrollElementRef = useRef<HTMLDivElement>(null);
+  const [isScrolling, setIsScrolling] = useState(false);
+  
+  // Use custom hooks
+  const { 
+    virtualizer, 
+    virtualItems,
+    isReady 
+  } = useVirtualizedMessages({
+    channelId,
+    autoLoad,
+    scrollElement: scrollElementRef.current,
+  });
+
+  const {
+    loadOlderPosts,
+    loadNewerPosts,
+    isLoadingOlder,
+    isLoadingNewer,
+  } = useMessages({
+    channelId,
+    autoLoad,
+  });
+
+  // Auto-scroll hook
+  const { scrollToBottom, scrollToIndex, isAtBottom } = useAutoScroll({
+    virtualizer,
+    scrollElement: scrollElementRef.current,
+    shouldStartFromBottomWhenUnread,
+    unreadChunkTimeStamp,
+  });
+
+  // Handle scroll events
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const element = event.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight } = element;
+    
+    setIsScrolling(true);
+    
+    // Auto-load logic (if enabled)
+    if (autoLoad) {
+      // Load older posts when near top
+      if (scrollTop < 200 && !isLoadingOlder) {
+        loadOlderPosts();
+      }
+      
+      // Load newer posts when near bottom
+      if (scrollHeight - scrollTop - clientHeight < 200 && !isLoadingNewer) {
+        loadNewerPosts();
+      }
+    }
+    
+    // Clear scrolling state
+    setTimeout(() => setIsScrolling(false), 150);
+  }, [autoLoad, loadOlderPosts, loadNewerPosts, isLoadingOlder, isLoadingNewer]);
+/*
+  // Initial scroll on mount or channel change
+  useEffect(() => {
+    if (isReady) {
+      if (shouldStartFromBottomWhenUnread) {
+        scrollToBottom();
+      } else if (newMessageIndex >= 0) {
+        scrollToIndex(newMessageIndex);
+      } else {
+        scrollToBottom();
+      }
+    }
+  }, [channelId, shouldStartFromBottomWhenUnread, scrollToBottom, scrollToIndex, isReady, newMessageIndex]);
+
+  // Calculate new messages count
+  const newMessagesCount = newMessageIndex >= 0 ? newMessageIndex : 0;*/
+
+  return (
+    <Box sx={{ ...containerStyles, ...sx }}>
+      <Box
+        ref={scrollElementRef}
+        sx={scrollContainerStyles}
+        onScroll={handleScroll}
+        role="log"
+        aria-label="Message list"
+      >
+        <Box
+          style={{
+            height: virtualizer.getTotalSize(),
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const itemId = virtualItems[virtualItem.index];
+            
+            return (
+              <Box
+                key={virtualItem.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: virtualItem.size,
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+              >
+                <MessageItem
+                  item={itemId}
+                  channelId={channelId}
+                  onLoadOlder={loadOlderPosts}
+                  onLoadNewer={loadNewerPosts}
+                  isOlderLoading={isLoadingOlder}
+                  isNewerLoading={isLoadingNewer}
+                />
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+
+      {/* Scroll to bottom FAB */}
+      <ScrollToBottomFab
+        visible={!isAtBottom(scrollElementRef.current)}
+        onClick={scrollToBottom}
+        /*newMessagesCount={newMessagesCount}*/
+      />
+      
+      {/* Unread divider - positioned absolutely */}
+      {/*{unreadChunkTimeStamp && newMessagesCount > 0 && (
+        <UnreadDivider
+          newMessagesCount={newMessagesCount}
+          onScrollToUnread={() => {
+            if (newMessageIndex >= 0) {
+              scrollToIndex(newMessageIndex);
+            }
+          }}
+        />
+      )}*/}
+    </Box>
+  );
+};

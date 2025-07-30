@@ -1,12 +1,8 @@
 import { useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
-import { 
-  setPost,
-  removePost,
-  addReaction,
-  removeReaction,
-} from '../store/slices/entitiesSlice';
+import { client } from '../api/client';
+import { setPost, removePost, addReactionFromWebSocket, removeReactionFromWebSocket } from '../store/slices/postsSlice';
 import { selectCurrentUserId } from '../store/selectors';
 import { Post } from '../api/types';
 
@@ -62,23 +58,27 @@ export const useMessageWebSocket = () => {
         break;
 
       case 'reaction_added':
-        // Reaction added to a message
-        if (data.reaction) {
+        // Reaction added to a message - WebSocket only (no API call)
+        // Skip if it's the current user (already handled by API response)
+        if (data.reaction && data.reaction.user_id !== currentUserId) {
           const reaction = data.reaction;
-          dispatch(addReaction({
+          dispatch(addReactionFromWebSocket({
             postId: reaction.post_id,
             emojiName: reaction.emoji_name,
+            userId: reaction.user_id,
           }));
         }
         break;
 
       case 'reaction_removed':
-        // Reaction removed from a message
-        if (data.reaction) {
+        // Reaction removed from a message - WebSocket only (no API call)
+        // Skip if it's the current user (already handled by API response)
+        if (data.reaction && data.reaction.user_id !== currentUserId) {
           const reaction = data.reaction;
-          dispatch(removeReaction({
+          dispatch(removeReactionFromWebSocket({
             postId: reaction.post_id,
             emojiName: reaction.emoji_name,
+            userId: reaction.user_id,
           }));
         }
         break;

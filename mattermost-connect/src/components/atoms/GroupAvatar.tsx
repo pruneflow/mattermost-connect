@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { Avatar, Badge, Box, Typography } from '@mui/material';
 import { Group as GroupIcon } from '@mui/icons-material';
 import { UserAvatar } from './UserAvatar';
@@ -6,6 +6,8 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectChannelMemberCount } from '../../store/selectors';
 
 // Static styles and configurations extracted for performance
+const EMPTY_USER_IDS: string[] = [];
+
 const SIZE_MAP = {
   xs: 24,
   small: 28,
@@ -71,7 +73,7 @@ export const GroupAvatar = React.forwardRef<HTMLDivElement, GroupAvatarProps & R
 }, ref) => {
   // Get member count and user IDs from store
   const memberCount = useAppSelector(selectChannelMemberCount(channelId));
-  const userIds = useAppSelector(state => state.entities.users.profilesInChannel[channelId] || []);
+  const userIds = useAppSelector(state => state.entities.users.profilesInChannel[channelId] || EMPTY_USER_IDS);
   
   // Get first 3 user IDs for avatars
   const firstThreeUsers = userIds.slice(0, 3);

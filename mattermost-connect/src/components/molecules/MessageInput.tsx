@@ -225,14 +225,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           
           {mode === 'default' && (
             <Tooltip title="Send message">
-              <IconButton 
-                size="small" 
-                onClick={handleSend}
-                disabled={!message.trim()}
-                color="primary"
-              >
-                <SendIcon fontSize="small" />
-              </IconButton>
+              <span>
+                <IconButton 
+                  size="small" 
+                  onClick={handleSend}
+                  disabled={!message.trim()}
+                  color="primary"
+                >
+                  <SendIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           )}
         </Box>

@@ -13,7 +13,7 @@ import { ChannelList } from '../organisms/ChannelList';
 import { ChannelHeader } from '../molecules/ChannelHeader';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentChannel } from '../../store/selectors';
-import {PostViewContainer} from '../organisms/PostView';
+import {ChatContainer} from '../organisms/PostView';
 
 export interface CustomLayoutProps {
   children?: React.ReactNode;
@@ -69,7 +69,7 @@ export const CustomLayout: React.FC<CustomLayoutProps> = ({
                 />
 
                 {/* Post List - EXACT Mattermost PostView usage */}
-                <PostViewContainer />
+                <ChatContainer  />
               </>
             ) : (
               <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default" }}>

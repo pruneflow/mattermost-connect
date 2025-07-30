@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import AutoSizer from "react-virtualized-auto-sizer";
+import useResizeObserver from "use-resize-observer";
 
 import {
   getNewMessagesIndex,
@@ -54,6 +54,20 @@ const virtListStyles = {
 } as const;
 
 const OFFSET_TO_SHOW_TOAST = -50;
+
+interface AutoSizerProps {
+  children: ({ height, width }: { height: number; width: number }) => React.ReactNode;
+}
+
+const AutoSizer: React.FC<AutoSizerProps> = ({ children }) => {
+  const { ref, width = 0, height = 0 } = useResizeObserver<HTMLDivElement>();
+
+  return (
+    <div ref={ref} style={{ width: '100%', height: '100%' }}>
+      {width > 0 && height > 0 ? children({ height, width }) : null}
+    </div>
+  );
+};
 
 type Props = {
   postListIds?: string[];

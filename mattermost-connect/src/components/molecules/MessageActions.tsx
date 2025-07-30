@@ -19,7 +19,6 @@ import {
   Theme,
 } from '@mui/material';
 import {
-  AddReaction as AddReactionIcon,
   Reply as ReplyIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -27,13 +26,13 @@ import {
   MoreVert as MoreVertIcon,
   MoreHoriz as MoreHorizIcon,
 } from '@mui/icons-material';
-import { useAppSelector } from '../../hooks/useAppSelector';
 import { useMessages, useReactionToggle } from '../../hooks/useMessages';
 import { useRecentEmojis } from '../../hooks/useRecentEmojis';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
+import { Post } from '../../api/types'
 
 interface MessageActionsProps {
-  postId: string;
+  post: Post;
   visible?: boolean;
   onReply?: () => void;
   onEdit?: () => void;
@@ -92,7 +91,7 @@ const RecentEmojiButton: React.FC<{
 };
 
 export const MessageActions: React.FC<MessageActionsProps> = ({
-  postId,
+  post,
   visible = false,
   onReply,
   onEdit,
@@ -101,10 +100,9 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  
-  const post = useAppSelector((state) => state.entities.posts.posts[postId]);
+
   const { deleteMessage, copyMessage } = useMessages();
-  const { toggleReaction } = useReactionToggle(postId);
+  const { toggleReaction } = useReactionToggle(post.id);
   const { recentEmojis } = useRecentEmojis();
   
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);

@@ -6,15 +6,12 @@ import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
 import { EditMessage } from './EditMessage';
 import { FileAttachmentList } from './FileAttachmentList';
-import { isSystemMessage, isConsecutivePost } from "../../utils/messageUtils";
-import { useAppSelector } from "../../hooks";
-import { getPost } from "../../store/selectors";
+import { isSystemMessage } from "../../utils/messageUtils";
 
 interface MessageProps {
   post: Post;
-  previousPostId?: string;
-  isCompact?: boolean;
   isFocused?: boolean;
+  isPartOfGroupedMessage?: boolean;
   onReply?: (postId: string) => void;
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
@@ -55,9 +52,8 @@ const reactionStyles: SxProps<Theme> = {
 
 export const Message: React.FC<MessageProps> = memo(({
   post,
-  previousPostId = "",
-  isCompact = false,
   isFocused = false,
+  isPartOfGroupedMessage = false,
   onReply,
   onDelete,
   onOpenThread,
@@ -68,12 +64,7 @@ export const Message: React.FC<MessageProps> = memo(({
   const theme = useTheme();
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  // Get previous post directly - stable selector call
-  const previousPost = useAppSelector(state => 
-    previousPostId ? getPost(state, previousPostId) : null
-  );
-  // For compact mode, never show header. Otherwise use the normal logic
-  const showHeader = !isConsecutivePost(post, previousPost || "");
+  const showHeader = !isPartOfGroupedMessage;
   const isSystem = isSystemMessage(post);
   
   const handleMouseEnter = useCallback(() => {
@@ -124,7 +115,7 @@ export const Message: React.FC<MessageProps> = memo(({
     backgroundColor: isFocused 
       ? theme.palette.action.selected 
       : 'transparent',
-    p: isCompact ? 1 : 2,
+    p: 2,
     mb: 0.25,
     borderRadius: 1,
     border: isFocused ? `1px solid ${theme.palette.primary.main}` : 'none',
@@ -216,7 +207,7 @@ export const Message: React.FC<MessageProps> = memo(({
       
       {/* Message Actions */}
       <MessageActions
-        postId={post.id}
+        post={post}
         visible={isHovered}
         onReply={handleReply}
         onEdit={handleStartEdit}
