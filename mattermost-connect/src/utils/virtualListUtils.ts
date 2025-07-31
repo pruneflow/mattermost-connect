@@ -27,7 +27,9 @@ export const buildVirtualList = (
   posts: Record<string, Post>,
   lastViewedAt: number,
   atOldestPost: boolean,
-  atLatestPost: boolean
+  atLatestPost: boolean,
+  currentUserId: string,
+  channelType: string
 ): VirtualListItem[] => {
   // Early return with stable empty array if no posts
   if (!postIds || postIds.length === 0) {
@@ -94,17 +96,21 @@ export const buildVirtualList = (
     }
     
     // 3. Calculate if this message should show header (not part of a group)
-    const showHeader = !lastPost || 
-      lastPost.user_id !== post.user_id ||
-      (post.create_at - lastPost.create_at) > 5 * 60 * 1000; // 5 minutes
+    // In Direct Messages (DM), never show headers
+    const showHeader = channelType === 'D' 
+      ? false
+      : (!lastPost || 
+         lastPost.user_id !== post.user_id ||
+         (post.create_at - lastPost.create_at) > 5 * 60 * 1000); // 5 minutes
     
-    // 4. Add the post itself with grouping info
+    // 4. Add the post itself with grouping and ownership info
     result.push({
       type: 'post',
       id: postId,
       data: { 
         post,
-        showHeader
+        showHeader,
+        isOwnMessage: post.user_id === currentUserId
       }
     });
     

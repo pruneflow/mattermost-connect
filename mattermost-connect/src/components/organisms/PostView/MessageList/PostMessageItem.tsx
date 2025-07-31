@@ -7,9 +7,10 @@ interface PostMessageItemProps {
   postId: string;
   channelId: string;
   showHeader: boolean;
+  isOwnMessage?: boolean;
 }
 
-export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHeader, channelId }) => {
+export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHeader, channelId, isOwnMessage }) => {
   const post = useAppSelector(state => selectPostById(state, postId));
 
   if (!post) {
@@ -21,6 +22,7 @@ export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHe
       post={post} 
       showHeader={showHeader}
       channelId={channelId}
+      isOwnMessage={isOwnMessage}
     />
   );
 };

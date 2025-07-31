@@ -32,6 +32,7 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
           postId={item.id} 
           channelId={channelId} 
           showHeader={item.data?.showHeader ?? true}
+          isOwnMessage={item.data?.isOwnMessage ?? false}
         />
       );
       

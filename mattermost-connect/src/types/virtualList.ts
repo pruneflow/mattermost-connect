@@ -15,6 +15,7 @@ export interface VirtualListItem {
     isLoading?: boolean;
     post?: Post;
     showHeader?: boolean; // For post grouping
+    isOwnMessage?: boolean; // For bubble layout (own vs others)
   };
 }
 

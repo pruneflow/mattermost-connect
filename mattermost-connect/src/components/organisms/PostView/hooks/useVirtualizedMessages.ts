@@ -10,6 +10,7 @@ import {
   selectAllPosts,
   selectLastViewedAt,
 } from "../../../../store/selectors/postsSelectors";
+import { selectCurrentUserId, selectChannelById } from "../../../../store/selectors";
 
 interface UseVirtualizedMessagesProps {
   channelId: string;
@@ -52,6 +53,8 @@ export const useVirtualizedMessages = ({
   const lastViewedAt = useAppSelector((state) =>
     selectLastViewedAt(state, channelId),
   );
+  const currentUserId = useAppSelector(selectCurrentUserId);
+  const currentChannel = useAppSelector(state => selectChannelById(state, channelId));
 
   // Build virtual list with all separators and load buttons
   const virtualItems = useMemo((): VirtualListItem[] => {
@@ -61,8 +64,10 @@ export const useVirtualizedMessages = ({
       lastViewedAt,
       atOldestPost,
       atLatestPost,
+      currentUserId || '',
+      currentChannel?.type || 'O'
     );
-  }, [postIds, allPosts, lastViewedAt, atOldestPost, atLatestPost]);
+  }, [postIds, allPosts, lastViewedAt, atOldestPost, atLatestPost, currentUserId, currentChannel?.type]);
 
   // New messages are now handled directly in buildVirtualList
 
@@ -79,10 +84,11 @@ export const useVirtualizedMessages = ({
         const messageLength = post.message?.length || 0;
         const reactionCount = post.metadata?.reactions?.length || 0;
         const replyCount = post.reply_count || 0;
+        const fileCount = post.file_ids?.length || 0;
         const showHeader = item.data.showHeader ?? true;
         
         // Cache key includes all size-affecting factors
-        cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${showHeader}`;
+        cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${fileCount}-${showHeader}`;
       }
       
       // Check cache with appropriate key
@@ -109,31 +115,42 @@ export const useVirtualizedMessages = ({
           estimatedSize = 200; // Start of channel divider with icon, name, description
           break;
         case "post":
-          // Better estimation for posts based on content
+          // Better estimation for posts based on bubble layout
           if (item.data?.post) {
             const post = item.data.post;
             const showHeader = item.data.showHeader ?? true;
+            const isOwnMessage = item.data.isOwnMessage ?? false;
             
-            // Base message height - more space for header
-            let postSize = showHeader ? 60 : 35; // Header includes avatar + username + timestamp
+            // Base bubble height - includes padding and timestamp
+            let postSize = 50; // Bubble padding (1.5 * 2) + timestamp height
 
-            // Add height for message content (rough estimate)
-            const messageLines = Math.ceil((post.message?.length || 0) / 80);
+            // Add header height only for non-own messages
+            if (showHeader && !isOwnMessage) {
+              postSize += 50; // MessageHeader height
+            }
+
+            // Add height for message content (rough estimate with bubble padding)
+            const messageLines = Math.ceil((post.message?.length || 0) / 70); // Shorter lines in bubbles
             postSize += messageLines * 20;
 
-            // Add height for reactions if present
+            // Add height for reactions if present (outside bubble)
             if (post.metadata?.reactions?.length) {
-              postSize += 35;
+              postSize += 40; // More space for reactions outside bubble
             }
 
-            // Add height for thread replies info
+            // Add height for thread replies info (inside bubble)
             if (post.reply_count && post.reply_count > 0) {
-              postSize += 30;
+              postSize += 25;
             }
 
-            // Cap minimum and maximum based on header presence
-            const minSize = showHeader ? 60 : 35;
-            estimatedSize = Math.max(minSize, Math.min(postSize, 200));
+            // Add height for file attachments if present
+            if (post.file_ids?.length) {
+              postSize += post.file_ids.length * 60; // Rough estimate per file
+            }
+
+            // Minimum and maximum sizes for bubble layout
+            const minSize = 45; // Minimum bubble size
+            estimatedSize = Math.max(minSize, Math.min(postSize, 300));
           } else {
             estimatedSize = estimatedItemHeight;
           }
@@ -167,8 +184,9 @@ export const useVirtualizedMessages = ({
           const messageLength = post.message?.length || 0;
           const reactionCount = post.metadata?.reactions?.length || 0;
           const replyCount = post.reply_count || 0;
+          const fileCount = post.file_ids?.length || 0;
           const showHeader = item.data.showHeader ?? true;
-          cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${showHeader}`;
+          cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${fileCount}-${showHeader}`;
         }
         
         measurementCache.current.set(cacheKey, height);
