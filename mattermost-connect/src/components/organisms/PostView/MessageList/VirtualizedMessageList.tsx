@@ -133,6 +133,8 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
             return (
               <Box
                 key={virtualItem.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -141,8 +143,6 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
                   height: virtualItem.size,
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
-                ref={virtualizer.measureElement}
-                data-index={virtualItem.index}
               >
                 <MessageItem
                   item={itemId}

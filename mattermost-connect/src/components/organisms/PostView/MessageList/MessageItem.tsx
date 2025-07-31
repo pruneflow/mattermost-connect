@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { DateDivider } from '../../../atoms/DateDivider';
 import { NewMessageSeparator } from '../../../molecules/NewMessageSeparator';
+import { StartOfChannelDivider } from '../../../atoms/StartOfChannelDivider';
 import { LoadMoreButton } from './LoadMoreButton';
 import { PostMessageItem } from './PostMessageItem';
 import LoadingScreen from '../../../common/LoadingScreen';
@@ -13,19 +14,26 @@ interface MessageItemProps {
   onLoadNewer: () => void;
   isOlderLoading: boolean;
   isNewerLoading: boolean;
+  virtualStyles?: React.CSSProperties;
 }
 
-export const MessageItem: React.FC<MessageItemProps> = ({
+export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
   item,
   channelId,
   onLoadOlder,
   onLoadNewer,
   isOlderLoading,
   isNewerLoading,
-}) => {
+}, ref) => {
   switch (item.type) {
     case 'post':
-      return <PostMessageItem postId={item.id} channelId={channelId} />;
+      return (
+        <PostMessageItem 
+          postId={item.id} 
+          channelId={channelId} 
+          showHeader={item.data?.showHeader ?? true}
+        />
+      );
       
     case 'date-separator':
       return (
@@ -43,6 +51,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           }
         </NewMessageSeparator>
       );
+      
+    case 'start-of-channel':
+      return <StartOfChannelDivider />;
       
     case 'load-more':
       return (
@@ -64,4 +75,4 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     default:
       return null;
   }
-};
+});

@@ -4,6 +4,7 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { displayUsername } from '../../utils/userUtils';
 import { formatMessageTimestamp } from '../../utils/dateUtils';
+import { TimestampDisplay } from "../atoms/TimestampDisplay";
 
 interface MessageHeaderProps {
   userId: string;
@@ -14,7 +15,7 @@ interface MessageHeaderProps {
 
 const headerStyles: SxProps<Theme> = {
   display: 'flex',
-  alignItems: 'baseline',
+  alignItems: 'center',
   gap: 1,
   mb: 0.5,
 };
@@ -67,7 +68,8 @@ export const MessageHeader: React.FC<MessageHeaderProps> = memo(({
         color="text.secondary"
         sx={timestampStyles}
       >
-        {formatMessageTimestamp(timestamp)}
+        {/*{formatMessageTimestamp(timestamp)}*/}
+        <TimestampDisplay timestamp={timestamp} format={"time"} showTooltip={true} />
       </Typography>
     </Box>
   );

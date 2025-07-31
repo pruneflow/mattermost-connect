@@ -1,14 +1,14 @@
-import { useMemo, useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { useAppSelector } from '../../../../hooks';
-import { VirtualListItem } from '../../../../types/virtualList';
-import { buildVirtualList } from '../../../../utils/virtualListUtils';
-import { 
-  selectPostsInChannel, 
-  selectHasLoadedLatestPost, 
+import { useMemo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useAppSelector } from "../../../../hooks";
+import { VirtualListItem } from "../../../../types/virtualList";
+import { buildVirtualList } from "../../../../utils/virtualListUtils";
+import {
+  selectPostsInChannel,
+  selectHasLoadedLatestPost,
   selectHasLoadedOldestPost,
   selectAllPosts,
-  selectLastViewedAt
+  selectLastViewedAt,
 } from "../../../../store/selectors/postsSelectors";
 
 interface UseVirtualizedMessagesProps {
@@ -26,7 +26,7 @@ interface UseVirtualizedMessagesReturn {
   isReady: boolean;
 }
 
-const DEFAULT_ESTIMATED_HEIGHT = 100;
+const DEFAULT_ESTIMATED_HEIGHT = 60;
 const DEFAULT_OVERSCAN = 20;
 
 export const useVirtualizedMessages = ({
@@ -39,11 +39,19 @@ export const useVirtualizedMessages = ({
   const measurementCache = useRef<Map<string, number>>(new Map());
 
   // Get data from Redux - direct selectors following existing pattern
-  const postIds = useAppSelector(state => selectPostsInChannel(state, channelId));
+  const postIds = useAppSelector((state) =>
+    selectPostsInChannel(state, channelId),
+  );
   const allPosts = useAppSelector(selectAllPosts);
-  const atOldestPost = useAppSelector(state => selectHasLoadedOldestPost(state, channelId));
-  const atLatestPost = useAppSelector(state => selectHasLoadedLatestPost(state, channelId));
-  const lastViewedAt = useAppSelector(state => selectLastViewedAt(state, channelId));
+  const atOldestPost = useAppSelector((state) =>
+    selectHasLoadedOldestPost(state, channelId),
+  );
+  const atLatestPost = useAppSelector((state) =>
+    selectHasLoadedLatestPost(state, channelId),
+  );
+  const lastViewedAt = useAppSelector((state) =>
+    selectLastViewedAt(state, channelId),
+  );
 
   // Build virtual list with all separators and load buttons
   const virtualItems = useMemo((): VirtualListItem[] => {
@@ -52,44 +60,88 @@ export const useVirtualizedMessages = ({
       allPosts,
       lastViewedAt,
       atOldestPost,
-      atLatestPost
+      atLatestPost,
     );
   }, [postIds, allPosts, lastViewedAt, atOldestPost, atLatestPost]);
 
   // New messages are now handled directly in buildVirtualList
 
-  // Custom size estimator with caching
+  // Custom size estimator with caching  
   const getItemSize = useMemo(() => {
     return (index: number) => {
       const item = virtualItems[index];
       if (!item) return estimatedItemHeight;
-      
-      // Check cache first
-      const cached = measurementCache.current.get(item.id);
-      if (cached) return cached;
-      
-      // Estimate based on item type
-      let estimatedSize = estimatedItemHeight;
-      
-      switch (item.type) {
-        case 'load-more':
-          estimatedSize = 60; // Load more buttons
-          break;
-        case 'loading':
-          estimatedSize = 80; // Loading indicators
-          break;
-        case 'date-separator':
-          estimatedSize = 40; // Date dividers
-          break;
-        case 'new-messages-separator':
-          estimatedSize = 50; // New message separator
-          break;
-        case 'post':
-        default:
-          estimatedSize = estimatedItemHeight; // Regular posts
-          break;
+
+      // Create cache key based on all factors that affect size
+      let cacheKey = item.id;
+      if (item.type === 'post' && item.data?.post) {
+        const post = item.data.post;
+        const messageLength = post.message?.length || 0;
+        const reactionCount = post.metadata?.reactions?.length || 0;
+        const replyCount = post.reply_count || 0;
+        const showHeader = item.data.showHeader ?? true;
+        
+        // Cache key includes all size-affecting factors
+        cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${showHeader}`;
       }
       
+      // Check cache with appropriate key
+      const cached = measurementCache.current.get(cacheKey);
+      if (cached) return cached;
+
+      // Estimate based on item type with better sizing
+      let estimatedSize = estimatedItemHeight;
+
+      switch (item.type) {
+        case "load-more":
+          estimatedSize = 60; // Load more buttons
+          break;
+        case "loading":
+          estimatedSize = 80; // Loading indicators
+          break;
+        case "date-separator":
+          estimatedSize = 60; // Date dividers with margins (12px top + 12px bottom + content ~36px)
+          break;
+        case "new-messages-separator":
+          estimatedSize = 50; // New message separator
+          break;
+        case "start-of-channel":
+          estimatedSize = 200; // Start of channel divider with icon, name, description
+          break;
+        case "post":
+          // Better estimation for posts based on content
+          if (item.data?.post) {
+            const post = item.data.post;
+            const showHeader = item.data.showHeader ?? true;
+            
+            // Base message height - more space for header
+            let postSize = showHeader ? 60 : 35; // Header includes avatar + username + timestamp
+
+            // Add height for message content (rough estimate)
+            const messageLines = Math.ceil((post.message?.length || 0) / 80);
+            postSize += messageLines * 20;
+
+            // Add height for reactions if present
+            if (post.metadata?.reactions?.length) {
+              postSize += 35;
+            }
+
+            // Add height for thread replies info
+            if (post.reply_count && post.reply_count > 0) {
+              postSize += 30;
+            }
+
+            // Cap minimum and maximum based on header presence
+            const minSize = showHeader ? 60 : 35;
+            estimatedSize = Math.max(minSize, Math.min(postSize, 200));
+          } else {
+            estimatedSize = estimatedItemHeight;
+          }
+          break;
+        default:
+          estimatedSize = estimatedItemHeight;
+          break;
+      }
       return estimatedSize;
     };
   }, [virtualItems, estimatedItemHeight]);
@@ -107,7 +159,19 @@ export const useVirtualizedMessages = ({
       const item = virtualItems[index];
       if (item && element) {
         const height = element.getBoundingClientRect().height;
-        measurementCache.current.set(item.id, height);
+        
+        // Use same cache key logic as getItemSize
+        let cacheKey = item.id;
+        if (item.type === 'post' && item.data?.post) {
+          const post = item.data.post;
+          const messageLength = post.message?.length || 0;
+          const reactionCount = post.metadata?.reactions?.length || 0;
+          const replyCount = post.reply_count || 0;
+          const showHeader = item.data.showHeader ?? true;
+          cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${showHeader}`;
+        }
+        
+        measurementCache.current.set(cacheKey, height);
       }
       return element?.getBoundingClientRect().height ?? estimatedItemHeight;
     },

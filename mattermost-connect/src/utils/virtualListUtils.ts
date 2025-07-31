@@ -36,8 +36,14 @@ export const buildVirtualList = (
   
   const result: VirtualListItem[] = [];
   
-  // Add LoadOlder button at the beginning if needed
-  if (!atOldestPost) {
+  // Add StartOfChannelDivider at the beginning if we've reached the oldest post
+  if (atOldestPost) {
+    result.push({
+      type: 'start-of-channel',
+      id: 'start-of-channel'
+    });
+  } else {
+    // Add LoadOlder button if we haven't reached the oldest post
     result.push({
       type: 'load-more',
       id: 'load-older',
@@ -50,6 +56,7 @@ export const buildVirtualList = (
   const orderedPostIds = [...postIds].reverse();
   let lastDate: Date | null = null;
   let newMessagesSeparatorInserted = false;
+  let lastPost: Post | null = null;
   
   orderedPostIds.forEach((postId) => {
     const post = posts[postId];
@@ -86,11 +93,23 @@ export const buildVirtualList = (
       newMessagesSeparatorInserted = true;
     }
     
-    // 3. Add the post itself
+    // 3. Calculate if this message should show header (not part of a group)
+    const showHeader = !lastPost || 
+      lastPost.user_id !== post.user_id ||
+      (post.create_at - lastPost.create_at) > 5 * 60 * 1000; // 5 minutes
+    
+    // 4. Add the post itself with grouping info
     result.push({
       type: 'post',
-      id: postId
+      id: postId,
+      data: { 
+        post,
+        showHeader
+      }
     });
+    
+    // Update lastPost for next iteration
+    lastPost = post;
   });
   
   // Add LoadNewer button at the end if needed
@@ -105,26 +124,3 @@ export const buildVirtualList = (
   return result;
 };
 
-/**
- * Helper function to determine if a post should be part of a grouped message
- * Based on consecutive posts from same user within time threshold
- */
-export const shouldGroupMessage = (
-  currentPost: Post,
-  previousPost: Post | null,
-  timeThresholdMs: number = 5 * 60 * 1000 // 5 minutes
-): boolean => {
-  if (!previousPost) return false;
-  
-  // Don't group if different users
-  if (currentPost.user_id !== previousPost.user_id) return false;
-  
-  // Don't group if too much time has passed
-  const timeDiff = currentPost.create_at - previousPost.create_at;
-  if (timeDiff > timeThresholdMs) return false;
-  
-  // Don't group system messages
-  if (currentPost.type !== '' || previousPost.type !== '') return false;
-  
-  return true;
-};

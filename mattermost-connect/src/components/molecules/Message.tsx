@@ -1,17 +1,25 @@
-import React, { memo, useState, useCallback } from 'react';
-import { Box, Typography, Paper, useTheme, SxProps, Theme } from '@mui/material';
-import { Post } from '../../api/types';
-import { MessageHeader } from './MessageHeader';
-import { MessageActions } from './MessageActions';
-import { MessageReactions } from './MessageReactions';
-import { EditMessage } from './EditMessage';
-import { FileAttachmentList } from './FileAttachmentList';
+import React, { memo, useState, useCallback } from "react";
+import {
+  Box,
+  Typography,
+  Paper,
+  useTheme,
+  SxProps,
+  Theme,
+} from "@mui/material";
+import { Post } from "../../api/types";
+import { MessageHeader } from "./MessageHeader";
+import { MessageActions } from "./MessageActions";
+import { MessageReactions } from "./MessageReactions";
+import { EditMessage } from "./EditMessage";
+import { FileAttachmentList } from "./FileAttachmentList";
 import { isSystemMessage } from "../../utils/messageUtils";
 
 interface MessageProps {
   post: Post;
+  channelId: string;
   isFocused?: boolean;
-  isPartOfGroupedMessage?: boolean;
+  showHeader?: boolean;
   onReply?: (postId: string) => void;
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
@@ -21,8 +29,8 @@ interface MessageProps {
 }
 
 const systemMessageStyles: SxProps<Theme> = {
-  display: 'flex',
-  justifyContent: 'center',
+  display: "flex",
+  justifyContent: "center",
   my: 1,
   opacity: 0.7,
 };
@@ -30,19 +38,19 @@ const systemMessageStyles: SxProps<Theme> = {
 // Styles will be applied dynamically based on showHeader
 
 const messageTextStyles: SxProps<Theme> = {
-  wordBreak: 'break-word',
-  whiteSpace: 'pre-wrap',
+  wordBreak: "break-word",
+  whiteSpace: "pre-wrap",
   lineHeight: 1.4,
 };
 
 const threadRepliesStyles: SxProps<Theme> = {
   mt: 1,
-  display: 'flex',
-  alignItems: 'center',
+  display: "flex",
+  alignItems: "center",
   gap: 0.5,
-  cursor: 'pointer',
-  '&:hover': {
-    textDecoration: 'underline',
+  cursor: "pointer",
+  "&:hover": {
+    textDecoration: "underline",
   },
 };
 
@@ -50,101 +58,96 @@ const reactionStyles: SxProps<Theme> = {
   mt: 1,
 };
 
-export const Message: React.FC<MessageProps> = memo(({
-  post,
-  isFocused = false,
-  isPartOfGroupedMessage = false,
-  onReply,
-  onDelete,
-  onOpenThread,
-  onFileDownload,
-  onFilePreview,
-  sx,
-}) => {
-  const theme = useTheme();
-  const [isHovered, setIsHovered] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const showHeader = !isPartOfGroupedMessage;
-  const isSystem = isSystemMessage(post);
-  
-  const handleMouseEnter = useCallback(() => {
-    setIsHovered(true);
-  }, []);
-  
-  const handleMouseLeave = useCallback(() => {
-    setIsHovered(false);
-  }, []);
-  
-  const handleReply = useCallback(() => {
-    onReply?.(post.id);
-  }, [onReply, post.id]);
-  
-  const handleDelete = useCallback(() => {
-    onDelete?.(post.id);
-  }, [onDelete, post.id]);
+export const Message: React.FC<MessageProps> = memo(
+  ({
+    post,
+    channelId,
+    isFocused = false,
+    showHeader = true,
+    onReply,
+    onDelete,
+    onOpenThread,
+    onFileDownload,
+    onFilePreview,
+    sx,
+  }) => {
+    const theme = useTheme();
+    const [isHovered, setIsHovered] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const isSystem = isSystemMessage(post);
 
-  const handleStartEdit = useCallback(() => {
-    setIsEditing(true);
-  }, []);
+    const handleMouseEnter = useCallback(() => {
+      setIsHovered(true);
+    }, []);
 
-  const handleEditSave = useCallback(() => {
-    setIsEditing(false);
-  }, []);
+    const handleMouseLeave = useCallback(() => {
+      setIsHovered(false);
+    }, []);
 
-  const handleEditCancel = useCallback(() => {
-    setIsEditing(false);
-  }, []);
+    const handleReply = useCallback(() => {
+      onReply?.(post.id);
+    }, [onReply, post.id]);
 
-  const handleOpenThread = useCallback(() => {
-    if (onOpenThread) {
-      onOpenThread(post.id);
+    const handleDelete = useCallback(() => {
+      onDelete?.(post.id);
+    }, [onDelete, post.id]);
+
+    const handleStartEdit = useCallback(() => {
+      setIsEditing(true);
+    }, []);
+
+    const handleEditSave = useCallback(() => {
+      setIsEditing(false);
+    }, []);
+
+    const handleEditCancel = useCallback(() => {
+      setIsEditing(false);
+    }, []);
+
+    const handleOpenThread = useCallback(() => {
+      if (onOpenThread) {
+        onOpenThread(post.id);
+      }
+    }, [onOpenThread, post.id]);
+
+    if (isSystem) {
+      return (
+        <Box sx={systemMessageStyles}>
+          <Typography variant="body2" color="textSecondary">
+            {post.message}
+          </Typography>
+        </Box>
+      );
     }
-  }, [onOpenThread, post.id]);
-  
-  if (isSystem) {
+
+    const paperStyles: SxProps<Theme> = {
+      backgroundColor: isFocused
+        ? theme.palette.action.selected
+        : "transparent",
+      p: 1,
+      mb: 2,
+      borderRadius: 1,
+      border: isFocused ? `1px solid ${theme.palette.primary.main}` : "none",
+      "&:hover": {
+        backgroundColor: theme.palette.action.hover,
+      },
+      ...sx,
+    };
+
+    const containerStyles: SxProps<Theme> = {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+    };
+
     return (
-      <Box sx={systemMessageStyles}>
-        <Typography variant="body2" color="textSecondary">
-          {post.message}
-        </Typography>
-      </Box>
-    );
-  }
-  
-  const paperStyles: SxProps<Theme> = {
-    backgroundColor: isFocused 
-      ? theme.palette.action.selected 
-      : 'transparent',
-    p: 2,
-    mb: 0.25,
-    borderRadius: 1,
-    border: isFocused ? `1px solid ${theme.palette.primary.main}` : 'none',
-    '&:hover': {
-      backgroundColor: theme.palette.action.hover,
-    },
-    ...sx,
-  };
-  
-  const containerStyles: SxProps<Theme> = {
-    display: 'flex',
-    gap: 2,
-    alignItems: 'flex-start',
-  };
-  
-  return (
-    <Paper
-      elevation={isFocused ? 1 : 0}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      sx={paperStyles}
-    >
-      <Box sx={containerStyles}>
-        {/* Message Content with proper header */}
-        <Box sx={{ 
-          flex: 1, 
-          minWidth: 0,
-          ml: showHeader ? 0 : 5 // Align with header when not showing avatar
-        }}>
+      <Paper
+        elevation={isFocused ? 1 : 0}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        sx={paperStyles}
+      >
+        <Box sx={containerStyles}>
           {/* Header with avatar, username and timestamp (only when showing header) */}
           {showHeader && (
             <MessageHeader
@@ -153,68 +156,75 @@ export const Message: React.FC<MessageProps> = memo(({
               showAvatar={true}
             />
           )}
-          
-          {/* Message Text or Edit Mode */}
-          {isEditing ? (
-            <EditMessage
-              postId={post.id}
-              initialMessage={post.message}
-              onCancel={handleEditCancel}
-              onSave={handleEditSave}
-              sx={{ mt: 1 }}
-            />
-          ) : (
-            <Typography
-              variant="body2"
-              color="text.primary"
-              sx={messageTextStyles}
-            >
-              {post.message}
-            </Typography>
-          )}
-          
-          {/* Reactions */}
-          {post.metadata?.reactions && post.metadata.reactions.length > 0 && (
-            <MessageReactions
-              postId={post.id}
-              reactions={post.metadata.reactions}
-              sx={reactionStyles}
-            />
-          )}
-          
-          {/* File attachments */}
-          {post.file_ids && post.file_ids.length > 0 && (
-            <FileAttachmentList
-              fileIds={post.file_ids}
-              onDownload={onFileDownload}
-              onPreview={onFilePreview}
-            />
-          )}
-          
-          {/* Thread replies indicator */}
-          {post.reply_count > 0 && (
-            <Box sx={threadRepliesStyles} onClick={handleOpenThread}>
-              <Typography 
-                variant="caption" 
-                color="primary"
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              ml: 5, // Align with header when not showing avatar
+            }}
+          >
+            {/* Message Text or Edit Mode */}
+            {isEditing ? (
+              <EditMessage
+                postId={post.id}
+                initialMessage={post.message}
+                onCancel={handleEditCancel}
+                onSave={handleEditSave}
+                sx={{ mt: 1 }}
+              />
+            ) : (
+              <Typography
+                variant="body2"
+                color="text.primary"
+                sx={messageTextStyles}
               >
-                {post.reply_count} {post.reply_count === 1 ? 'reply' : 'replies'}
+                {post.message}
               </Typography>
-            </Box>
-          )}
-        </Box>
-      </Box>
-      
-      {/* Message Actions */}
-      <MessageActions
-        post={post}
-        visible={isHovered}
-        onReply={handleReply}
-        onEdit={handleStartEdit}
-        onDelete={handleDelete}
-      />
-    </Paper>
-  );
-});
+            )}
 
-Message.displayName = 'Message';
+            {/* Reactions */}
+            {post.metadata?.reactions && post.metadata.reactions.length > 0 && (
+              <MessageReactions
+                postId={post.id}
+                reactions={post.metadata.reactions}
+                sx={reactionStyles}
+              />
+            )}
+
+            {/* File attachments */}
+            {post.file_ids && post.file_ids.length > 0 && (
+              <FileAttachmentList
+                fileIds={post.file_ids}
+                onDownload={onFileDownload}
+                onPreview={onFilePreview}
+              />
+            )}
+
+            {/* Thread replies indicator */}
+            {post.reply_count > 0 && (
+              <Box sx={threadRepliesStyles} onClick={handleOpenThread}>
+                <Typography variant="caption" color="primary">
+                  {post.reply_count}{" "}
+                  {post.reply_count === 1 ? "reply" : "replies"}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Box>
+
+        {/* Message Actions */}
+        {isHovered && (
+          <MessageActions
+            post={post}
+            visible={isHovered}
+            onReply={handleReply}
+            onEdit={handleStartEdit}
+            onDelete={handleDelete}
+          />
+        )}
+      </Paper>
+    );
+  },
+);
+
+Message.displayName = "Message";

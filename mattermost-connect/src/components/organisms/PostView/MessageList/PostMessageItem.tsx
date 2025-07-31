@@ -1,17 +1,16 @@
 import React from 'react';
 import { useAppSelector } from '../../../../hooks';
 import { selectPostById } from '../../../../store/selectors/postsSelectors';
-import { useGroupedMessageLogic } from '../hooks/useGroupedMessageLogic';
 import { Message } from '../../../molecules/Message';
 
 interface PostMessageItemProps {
   postId: string;
   channelId: string;
+  showHeader: boolean;
 }
 
-export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, channelId }) => {
+export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHeader, channelId }) => {
   const post = useAppSelector(state => selectPostById(state, postId));
-  const isPartOfGroupedMessage = useGroupedMessageLogic(postId, channelId);
 
   if (!post) {
     return null;
@@ -20,7 +19,8 @@ export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, channe
   return (
     <Message
       post={post} 
-      isPartOfGroupedMessage={isPartOfGroupedMessage}
+      showHeader={showHeader}
+      channelId={channelId}
     />
   );
 };
