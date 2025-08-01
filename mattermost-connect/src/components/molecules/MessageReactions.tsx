@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { Box, Chip, Tooltip, SxProps, Theme, useTheme } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { Reaction } from '../../api/types';
@@ -35,6 +35,7 @@ const addReactionButtonStyles: SxProps<Theme> = {
   border: '1px dashed',
   borderColor: 'divider',
   backgroundColor: 'transparent',
+  order: 999, // Toujours en dernier dans le flex
   '&:hover': {
     backgroundColor: 'action.hover',
   },
@@ -137,12 +138,14 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
     }
   }, [toggleReaction]);
 
+
   if (groupedReactions.length === 0) {
     return null;
   }
 
   return (
     <Box sx={{ ...reactionsContainerStyles, ...sx }}>
+      {/* Réactions avec wrap multi-lignes */}
       {groupedReactions.map((reaction) => (
         <ReactionChip
           key={reaction.emojiName}
@@ -152,7 +155,7 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
         />
       ))}
 
-      {/* Add reaction button */}
+      {/* Bouton d'ajout */}
       <EmojiPickerButton
         onEmojiSelect={handleEmojiSelect}
         size="small"

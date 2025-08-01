@@ -8,10 +8,12 @@ import {
   Theme,
   useMediaQuery,
 } from "@mui/material";
+import { Reply as ReplyIcon } from "@mui/icons-material";
 import { formatMessageTime } from "../../utils/dateUtils";
-import { Post } from "../../api/types";
+import { Post, User } from "../../api/types";
 import { MessageHeader } from "./MessageHeader";
 import { MessageActions } from "./MessageActions";
+import { UserAvatar } from "../atoms/UserAvatar";
 import { MessageReactions } from "./MessageReactions";
 import { EditMessage } from "./EditMessage";
 import { FileAttachmentList } from "./FileAttachmentList";
@@ -47,14 +49,77 @@ const messageTextStyles: SxProps<Theme> = {
 };
 
 const threadRepliesStyles: SxProps<Theme> = {
-  mt: 1,
   display: "flex",
   alignItems: "center",
-  gap: 0.5,
+  gap: 1,
+  px: 1,
+  py: 0.5,
+  borderRadius: 1,
   cursor: "pointer",
   "&:hover": {
-    textDecoration: "underline",
+    bgcolor: "action.hover",
   },
+};
+
+// Composant pour les avatars des répondants (style GroupAvatar)
+const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({ userIds = [] }) => {
+  if (userIds.length === 0) return null;
+  
+  const displayUsers = userIds.slice(0, 3);
+  const avatarSize = 20;
+  
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+      {displayUsers.map((userId, index) => (
+        <Box
+          key={userId}
+          sx={{
+            position: 'relative',
+            zIndex: 3 - index,
+            marginLeft: index > 0 ? '-6px' : 0,
+          }}
+        >
+          <Box
+            sx={{
+              width: avatarSize,
+              height: avatarSize,
+              border: '2px solid',
+              borderColor: 'background.paper',
+              borderRadius: '50%',
+              overflow: 'hidden',
+            }}
+          >
+            <UserAvatar
+              userId={userId}
+              size="xs"
+              showStatus={false}
+            />
+          </Box>
+        </Box>
+      ))}
+      {userIds.length > 3 && (
+        <Box
+          sx={{
+            width: avatarSize,
+            height: avatarSize,
+            borderRadius: '50%',
+            bgcolor: 'grey.400',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '8px',
+            color: 'white',
+            marginLeft: '-6px',
+            border: '2px solid',
+            borderColor: 'background.paper',
+            zIndex: 0,
+          }}
+        >
+          +{userIds.length - 3}
+        </Box>
+      )}
+    </Box>
+  );
 };
 
 const reactionStyles: SxProps<Theme> = {
@@ -80,7 +145,7 @@ export const Message: React.FC<MessageProps> = memo(
     const [isHovered, setIsHovered] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const isSystem = isSystemMessage(post);
-
+    console.debug("post", post);
     const handleMouseEnter = useCallback(() => {
       setIsHovered(true);
     }, []);
@@ -234,38 +299,42 @@ export const Message: React.FC<MessageProps> = memo(
               />
             )}
 
-            {/* Thread replies indicator */}
-            {post.reply_count > 0 && (
-              <Box 
-                sx={{
-                  ...threadRepliesStyles,
-                  "& .MuiTypography-root": {
-                    color: isOwnMessage ? "rgba(255,255,255,0.9)" : "primary.main",
-                  },
-                }} 
-                onClick={handleOpenThread}
-              >
-                <Typography variant="caption">
-                  {post.reply_count}{" "}
-                  {post.reply_count === 1 ? "reply" : "replies"}
-                </Typography>
-              </Box>
-            )}
-
             {/* Timestamp in bottom right */}
             <Typography variant="caption" sx={timestampStyles}>
               {formatMessageTime(post.create_at)}
             </Typography>
           </Paper>
 
-          {/* Reactions - outside bubble but aligned */}
+          {/* Reactions - outside bubble, always aligned left */}
           {post.metadata?.reactions && post.metadata.reactions.length > 0 && (
-            <Box sx={{ alignSelf: isOwnMessage ? "flex-end" : "flex-start", mt: 0.5 }}>
+            <Box sx={{ alignSelf: "flex-start", mt: 0.5 }}>
               <MessageReactions
                 postId={post.id}
                 reactions={post.metadata.reactions}
                 sx={reactionStyles}
               />
+            </Box>
+          )}
+
+          {/* Thread replies indicator - outside bubble, always aligned left */}
+          {post.reply_count > 0 && (
+            <Box sx={{ alignSelf: "flex-start", mt: 0.5 }}>
+              <Box 
+                sx={{
+                  ...threadRepliesStyles,
+                  "& .MuiTypography-root": {
+                    color: "primary.main",
+                  },
+                }} 
+                onClick={handleOpenThread}
+              >
+                <ThreadReplierAvatars userIds={post.participants?.map((user: User) => user.id)} />
+                <ReplyIcon sx={{ fontSize: 14, color: "primary.main" }} />
+                <Typography variant="caption">
+                  {post.reply_count}{" "}
+                  {post.reply_count === 1 ? "reply" : "replies"}
+                </Typography>
+              </Box>
             </Box>
           )}
 
