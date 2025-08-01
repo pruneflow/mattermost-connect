@@ -69,7 +69,7 @@ export const CustomLayout: React.FC<CustomLayoutProps> = ({
                 />
 
                 {/* Post List - EXACT Mattermost PostView usage */}
-                <ChatContainer  />
+                <ChatContainer autoLoad={true}  />
               </>
             ) : (
               <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default" }}>

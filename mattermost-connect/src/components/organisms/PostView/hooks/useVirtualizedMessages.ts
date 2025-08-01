@@ -14,11 +14,9 @@ import {
   selectChannelById,
   selectMyChannelMember,
 } from "../../../../store/selectors";
-import {EnrichedChannel} from "../../../../api/types";
 
 interface UseVirtualizedMessagesProps {
   channelId: string;
-  autoLoad: boolean;
   scrollElement: HTMLDivElement | null;
   estimatedItemHeight?: number;
   overscan?: number;
@@ -37,7 +35,6 @@ const DEFAULT_OVERSCAN = 100;
 
 export const useVirtualizedMessages = ({
   channelId,
-  autoLoad,
   scrollElement,
   estimatedItemHeight = DEFAULT_ESTIMATED_HEIGHT,
   overscan = DEFAULT_OVERSCAN,

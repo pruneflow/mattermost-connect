@@ -57,7 +57,7 @@ const getDesktopActionsStyles = (isOwnMessage: boolean): SxProps<Theme> => ({
   top: -30,
   ...(isOwnMessage 
     ? { right: 8 }
-    : { left: 100 } 
+    : { left: 100 }
   ),
   zIndex: 10,
 });

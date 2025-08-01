@@ -45,7 +45,6 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   const { virtualizer, virtualItems, isReady, measureAnchorPosition } =
     useVirtualizedMessages({
       channelId,
-      autoLoad,
       scrollElement: scrollElementRef.current,
     });
 
@@ -128,16 +127,29 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
       const { scrollTop, scrollHeight, clientHeight } = element;
 
 
-      // Auto-load logic (if enabled)
+      // Auto-load logic (if enabled) - trigger when load-more buttons are visible based on scroll direction
       if (autoLoad) {
-        // Load older posts when near top - with scroll preservation
-        if (scrollTop < 200 && !isLoadingOlder) {
-          handleLoadOlder();
-        }
-
-        // Load newer posts when near bottom
-        if (scrollHeight - scrollTop - clientHeight < 200 && !isLoadingNewer) {
-          handleLoadNewer();
+        const virtualItemsVisible = virtualizer.getVirtualItems();
+        if (virtualItemsVisible.length === 0) return;
+        
+        const scrollDirection = virtualizer.scrollDirection;
+        
+        if (scrollDirection === 'backward') {
+          // Scrolling up: check first visible item for load-older
+          const firstVisibleItem = virtualItems[virtualItemsVisible[0].index];
+          if (firstVisibleItem?.type === 'load-more' && 
+              firstVisibleItem.data?.loadDirection === 'older' && 
+              !isLoadingOlder) {
+            handleLoadOlder();
+          }
+        } else if (scrollDirection === 'forward') {
+          // Scrolling down: check last visible item for load-newer
+          const lastVisibleItem = virtualItems[virtualItemsVisible[virtualItemsVisible.length - 1].index];
+          if (lastVisibleItem?.type === 'load-more' && 
+              lastVisibleItem.data?.loadDirection === 'newer' && 
+              !isLoadingNewer) {
+            handleLoadNewer();
+          }
         }
       }
 
