@@ -104,8 +104,6 @@ export const useUserSearch = (debounceMs: number = 300) => {
       
       // Return IDs only
       const userIds = activeUsers.map(user => user.id);
-      console.debug("useUserSearch - setting results:", userIds, "length:", userIds.length);
-
       dispatch(setUserSearchResults({ term, results: userIds }));
       return userIds;
     } catch (error) {

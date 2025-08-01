@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useLayoutEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAppSelector } from "../../../../hooks";
 import { VirtualListItem } from "../../../../types/virtualList";
@@ -10,7 +10,10 @@ import {
   selectAllPosts,
   selectLastViewedAt,
 } from "../../../../store/selectors/postsSelectors";
-import { selectCurrentUserId, selectChannelById } from "../../../../store/selectors";
+import {
+  selectCurrentUserId,
+  selectChannelById,
+} from "../../../../store/selectors";
 
 interface UseVirtualizedMessagesProps {
   channelId: string;
@@ -25,10 +28,11 @@ interface UseVirtualizedMessagesReturn {
   virtualItems: VirtualListItem[];
   totalCount: number;
   isReady: boolean;
+  measureAnchorPosition: () => void;
 }
 
 const DEFAULT_ESTIMATED_HEIGHT = 60;
-const DEFAULT_OVERSCAN = 20;
+const DEFAULT_OVERSCAN = 100;
 
 export const useVirtualizedMessages = ({
   channelId,
@@ -38,6 +42,10 @@ export const useVirtualizedMessages = ({
   overscan = DEFAULT_OVERSCAN,
 }: UseVirtualizedMessagesProps): UseVirtualizedMessagesReturn => {
   const measurementCache = useRef<Map<string, number>>(new Map());
+
+  // Refs pour sauvegarder la position et l'ID de l'élément ancre avant le prepend
+  const prevTopRef = useRef<number | null>(null);
+  const anchorIdRef = useRef<string | null>(null);
 
   // Get data from Redux - direct selectors following existing pattern
   const postIds = useAppSelector((state) =>
@@ -54,7 +62,9 @@ export const useVirtualizedMessages = ({
     selectLastViewedAt(state, channelId),
   );
   const currentUserId = useAppSelector(selectCurrentUserId);
-  const currentChannel = useAppSelector(state => selectChannelById(state, channelId));
+  const currentChannel = useAppSelector((state) =>
+    selectChannelById(state, channelId),
+  );
 
   // Build virtual list with all separators and load buttons
   const virtualItems = useMemo((): VirtualListItem[] => {
@@ -64,14 +74,22 @@ export const useVirtualizedMessages = ({
       lastViewedAt,
       atOldestPost,
       atLatestPost,
-      currentUserId || '',
-      currentChannel?.type || 'O'
+      currentUserId || "",
+      currentChannel?.type || "O",
     );
-  }, [postIds, allPosts, lastViewedAt, atOldestPost, atLatestPost, currentUserId, currentChannel?.type]);
+  }, [
+    postIds,
+    allPosts,
+    lastViewedAt,
+    atOldestPost,
+    atLatestPost,
+    currentUserId,
+    currentChannel?.type,
+  ]);
 
   // New messages are now handled directly in buildVirtualList
 
-  // Custom size estimator with caching  
+  // Custom size estimator with caching
   const getItemSize = useMemo(() => {
     return (index: number) => {
       const item = virtualItems[index];
@@ -79,18 +97,18 @@ export const useVirtualizedMessages = ({
 
       // Create cache key based on all factors that affect size
       let cacheKey = item.id;
-      if (item.type === 'post' && item.data?.post) {
+      if (item.type === "post" && item.data?.post) {
         const post = item.data.post;
         const messageLength = post.message?.length || 0;
         const reactionCount = post.metadata?.reactions?.length || 0;
         const replyCount = post.reply_count || 0;
         const fileCount = post.file_ids?.length || 0;
         const showHeader = item.data.showHeader ?? true;
-        
+
         // Cache key includes all size-affecting factors
         cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${fileCount}-${showHeader}`;
       }
-      
+
       // Check cache with appropriate key
       const cached = measurementCache.current.get(cacheKey);
       if (cached) return cached;
@@ -120,7 +138,7 @@ export const useVirtualizedMessages = ({
             const post = item.data.post;
             const showHeader = item.data.showHeader ?? true;
             const isOwnMessage = item.data.isOwnMessage ?? false;
-            
+
             // Base bubble height - includes padding and timestamp
             let postSize = 50; // Bubble padding (1.5 * 2) + timestamp height
 
@@ -176,10 +194,10 @@ export const useVirtualizedMessages = ({
       const item = virtualItems[index];
       if (item && element) {
         const height = element.getBoundingClientRect().height;
-        
+
         // Use same cache key logic as getItemSize
         let cacheKey = item.id;
-        if (item.type === 'post' && item.data?.post) {
+        if (item.type === "post" && item.data?.post) {
           const post = item.data.post;
           const messageLength = post.message?.length || 0;
           const reactionCount = post.metadata?.reactions?.length || 0;
@@ -188,12 +206,54 @@ export const useVirtualizedMessages = ({
           const showHeader = item.data.showHeader ?? true;
           cacheKey = `${item.id}-${messageLength}-${reactionCount}-${replyCount}-${fileCount}-${showHeader}`;
         }
-        
+
         measurementCache.current.set(cacheKey, height);
       }
       return element?.getBoundingClientRect().height ?? estimatedItemHeight;
     },
   });
+  // Enregistrer la position avant le prepend
+  const measureAnchorPosition = () => {
+    if (!scrollElement || !virtualizer || virtualItems.length === 0) return;
+
+
+    const visibleItems = virtualizer.getVirtualItems();
+    /** We take second élément because first element will be a date and if we load
+     * and it's the same date then the scroll measurement will not work
+     */
+    const anchorItem = visibleItems[2];
+    
+    if (anchorItem && virtualItems[anchorItem.index]) {
+      const anchorElement = virtualItems[anchorItem.index];
+      console.debug("anchorElement", anchorElement)
+      const anchor = document.getElementById(anchorElement.id);
+      
+      if (anchor) {
+        prevTopRef.current = anchor.getBoundingClientRect().top;
+        anchorIdRef.current = anchorElement.id;
+        console.log('🔍 Anchor position measured for ID:', anchorElement.id, 'position:', prevTopRef.current);
+      }
+    }
+  };
+
+  // Après le render (posts mis à jour) => recaler le scroll
+  useLayoutEffect(() => {
+    if (prevTopRef.current === null || !anchorIdRef.current || !scrollElement) return;
+
+    const anchor = document.getElementById(anchorIdRef.current);
+
+    if (anchor) {
+      const newTop = anchor.getBoundingClientRect().top;
+      const diff = newTop - prevTopRef.current;
+      scrollElement.scrollTop += diff;
+      
+      console.log('✅ Scroll adjusted for ID:', anchorIdRef.current, 'diff:', diff, 'new scrollTop:', scrollElement.scrollTop);
+    }
+
+    // Reset pour la prochaine fois
+    prevTopRef.current = null;
+    anchorIdRef.current = null;
+  }, [virtualItems, scrollElement]);
 
   const isReady = useMemo(() => {
     return virtualItems.length > 0 && !!scrollElement;
@@ -204,5 +264,6 @@ export const useVirtualizedMessages = ({
     virtualItems,
     totalCount: virtualItems.length,
     isReady,
+    measureAnchorPosition,
   };
 };

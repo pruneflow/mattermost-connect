@@ -119,8 +119,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
   // Handle email input and validation
   const handleEmailInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      console.debug("handleEmailINputChange recreated!");
-
       setEmailInput(event.target.value);
     },
     [],
@@ -128,8 +126,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
 
   const handleEmailInputKeyPress = useCallback(
     (event: React.KeyboardEvent) => {
-      console.debug("handleEMailINputKeyPress recreated!");
-
       if (event.key === "Enter" || event.key === ",") {
         event.preventDefault();
         const email = emailInput.trim();
@@ -151,8 +147,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
   );
 
   const handleRemoveEmail = useCallback((emailToRemove: string) => {
-    console.debug("handleRemoveEmail recreated!");
-
     setEmails((prev) => prev.filter((email) => email !== emailToRemove));
   }, []);
 
@@ -172,8 +166,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
   }, [getInviteLink]);
 
   const handleCopyInviteLink = useCallback(async () => {
-    console.debug("handleCopyInviteLink recreated!");
-
     const success = await copyInviteLink();
     if (success) {
       setFeedback({
@@ -187,8 +179,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
 
   // Handle invitations
   const handleSendInvitations = useCallback(async () => {
-    console.debug("handleSendINvitation recreated!");
-
     const hasUsers =
       selectedUserIds.length > 0 && permissions.canAddExistingUsers;
     const hasEmails = emails.length > 0 && permissions.canSendEmailInvitations;

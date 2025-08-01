@@ -271,21 +271,26 @@ export const Message: React.FC<MessageProps> = memo(
 
           {/* Message Actions - positioned relative to bubble */}
           {(isHovered || isMobile) && (
-            <Box sx={{ 
-              position: "absolute",
-              top: -10,
-              right: isOwnMessage ? "auto" : -10,
-              left: isOwnMessage ? -10 : "auto",
-              zIndex: 1,
-            }}>
-              <MessageActions
-                post={post}
-                visible={isHovered || isMobile}
-                onReply={handleReply}
-                onEdit={handleStartEdit}
-                onDelete={handleDelete}
-              />
-            </Box>
+            <MessageActions
+              post={post}
+              visible={isHovered || isMobile}
+              onReply={handleReply}
+              onEdit={handleStartEdit}
+              onDelete={handleDelete}
+              sx={{
+                position: "absolute",
+                top: -16,
+                right: isOwnMessage ? 8 : "auto",
+                left: isOwnMessage ? "auto" : 8,
+                zIndex: 10,
+                // Override the default positioning from MessageActions
+                "& > div": {
+                  position: "static",
+                  top: "auto",
+                  right: "auto",
+                },
+              }}
+            />
           )}
         </Box>
       </Box>

@@ -111,10 +111,8 @@ export const loadUnreadPosts = createAsyncThunk(
   async ({ channelId, perPage = 60 }: { channelId: string; perPage?: number }, 
   { getState, rejectWithValue }) => {
     try {
-      console.debug("channelId", channelId)
       const state = getState() as { posts: PostsState, entities: { users: { currentUserId: string } } };
       const metadata = state.posts.channelMetadata[channelId];
-      console.debug("metadata", metadata);
       // Only proceed if not loading
       if (metadata?.loadingState !== 'none' && metadata?.loadingState !== 'unreads') {
         return rejectWithValue('Cannot load unread posts - already loading');

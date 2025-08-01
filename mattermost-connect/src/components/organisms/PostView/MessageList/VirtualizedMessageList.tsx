@@ -46,7 +46,8 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   const { 
     virtualizer, 
     virtualItems,
-    isReady 
+    isReady,
+    measureAnchorPosition,
   } = useVirtualizedMessages({
     channelId,
     autoLoad,
@@ -64,12 +65,28 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   });
 
   // Auto-scroll hook
-  const { scrollToBottom, scrollToIndex, isAtBottom } = useAutoScroll({
+  const { scrollToBottom, isAtBottom } = useAutoScroll({
     virtualizer,
     scrollElement: scrollElementRef.current,
     shouldStartFromBottomWhenUnread,
     unreadChunkTimeStamp,
   });
+
+  // Wrapper functions with scroll preservation
+  const handleLoadOlder = useCallback(async () => {
+    // Étape 1: Enregistrer la position avant le prepend
+    measureAnchorPosition();
+    
+    // Étape 2: Charger les posts plus anciens (ce qui déclenchera un nouveau render)
+    await loadOlderPosts();
+    
+    // Étape 3: La restauration se fait automatiquement via useLayoutEffect
+  }, [measureAnchorPosition, loadOlderPosts]);
+
+  const handleLoadNewer = useCallback(async () => {
+    // Pour load newer, on garde généralement la position actuelle ou on va vers le bas
+    await loadNewerPosts();
+  }, [loadNewerPosts]);
 
   // Handle scroll events
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
@@ -80,36 +97,36 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     
     // Auto-load logic (if enabled)
     if (autoLoad) {
-      // Load older posts when near top
+      // Load older posts when near top - with scroll preservation
       if (scrollTop < 200 && !isLoadingOlder) {
-        loadOlderPosts();
+        handleLoadOlder();
       }
       
       // Load newer posts when near bottom
       if (scrollHeight - scrollTop - clientHeight < 200 && !isLoadingNewer) {
-        loadNewerPosts();
+        handleLoadNewer();
       }
     }
     
     // Clear scrolling state
     setTimeout(() => setIsScrolling(false), 150);
-  }, [autoLoad, loadOlderPosts, loadNewerPosts, isLoadingOlder, isLoadingNewer]);
-/*
-  // Initial scroll on mount or channel change
-  useEffect(() => {
-    if (isReady) {
-      if (shouldStartFromBottomWhenUnread) {
-        scrollToBottom();
-      } else if (newMessageIndex >= 0) {
-        scrollToIndex(newMessageIndex);
-      } else {
-        scrollToBottom();
-      }
-    }
-  }, [channelId, shouldStartFromBottomWhenUnread, scrollToBottom, scrollToIndex, isReady, newMessageIndex]);
+  }, [autoLoad, handleLoadOlder, handleLoadNewer, isLoadingOlder, isLoadingNewer]);
 
-  // Calculate new messages count
-  const newMessagesCount = newMessageIndex >= 0 ? newMessageIndex : 0;*/
+  // Scroll initial automatique : vers nouveaux messages ou vers le bas
+  useEffect(() => {
+    if (!isReady) return;
+    
+    // Chercher un séparateur "new-messages" dans virtualItems
+    const newMessageIndex = virtualItems.findIndex(item => item.type === 'new-messages-separator');
+    
+    if (newMessageIndex >= 0) {
+      // Scroll vers le séparateur de nouveaux messages
+      virtualizer.scrollToIndex(newMessageIndex, { align: 'start' });
+    } else {
+      // Pas de nouveaux messages, scroll vers le bas
+      scrollToBottom();
+    }
+  }, [channelId, isReady, virtualItems, virtualizer, scrollToBottom]);
 
   return (
     <Box sx={{ ...containerStyles, ...sx }}>
@@ -147,8 +164,8 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
                 <MessageItem
                   item={itemId}
                   channelId={channelId}
-                  onLoadOlder={loadOlderPosts}
-                  onLoadNewer={loadNewerPosts}
+                  onLoadOlder={handleLoadOlder}
+                  onLoadNewer={handleLoadNewer}
                   isOlderLoading={isLoadingOlder}
                   isNewerLoading={isLoadingNewer}
                 />

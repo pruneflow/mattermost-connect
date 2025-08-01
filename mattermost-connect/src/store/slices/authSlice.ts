@@ -50,11 +50,9 @@ export const loginUser = createAsyncThunk<
       
       // Call login exactly like Mattermost does (loginId, password, token='', ldapOnly=false)
       const user = await client.login(login_id, password, '', false);
-      console.debug("Login response - user:", user);
-      
+
       // Get token exactly like Mattermost does
       const token = client.getToken();
-      console.debug("Token from client:", token);
       
       // Mattermost only throws error if user is not returned, not token
       // Token might be in cookies only on some server configurations

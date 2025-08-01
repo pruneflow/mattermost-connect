@@ -133,7 +133,6 @@ export const AddChannelMembersDialog: React.FC<AddChannelMembersDialogProps> = (
   const channel = useAppSelector(state => selectChannelById(state, channelId));
   const teamId = channel?.team_id || '';
   const channelMembers = useAppSelector(state => selectChannelMembers(state, channelId));
-  console.debug("channelMembers", channelMembers)
   // Load team and channel members when dialog opens (always fresh data)
   useEffect(() => {
     if (open && channel && channel.type !== 'D' && teamId) {

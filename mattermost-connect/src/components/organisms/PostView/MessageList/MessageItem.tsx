@@ -25,55 +25,63 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
   isOlderLoading,
   isNewerLoading,
 }, ref) => {
-  switch (item.type) {
-    case 'post':
-      return (
-        <PostMessageItem 
-          postId={item.id} 
-          channelId={channelId} 
-          showHeader={item.data?.showHeader ?? true}
-          isOwnMessage={item.data?.isOwnMessage ?? false}
-        />
-      );
-      
-    case 'date-separator':
-      return (
-        <DateDivider 
-          date={item.data?.date?.getTime() || Date.now()} 
-        />
-      );
-      
-    case 'new-messages-separator':
-      return (
-        <NewMessageSeparator>
-          {item.data?.unreadCount && item.data.unreadCount > 0 
-            ? `${item.data.unreadCount} new messages`
-            : 'New messages'
-          }
-        </NewMessageSeparator>
-      );
-      
-    case 'start-of-channel':
-      return <StartOfChannelDivider />;
-      
-    case 'load-more':
-      return (
-        <LoadMoreButton
-          type={item.data?.loadDirection || 'older'}
-          loading={item.data?.loadDirection === 'older' ? isOlderLoading : isNewerLoading}
-          onClick={item.data?.loadDirection === 'older' ? onLoadOlder : onLoadNewer}
-        />
-      );
-      
-    case 'loading':
-      return (
-        <LoadingScreen 
-          centered={true}
-          style={{ padding: '16px 0' }}
-        />
-      );
-      
-    default:
-      return null;
-  }
+  const renderContent = () => {
+    switch (item.type) {
+      case 'post':
+        return (
+          <PostMessageItem 
+            postId={item.id} 
+            channelId={channelId} 
+            showHeader={item.data?.showHeader ?? true}
+            isOwnMessage={item.data?.isOwnMessage ?? false}
+          />
+        );
+        
+      case 'date-separator':
+        return (
+          <DateDivider 
+            date={item.data?.date?.getTime() || Date.now()} 
+          />
+        );
+        
+      case 'new-messages-separator':
+        return (
+          <NewMessageSeparator>
+            {item.data?.unreadCount && item.data.unreadCount > 0 
+              ? `${item.data.unreadCount} new messages`
+              : 'New messages'
+            }
+          </NewMessageSeparator>
+        );
+        
+      case 'start-of-channel':
+        return <StartOfChannelDivider />;
+        
+      case 'load-more':
+        return (
+          <LoadMoreButton
+            type={item.data?.loadDirection || 'older'}
+            loading={item.data?.loadDirection === 'older' ? isOlderLoading : isNewerLoading}
+            onClick={item.data?.loadDirection === 'older' ? onLoadOlder : onLoadNewer}
+          />
+        );
+        
+      case 'loading':
+        return (
+          <LoadingScreen 
+            centered={true}
+            style={{ padding: '16px 0' }}
+          />
+        );
+        
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div id={item.id} ref={ref}>
+      {renderContent()}
+    </div>
+  );
 });
