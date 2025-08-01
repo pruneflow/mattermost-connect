@@ -278,17 +278,10 @@ export const Message: React.FC<MessageProps> = memo(
               onEdit={handleStartEdit}
               onDelete={handleDelete}
               sx={{
-                position: "absolute",
-                top: -16,
-                right: isOwnMessage ? 8 : "auto",
-                left: isOwnMessage ? "auto" : 8,
-                zIndex: 10,
-                // Override the default positioning from MessageActions
-                "& > div": {
-                  position: "static",
-                  top: "auto",
-                  right: "auto",
-                },
+                ...(showHeader
+                    ? { top: -10 }
+                    : { top: -30 }
+                ),
               }}
             />
           )}

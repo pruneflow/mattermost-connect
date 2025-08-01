@@ -74,11 +74,6 @@ export const selectNewestPostId = createSelector(
   (metadata) => metadata?.newestPostId || null
 );
 
-// Unread/new messages logic - memoized selectors
-export const selectLastViewedAt = createSelector(
-  [selectChannelPostsMetadata],
-  (metadata) => metadata?.lastViewedAt || 0
-);
 
 export const selectNewMessagesSeparatorIndex = createSelector(
   [selectChannelPostsMetadata],

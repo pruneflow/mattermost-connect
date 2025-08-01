@@ -8,12 +8,13 @@ import {
   selectHasLoadedLatestPost,
   selectHasLoadedOldestPost,
   selectAllPosts,
-  selectLastViewedAt,
 } from "../../../../store/selectors/postsSelectors";
 import {
   selectCurrentUserId,
   selectChannelById,
+  selectMyChannelMember,
 } from "../../../../store/selectors";
+import {EnrichedChannel} from "../../../../api/types";
 
 interface UseVirtualizedMessagesProps {
   channelId: string;
@@ -24,7 +25,7 @@ interface UseVirtualizedMessagesProps {
 }
 
 interface UseVirtualizedMessagesReturn {
-  virtualizer: ReturnType<typeof useVirtualizer>;
+  virtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>;
   virtualItems: VirtualListItem[];
   totalCount: number;
   isReady: boolean;
@@ -58,14 +59,18 @@ export const useVirtualizedMessages = ({
   const atLatestPost = useAppSelector((state) =>
     selectHasLoadedLatestPost(state, channelId),
   );
-  const lastViewedAt = useAppSelector((state) =>
-    selectLastViewedAt(state, channelId),
-  );
   const currentUserId = useAppSelector(selectCurrentUserId);
   const currentChannel = useAppSelector((state) =>
     selectChannelById(state, channelId),
   );
+  const channelMember = useAppSelector(selectMyChannelMember(channelId));
 
+  let lastViewedAt = channelMember?.last_viewed_at || 0;
+  if (currentChannel) {
+    lastViewedAt = currentChannel.last_post_at ? lastViewedAt : currentChannel.last_post_at;
+  }
+  const unreadCount = currentChannel?.unreadCount || 0;
+  console.debug("lastViewedAt", lastViewedAt)
   // Build virtual list with all separators and load buttons
   const virtualItems = useMemo((): VirtualListItem[] => {
     return buildVirtualList(
@@ -76,6 +81,7 @@ export const useVirtualizedMessages = ({
       atLatestPost,
       currentUserId || "",
       currentChannel?.type || "O",
+      unreadCount,
     );
   }, [
     postIds,
@@ -85,6 +91,8 @@ export const useVirtualizedMessages = ({
     atLatestPost,
     currentUserId,
     currentChannel?.type,
+    channelMember?.last_viewed_at,
+    unreadCount,
   ]);
 
   // New messages are now handled directly in buildVirtualList
@@ -182,7 +190,7 @@ export const useVirtualizedMessages = ({
   }, [virtualItems, estimatedItemHeight]);
 
   // Virtualizer setup
-  const virtualizer = useVirtualizer({
+  const virtualizer = useVirtualizer<HTMLDivElement, Element>({
     count: virtualItems.length,
     getScrollElement: () => scrollElement,
     estimateSize: getItemSize,
@@ -190,7 +198,8 @@ export const useVirtualizedMessages = ({
     getItemKey: (index) => virtualItems[index]?.id || index,
     // Enable dynamic sizing
     measureElement: (element) => {
-      const index = element.dataset.index ? parseInt(element.dataset.index) : 0;
+      const htmlElement = element as HTMLElement;
+      const index = htmlElement.dataset.index ? parseInt(htmlElement.dataset.index) : 0;
       const item = virtualItems[index];
       if (item && element) {
         const height = element.getBoundingClientRect().height;

@@ -14,6 +14,8 @@ import {
   resetChannelUnreadCount,
   incrementTeamUnreadCount,
   resetTeamUnreadCount,
+  setChannelMember,
+  store,
 } from "../store";
 import { client } from '../api/client';
 import { useErrorHandler } from './useErrorHandler';
@@ -54,7 +56,17 @@ export const useUnreadCounts = () => {
       }
 
       // Call API to mark channel as read
-      await client.viewMyChannel(channelId);
+      const response = await client.viewMyChannel(channelId);
+      
+      // Update channel member's last_viewed_at with the value returned by API
+      const currentState = store.getState();
+      const channelMember = currentState.entities.channels.myMembers[channelId];
+      if (channelMember && response.last_viewed_at_times?.[channelId]) {
+        dispatch(setChannelMember({
+          ...channelMember,
+          last_viewed_at: response.last_viewed_at_times[channelId]
+        }));
+      }
       
       // Reset channel unread count
       dispatch(resetChannelUnreadCount(channelId));

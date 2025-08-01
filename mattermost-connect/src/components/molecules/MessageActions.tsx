@@ -29,7 +29,9 @@ import {
 import { useMessages, useReactionToggle } from '../../hooks/useMessages';
 import { useRecentEmojis } from '../../hooks/useRecentEmojis';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
-import { Post } from '../../api/types'
+import { Post } from '../../api/types';
+import { useAppSelector } from '../../hooks';
+import { selectCurrentUserId } from '../../store/selectors';
 
 interface MessageActionsProps {
   post: Post;
@@ -40,7 +42,7 @@ interface MessageActionsProps {
   sx?: SxProps<Theme>;
 }
 
-const desktopActionsStyles: SxProps<Theme> = {
+const getDesktopActionsStyles = (isOwnMessage: boolean): SxProps<Theme> => ({
   display: 'flex',
   gap: 0.5,
   alignItems: 'center',
@@ -52,10 +54,13 @@ const desktopActionsStyles: SxProps<Theme> = {
   borderColor: 'divider',
   transition: 'opacity 0.2s ease',
   position: 'absolute',
-  top: -16,
-  right: 8,
+  top: -30,
+  ...(isOwnMessage 
+    ? { right: 8 }
+    : { left: 100 } 
+  ),
   zIndex: 10,
-};
+});
 
 const mobileActionsStyles: SxProps<Theme> = {
   display: 'flex',
@@ -100,10 +105,13 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const currentUserId = useAppSelector(selectCurrentUserId);
 
   const { deleteMessage, copyMessage } = useMessages();
   const { toggleReaction } = useReactionToggle(post.id);
   const { recentEmojis } = useRecentEmojis();
+  
+  const isOwnMessage = post.user_id === currentUserId;
   
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -178,12 +186,17 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
 
   if (!post) return null;
 
-  const actionsStyles = isMobile ? mobileActionsStyles : desktopActionsStyles;
-  const opacityStyles = { opacity: visible ? 1 : 0 };
+  const baseStyles = isMobile ? mobileActionsStyles : getDesktopActionsStyles(isOwnMessage);
 
   return (
     <>
-      <Box sx={{ ...actionsStyles, ...opacityStyles, ...sx }}>
+      <Box 
+        sx={[
+          baseStyles,
+          { opacity: visible ? 1 : 0 },
+          ...(Array.isArray(sx) ? sx : [sx])
+        ]}
+      >
         {/* Recent emojis (desktop only) */}
         {!isMobile && recentEmojis.map((emoji) => (
           <RecentEmojiButton

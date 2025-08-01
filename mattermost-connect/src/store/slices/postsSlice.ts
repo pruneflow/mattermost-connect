@@ -13,7 +13,6 @@ export interface ChannelPostsMetadata {
   hasLoadedLatestPost: boolean; // Critical for WebSocket logic
   hasLoadedOldestPost: boolean;
   loadingState: LoadingState;
-  lastViewedAt: number;
   newMessagesSeparatorIndex: number;
 }
 
@@ -31,7 +30,6 @@ const initialChannelMetadata: ChannelPostsMetadata = {
   hasLoadedLatestPost: false,
   hasLoadedOldestPost: false,
   loadingState: 'none',
-  lastViewedAt: 0,
   newMessagesSeparatorIndex: -1,
 };
 
@@ -194,27 +192,6 @@ const postsSlice = createSlice({
   name: 'posts',
   initialState,
   reducers: {
-    updateLastViewedAt: (state, action: PayloadAction<{ channelId: string; timestamp: number }>) => {
-      const { channelId, timestamp } = action.payload;
-      if (!state.channelMetadata[channelId]) {
-        state.channelMetadata[channelId] = { ...initialChannelMetadata };
-      }
-      state.channelMetadata[channelId].lastViewedAt = timestamp;
-    },
-    
-    updateNewMessagesSeparator: (state, action: PayloadAction<{ channelId: string; index: number }>) => {
-      const { channelId, index } = action.payload;
-      if (!state.channelMetadata[channelId]) {
-        state.channelMetadata[channelId] = { ...initialChannelMetadata };
-      }
-      state.channelMetadata[channelId].newMessagesSeparatorIndex = index;
-    },
-    
-    clearChannelPosts: (state, action: PayloadAction<{ channelId: string }>) => {
-      const { channelId } = action.payload;
-      delete state.postsInChannel[channelId];
-      delete state.channelMetadata[channelId];
-    },
 
     // Set/update a single post (used by WebSocket)
     setPost: (state, action: PayloadAction<Post>) => {
@@ -715,9 +692,6 @@ export const deletePost = createAsyncThunk(
 );
 
 export const {
-  updateLastViewedAt,
-  updateNewMessagesSeparator,
-  clearChannelPosts,
   setPost,
   removePost,
   addReactionFromWebSocket,

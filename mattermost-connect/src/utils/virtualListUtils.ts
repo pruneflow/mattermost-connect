@@ -29,7 +29,8 @@ export const buildVirtualList = (
   atOldestPost: boolean,
   atLatestPost: boolean,
   currentUserId: string,
-  channelType: string
+  channelType: string,
+  unreadCount?: number
 ): VirtualListItem[] => {
   // Early return with stable empty array if no posts
   if (!postIds || postIds.length === 0) {
@@ -81,16 +82,10 @@ export const buildVirtualList = (
         lastViewedAt && 
         post.create_at > lastViewedAt) {
       
-      // Count remaining unread posts
-      const unreadCount = postIds
-        .slice(postIds.indexOf(postId))
-        .filter(id => posts[id] && posts[id].create_at > lastViewedAt)
-        .length;
-      
       result.push({
         type: 'new-messages-separator',
         id: `new-messages-${lastViewedAt}`,
-        data: { unreadCount }
+        data: { unreadCount: unreadCount || 0 }
       });
       newMessagesSeparatorInserted = true;
     }

@@ -50,7 +50,7 @@ export const useChannels = () => {
   const switchToChannel = useCallback((channelId: string) => {
     dispatch(setCurrentChannelId(channelId));
     // Mark channel as read when switching to it
-    markChannelAsRead(channelId);
+    //markChannelAsRead(channelId);
   }, [dispatch, markChannelAsRead]);
 
   // Mark channel as unread action
