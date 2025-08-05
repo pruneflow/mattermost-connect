@@ -7,6 +7,7 @@ import {
   SxProps,
   Theme,
   useMediaQuery,
+  Tooltip,
 } from "@mui/material";
 import { Reply as ReplyIcon } from "@mui/icons-material";
 import { formatMessageTime } from "../../utils/dateUtils";
@@ -18,6 +19,9 @@ import { MessageReactions } from "./MessageReactions";
 import { EditMessage } from "./EditMessage";
 import { FileAttachmentList } from "./FileAttachmentList";
 import { isSystemMessage } from "../../utils/messageUtils";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectUserProfiles } from "../../store/selectors";
+import {displayUsername} from "../../utils/userUtils";
 
 interface MessageProps {
   post: Post;
@@ -61,62 +65,85 @@ const threadRepliesStyles: SxProps<Theme> = {
   },
 };
 
-// Composant pour les avatars des répondants (style GroupAvatar)
+// Composant pour les avatars des répondants (style GroupAvatar amélioré)
 const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({ userIds = [] }) => {
+  const userProfiles = useAppSelector(selectUserProfiles);
+  
   if (userIds.length === 0) return null;
   
   const displayUsers = userIds.slice(0, 3);
-  const avatarSize = 20;
+  const avatarSize = 28;
   
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
-      {displayUsers.map((userId, index) => (
-        <Box
-          key={userId}
-          sx={{
-            position: 'relative',
-            zIndex: 3 - index,
-            marginLeft: index > 0 ? '-6px' : 0,
-          }}
-        >
+      {displayUsers.map((userId, index) => {
+        const user = userProfiles[userId];
+        const displayName = user ? displayUsername(user, "full_name_nickname", true) : 'Unknown User';
+        
+        return (
+          <Tooltip key={userId} title={displayName} arrow>
+            <Box
+              sx={{
+                position: 'relative',
+                zIndex: displayUsers.length - index,
+                marginLeft: index > 0 ? '-10px' : 0,
+                transition: 'transform 0.2s ease, z-index 0.2s ease',
+                cursor: 'pointer',
+                '&:hover': {
+                  transform: 'scale(1.2)',
+                  zIndex: 999,
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  border: '2px solid',
+                  borderColor: 'background.paper',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                }}
+              >
+                <UserAvatar
+                  userId={userId}
+                  size="small"
+                  showStatus={false}
+                />
+              </Box>
+            </Box>
+          </Tooltip>
+        );
+      })}
+      {userIds.length > 3 && (
+        <Tooltip title={`+${userIds.length - 3} more participants`} arrow>
           <Box
             sx={{
               width: avatarSize,
               height: avatarSize,
+              borderRadius: '50%',
+              bgcolor: 'grey.400',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '10px',
+              fontWeight: 'bold',
+              color: 'white',
+              marginLeft: '-10px',
               border: '2px solid',
               borderColor: 'background.paper',
-              borderRadius: '50%',
-              overflow: 'hidden',
+              zIndex: 0,
+              transition: 'transform 0.2s ease, z-index 0.2s ease',
+              cursor: 'pointer',
+              '&:hover': {
+                transform: 'scale(1.2)',
+                zIndex: 999,
+              },
             }}
           >
-            <UserAvatar
-              userId={userId}
-              size="xs"
-              showStatus={false}
-            />
+            +{userIds.length - 3}
           </Box>
-        </Box>
-      ))}
-      {userIds.length > 3 && (
-        <Box
-          sx={{
-            width: avatarSize,
-            height: avatarSize,
-            borderRadius: '50%',
-            bgcolor: 'grey.400',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '8px',
-            color: 'white',
-            marginLeft: '-6px',
-            border: '2px solid',
-            borderColor: 'background.paper',
-            zIndex: 0,
-          }}
-        >
-          +{userIds.length - 3}
-        </Box>
+        </Tooltip>
       )}
     </Box>
   );
@@ -145,7 +172,6 @@ export const Message: React.FC<MessageProps> = memo(
     const [isHovered, setIsHovered] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const isSystem = isSystemMessage(post);
-    console.debug("post", post);
     const handleMouseEnter = useCallback(() => {
       setIsHovered(true);
     }, []);
@@ -318,19 +344,33 @@ export const Message: React.FC<MessageProps> = memo(
 
           {/* Thread replies indicator - outside bubble, always aligned left */}
           {post.reply_count > 0 && (
-            <Box sx={{ alignSelf: "flex-start", mt: 0.5 }}>
+            <Box sx={{ 
+              alignSelf: "flex-start", 
+              mt: 0.5,
+              display: "flex",
+              alignItems: "center",
+              gap: 1
+            }}>
+              {/* Group Avatars - séparé visuellement */}
+              <ThreadReplierAvatars userIds={post.participants?.map((user: User) => user.id)} />
+              
+              {/* Reply Icon + Text - séparé visuellement mais aligné verticalement */}
               <Box 
                 sx={{
-                  ...threadRepliesStyles,
-                  "& .MuiTypography-root": {
-                    color: "primary.main",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.5,
+                  cursor: "pointer",
+                  "&:hover": {
+                    "& .MuiTypography-root": {
+                      textDecoration: "underline",
+                    },
                   },
                 }} 
                 onClick={handleOpenThread}
               >
-                <ThreadReplierAvatars userIds={post.participants?.map((user: User) => user.id)} />
                 <ReplyIcon sx={{ fontSize: 14, color: "primary.main" }} />
-                <Typography variant="caption">
+                <Typography variant="caption" sx={{ color: "primary.main" }}>
                   {post.reply_count}{" "}
                   {post.reply_count === 1 ? "reply" : "replies"}
                 </Typography>

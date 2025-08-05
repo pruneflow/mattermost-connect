@@ -7,6 +7,7 @@ import {
   updatePost, 
   deletePost, 
   toggleReaction,
+  createPostWithAutoLoad,
   loadOlderPosts as loadOlderPostsThunk, 
   loadNewerPosts as loadNewerPostsThunk, 
   loadUnreadPosts as loadUnreadPostsThunk, 
@@ -73,7 +74,6 @@ export const useMessages = (props?: UseMessagesProps) => {
   const atLatestPost = useAppSelector(stableSelectors.selectAtLatestPost);
   const postIds = useAppSelector(stableSelectors.selectPostIds);
   const hasPosts = useAppSelector(stableSelectors.selectHasPosts);
-  const isChannelLoading = useAppSelector(stableSelectors.selectIsChannelLoading);
 
   // Initial load effect for channel
   useEffect(() => {
@@ -81,13 +81,13 @@ export const useMessages = (props?: UseMessagesProps) => {
       channelId && 
       !loadedChannelsRef.current.has(channelId) && 
       !hasPosts && 
-      !isChannelLoading
+      !isLoadingUnreads
     ) {
       console.log('Loading initial posts for channel:', channelId);
       loadedChannelsRef.current.add(channelId);
       dispatch(loadUnreadPostsThunk({ channelId }));
     }
-  }, [channelId, hasPosts, isChannelLoading, dispatch]);
+  }, [channelId, hasPosts, isLoadingUnreads, dispatch]);
 
   // Message management actions
   const loadOlderPosts = useCallback(async () => {
@@ -167,7 +167,27 @@ export const useMessages = (props?: UseMessagesProps) => {
     }
   }, []);
 
+  const sendMessage = useCallback(async (message: string, rootId?: string, fileIds?: string[]) => {
+    if (!channelId) {
+      throw new Error('No channel selected');
+    }
+
+    try {
+      const result = await dispatch(createPostWithAutoLoad({
+        channelId,
+        message,
+        rootId,
+        fileIds,
+      })).unwrap();
+      return result.post;
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      throw error;
+    }
+  }, [dispatch, channelId]);
+
   return {
+    sendMessage,
     updateMessage,
     deleteMessage,
     copyMessage,

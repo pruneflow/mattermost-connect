@@ -43,13 +43,13 @@ const initialState: PostsState = {
 export const loadOlderPosts = createAsyncThunk(
   'posts/loadOlderPosts',
   async ({ channelId, perPage = 60 }: { channelId: string; perPage?: number }, 
-  { getState, rejectWithValue }) => {
+  { getState, rejectWithValue, dispatch }) => {
     try {
       const state = getState() as { posts: PostsState };
       const metadata = state.posts.channelMetadata[channelId];
       
       // Only proceed if not loading and not at oldest
-      if (!metadata || (metadata.loadingState !== 'none' && metadata?.loadingState !== 'older') || metadata.hasLoadedOldestPost) {
+      if (metadata && (metadata.loadingState !== 'none' || metadata.hasLoadedOldestPost)) {
         return rejectWithValue('Cannot load older posts');
       }
 
@@ -57,6 +57,9 @@ export const loadOlderPosts = createAsyncThunk(
       if (!oldestPostId) {
         return rejectWithValue('No oldest post ID available');
       }
+
+      // Set loading state immediately
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'older' }));
 
       const response = await client.getPostsBefore(channelId, oldestPostId, 0, perPage);
 
@@ -67,6 +70,8 @@ export const loadOlderPosts = createAsyncThunk(
         hasReachedOldest: !response.prev_post_id,
       };
     } catch (error) {
+      // Reset loading state on error
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'none' }));
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to load older posts');
     }
   }
@@ -75,13 +80,13 @@ export const loadOlderPosts = createAsyncThunk(
 export const loadNewerPosts = createAsyncThunk(
   'posts/loadNewerPosts',
   async ({ channelId, perPage = 60 }: { channelId: string; perPage?: number }, 
-  { getState, rejectWithValue }) => {
+  { getState, rejectWithValue, dispatch }) => {
     try {
       const state = getState() as { posts: PostsState };
       const metadata = state.posts.channelMetadata[channelId];
       
       // Only proceed if not loading and not at latest
-      if (!metadata || (metadata.loadingState !== 'none' && metadata.loadingState !== 'newer') || metadata.hasLoadedLatestPost) {
+      if (metadata && (metadata.loadingState !== 'none' || metadata.hasLoadedLatestPost)) {
         return rejectWithValue('Cannot load newer posts');
       }
 
@@ -89,6 +94,9 @@ export const loadNewerPosts = createAsyncThunk(
       if (!newestPostId) {
         return rejectWithValue('No newest post ID available');
       }
+
+      // Set loading state immediately
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'newer' }));
 
       const response = await client.getPostsAfter(channelId, newestPostId, 0, perPage);
 
@@ -99,6 +107,8 @@ export const loadNewerPosts = createAsyncThunk(
         hasReachedLatest: !response.next_post_id,
       };
     } catch (error) {
+      // Reset loading state on error
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'none' }));
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to load newer posts');
     }
   }
@@ -107,12 +117,14 @@ export const loadNewerPosts = createAsyncThunk(
 export const loadUnreadPosts = createAsyncThunk(
   'posts/loadUnreadPosts',
   async ({ channelId, perPage = 60 }: { channelId: string; perPage?: number }, 
-  { getState, rejectWithValue }) => {
+  { getState, rejectWithValue, dispatch }) => {
     try {
       const state = getState() as { posts: PostsState, entities: { users: { currentUserId: string } } };
       const metadata = state.posts.channelMetadata[channelId];
+      console.debug("metadata dans loadUnread", metadata)
+      
       // Only proceed if not loading
-      if (metadata?.loadingState !== 'none' && metadata?.loadingState !== 'unreads') {
+      if (metadata && metadata.loadingState !== 'none') {
         return rejectWithValue('Cannot load unread posts - already loading');
       }
 
@@ -120,6 +132,9 @@ export const loadUnreadPosts = createAsyncThunk(
       if (!userId) {
         throw new Error("User not authenticated");
       }
+
+      // Set loading state immediately
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'unreads' }));
 
       // EXACT Mattermost API call
       const response = await client.getPostsUnread(
@@ -132,7 +147,6 @@ export const loadUnreadPosts = createAsyncThunk(
         true,
       );
 
-
       return {
         channelId,
         posts: response.posts,
@@ -141,6 +155,8 @@ export const loadUnreadPosts = createAsyncThunk(
         hasReachedOldest: !response.prev_post_id,
       };
     } catch (error) {
+      // Reset loading state on error
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'none' }));
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to load unread posts');
     }
   }
@@ -149,15 +165,18 @@ export const loadUnreadPosts = createAsyncThunk(
 export const syncPostsInChannel = createAsyncThunk(
   'posts/syncPostsInChannel',
   async ({ channelId, since }: { channelId: string; since: number }, 
-  { getState, rejectWithValue }) => {
+  { getState, rejectWithValue, dispatch }) => {
     try {
       const state = getState() as { posts: PostsState };
       const metadata = state.posts.channelMetadata[channelId];
       
       // Only proceed if not loading
-      if (metadata?.loadingState !== 'none' && metadata?.loadingState !== 'syncing') {
+      if (metadata && metadata.loadingState !== 'none') {
         return rejectWithValue('Cannot sync posts - already loading');
       }
+
+      // Set loading state immediately
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'syncing' }));
 
       const response = await client.getPostsSince(channelId, since);
 
@@ -167,6 +186,8 @@ export const syncPostsInChannel = createAsyncThunk(
         order: response.order,
       };
     } catch (error) {
+      // Reset loading state on error
+      dispatch(postsSlice.actions.setLoadingState({ channelId, loadingState: 'none' }));
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to sync posts');
     }
   }
@@ -192,6 +213,14 @@ const postsSlice = createSlice({
   name: 'posts',
   initialState,
   reducers: {
+    // Set loading state for a channel
+    setLoadingState: (state, action: PayloadAction<{ channelId: string; loadingState: LoadingState }>) => {
+      const { channelId, loadingState } = action.payload;
+      if (!state.channelMetadata[channelId]) {
+        state.channelMetadata[channelId] = { ...initialChannelMetadata };
+      }
+      state.channelMetadata[channelId].loadingState = loadingState;
+    },
 
     // Set/update a single post (used by WebSocket)
     setPost: (state, action: PayloadAction<Post>) => {
@@ -285,13 +314,6 @@ const postsSlice = createSlice({
   extraReducers: (builder) => {
     // Load older posts
     builder
-      .addCase(loadOlderPosts.pending, (state, action) => {
-        const { channelId } = action.meta.arg;
-        if (!state.channelMetadata[channelId]) {
-          state.channelMetadata[channelId] = { ...initialChannelMetadata };
-        }
-        state.channelMetadata[channelId].loadingState = 'older';
-      })
       .addCase(loadOlderPosts.fulfilled, (state, action) => {
         const { channelId, posts, order, hasReachedOldest } = action.payload;
         
@@ -319,13 +341,6 @@ const postsSlice = createSlice({
 
     // Load newer posts  
     builder
-      .addCase(loadNewerPosts.pending, (state, action) => {
-        const { channelId } = action.meta.arg;
-        if (!state.channelMetadata[channelId]) {
-          state.channelMetadata[channelId] = { ...initialChannelMetadata };
-        }
-        state.channelMetadata[channelId].loadingState = 'newer';
-      })
       .addCase(loadNewerPosts.fulfilled, (state, action) => {
         const { channelId, posts, order, hasReachedLatest } = action.payload;
         
@@ -353,13 +368,6 @@ const postsSlice = createSlice({
 
     // Load unread posts
     builder
-      .addCase(loadUnreadPosts.pending, (state, action) => {
-        const { channelId } = action.meta.arg;
-        if (!state.channelMetadata[channelId]) {
-          state.channelMetadata[channelId] = { ...initialChannelMetadata };
-        }
-        state.channelMetadata[channelId].loadingState = 'unreads';
-      })
       .addCase(loadUnreadPosts.fulfilled, (state, action) => {
         const { channelId, posts, order, hasReachedLatest, hasReachedOldest } = action.payload;
         
@@ -391,13 +399,6 @@ const postsSlice = createSlice({
 
     // Sync posts
     builder
-      .addCase(syncPostsInChannel.pending, (state, action) => {
-        const { channelId } = action.meta.arg;
-        if (!state.channelMetadata[channelId]) {
-          state.channelMetadata[channelId] = { ...initialChannelMetadata };
-        }
-        state.channelMetadata[channelId].loadingState = 'syncing';
-      })
       .addCase(syncPostsInChannel.fulfilled, (state, action) => {
         const { channelId, posts, order } = action.payload;
         
@@ -507,6 +508,24 @@ const postsSlice = createSlice({
             );
           }
         }
+      })
+      .addCase(createPost.fulfilled, (state, action) => {
+        const { post, channelId } = action.payload;
+        
+        // Stocker le post dans les entités
+        state.posts[post.id] = post;
+        
+        // Initialiser le channel si nécessaire
+        if (!state.postsInChannel[channelId]) {
+          state.postsInChannel[channelId] = [];
+        }
+        if (!state.channelMetadata[channelId]) {
+          state.channelMetadata[channelId] = { ...initialChannelMetadata };
+        }
+        
+        // Nouveau message = toujours le plus récent, donc au début
+        state.postsInChannel[channelId].unshift(post.id);
+        state.channelMetadata[channelId].newestPostId = post.id;
       });
   },
 });
@@ -691,7 +710,87 @@ export const deletePost = createAsyncThunk(
   },
 );
 
+export const createPost = createAsyncThunk(
+  'posts/createPost',
+  async ({
+    channelId,
+    message,
+    rootId,
+    fileIds,
+  }: {
+    channelId: string;
+    message: string;
+    rootId?: string;
+    fileIds?: string[];
+  }, { rejectWithValue }) => {
+    try {
+      const postData = {
+        channel_id: channelId,
+        message: message.trim(),
+        root_id: rootId || '',
+        file_ids: fileIds || [],
+      };
+
+      const response = await client.createPost(postData);
+      return {
+        post: response,
+        channelId,
+        isReply: !!rootId,
+      };
+    } catch (error) {
+      return rejectWithValue({
+        channelId,
+        error: error instanceof Error ? error.message : "Failed to create post",
+      });
+    }
+  },
+);
+
+// Thunk récursif : créer un post et charger automatiquement tous les messages récents manquants
+export const createPostWithAutoLoad = createAsyncThunk(
+  'posts/createPostWithAutoLoad',
+  async (params: {
+    channelId: string;
+    message: string;
+    rootId?: string;
+    fileIds?: string[];
+  }, { dispatch, getState, rejectWithValue }) => {
+    try {
+      const { channelId } = params;
+      
+      // 1. Créer le post
+      const createResult = await dispatch(createPost(params)).unwrap();
+      
+      // 2. Vérifier si on a besoin de charger des messages récents
+      let currentState = getState() as { posts: PostsState };
+      let metadata = currentState.posts.channelMetadata[channelId];
+      
+      // 3. Charger automatiquement tous les messages manquants
+      while (metadata && !metadata.hasLoadedLatestPost) {
+        try {
+          await dispatch(loadNewerPosts({ channelId })).unwrap();
+          // Rafraîchir l'état après chaque chargement
+          currentState = getState() as { posts: PostsState };
+          metadata = currentState.posts.channelMetadata[channelId];
+        } catch (loadError) {
+          // Si le chargement échoue, on s'arrête mais on garde le post créé
+          console.warn('Failed to load newer posts during auto-load:', loadError);
+          break;
+        }
+      }
+      
+      return createResult;
+    } catch (error) {
+      return rejectWithValue({
+        channelId: params.channelId,
+        error: error instanceof Error ? error.message : "Failed to create post with auto-load",
+      });
+    }
+  },
+);
+
 export const {
+  setLoadingState,
   setPost,
   removePost,
   addReactionFromWebSocket,

@@ -23,10 +23,14 @@ export const useMessageWebSocket = () => {
     switch (event) {
       case 'posted':
         // New message posted - handle ONLY post data, not unread counts
+        // Skip if it's the current user (already handled by sendMessage)
         if (data.post) {
           try {
             const post = typeof data.post === 'string' ? JSON.parse(data.post) : data.post;
-            dispatch(setPost(post));
+            // Skip our own messages to avoid duplicates
+            if (post.user_id !== currentUserId) {
+              dispatch(setPost(post));
+            }
           } catch (error) {
             console.error('Error parsing posted message:', error);
           }
@@ -35,10 +39,14 @@ export const useMessageWebSocket = () => {
 
       case 'post_edited':
         // Message was edited
+        // Skip if it's the current user (already handled by updateMessage)
         if (data.post) {
           try {
             const post = typeof data.post === 'string' ? JSON.parse(data.post) : data.post;
-            dispatch(setPost(post));
+            // Skip our own edited messages to avoid duplicates
+            if (post.user_id !== currentUserId) {
+              dispatch(setPost(post));
+            }
           } catch (error) {
             console.error('Error parsing edited message:', error);
           }
@@ -47,10 +55,14 @@ export const useMessageWebSocket = () => {
 
       case 'post_deleted':
         // Message was deleted
+        // Skip if it's the current user (already handled by deleteMessage)
         if (data.post) {
           try {
             const post = typeof data.post === 'string' ? JSON.parse(data.post) : data.post;
-            dispatch(removePost(post.id));
+            // Skip our own deleted messages to avoid duplicates
+            if (post.user_id !== currentUserId) {
+              dispatch(removePost(post.id));
+            }
           } catch (error) {
             console.error('Error parsing deleted message:', error);
           }

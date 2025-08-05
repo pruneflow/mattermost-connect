@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState } from "react";
+import React, {useRef, useCallback, useEffect, RefObject} from "react";
 import { Box, SxProps, Theme } from "@mui/material";
 import { MessageItem } from "./MessageItem";
 import { ScrollToBottomFab } from "./ScrollToBottomFab";
@@ -15,6 +15,7 @@ export interface MessageListProps {
   onChangeUnreadChunkTimeStamp: (timestamp: number) => void;
   onToggleShouldStartFromBottomWhenUnread: () => void;
   sx?: SxProps<Theme>;
+  scrollElementRef: RefObject<HTMLDivElement>
 }
 
 const containerStyles: SxProps<Theme> = {
@@ -36,9 +37,10 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   unreadChunkTimeStamp,
   shouldStartFromBottomWhenUnread,
   sx,
+  scrollElementRef,
 }) => {
-  const scrollElementRef = useRef<HTMLDivElement>(null);
   const lastReadPostIdRef = useRef<string | null>(null);
+  const allowAutoLoadRef = useRef<boolean>(false);
 
   const { markChannelAsRead } = useUnreadCounts();
   // Use custom hooks
@@ -65,6 +67,10 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     shouldStartFromBottomWhenUnread,
     unreadChunkTimeStamp,
   });
+
+  const handleScrollToBottom = useCallback(() => {
+    scrollToBottom(scrollElementRef.current)
+  }, [scrollElementRef.current])
 
   // Wrapper functions with scroll preservation
   const handleLoadOlder = useCallback(async () => {
@@ -123,31 +129,34 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   // Handle scroll events
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
-      const element = event.currentTarget;
-      const { scrollTop, scrollHeight, clientHeight } = element;
-
-
       // Auto-load logic (if enabled) - trigger when load-more buttons are visible based on scroll direction
-      if (autoLoad) {
+      if (autoLoad && allowAutoLoadRef.current) {
         const virtualItemsVisible = virtualizer.getVirtualItems();
         if (virtualItemsVisible.length === 0) return;
-        
+
         const scrollDirection = virtualizer.scrollDirection;
-        
-        if (scrollDirection === 'backward') {
+
+        if (scrollDirection === "backward") {
           // Scrolling up: check first visible item for load-older
           const firstVisibleItem = virtualItems[virtualItemsVisible[0].index];
-          if (firstVisibleItem?.type === 'load-more' && 
-              firstVisibleItem.data?.loadDirection === 'older' && 
-              !isLoadingOlder) {
+          if (
+            firstVisibleItem?.type === "load-more" &&
+            firstVisibleItem.data?.loadDirection === "older" &&
+            !isLoadingOlder
+          ) {
             handleLoadOlder();
           }
-        } else if (scrollDirection === 'forward') {
+        } else if (scrollDirection === "forward") {
           // Scrolling down: check last visible item for load-newer
-          const lastVisibleItem = virtualItems[virtualItemsVisible[virtualItemsVisible.length - 1].index];
-          if (lastVisibleItem?.type === 'load-more' && 
-              lastVisibleItem.data?.loadDirection === 'newer' && 
-              !isLoadingNewer) {
+          const lastVisibleItem =
+            virtualItems[
+              virtualItemsVisible[virtualItemsVisible.length - 1].index
+            ];
+          if (
+            lastVisibleItem?.type === "load-more" &&
+            lastVisibleItem.data?.loadDirection === "newer" &&
+            !isLoadingNewer
+          ) {
             handleLoadNewer();
           }
         }
@@ -169,6 +178,8 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   // Reset lastReadPostId when changing channel
   useEffect(() => {
     lastReadPostIdRef.current = null;
+    // Désactiver l'auto-load temporairement lors du changement de channel
+    allowAutoLoadRef.current = false;
   }, [channelId]);
 
   // Scroll initial automatique : vers nouveaux messages ou vers le bas
@@ -188,10 +199,18 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     if (newMessageIndex >= 0) {
       // Scroll vers le séparateur de nouveaux messages
       virtualizer.scrollToIndex(newMessageIndex, { align: "start" });
+      // Réactiver l'auto-load après 1 seconde
+      setTimeout(() => {
+        allowAutoLoadRef.current = true;
+      }, 1000);
     } else {
       // Pas de nouveaux messages, scroll vers le bas
-      scrollToBottom();
+      handleScrollToBottom();
       void markChannelAsRead(channelId);
+      // Réactiver l'auto-load après 1 seconde
+      setTimeout(() => {
+        allowAutoLoadRef.current = true;
+      }, 1000);
     }
   }, [channelId, isReady]); // Retirer les autres dépendances pour éviter les re-déclenchements
 
@@ -245,7 +264,7 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
       {/* Scroll to bottom FAB */}
       <ScrollToBottomFab
         visible={!isAtBottom(scrollElementRef.current)}
-        onClick={scrollToBottom}
+        onClick={handleScrollToBottom}
         /*newMessagesCount={newMessagesCount}*/
       />
 

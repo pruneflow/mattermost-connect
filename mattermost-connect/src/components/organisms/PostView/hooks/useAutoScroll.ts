@@ -9,7 +9,7 @@ interface UseAutoScrollProps {
 }
 
 interface UseAutoScrollReturn {
-  scrollToBottom: () => void;
+  scrollToBottom: (element: HTMLDivElement | null) => void;
   scrollToIndex: (index: number, align?: 'start' | 'center' | 'end' | 'auto') => void;
   isAtBottom: (element: HTMLDivElement | null) => boolean;
   scrollToOffset: (offset: number, smooth?: boolean) => void;
@@ -20,19 +20,18 @@ const BOTTOM_THRESHOLD = 10; // pixels from bottom to consider "at bottom"
 export const useAutoScroll = ({
   virtualizer,
   scrollElement,
-  shouldStartFromBottomWhenUnread,
-  unreadChunkTimeStamp,
 }: UseAutoScrollProps): UseAutoScrollReturn => {
   const isScrollingRef = useRef(false);
 
-  const scrollToBottom = useCallback(() => {
-    if (!scrollElement) return;
-    
+  const scrollToBottom = useCallback((element: HTMLDivElement | null) => {
+    console.debug("Scroll to bottom ")
+    if (!element) return;
+    console.debug("Element is not null")
     isScrollingRef.current = true;
     
     // Scroll to the very bottom
-    scrollElement.scrollTo({
-      top: scrollElement.scrollHeight,
+    element.scrollTo({
+      top: element.scrollHeight,
       behavior: 'smooth',
     });
     
@@ -40,7 +39,7 @@ export const useAutoScroll = ({
     setTimeout(() => {
       isScrollingRef.current = false;
     }, 500);
-  }, [scrollElement]);
+  }, []);
 
   const scrollToIndex = useCallback((
     index: number, 
