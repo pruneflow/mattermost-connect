@@ -153,3 +153,20 @@ export const getRoleChips = (user: UserProfile, teamMembers: Record<string, Team
   
   return chips;
 };
+
+/**
+ * Generate user initials from display name
+ * Uses official Mattermost display name logic
+ */
+export const getInitials = (user: UserProfile): string => {
+  const displayName = displayUsername(user, 'full_name', true);
+  
+  if (!displayName || displayName === 'Someone') return '?';
+  
+  const words = displayName.split(' ').filter(word => word.length > 0);
+  if (words.length >= 2) {
+    return `${words[0].charAt(0)}${words[1].charAt(0)}`.toUpperCase();
+  }
+  
+  return displayName.charAt(0).toUpperCase();
+};

@@ -17,7 +17,7 @@ import { MessageActions } from "./MessageActions";
 import { UserAvatar } from "../atoms/UserAvatar";
 import { MessageReactions } from "./MessageReactions";
 import { EditMessage } from "./EditMessage";
-import { FileAttachmentList } from "./FileAttachmentList";
+import { MessageAttachment } from "./MessageAttachment";
 import { isSystemMessage } from "../../utils/messageUtils";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectUserProfiles } from "../../store/selectors";
@@ -32,8 +32,6 @@ interface MessageProps {
   onReply?: (postId: string) => void;
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
-  onFileDownload?: (fileId: string) => void;
-  onFilePreview?: (fileId: string) => void;
   sx?: SxProps<Theme>;
 }
 
@@ -163,8 +161,6 @@ export const Message: React.FC<MessageProps> = memo(
     onReply,
     onDelete,
     onOpenThread,
-    onFileDownload,
-    onFilePreview,
     sx,
   }) => {
     const theme = useTheme();
@@ -318,11 +314,7 @@ export const Message: React.FC<MessageProps> = memo(
 
             {/* File attachments */}
             {post.file_ids && post.file_ids.length > 0 && (
-              <FileAttachmentList
-                fileIds={post.file_ids}
-                onDownload={onFileDownload}
-                onPreview={onFilePreview}
-              />
+              <MessageAttachment postId={post.id} fileIds={post.file_ids} />
             )}
 
             {/* Timestamp in bottom right */}

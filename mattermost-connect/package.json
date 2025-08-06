@@ -39,6 +39,8 @@
     "@mattermost/types": "^10.8.0",
     "@mui/icons-material": "^7.0.1",
     "@mui/material": "^7.0.1",
+    "@react-pdf-viewer/core": "^3.12.0",
+    "@react-pdf-viewer/default-layout": "3.12.0",
     "@reduxjs/toolkit": "^2.8.2",
     "@tanstack/react-virtual": "^3.13.12",
     "@types/dompurify": "^3.2.0",
@@ -51,6 +53,7 @@
     "framer-motion": "^12.23.11",
     "moment-timezone": "0.6.0",
     "node-fetch": "2",
+    "pdfjs-dist": "3.4.120",
     "react-fast-compare": "^3.2.2",
     "react-redux": "^9.2.0",
     "swr": "^2.3.3",
@@ -161,5 +164,6 @@
       "@typescript-eslint/no-unused-vars": "error",
       "@typescript-eslint/no-explicit-any": "error"
     }
-  }
+  },
+  "packageManager": "pnpm@9.1.2+sha1.907f57a52517de34399d66401bf220a549e47b57"
 }

@@ -119,7 +119,7 @@ const AuthStatus: React.FC = () => {
             border: 1,
             borderColor: "success.main",
             borderRadius: 2,
-            maxWidth: { xs: "100%", sm: "800px" },
+            maxWidth: "100%",
             margin: { xs: "10px", sm: "20px auto" },
             textAlign: "center",
             minWidth: 0,
@@ -148,7 +148,7 @@ const AuthStatus: React.FC = () => {
   }
 
   return (
-    <Box sx={{ maxWidth: "500px", margin: "40px auto" }}>
+    <Box sx={{ maxWidth: "100%", margin: "40px auto" }}>
       <LoginForm onSuccess={() => console.log("Login successful!")} />
     </Box>
   );
@@ -160,8 +160,8 @@ const ReduxDemoContent: React.FC = () => {
     <Box
       sx={{
         p: 2.5,
-        maxWidth: "900px",
-        margin: "0 auto",
+        maxWidth: "100%",
+        margin: "0",
         fontFamily: "system-ui, -apple-system, sans-serif",
       }}
     >

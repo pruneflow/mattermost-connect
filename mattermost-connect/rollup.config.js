@@ -54,6 +54,7 @@ export default [
       ...Object.keys(pkg.dependencies || {}),
       ...Object.keys(pkg.peerDependencies || {}),
       "react/jsx-runtime",
+      /\.css$/, // Externalize CSS files
     ],
   },
   // TypeScript declarations

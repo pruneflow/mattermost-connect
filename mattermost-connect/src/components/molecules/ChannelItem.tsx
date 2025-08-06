@@ -247,9 +247,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     // Get permissions
     const { canManageChannelMembers } = usePermissions();
 
-    // Get current user ID for channel member lookup
-    const currentUserId = useAppSelector(selectCurrentUserId);
-
     // Get current favorite status and category
     const isFavorite = isChannelFavorite(channel.id);
     const currentCategory = getChannelCategory(channel.id);
