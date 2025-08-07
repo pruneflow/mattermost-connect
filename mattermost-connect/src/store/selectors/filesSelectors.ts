@@ -160,23 +160,26 @@ export const selectIsFileViewable = createSelector(
 
 export const selectMultipleFileInfos = createSelector(
   [selectAllFiles, (_: RootState, fileIds: string[]) => fileIds],
-  (files, fileIds): (FileInfo | null)[] => 
-    fileIds.map(fileId => files[fileId]?.info || null),
-  {
-    // Mémorisation basée sur les fileIds pour éviter les re-renders inutiles
-    memoizeOptions: {
-      resultEqualityCheck: (a, b) => {
-        if (a.length !== b.length) return false;
-        return a.every((item: any, index: number) => item === b[index]);
-      }
+  (files, fileIds): (FileInfo | null)[] => {
+    // Single-pass processing to avoid creating intermediate arrays
+    const result: (FileInfo | null)[] = [];
+    for (const fileId of fileIds) {
+      result.push(files[fileId]?.info || null);
     }
+    return result;
   }
 );
 
 export const selectMultipleFileStates = createSelector(
   [selectAllFiles, (_: RootState, fileIds: string[]) => fileIds],
-  (files, fileIds): (FileState | null)[] => 
-    fileIds.map(fileId => files[fileId] || null)
+  (files, fileIds): (FileState | null)[] => {
+    // Single-pass processing to avoid creating intermediate arrays
+    const result: (FileState | null)[] = [];
+    for (const fileId of fileIds) {
+      result.push(files[fileId] || null);
+    }
+    return result;
+  }
 );
 
 // ================================================================================

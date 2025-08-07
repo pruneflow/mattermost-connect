@@ -44,7 +44,7 @@ export const usePermissions = () => {
     if (isSystemAdmin) return true;
     
     // Check system roles
-    const permissions = getPermissionsForRoles(systemRoles);
+    const permissions = getPermissionsForRoles(systemRoles as string[]);
     return permissions.includes(permission);
   }, [currentUser, isSystemAdmin, systemRoles, getPermissionsForRoles]);
 

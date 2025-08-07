@@ -141,7 +141,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     return categories
       .map(category => ({
         ...category,
-        channel_ids: category.channel_ids.filter(id => filteredChannelIds.includes(id))
+        channel_ids: category.channel_ids.filter((id: string) => filteredChannelIds.includes(id))
       }))
       .filter(category => {
         // Show favorites only if it has channels

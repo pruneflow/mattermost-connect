@@ -41,7 +41,7 @@ const buttonStyles: SxProps<Theme> = {
   transition: 'all 0.2s ease-in-out',
 };
 
-const MotionBox = motion(Box);
+const MotionBox = motion.create(Box);
 
 export const UnreadDivider: React.FC<UnreadDividerProps> = ({
   newMessagesCount,

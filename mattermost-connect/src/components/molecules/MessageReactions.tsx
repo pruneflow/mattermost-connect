@@ -4,6 +4,7 @@ import { Add as AddIcon } from '@mui/icons-material';
 import { Reaction } from '../../api/types';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useReactionToggle } from '../../hooks/useMessages';
+import { selectCurrentUserId } from '../../store/selectors';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
 import { findEmojiByName } from '../../utils/emojiMartAdapter';
 
@@ -92,7 +93,7 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
   sx,
 }) => {
   const theme = useTheme();
-  const currentUserId = useAppSelector((state) => state.entities.users.currentUserId);
+  const currentUserId = useAppSelector(selectCurrentUserId);
   const { toggleReaction } = useReactionToggle(postId);
 
   // Group reactions by emoji name

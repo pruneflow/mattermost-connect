@@ -10,10 +10,9 @@ import {
   selectAllPosts,
 } from "../../../../store/selectors/postsSelectors";
 import {
-  selectCurrentUserId,
-  selectChannelById,
-  selectMyChannelMember,
-} from "../../../../store/selectors";
+  selectVirtualizedMessagesData,
+  DEFAULT_VIRTUALIZED_MESSAGES_DATA,
+} from "../../../../store/selectors/virtualizedMessagesSelector";
 
 interface UseVirtualizedMessagesProps {
   channelId: string;
@@ -45,39 +44,36 @@ export const useVirtualizedMessages = ({
   const prevTopRef = useRef<number | null>(null);
   const anchorIdRef = useRef<string | null>(null);
 
-  // Get data from Redux - direct selectors following existing pattern
-  const postIds = useAppSelector((state) =>
-    selectPostsInChannel(state, channelId),
+  // Use single optimized selector call - eliminates multiple useAppSelector calls
+  const messagesData = useAppSelector(state => 
+    channelId ? selectVirtualizedMessagesData(state, channelId) : DEFAULT_VIRTUALIZED_MESSAGES_DATA
   );
-  const allPosts = useAppSelector(selectAllPosts);
-  const atOldestPost = useAppSelector((state) =>
-    selectHasLoadedOldestPost(state, channelId),
-  );
-  const atLatestPost = useAppSelector((state) =>
-    selectHasLoadedLatestPost(state, channelId),
-  );
-  const currentUserId = useAppSelector(selectCurrentUserId);
-  const currentChannel = useAppSelector((state) =>
-    selectChannelById(state, channelId),
-  );
-  const channelMember = useAppSelector(selectMyChannelMember(channelId));
 
-  let lastViewedAt = channelMember?.last_viewed_at || 0;
-  if (currentChannel) {
-    lastViewedAt = currentChannel.last_post_at ? lastViewedAt : currentChannel.last_post_at;
-  }
-  const unreadCount = currentChannel?.unreadCount || 0;
-  console.debug("lastViewedAt", lastViewedAt)
+  // Destructure all data from single selector call
+  const {
+    postIds,
+    channelPosts: allPosts,
+    atLatestPost,
+    atOldestPost,
+    currentUserId,
+    channelType,
+    unreadCount,
+    lastViewedAt,
+    channel: currentChannel,
+    channelMember,
+  } = messagesData;
+
+  console.debug("lastViewedAt", lastViewedAt, unreadCount)
   // Build virtual list with all separators and load buttons
   const virtualItems = useMemo((): VirtualListItem[] => {
     return buildVirtualList(
-      postIds,
+      postIds as string[],
       allPosts,
       lastViewedAt,
       atOldestPost,
       atLatestPost,
       currentUserId || "",
-      currentChannel?.type || "O",
+      channelType || "O",
       unreadCount,
     );
   }, [

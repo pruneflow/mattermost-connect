@@ -83,7 +83,12 @@ export const UsernameBadge: React.FC<UsernameBadgeProps> = memo(({
   sx,
 }) => {
   const theme = useTheme();
-  const user = useAppSelector((state) => state.entities.users.profiles[userId]);
+  // Create stable selector to avoid inline function
+  const selectUserProfile = useMemo(() => 
+    (state: any) => state.entities.users.profiles[userId]
+  , [userId]);
+  
+  const user = useAppSelector(selectUserProfile);
   
   // Memoized dynamic styles
   const dynamicStyles = useMemo(() => ({

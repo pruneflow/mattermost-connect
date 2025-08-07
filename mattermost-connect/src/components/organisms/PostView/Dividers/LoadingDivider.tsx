@@ -25,7 +25,7 @@ const textStyles: SxProps<Theme> = {
   fontWeight: 400,
 };
 
-const MotionBox = motion(Box);
+const MotionBox = motion.create(Box);
 
 export const LoadingDivider: React.FC<LoadingDividerProps> = ({
   type = 'initial',

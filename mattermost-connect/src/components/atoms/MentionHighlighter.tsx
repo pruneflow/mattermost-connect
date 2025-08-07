@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
 import { highlightMentions, extractMentions } from '../../utils/mentionUtils';
 import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectUserProfiles } from '../../store/selectors';
 
 /**
  * Composant pour surligner les mentions dans un texte
@@ -20,7 +21,7 @@ export const MentionHighlighter: React.FC<MentionHighlighterProps> = memo(({
   channelMemberIds = [],
   sx,
 }) => {
-  const users = useAppSelector((state) => state.entities.users.profiles);
+  const users = useAppSelector(selectUserProfiles);
   
   // Extraire et traiter les mentions
   const processedText = useMemo(() => {

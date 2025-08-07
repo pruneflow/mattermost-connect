@@ -23,7 +23,7 @@ const fabStyles: SxProps<Theme> = {
   boxShadow: (theme) => theme.shadows[6],
 };
 
-const MotionFab = motion(Fab);
+const MotionFab = motion.create(Fab);
 
 export const ScrollToBottomFab: React.FC<ScrollToBottomFabProps> = ({
   visible,

@@ -4,6 +4,7 @@ import { formatMessage } from '../../utils/messageFormatUtils';
 import { replaceCustomEmojis } from '../../utils/messageFormatUtils';
 import { highlightMentions } from '../../utils/mentionUtils';
 import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectUserProfiles } from '../../store/selectors';
 
 /**
  * Composant pour formater et rendre le contenu d'un message avec markdown, mentions, emojis
@@ -24,7 +25,7 @@ export const MessageFormatter: React.FC<MessageFormatterProps> = memo(({
   customEmojis = {},
   sx,
 }) => {
-  const users = useAppSelector((state) => state.entities.users.profiles);
+  const users = useAppSelector(selectUserProfiles);
   
   // Formatage du message en plusieurs étapes
   const formattedMessage = useMemo(() => {

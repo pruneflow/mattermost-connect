@@ -3,8 +3,8 @@ import { RootState } from "../index";
 
 export const selectAllPosts = (state: RootState) => state.posts.posts;
 
-// Stable empty array references to avoid rerenders
-const EMPTY_STRING_ARRAY: string[] = [];
+// Empty array references to avoid rerenders - frozen for immutability
+const EMPTY_STRING_ARRAY = Object.freeze([]) as readonly string[];
 
 // Memoized selectors for posts with parameters
 export const selectPostsInChannel = createSelector(

@@ -1,5 +1,6 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAppSelector } from './useAppSelector';
+import { createSelector } from '@reduxjs/toolkit';
 import { client } from '../api/client';
 import { formatFileSize } from '../utils/formatters';
 import {
@@ -14,6 +15,10 @@ import {
   selectMultipleFileInfos,
 } from '../store/selectors/filesSelectors';
 import { useAppDispatch } from "./useAppDispatch";
+
+// Empty array references
+const EMPTY_FILE_INFOS = Object.freeze([]) as readonly FileInfo[];
+const EMPTY_FILE_IDS = Object.freeze([]) as readonly string[];
 
 /**
  * Hook unifié pour la gestion des fichiers avec Redux au niveau post
@@ -33,7 +38,7 @@ export function useFile(postId: string | undefined) {
   
   // Récupérer les infos de tous les fichiers du post
   const fileInfos = useAppSelector((state) => 
-    postFiles ? selectMultipleFileInfos(state, postFiles.fileIds) : []
+    postFiles ? selectMultipleFileInfos(state, postFiles.fileIds) : EMPTY_FILE_INFOS
   );
 
   // ----------------
@@ -124,7 +129,7 @@ export function useFile(postId: string | undefined) {
     // Données du post
     postId,
     fileInfos: fileInfos.filter((info): info is FileInfo => Boolean(info)), // Filter out nulls
-    fileIds: postFiles?.fileIds || [],
+    fileIds: postFiles?.fileIds || EMPTY_FILE_IDS,
 
     // Actions au niveau post
     fetchAllFiles,

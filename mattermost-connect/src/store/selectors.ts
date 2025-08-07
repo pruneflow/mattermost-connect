@@ -41,12 +41,35 @@ export const selectChannelsData = (state: RootState) =>
 // MEMOIZED TEAM SELECTORS
 // ============================================================================
 
+// Stable empty array constant
+const EMPTY_TEAM_IDS = Object.freeze([]) as readonly string[];
+
+// Stable selector for team keys - memoized to avoid creating new arrays
+const selectTeamIds = createSelector(
+  [(state: RootState) => state.entities.teams.teams],
+  (teams) => {
+    const keys = Object.keys(teams);
+    return keys.length === 0 ? EMPTY_TEAM_IDS : keys;
+  }
+);
+
 /**
  * Get teams as an array (memoized) - Following Mattermost pattern
+ * Uses stable transformation to avoid unnecessary re-renders
  */
 export const selectTeams = createSelector(
-  [(state: RootState) => state.entities.teams.teams], 
-  (teamsById) => Object.values(teamsById),
+  [
+    (state: RootState) => state.entities.teams.teams,
+    selectTeamIds,
+  ],
+  (teamsById, teamIds) => {
+    // Single-pass processing to avoid creating intermediate arrays
+    const result: any[] = [];
+    for (const id of teamIds) {
+      result.push(teamsById[id]);
+    }
+    return result;
+  },
 );
 
 /**
@@ -55,12 +78,15 @@ export const selectTeams = createSelector(
  */
 export const selectTeamsById = (state: RootState) => state.entities.teams.teams;
 
-// Create stable empty arrays to avoid unnecessary re-renders
-const EMPTY_CHANNELS_ARRAY = [] as const;
-const EMPTY_CHANNEL_IDS = [] as const;
+// Create stable empty arrays to avoid unnecessary re-renders - frozen for immutability
+const EMPTY_CHANNELS_ARRAY = Object.freeze([]) as readonly any[];
+const EMPTY_CHANNEL_IDS = Object.freeze([]) as readonly string[];
 
-// Create stable empty objects to avoid unnecessary re-renders
-const EMPTY_UNREAD_DATA = { msg_count: 0, mention_count: 0 } as const;
+// Create stable empty objects to avoid unnecessary re-renders - frozen for immutability
+const EMPTY_UNREAD_DATA = Object.freeze({ msg_count: 0, mention_count: 0 });
+const EMPTY_POST_IDS = Object.freeze([]) as readonly string[];
+const EMPTY_STRING_ARRAY = Object.freeze([]) as readonly string[];
+const EMPTY_POSTS_ARRAY = Object.freeze([]) as readonly any[];
 
 /**
  * Get channels in current team - Exact Mattermost pattern
@@ -74,8 +100,18 @@ export const selectChannelsInCurrentTeam = createIdsSelector('selectChannelsInCu
   ],
   (allChannels: Record<string, Channel>, currentTeamId: string | null, channelsInTeam: Record<string, string[]>) => {
     if (!currentTeamId) return EMPTY_CHANNELS_ARRAY;
-    const channelIds = channelsInTeam[currentTeamId] || EMPTY_CHANNEL_IDS;
-    return channelIds.map((id: string) => allChannels[id]).filter(Boolean);
+    const channelIds = channelsInTeam[currentTeamId];
+    if (!channelIds || channelIds.length === 0) return EMPTY_CHANNELS_ARRAY;
+    
+    // Pre-filter and map in single pass to avoid creating intermediate arrays
+    const result: Channel[] = [];
+    for (const id of channelIds) {
+      const channel = allChannels[id];
+      if (channel) {
+        result.push(channel);
+      }
+    }
+    return result;
   },
 );
 
@@ -104,8 +140,10 @@ export const selectChannelsForCurrentTeam = createIdsSelector('selectChannelsFor
     currentUserId: string | null,
     preferences: PreferenceType[],
   ): EnrichedChannel[] => {
-    return teamChannels
-      .map((channel: Channel) => {
+    // Single-pass processing to avoid intermediate array creation
+    const result: EnrichedChannel[] = [];
+    
+    for (const channel of teamChannels) {
       // Unread data from single source of truth: channels.unreads
       const membership = channelMembers[channel.id];
       const isMuted = membership?.notify_props?.mark_unread === "mention";
@@ -133,7 +171,7 @@ export const selectChannelsForCurrentTeam = createIdsSelector('selectChannelsFor
         otherUserId,
       } = processChannelData(channel, userProfiles, currentUserId);
 
-      return {
+      const enrichedChannel = {
         ...channel,
         // Unread data
         isActive: channel.id === currentChannelId,
@@ -146,11 +184,14 @@ export const selectChannelsForCurrentTeam = createIdsSelector('selectChannelsFor
         otherUser,
         otherUserId,
       } as EnrichedChannel;
-    })
-    .filter((channel: EnrichedChannel) => {
-      // Filter group channels based on preferences
-      return shouldDisplayGroupChannel(channel, preferences, channel.hasUnreads);
-    });
+      
+      // Filter during processing to avoid creating intermediate arrays
+      if (shouldDisplayGroupChannel(enrichedChannel, preferences, enrichedChannel.hasUnreads)) {
+        result.push(enrichedChannel);
+      }
+    }
+    
+    return result;
   },
 );
 
@@ -207,13 +248,35 @@ export const selectCurrentUser = createSelector(
   },
 );
 
+// Stable empty array constant for user IDs
+const EMPTY_USER_IDS = Object.freeze([]) as readonly string[];
+
+// Stable selector for user keys - memoized to avoid creating new arrays
+const selectUserIds = createSelector(
+  [(state: RootState) => state.entities.users.profiles],
+  (profiles) => {
+    const keys = Object.keys(profiles);
+    return keys.length === 0 ? EMPTY_USER_IDS : keys;
+  }
+);
+
 /**
  * Get users as array (memoized)
- * Performance benefit: Avoids Object.values() recalculation
+ * Performance benefit: Avoids Object.values() recalculation using stable key-based mapping
  */
 export const selectUsersArray = createIdsSelector('selectUsersArray',
-  [(state: RootState) => state.entities.users.profiles],
-  (userProfiles: Record<string, UserProfile>) => Object.values(userProfiles),
+  [
+    (state: RootState) => state.entities.users.profiles,
+    selectUserIds,
+  ],
+  (userProfiles: Record<string, UserProfile>, userIds: string[]) => {
+    // Single-pass processing to avoid creating intermediate arrays
+    const result: UserProfile[] = [];
+    for (const id of userIds) {
+      result.push(userProfiles[id]);
+    }
+    return result;
+  },
 );
 
 // ============================================================================
@@ -228,7 +291,13 @@ export const selectCurrentChannel = createSelector(
   [selectChannelsForCurrentTeam, selectCurrentChannelId],
   (channels: EnrichedChannel[], currentChannelId: string | null): EnrichedChannel | null => {
     if (!currentChannelId) return null;
-    return channels.find((channel: EnrichedChannel) => channel.id === currentChannelId) || null;
+    // Use for-loop instead of .find() for better performance
+    for (const channel of channels) {
+      if (channel.id === currentChannelId) {
+        return channel;
+      }
+    }
+    return null;
   },
 );
 
@@ -249,7 +318,15 @@ export const makeSelectChannelsInTeam = () =>
     ],
     (channelsInTeam, channelsById, teamId) => {
       const channelIds = channelsInTeam[teamId] || EMPTY_CHANNEL_IDS;
-      return channelIds.map((id: string) => channelsById[id]).filter(Boolean);
+      // Single-pass processing to avoid creating intermediate arrays
+      const result: any[] = [];
+      for (const id of channelIds) {
+        const channel = channelsById[id];
+        if (channel) {
+          result.push(channel);
+        }
+      }
+      return result;
     },
   );
 
@@ -503,9 +580,15 @@ export const selectCategoriesForCurrentTeam = createSelector(
     const categoryIds = categoriesInTeam[currentTeamId] || EMPTY_CHANNEL_IDS;
     const orderedIds = categoryOrder[currentTeamId] || categoryIds;
     
-    return orderedIds
-      .map(id => categories[id])
-      .filter(Boolean);
+    // Single-pass processing to avoid creating intermediate arrays
+    const result: any[] = [];
+    for (const id of orderedIds) {
+      const category = categories[id];
+      if (category) {
+        result.push(category);
+      }
+    }
+    return result;
   }
 );
 
@@ -589,7 +672,7 @@ export const createSelectFilteredChannelIds = () =>
 export const selectCurrentUserRoles = createSelector(
   [selectCurrentUser],
   (currentUser) => {
-    if (!currentUser?.roles) return [];
+    if (!currentUser?.roles) return EMPTY_STRING_ARRAY;
     return currentUser.roles.split(" ").filter(Boolean);
   },
 );
@@ -635,7 +718,7 @@ export const selectLastUserSearchTerm = createSelector(
 
 // Channel Members Selectors
 // Create a stable empty object to avoid unnecessary re-renders
-const EMPTY_CHANNEL_MEMBERS = {};
+const EMPTY_CHANNEL_MEMBERS = Object.freeze({});
 
 export const selectChannelMembers = createSelector(
   [
@@ -647,7 +730,7 @@ export const selectChannelMembers = createSelector(
 
 // Team membership selectors
 // Create a stable empty object to avoid unnecessary re-renders
-const EMPTY_TEAM_MEMBERS = {};
+const EMPTY_TEAM_MEMBERS = Object.freeze({});
 
 export const selectTeamMembers = createSelector(
   [
@@ -660,7 +743,7 @@ export const selectTeamMembers = createSelector(
 
 // Team stats selector
 // Create a stable empty stats object to avoid unnecessary re-renders
-const EMPTY_TEAM_STATS = { total_member_count: 0, active_member_count: 0 };
+const EMPTY_TEAM_STATS = Object.freeze({ total_member_count: 0, active_member_count: 0 });
 
 export const selectTeamStatsById = (teamId: string) =>
   createSelector([selectTeamStats], (teamStats) => {
@@ -684,10 +767,15 @@ export function makeGetPostsForIds(): (state: RootState, postIds: Array<Post['id
     (state: RootState, postIds: Array<Post['id']>) => postIds,
     (allPosts: Record<string, Post[]>, postIds: string[]) => {
       if (!postIds) {
-        return [];
+        return EMPTY_POSTS_ARRAY;
       }
 
-      return postIds.map((id: string) => allPosts[id]);
+      // Single-pass processing instead of .map()
+      const result: Post[] = [];
+      for (const id of postIds) {
+        result.push(allPosts[id]);
+      }
+      return result;
     },
   );
 }
@@ -715,7 +803,7 @@ export function makeFilterPostsAndAddSeparators() {
     (posts: Post[], lastViewedAt: number, indicateNewMessages: boolean, currentUser: UserProfile, preferences: PreferenceType[]) => {
 
       if (posts.length === 0 || !currentUser) {
-        return [];
+        return EMPTY_STRING_ARRAY;
       }
 
       const out: string[] = [];
@@ -852,7 +940,16 @@ export const makeGetPostsAndMetadata = () =>
       (state: RootState, channelId: string) => state.entities.posts.channelPagination[channelId],
     ],
     (postIds, allPosts, pagination) => {
-      const posts = postIds ? postIds.map(postId => allPosts[postId]).filter(Boolean) : [];
+      // Single-pass processing instead of .map().filter()
+      const posts: Post[] = [];
+      if (postIds) {
+        for (const postId of postIds) {
+          const post = allPosts[postId];
+          if (post) {
+            posts.push(post);
+          }
+        }
+      }
       
       return {
         posts,
@@ -925,15 +1022,20 @@ export const getPostsBefore = createSelector(
     (state: RootState, channelId: string, postId: string) => postId,
   ],
   (postIds, allPosts, targetPostId) => {
-    if (!postIds || postIds.length === 0) return [];
+    if (!postIds || postIds.length === 0) return EMPTY_POSTS_ARRAY;
     
     const targetIndex = postIds.indexOf(targetPostId);
-    if (targetIndex === -1) return [];
+    if (targetIndex === -1) return EMPTY_POSTS_ARRAY;
     
-    return postIds
-      .slice(0, targetIndex)
-      .map(postId => allPosts[postId])
-      .filter(Boolean);
+    // Single-pass processing instead of .slice().map().filter()
+    const result: Post[] = [];
+    for (let i = 0; i < targetIndex; i++) {
+      const post = allPosts[postIds[i]];
+      if (post) {
+        result.push(post);
+      }
+    }
+    return result;
   }
 );
 
@@ -945,15 +1047,20 @@ export const getPostsAfter = createSelector(
     (state: RootState, channelId: string, postId: string) => postId,
   ],
   (postIds, allPosts, targetPostId) => {
-    if (!postIds || postIds.length === 0) return [];
+    if (!postIds || postIds.length === 0) return EMPTY_POSTS_ARRAY;
     
     const targetIndex = postIds.indexOf(targetPostId);
-    if (targetIndex === -1) return [];
+    if (targetIndex === -1) return EMPTY_POSTS_ARRAY;
     
-    return postIds
-      .slice(targetIndex + 1)
-      .map(postId => allPosts[postId])
-      .filter(Boolean);
+    // Single-pass processing instead of .slice().map().filter()
+    const result: Post[] = [];
+    for (let i = targetIndex + 1; i < postIds.length; i++) {
+      const post = allPosts[postIds[i]];
+      if (post) {
+        result.push(post);
+      }
+    }
+    return result;
   }
 );
 
@@ -962,7 +1069,16 @@ export const getPostsSince = createSelector(
   [
     (state: RootState, channelId: string, timestamp: number) => {
       const postIds = getPostIdsInChannel(state, channelId);
-      return postIds ? postIds.map(postId => state.entities.posts.posts[postId]).filter(Boolean) : [];
+      if (!postIds) return EMPTY_POSTS_ARRAY;
+      // Single-pass processing instead of .map().filter()
+      const result: Post[] = [];
+      for (const postId of postIds) {
+        const post = state.entities.posts.posts[postId];
+        if (post) {
+          result.push(post);
+        }
+      }
+      return result;
     },
     (state: RootState, channelId: string, timestamp: number) => timestamp,
   ],
@@ -998,7 +1114,16 @@ export const getPostsInDateRange = createSelector(
   [
     (state: RootState, channelId: string, startTime: number, endTime: number) => {
       const postIds = getPostIdsInChannel(state, channelId);
-      return postIds ? postIds.map(postId => state.entities.posts.posts[postId]).filter(Boolean) : [];
+      if (!postIds) return EMPTY_POSTS_ARRAY;
+      // Single-pass processing instead of .map().filter()
+      const result: Post[] = [];
+      for (const postId of postIds) {
+        const post = state.entities.posts.posts[postId];
+        if (post) {
+          result.push(post);
+        }
+      }
+      return result;
     },
     (state: RootState, channelId: string, startTime: number, endTime: number) => startTime,
     (state: RootState, channelId: string, startTime: number, endTime: number) => endTime,
@@ -1014,14 +1139,19 @@ export const getPostsInDateRange = createSelector(
 export const makeGetPostsInThread = () =>
   createSelector(
     [
-      (state: RootState, threadId: string) => state.entities.posts.postsInThread[threadId] || [],
+      (state: RootState, threadId: string) => state.entities.posts.postsInThread[threadId] || EMPTY_POST_IDS,
       (state: RootState) => state.entities.posts.posts,
     ],
     (postIds, allPosts) => {
-      return postIds
-        .map(postId => allPosts[postId])
-        .filter(Boolean)
-        .sort((a, b) => a.create_at - b.create_at);
+      // Single-pass processing instead of .map().filter().sort()
+      const result: Post[] = [];
+      for (const postId of postIds) {
+        const post = allPosts[postId];
+        if (post) {
+          result.push(post);
+        }
+      }
+      return result.sort((a, b) => a.create_at - b.create_at);
     }
   );
 
@@ -1070,7 +1200,7 @@ export const selectHasMorePosts = createSelector(
 export const selectUnreadPostsChunk = createSelector(
   [
     (state: RootState, channelId: string) => {
-      const postIds = getPostIdsInChannel(state, channelId) || [];
+      const postIds = getPostIdsInChannel(state, channelId) || EMPTY_POST_IDS;
       return postIds.map(postId => state.entities.posts.posts[postId]).filter(Boolean);
     },
     (state: RootState, channelId: string) => state.entities.channels.myMembers[channelId]?.last_viewed_at,
@@ -1096,7 +1226,7 @@ export const selectUnreadDividerInfo = createSelector(
   [
     (state: RootState, channelId: string) => selectUnreadPostsChunk(state, channelId),
     (state: RootState, channelId: string) => {
-      const postIds = getPostIdsInChannel(state, channelId) || [];
+      const postIds = getPostIdsInChannel(state, channelId) || EMPTY_POST_IDS;
       return postIds.map(postId => state.entities.posts.posts[postId]).filter(Boolean);
     },
   ],
