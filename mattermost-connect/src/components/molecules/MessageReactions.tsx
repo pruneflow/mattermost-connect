@@ -3,7 +3,7 @@ import { Box, Chip, Tooltip, SxProps, Theme, useTheme } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { Reaction } from '../../api/types';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { useReactionToggle } from '../../hooks/useMessages';
+import { toggleReactionOnPost } from '../../services/reactionService';
 import { selectCurrentUserId } from '../../store/selectors';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
 import { findEmojiByName } from '../../utils/emojiMartAdapter';
@@ -94,7 +94,6 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
 }) => {
   const theme = useTheme();
   const currentUserId = useAppSelector(selectCurrentUserId);
-  const { toggleReaction } = useReactionToggle(postId);
 
   // Group reactions by emoji name
   const groupedReactions = React.useMemo((): GroupedReaction[] => {
@@ -125,19 +124,19 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
 
   const handleReactionToggle = useCallback(async (emojiName: string) => {
     try {
-      await toggleReaction(emojiName);
+      await toggleReactionOnPost(postId, emojiName);
     } catch (error) {
       console.error('Failed to toggle reaction:', error);
     }
-  }, [toggleReaction]);
+  }, [postId]);
 
   const handleEmojiSelect = useCallback(async (emoji: string) => {
     try {
-      await toggleReaction(emoji);
+      await toggleReactionOnPost(postId, emoji);
     } catch (error) {
       console.error('Failed to add reaction:', error);
     }
-  }, [toggleReaction]);
+  }, [postId]);
 
 
   if (groupedReactions.length === 0) {

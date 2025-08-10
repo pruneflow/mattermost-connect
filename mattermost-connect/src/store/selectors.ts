@@ -459,8 +459,6 @@ export const selectAllUserIds = createSelector(
 export const selectWebSocketConnectionStatus = (state: RootState) =>
   state.websocket.status;
 
-// Loading state selector
-export const selectLoadingState = (state: RootState) => state.loading;
 
 // (Moved to Pattern 1 section above)
 
@@ -662,7 +660,7 @@ export const createSelectFilteredChannelIds = () =>
   );
 
 // ============================================================================
-// PERMISSIONS SELECTORS (for usePermissions optimization)
+// PERMISSIONS SELECTORS
 // ============================================================================
 
 /**

@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { IconButton, Tooltip } from '@mui/material';
 import { Link as LinkIcon, Check as CheckIcon } from '@mui/icons-material';
-import { useFileActions } from '../../hooks/useFileActions';
+import { copyPublicLinkToClipboard, hasPublicLink } from '../../services/fileService';
 
 export interface FilePublicLinkButtonProps {
   fileId: string;
@@ -20,16 +20,17 @@ export const FilePublicLinkButton: React.FC<FilePublicLinkButtonProps> = ({
   tooltip = 'Copy Public Link', 
   sx 
 }) => {
-  const { copyPublicLinkToClipboard, hasPublicLink } = useFileActions(fileId);
+  const hasLink = hasPublicLink(fileId);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const handleCopyLink = useCallback(async () => {
-    const success = await copyPublicLinkToClipboard();
+  const handleCopyLink = useCallback(async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    const success = await copyPublicLinkToClipboard(fileId);
     
     if (success) {
       setShowSuccess(true);
     }
-  }, [copyPublicLinkToClipboard]);
+  }, [fileId]);
 
   // Reset success state after 5 seconds
   useEffect(() => {
@@ -50,7 +51,7 @@ export const FilePublicLinkButton: React.FC<FilePublicLinkButtonProps> = ({
         aria-label="copy public link"
         sx={{ 
           p: { xs: 0.75, md: 0.5 },
-          color: showSuccess ? 'success.main' : (hasPublicLink ? 'primary.main' : 'inherit'),
+          color: showSuccess ? 'success.main' : (hasLink ? 'primary.main' : 'inherit'),
           '&:hover': {
             backgroundColor: 'rgba(0, 0, 0, 0.04)',
           },

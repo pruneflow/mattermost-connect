@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { client } from '../api/client';
-import { useErrorHandler } from './useErrorHandler';
+import { handleSilentError } from '../services/errorService';
 import type { ClientConfig } from '@mattermost/types/config';
 
 export interface EmailCapabilities {
@@ -14,7 +14,7 @@ export interface EmailCapabilities {
  * Uses the same method as the official Mattermost webapp
  */
 export const useServerConfig = () => {
-  const { handleSilentError } = useErrorHandler();
+  
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

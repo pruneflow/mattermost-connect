@@ -18,7 +18,8 @@ import {
   Warning as WarningIcon,
   ExitToApp as ExitIcon,
 } from '@mui/icons-material';
-import { useErrorHandler, useLayout } from '../../hooks';
+import { useLayout } from '../../hooks';
+import { handleError } from '../../services/errorService';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { selectTeamById, selectCurrentUserId } from '../../store/selectors';
@@ -38,7 +39,6 @@ export const LeaveTeamDialog: React.FC<LeaveTeamDialogProps> = ({
   teamId,
 }) => {
   const { isMobile } = useLayout();
-  const { handleError } = useErrorHandler();
   const dispatch = useAppDispatch();
   
   const team = useAppSelector(selectTeamById(teamId));

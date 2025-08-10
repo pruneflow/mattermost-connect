@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Box, Card, Typography, Alert } from '@mui/material';
 import { Button, TextInput } from '../atoms';
-import { useAppDispatch, useAppSelector, useErrorHandler } from '../../hooks';
+import { useAppDispatch, useAppSelector } from '../../hooks';
+import { handleError } from '../../services/errorService';
 import { selectIsLoggingIn, selectLoginError } from '../../store/selectors';
 import { loginUser } from '../../store/slices/authSlice';
 
@@ -10,11 +11,10 @@ export interface LoginFormProps {
   className?: string;
 }
 
-const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, className = '' }) => {
+const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const dispatch = useAppDispatch();
   const isLoggingIn = useAppSelector(selectIsLoggingIn);
   const loginError = useAppSelector(selectLoginError);
-  const { handleError } = useErrorHandler();
   
   const [formData, setFormData] = useState({
     serverUrl: '',

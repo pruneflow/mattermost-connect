@@ -27,7 +27,7 @@ import type {
   UserProfile as UserProfileType,
   UserStatus,
 } from "../../api/types";
-import { useAuth } from "../../hooks";
+import { logout } from "../../services/authService";
 
 export interface UserMenuProps {
   user?: UserProfileType;
@@ -51,7 +51,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { status, updateStatus } = useUserStatus();
-  const { logout } = useAuth();
+  // Using logout from authService directly
 
   const handleAvatarClick = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {

@@ -4,7 +4,7 @@ import {
   Paper,
   Typography
 } from '@mui/material';
-import { useFile } from '../../hooks/useFile';
+import { fetchAllFiles } from '../../services/fileService';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectMultipleFileInfos } from '../../store/selectors/filesSelectors';
 import { formatFileSize } from '../../utils/formatters';
@@ -48,8 +48,6 @@ export interface MessageAttachmentProps {
  * Handles multiple files with preview, download, and copy link functionality
  */
 export const MessageAttachment: React.FC<MessageAttachmentProps> = ({ postId, fileIds }) => {
-  // Logique centralisée avec useFile(postId)
-  const { fetchAllFiles } = useFile(postId);
   
   // Preview modal state
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -61,9 +59,9 @@ export const MessageAttachment: React.FC<MessageAttachmentProps> = ({ postId, fi
   // Chargement centralisé : seulement les infos (les images utilisent les URLs directes)
   React.useEffect(() => {
     if (fileIds.length > 0) {
-      fetchAllFiles(fileIds);
+      fetchAllFiles(postId, fileIds);
     }
-  }, [postId, fileIds]); // Dépendances minimales
+  }, [postId, fileIds]);
 
   // Handle opening preview modal (following Mattermost pattern)
   const handleFileClick = React.useCallback((clickedIndex: number) => {

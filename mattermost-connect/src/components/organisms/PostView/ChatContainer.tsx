@@ -1,13 +1,14 @@
-import React, {useState, useCallback, useRef} from 'react';
+import React, {useState, useCallback, useRef, useEffect} from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
 import { VirtualizedMessageList } from './MessageList/VirtualizedMessageList';
 import { MessageInput } from '../../molecules/MessageInput';
 import { useAppSelector } from "../../../hooks";
 import { selectCurrentChannelId } from "../../../store/selectors";
-import { useMessages } from "../../../hooks/useMessages";
-import useUnreadCounts from "../../../hooks/useUnreadCounts";
+import { sendMessage, loadUnreadPosts } from "../../../services/messageService";
+import { selectChannelHasPosts, selectIsLoadingUnreads } from "../../../store/selectors/postsSelectors";
 import {useVirtualizedMessages} from "./hooks/useVirtualizedMessages";
-import {useAutoScroll} from "./hooks/useAutoScroll";
+import { scrollToBottom } from "../../../utils/scrollUtils";
+import { markAsRead } from "../../../services/channelService";
 
 export interface ChatContainerProps {
   autoLoad?: boolean;
@@ -35,48 +36,78 @@ const inputContainerStyles: SxProps<Theme> = {
   p: 2,
 };
 
-export const ChatContainer: React.FC<ChatContainerProps> = ({
+const ChatContainerComponent: React.FC<ChatContainerProps> = ({
   autoLoad = false,
   lastViewedAt,
   sx,
 }) => {
+  console.debug("🔄 ChatContainer re-render");
+  console.debug("🔍 ChatContainer props:", {
+    autoLoad,
+    lastViewedAt, 
+    sx: !!sx,
+    sxStringified: JSON.stringify(sx)
+  });
+
   const channelId = useAppSelector(selectCurrentChannelId);
+  console.debug("🔍 channelId from selector:", channelId);
   const [unreadChunkTimeStamp, setUnreadChunkTimeStamp] = useState<number | undefined>(lastViewedAt);
   const [shouldStartFromBottomWhenUnread, setShouldStartFromBottomWhenUnread] = useState(false);
   const scrollElementRef = useRef<HTMLDivElement>(null);
 
-  const { markChannelAsRead } = useUnreadCounts();
 
+  
   // Use custom hooks
-  const { virtualizer } =
+  const { virtualizer, virtualItems, totalCount, isReady } =
       useVirtualizedMessages({
         channelId,
-        scrollElement: scrollElementRef.current,
+        scrollElementRef,
       });
-
-  // Auto-scroll hook
-  const { scrollToBottom, isAtBottom } = useAutoScroll({
-    virtualizer,
-    scrollElement: scrollElementRef.current,
-    shouldStartFromBottomWhenUnread,
-    unreadChunkTimeStamp,
+  console.debug("🔍 useVirtualizedMessages result:", {
+    hasVirtualizer: !!virtualizer,
+    virtualizerToString: virtualizer ? virtualizer.toString().slice(0, 50) : "null",
+    virtualItemsLength: virtualItems?.length || 0,
+    totalCount,
+    isReady
   });
+
+
   
-  const { sendMessage } = useMessages({ channelId });
+  // Initial load effect for channel messages
+  const hasPosts = useAppSelector(state => selectChannelHasPosts(state, channelId));
+  const isLoadingUnreads = useAppSelector(state => selectIsLoadingUnreads(state, channelId));
+  const loadedChannelsRef = useRef<Set<string>>(new Set());
+  
+  useEffect(() => {
+    if (
+      channelId && 
+      !loadedChannelsRef.current.has(channelId) && 
+      !hasPosts && 
+      !isLoadingUnreads
+    ) {
+      console.log('Loading initial posts for channel:', channelId);
+      loadedChannelsRef.current.add(channelId);
+      void loadUnreadPosts(channelId);
+    }
+  }, [channelId, hasPosts, isLoadingUnreads]);
+
+  console.debug("🔍 sendMessage service:", {
+    sendMessageType: typeof sendMessage,
+    channelId
+  });
   
   const handleSendMessage = useCallback(async (message: string) => {
     if (!message.trim()) return;
     
     try {
-      await sendMessage(message);
-      await markChannelAsRead(channelId)
-      console.debug("isAtBottom", isAtBottom(scrollElementRef.current))
+      await sendMessage(channelId, message);
+      await markAsRead(channelId);
       scrollToBottom(scrollElementRef.current)
     } catch (error) {
       console.error('Failed to send message:', error);
       // TODO: Show error toast or notification
     }
-  }, [sendMessage]);
+  }, [sendMessage, markAsRead, channelId]);
 
   const handleChangeUnreadChunkTimeStamp = useCallback((newTimestamp: number) => {
     setUnreadChunkTimeStamp(newTimestamp);
@@ -112,3 +143,5 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     </Box>
   );
 };
+
+export const ChatContainer = React.memo(ChatContainerComponent);

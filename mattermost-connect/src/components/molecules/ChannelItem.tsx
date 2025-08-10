@@ -32,10 +32,17 @@ import { Tooltip } from "@mui/material";
 import { ChannelIndicator } from "./ChannelIndicator";
 import { Menu, useMenu, type MenuItemConfig } from "../common";
 import { LeaveChannelDialog } from "../organisms/LeaveChannelDialog";
-import { useChannels } from "../../hooks/useChannels";
-import { usePermissions } from "../../hooks/usePermissions";
-import { useAppSelector } from "../../hooks/useAppSelector";
-import { selectCurrentUserId } from "../../store/selectors";
+import {
+  markAsUnread,
+  toggleFavorite,
+  moveToCategory,
+  muteChannel,
+  leaveChannel,
+  isChannelFavorite,
+  getChannelCategory,
+  getCategories
+} from "../../services/channelService";
+import { canManageChannelMembers } from "../../services/permissionService";
 import useUserPreferences from "../../hooks/useUserPreferences";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -229,27 +236,16 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       }
     }, [onClick, channel.id]);
 
-    // Get channel actions from useChannels hook
-    const {
-      markAsUnread,
-      toggleFavorite,
-      moveToCategory,
-      muteChannel,
-      leaveChannel,
-      isChannelFavorite,
-      getChannelCategory,
-      categories,
-    } = useChannels();
 
     // Get preferences actions for group channels
     const { closeGroupConversation } = useUserPreferences();
 
     // Get permissions
-    const { canManageChannelMembers } = usePermissions();
 
     // Get current favorite status and category
     const isFavorite = isChannelFavorite(channel.id);
     const currentCategory = getChannelCategory(channel.id);
+    const categories = getCategories();
     const canAddMembers = canManageChannelMembers(channel);
 
     // Default values for enriched properties
@@ -395,7 +391,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       handleMarkUnread,
       handleToggleFavorite,
       handleMuteChannel,
-      categories,
       channel.type,
       currentCategory?.id,
       handleMoveToCategory,

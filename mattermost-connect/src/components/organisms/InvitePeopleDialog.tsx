@@ -29,7 +29,7 @@ import {
 } from "@mui/icons-material";
 import { useTeamInvitations } from "../../hooks/useTeamInvitations";
 import { useUserSearch } from "../../hooks/useUserSearch";
-import { usePermissions } from "../../hooks/usePermissions";
+import { canInviteUser, canAddUserToTeam, canInviteGuest } from "../../services/permissionService";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectTeamsById } from "../../store/selectors";
 import { UserSearchAutocomplete } from "../atoms/UserSearchAutocomplete";
@@ -71,7 +71,6 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
 
   const { searchUsersNotInTeam, clearSearch } =
     useUserSearch();
-  const { canInviteUser, canAddUserToTeam, canInviteGuest } = usePermissions();
 
   const team = teams[teamId];
 

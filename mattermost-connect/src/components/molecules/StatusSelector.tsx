@@ -1,6 +1,6 @@
 import React from 'react';
 import { Dropdown, StatusBadge } from '../atoms';
-import { useErrorHandler } from '../../hooks';
+import { handleError } from '../../services/errorService';
 import type { UserStatus } from '../../api/types';
 import type { DropdownOption } from '../atoms/Dropdown';
 
@@ -19,7 +19,6 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
   className,
   sx
 }) => {
-  const { handleError } = useErrorHandler();
   
   const statusOptions: DropdownOption[] = [
     {

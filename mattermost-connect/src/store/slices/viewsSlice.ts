@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { saveLastVisited, saveLastVisitedChannels } from '../../services/storageService';
 
 // Views State for UI-specific state
 // Navigation state following Mattermost pattern
@@ -106,12 +107,19 @@ const viewsSlice = createSlice({
       const { teamId, channelId } = action.payload;
       state.navigation.lastVisitedChannels[teamId] = channelId;
       state.navigation.lastVisited = { teamId, channelId };
+      
+      // Save to localStorage automatically
+      saveLastVisitedChannels(state.navigation.lastVisitedChannels);
+      saveLastVisited(state.navigation.lastVisited);
     },
     restoreLastVisitedChannels: (state, action: PayloadAction<Record<string, string>>) => {
       state.navigation.lastVisitedChannels = action.payload;
     },
     setLastVisited: (state, action: PayloadAction<{ teamId: string; channelId: string } | null>) => {
       state.navigation.lastVisited = action.payload;
+      
+      // Save to localStorage automatically
+      saveLastVisited(action.payload);
     },
 
     // Channel views

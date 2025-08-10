@@ -7,9 +7,58 @@ import {
   ChannelMember,
   UserStatus,
   TeamStats,
-  ChannelCategory
+  ChannelCategory,
 } from "../../api/types";
 import { client } from "../../api/client";
+
+// ============================================================================
+// INTERNAL USER LOADING FUNCTIONS
+// ============================================================================
+
+/**
+ * Load users from API and update store
+ */
+const loadUsers = async (userIds: string[], dispatch: any, getState: any): Promise<UserProfile[]> => {
+  if (!userIds || userIds.length === 0) return [];
+
+  const state = getState();
+  const profiles = state.entities.users.profiles;
+
+  // Filter out users we already have
+  const missingUserIds = userIds.filter((id: string) => !profiles[id]);
+  if (missingUserIds.length === 0) return [];
+
+  console.log(`Loading ${missingUserIds.length} missing users for direct channels`);
+  
+  // Use efficient batch loading (official Mattermost pattern)
+  const users = await client.getProfilesByIds(missingUserIds);
+  
+  // Update store with all loaded users
+  dispatch(setUsers(users || []));
+  
+  return users;
+};
+
+/**
+ * Load user statuses from API and update store
+ */
+const loadStatus = async (userIds: string[], dispatch: any): Promise<Record<string, UserStatus>> => {
+  if (!userIds || userIds.length === 0) return {};
+
+  const validUserIds = userIds.filter(Boolean);
+  const statuses = await client.getStatusesByIds(validUserIds);
+
+  // Transform status array to Record<userId, UserStatus> and set in store
+  const statusRecord: Record<string, UserStatus> = {};
+  if (statuses && Array.isArray(statuses)) {
+    statuses.forEach((status: UserStatus) => {
+      statusRecord[status.user_id] = status;
+    });
+    dispatch(setUsersStatus(statusRecord));
+  }
+  
+  return statusRecord;
+};
 
 // ============================================================================
 // ASYNC THUNKS - Centralized Data Loading (Mattermost pattern)
@@ -129,32 +178,16 @@ export const loadChannelMembers = createAsyncThunk(
   "entities/loadChannelMembers",
   async (channelId: string, { getState, dispatch, rejectWithValue }) => {
     try {
-      const state = getState() as { entities: EntitiesState };
-
-      // Always load fresh data (no cache check)
-
       console.log(`Loading members for channel ${channelId}`);
       const members = await client.getChannelMembers(channelId, 0, 200);
 
       // Extract user IDs and load their profiles if needed
       const userIds = (members || []).map((member) => member.user_id);
-      const existingUserIds = Object.keys(state.entities.users.profiles);
-      const missingUserIds = userIds.filter(
-        (id) => !existingUserIds.includes(id),
-      );
-
       // Load missing user profiles
-      if (missingUserIds.length > 0) {
-        console.log(
-          `Loading ${missingUserIds.length} missing user profiles for channel members`,
-        );
-        try {
-          const users = await client.getProfilesByIds(missingUserIds);
-          // Store users in state (will be handled by the fulfilled reducer)
-          dispatch(setUsers(users || []));
-        } catch (userError) {
-          console.warn("Failed to load some user profiles:", userError);
-        }
+      try {
+        await loadUsers(userIds, dispatch, getState);
+      } catch (userError) {
+        console.warn("Failed to load user profiles:", userError);
       }
 
       return { channelId, members: members || [], skipped: false };
@@ -555,7 +588,7 @@ export const toggleCategoryCollapsedAction = createAsyncThunk(
 /**
  * Mark channel as unread (Mattermost pattern)
  */
-export const markChannelAsUnreadAction = createAsyncThunk(
+export const markChannelAsUnread = createAsyncThunk(
   "entities/markChannelAsUnread",
   async (
     { channelId }: { channelId: string },
@@ -757,6 +790,7 @@ const loadGroupChannelMembersAndUsers = async (
   groupChannelIds: string[],
   allUserIdsToLoad: string[],
   dispatch: any,
+  getState: any,
   currentState: EntitiesState,
 ): Promise<{
   groupChannelData?: {
@@ -795,14 +829,7 @@ const loadGroupChannelMembersAndUsers = async (
     const missingStatusIds = groupUserIds.filter(
       (userId) => !currentState.users.statuses[userId],
     );
-    if (missingStatusIds.length > 0) {
-      const statuses = await client.getStatusesByIds(missingStatusIds);
-      const statusRecord: Record<string, UserStatus> = {};
-      statuses.forEach((status: UserStatus) => {
-        statusRecord[status.user_id] = status;
-      });
-      dispatch(setUsersStatus(statusRecord));
-    }
+    await loadStatus(missingStatusIds, dispatch);
 
     groupChannelData = {
       profilesByChannelId,
@@ -819,10 +846,8 @@ const loadGroupChannelMembersAndUsers = async (
   const remainingUserIds = allUserIdsToLoad.filter(
     (id) => !loadedUserIds.has(id),
   );
-  const { users: additionalUsers, userStatuses } = await loadMissingUsers(
-    remainingUserIds,
-    currentState.users.profiles,
-  );
+  const { users: additionalUsers, userStatuses } =
+    await loadMissingUsers(remainingUserIds, dispatch, getState);
 
   return {
     groupChannelData,
@@ -837,41 +862,20 @@ const loadGroupChannelMembersAndUsers = async (
  */
 const loadMissingUsers = async (
   userIdsToLoad: string[],
-  existingUserProfiles: Record<string, UserProfile>,
+  dispatch: any,
+  getState: any,
 ): Promise<{
   users: UserProfile[];
   userStatuses: Record<string, UserStatus>;
 }> => {
-  let missingUsers: UserProfile[] = [];
-  let missingUserStatuses: Record<string, UserStatus> = {};
+  // Load users (it handles filtering internally)
+  const users = await loadUsers(userIdsToLoad, dispatch, getState);
 
-  if (userIdsToLoad.length > 0) {
-    const existingUserIds = Object.keys(existingUserProfiles);
-    const missingUserIds = userIdsToLoad.filter(
-      (id) => !existingUserIds.includes(id),
-    );
+  // Load statuses for the users that were actually loaded
+  const validUserIds = users.map((user) => user.id);
+  const userStatuses = await loadStatus(validUserIds, dispatch);
 
-    if (missingUserIds.length > 0) {
-      // First load users (this works with invalid IDs)
-      const users = await client.getProfilesByIds(missingUserIds);
-      missingUsers = users || [];
-
-      // Then load statuses using only the valid user IDs returned from getProfilesByIds
-      if (users && users.length > 0) {
-        const validUserIds = users.map((user) => user.id);
-        const statuses = await client.getStatusesByIds(validUserIds);
-
-        // Transform status array to Record<userId, UserStatus>
-        if (statuses && Array.isArray(statuses)) {
-          statuses.forEach((status: UserStatus) => {
-            missingUserStatuses[status.user_id] = status;
-          });
-        }
-      }
-    }
-  }
-
-  return { users: missingUsers, userStatuses: missingUserStatuses };
+  return { users, userStatuses };
 };
 
 /**
@@ -961,6 +965,7 @@ export const addSingleChannelToTeam = createAsyncThunk(
         groupChannelIds,
         userIdsToLoad,
         dispatch,
+        getState,
         state.entities,
       );
 
@@ -1047,6 +1052,7 @@ export const loadChannelsForTeam = createAsyncThunk(
         groupChannelIds,
         Array.from(userIdsToLoad),
         dispatch,
+        getState,
         state.entities,
       );
 
@@ -1066,6 +1072,61 @@ export const loadChannelsForTeam = createAsyncThunk(
         error:
           error instanceof Error ? error.message : "Failed to load channels",
       });
+    }
+  },
+);
+
+/**
+ * Mark channel as read - API call + state updates
+ */
+export const markChannelAsRead = createAsyncThunk(
+  "entities/markChannelAsRead",
+  async (channelId: string, { dispatch, getState, rejectWithValue }) => {
+    try {
+      const state = getState() as any;
+      const currentUserId = state.entities.users.currentUserId;
+      const currentTeamId = state.entities.teams.currentTeamId;
+
+      if (!currentUserId || !currentTeamId) {
+        return rejectWithValue("Missing current user or team");
+      }
+
+      // Get current unread counts for this channel
+      const currentUnreads = state.entities.channels.unreads[channelId];
+      if (currentUnreads) {
+        // Decrement team unreads by the amount this channel had (Mattermost pattern)
+        dispatch(
+          incrementTeamUnreadCount({
+            teamId: currentTeamId,
+            msgCount: -currentUnreads.msg_count, // negative to decrement
+            mentionCount: -currentUnreads.mention_count, // negative to decrement
+          }),
+        );
+      }
+
+      // Call API to mark channel as read
+      const response = await client.viewMyChannel(channelId);
+
+      // Update channel member's last_viewed_at with the value returned by API
+      const channelMember = state.entities.channels.myMembers[channelId];
+      if (channelMember && response.last_viewed_at_times?.[channelId]) {
+        dispatch(
+          setChannelMember({
+            ...channelMember,
+            last_viewed_at: response.last_viewed_at_times[channelId],
+          }),
+        );
+      }
+
+      // Reset channel unread count
+      dispatch(resetChannelUnreadCount(channelId));
+
+      return { channelId };
+    } catch (error) {
+      console.error(`Failed to mark channel ${channelId} as read:`, error);
+      return rejectWithValue(
+        error instanceof Error ? error.message : "Unknown error",
+      );
     }
   },
 );
@@ -1740,7 +1801,7 @@ const entitiesSlice = createSlice({
       })
       .addCase(leaveChannelAction.rejected, (state, action) => {
         console.error("Failed to leave channel:", action.payload);
-      })
+      });
   },
 });
 

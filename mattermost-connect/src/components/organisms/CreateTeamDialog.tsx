@@ -13,7 +13,8 @@ import {
   IconButton,
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
-import { useErrorHandler, useAppSelector, useLayout } from '../../hooks';
+import { useAppSelector, useLayout } from '../../hooks';
+import { handleError } from '../../services/errorService';
 import { selectServerUrl } from '../../store/selectors';
 
 export interface CreateTeamData {
@@ -47,7 +48,6 @@ export const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
   onCreateTeam,
   loading = false,
 }) => {
-  const { handleError } = useErrorHandler();
   const { isMobile } = useLayout();
   const serverUrl = useAppSelector(selectServerUrl) || '';
   

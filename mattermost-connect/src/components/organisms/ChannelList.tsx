@@ -17,7 +17,7 @@ import { ChannelCategory } from "../molecules/ChannelCategory";
 import { AddChannelMembersDialog } from "./AddChannelMembersDialog";
 import { useChannelLoader } from "../../hooks/useChannelLoader";
 import { useAutoChannelSelection } from "../../hooks/useAutoChannelSelection";
-import { useNavigation } from "../../hooks/useNavigation";
+import { navigateToChannel } from "../../services/navigationService";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import {
@@ -154,7 +154,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   }, [categories, filteredChannelIds]);
 
   // Get navigation
-  const { navigateToChannel } = useNavigation();
 
   // Drag & drop sensors - simple and direct
   const sensors = useSensors(

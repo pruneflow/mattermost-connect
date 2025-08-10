@@ -3,7 +3,9 @@ import { useAppSelector } from './useAppSelector';
 import { selectWebSocketConnectionStatus } from "../store/selectors";
 import { useAppDispatch } from './useAppDispatch';
 import { setConnectionStatus, setConnectionError } from '../store/slices/websocketSlice';
-import { useUnreadCounts } from './useUnreadCounts';
+import { incrementChannelUnreadCount, resetChannelUnreadCount, incrementTeamUnreadCount } from '../store/slices/entitiesSlice';
+import { selectCurrentUserId, selectCurrentUser, selectChannelById } from '../store/selectors';
+import { store } from '../store';
 import { useChannelWebSocket } from './useChannelWebSocket';
 import { useTeamWebSocket } from './useTeamWebSocket';
 import { useTypingWebSocket } from './useTypingWebSocket';
@@ -25,7 +27,66 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const tokenRef = useRef<string>('');
   
   const connectionStatus = useAppSelector(selectWebSocketConnectionStatus);
-  const { handleWebSocketEvent: handleUnreadEvent } = useUnreadCounts();
+  const currentUserId = useAppSelector(selectCurrentUserId);
+  const currentUser = useAppSelector(selectCurrentUser);
+
+  const handleUnreadEvent = useCallback((event: string, data: any) => {
+    switch (event) {
+      case 'posted':
+        if (data.post) {
+          const post = typeof data.post === 'string' ? JSON.parse(data.post) : data.post;
+          if(post.user_id !== currentUserId) {
+            const channelId = post.channel_id;
+            const teamId = data.team_id;
+            // Use selector to get channel data without creating dependency
+            const currentState = store.getState();
+            const channel = selectChannelById(currentState, channelId);
+            
+            let msgCount = 1;
+            let mentionCount = 0;
+            
+            if (channel?.type === 'D') {
+              // Direct Messages: all messages are mentions, don't increment msg_count
+              msgCount = 0;
+              mentionCount = 1; // Every DM message is a mention
+            } else {
+              // Team channels: normal logic
+              msgCount = 1;
+              mentionCount = post.message?.includes(`@${currentUser?.username}`) ? 1 : 0;
+            }
+
+            // Update channel unread count in channels.unreads
+            dispatch(incrementChannelUnreadCount({
+              channelId,
+              msgCount,
+              mentionCount,
+              fromCurrentUser: false,
+            }));
+
+            // Update team unread count
+            if (teamId) {
+              dispatch(incrementTeamUnreadCount({
+                teamId,
+                msgCount,
+                mentionCount,
+              }));
+            }
+          }
+        }
+        break;
+        
+      case 'channel_viewed':
+        if (data.channel_id) {
+          // Reset channel unread count in channels.unreads
+          dispatch(resetChannelUnreadCount(data.channel_id));
+        }
+        break;
+        
+      default:
+        // Ignore other events
+        break;
+    }
+  }, [currentUserId, currentUser?.username, dispatch]);
   const { handleChannelEvent } = useChannelWebSocket();
   const { handleTeamEvent } = useTeamWebSocket();
   const { handleTypingEvent } = useTypingWebSocket();

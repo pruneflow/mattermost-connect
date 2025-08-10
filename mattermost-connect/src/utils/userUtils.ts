@@ -30,6 +30,10 @@ export const displayUsername = (
   }
 };
 
+export const getDisplayName = (user: UserProfile): string => {
+  return displayUsername(user, 'full_name');
+};
+
 /**
  * Get profile image URL for a user (Mattermost pattern)
  * @param userId - The user ID

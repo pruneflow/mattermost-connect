@@ -23,7 +23,7 @@ import {
 } from '@mui/icons-material';
 import { ChannelIcon } from '../atoms/ChannelIcon';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { useChannels } from '../../hooks/useChannels';
+import { isChannelFavorite } from '../../services/channelService';
 import { selectCurrentUserId, selectMyChannelMember } from '../../store/selectors';
 import { displayUsername } from '../../utils/userUtils';
 import type { Channel, UserProfile } from '../../api/types';
@@ -61,7 +61,6 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
 
   const currentUserId = useAppSelector(selectCurrentUserId);
   const channelMember = useAppSelector(selectMyChannelMember(channel.id));
-  const { isChannelFavorite } = useChannels();
 
   const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);

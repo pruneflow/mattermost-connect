@@ -13,7 +13,7 @@ import { PersonAdd } from '@mui/icons-material';
 import { UserSearchAutocomplete } from '../atoms/UserSearchAutocomplete';
 import { useUserSearch } from '../../hooks/useUserSearch';
 import { useChannelInvitations } from '../../hooks/useChannelInvitations';
-import { usePermissions } from '../../hooks/usePermissions';
+import { canManageChannelMembers } from '../../services/permissionService';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { selectChannelById, selectChannelMembers } from '../../store/selectors';
@@ -144,7 +144,6 @@ export const AddChannelMembersDialog: React.FC<AddChannelMembersDialogProps> = (
   
   const { searchUsersToAddInChannel } = useUserSearch();
   const { addMembersToChannel, isAddingMembers } = useChannelInvitations(channelId);
-  const { canManageChannelMembers } = usePermissions();
   
   // Check permissions
   const canAddMembers = channel ? canManageChannelMembers(channel) : false;

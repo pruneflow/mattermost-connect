@@ -24,7 +24,9 @@ import {
   Save as SaveIcon,
   Cancel as CancelIcon,
 } from '@mui/icons-material';
-import { useErrorHandler, useLayout, useTeamCreation, usePermissions } from '../../hooks';
+import { useLayout, useTeamCreation } from '../../hooks';
+import { handleError } from '../../services/errorService';
+import { canManageTeam } from '../../services/permissionService';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectTeamById } from '../../store/selectors';
@@ -45,9 +47,7 @@ export const TeamSettingsDialog: React.FC<TeamSettingsDialogProps> = ({
   teamId,
 }) => {
   const { isMobile } = useLayout();
-  const { handleError } = useErrorHandler();
   const { uploadTeamIcon } = useTeamCreation();
-  const { canManageTeam } = usePermissions();
   const dispatch = useAppDispatch();
   
   // Get fresh team from store using memoized selector

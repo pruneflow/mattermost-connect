@@ -1,12 +1,17 @@
-import React, {useRef, useCallback, useEffect, RefObject} from "react";
+import React, { useRef, useCallback, useEffect, RefObject } from "react";
 import { Box, SxProps, Theme } from "@mui/material";
-import { MessageItem } from "./MessageItem";
 import { ScrollToBottomFab } from "./ScrollToBottomFab";
-import { useAutoScroll } from "../hooks/useAutoScroll";
+import { VirtualItemRenderer } from "./VirtualItemRenderer";
+import { scrollToBottom, isAtBottom } from "../../../../utils/scrollUtils";
 import { useVirtualizedMessages } from "../hooks/useVirtualizedMessages";
-import { useMessages } from "../../../../hooks/useMessages";
-import useUnreadCounts from "../../../../hooks/useUnreadCounts";
-
+import { loadOlderPosts, loadNewerPosts } from "../../../../services/messageService";
+import { markAsRead } from "../../../../services/channelService";
+import { useAppSelector } from "../../../../hooks/useAppSelector";
+import {
+  selectIsLoadingNewerPosts,
+  selectIsLoadingOlderPosts,
+  selectHasLoadedLatestPost
+} from "../../../../store/selectors/postsSelectors";
 export interface MessageListProps {
   channelId: string;
   autoLoad?: boolean;
@@ -15,7 +20,7 @@ export interface MessageListProps {
   onChangeUnreadChunkTimeStamp: (timestamp: number) => void;
   onToggleShouldStartFromBottomWhenUnread: () => void;
   sx?: SxProps<Theme>;
-  scrollElementRef: RefObject<HTMLDivElement>
+  scrollElementRef: RefObject<HTMLDivElement>;
 }
 
 const containerStyles: SxProps<Theme> = {
@@ -31,7 +36,7 @@ const scrollContainerStyles: SxProps<Theme> = {
   overflow: "auto",
 };
 
-export const VirtualizedMessageList: React.FC<MessageListProps> = ({
+const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   channelId,
   autoLoad = false,
   unreadChunkTimeStamp,
@@ -39,38 +44,32 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
   sx,
   scrollElementRef,
 }) => {
+  console.debug("🔄 VirtualizedMessageList re-render", {
+    channelId,
+    autoLoad,
+    unreadChunkTimeStamp,
+    shouldStartFromBottomWhenUnread,
+  });
+
   const lastReadPostIdRef = useRef<string | null>(null);
   const allowAutoLoadRef = useRef<boolean>(false);
-
-  const { markChannelAsRead } = useUnreadCounts();
   // Use custom hooks
   const { virtualizer, virtualItems, isReady, measureAnchorPosition } =
     useVirtualizedMessages({
       channelId,
-      scrollElement: scrollElementRef.current,
+      scrollElementRef,
     });
 
-  const {
-    loadOlderPosts,
-    loadNewerPosts,
-    isLoadingOlder,
-    isLoadingNewer,
-    atLatestPost,
-  } = useMessages({
-    channelId,
-  });
+  // Message loading states
+  const isLoadingOlder = useAppSelector(state => selectIsLoadingOlderPosts(state, channelId));
+  const isLoadingNewer = useAppSelector(state => selectIsLoadingNewerPosts(state, channelId));
+  const atLatestPost = useAppSelector(state => selectHasLoadedLatestPost(state, channelId));
 
-  // Auto-scroll hook
-  const { scrollToBottom, isAtBottom } = useAutoScroll({
-    virtualizer,
-    scrollElement: scrollElementRef.current,
-    shouldStartFromBottomWhenUnread,
-    unreadChunkTimeStamp,
-  });
+  // No auto-scroll hook needed - using direct functions
 
   const handleScrollToBottom = useCallback(() => {
-    scrollToBottom(scrollElementRef.current)
-  }, [scrollElementRef.current])
+    scrollToBottom(scrollElementRef.current);
+  }, []);
 
   // Wrapper functions with scroll preservation
   const handleLoadOlder = useCallback(async () => {
@@ -78,15 +77,15 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     measureAnchorPosition();
 
     // Étape 2: Charger les posts plus anciens (ce qui déclenchera un nouveau render)
-    await loadOlderPosts();
+    await loadOlderPosts(channelId);
 
     // Étape 3: La restauration se fait automatiquement via useLayoutEffect
-  }, [measureAnchorPosition, loadOlderPosts]);
+  }, [measureAnchorPosition, channelId]);
 
   const handleLoadNewer = useCallback(async () => {
     // Pour load newer, on garde généralement la position actuelle ou on va vers le bas
-    await loadNewerPosts();
-  }, [loadNewerPosts]);
+    await loadNewerPosts(channelId);
+  }, [channelId]);
 
   // Fonction pour marquer comme lu si on est en bas avec les derniers messages
   const handleMarkAsReadIfAtBottom = useCallback(() => {
@@ -112,7 +111,7 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     // Éviter les appels redondants
     if (lastReadPostIdRef.current === lastPostId) return;
     lastReadPostIdRef.current = lastPostId;
-    void markChannelAsRead(channelId);
+    void markAsRead(channelId);
     console.debug(
       "[VirtualizedMessageList] Marked channel as read, lastPostId:",
       lastPostId,
@@ -122,58 +121,54 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     virtualItems,
     virtualizer,
     channelId,
-    markChannelAsRead,
     isAtBottom,
   ]);
 
   // Handle scroll events
-  const handleScroll = useCallback(
-    (event: React.UIEvent<HTMLDivElement>) => {
-      // Auto-load logic (if enabled) - trigger when load-more buttons are visible based on scroll direction
-      if (autoLoad && allowAutoLoadRef.current) {
-        const virtualItemsVisible = virtualizer.getVirtualItems();
-        if (virtualItemsVisible.length === 0) return;
+  const handleScroll = useCallback(() => {
+    // Auto-load logic (if enabled) - trigger when load-more buttons are visible based on scroll direction
+    if (autoLoad && allowAutoLoadRef.current) {
+      const virtualItemsVisible = virtualizer.getVirtualItems();
+      if (virtualItemsVisible.length === 0) return;
 
-        const scrollDirection = virtualizer.scrollDirection;
+      const scrollDirection = virtualizer.scrollDirection;
 
-        if (scrollDirection === "backward") {
-          // Scrolling up: check first visible item for load-older
-          const firstVisibleItem = virtualItems[virtualItemsVisible[0].index];
-          if (
-            firstVisibleItem?.type === "load-more" &&
-            firstVisibleItem.data?.loadDirection === "older" &&
-            !isLoadingOlder
-          ) {
-            handleLoadOlder();
-          }
-        } else if (scrollDirection === "forward") {
-          // Scrolling down: check last visible item for load-newer
-          const lastVisibleItem =
-            virtualItems[
-              virtualItemsVisible[virtualItemsVisible.length - 1].index
-            ];
-          if (
-            lastVisibleItem?.type === "load-more" &&
-            lastVisibleItem.data?.loadDirection === "newer" &&
-            !isLoadingNewer
-          ) {
-            handleLoadNewer();
-          }
+      if (scrollDirection === "backward") {
+        // Scrolling up: check first visible item for load-older
+        const firstVisibleItem = virtualItems[virtualItemsVisible[0].index];
+        if (
+          firstVisibleItem?.type === "load-more" &&
+          firstVisibleItem.data?.loadDirection === "older" &&
+          !isLoadingOlder
+        ) {
+          void handleLoadOlder();
+        }
+      } else if (scrollDirection === "forward") {
+        // Scrolling down: check last visible item for load-newer
+        const lastVisibleItem =
+          virtualItems[
+            virtualItemsVisible[virtualItemsVisible.length - 1].index
+          ];
+        if (
+          lastVisibleItem?.type === "load-more" &&
+          lastVisibleItem.data?.loadDirection === "newer" &&
+          !isLoadingNewer
+        ) {
+          void handleLoadNewer();
         }
       }
+    }
 
-      // Mark as read if at bottom with latest posts
-      handleMarkAsReadIfAtBottom();
-    },
-    [
-      autoLoad,
-      handleLoadOlder,
-      handleLoadNewer,
-      isLoadingOlder,
-      isLoadingNewer,
-      handleMarkAsReadIfAtBottom,
-    ],
-  );
+    // Mark as read if at bottom with latest posts
+    handleMarkAsReadIfAtBottom();
+  }, [
+    autoLoad,
+    handleLoadOlder,
+    handleLoadNewer,
+    isLoadingOlder,
+    isLoadingNewer,
+    handleMarkAsReadIfAtBottom,
+  ]);
 
   // Reset lastReadPostId when changing channel
   useEffect(() => {
@@ -206,7 +201,7 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     } else {
       // Pas de nouveaux messages, scroll vers le bas
       handleScrollToBottom();
-      void markChannelAsRead(channelId);
+      void markAsRead(channelId);
       // Réactiver l'auto-load après 1 seconde
       setTimeout(() => {
         allowAutoLoadRef.current = true;
@@ -223,42 +218,17 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
         role="log"
         aria-label="Message list"
       >
-        <Box
-          style={{
-            height: virtualizer.getTotalSize(),
-            width: "100%",
-            position: "relative",
-          }}
-        >
-          {virtualizer.getVirtualItems().map((virtualItem) => {
-            const itemId = virtualItems[virtualItem.index];
-
-            return (
-              <Box
-                key={virtualItem.key}
-                ref={virtualizer.measureElement}
-                data-index={virtualItem.index}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: virtualItem.size,
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
-              >
-                <MessageItem
-                  item={itemId}
-                  channelId={channelId}
-                  onLoadOlder={handleLoadOlder}
-                  onLoadNewer={handleLoadNewer}
-                  isOlderLoading={isLoadingOlder}
-                  isNewerLoading={isLoadingNewer}
-                />
-              </Box>
-            );
-          })}
-        </Box>
+        <VirtualItemRenderer
+          totalSize={virtualizer.getTotalSize()}
+          measureElement={virtualizer.measureElement}
+          visibleItems={virtualizer.getVirtualItems()}
+          dataItems={virtualItems}
+          channelId={channelId}
+          onLoadOlder={handleLoadOlder}
+          onLoadNewer={handleLoadNewer}
+          isOlderLoading={isLoadingOlder}
+          isNewerLoading={isLoadingNewer}
+        />
       </Box>
 
       {/* Scroll to bottom FAB */}
@@ -282,3 +252,7 @@ export const VirtualizedMessageList: React.FC<MessageListProps> = ({
     </Box>
   );
 };
+
+export const VirtualizedMessageList = React.memo(
+  VirtualizedMessageListComponent,
+);

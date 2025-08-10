@@ -7,7 +7,6 @@ import viewsReducer from './slices/viewsSlice';
 import errorsReducer from './slices/errorsSlice';
 import authReducer from './slices/authSlice';
 import preferencesReducer from './slices/preferencesSlice';
-import loadingReducer from './slices/loadingSlice';
 import websocketReducer from './slices/websocketSlice';
 import postsReducer from './slices/postsSlice'
 import filesReducer from './slices/filesSlice'
@@ -34,7 +33,6 @@ export const store = configureStore({
     errors: errorsReducer,
     auth: authReducer,
     preferences: preferencesReducer,
-    loading: loadingReducer,
     websocket: websocketReducer,
     posts: postsReducer,
     files: filesReducer
@@ -71,6 +69,5 @@ export * from './slices/viewsSlice';
 export * from './slices/errorsSlice';
 export * from './slices/authSlice';
 export * from './slices/preferencesSlice';
-export * from './slices/loadingSlice';
 export * from './slices/postsSlice'
 export * from './slices/filesSlice'

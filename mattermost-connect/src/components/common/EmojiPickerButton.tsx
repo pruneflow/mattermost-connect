@@ -3,7 +3,7 @@ import { IconButton, Popover, Box, SxProps, Theme } from '@mui/material';
 import { EmojiEmotions as EmojiIcon } from '@mui/icons-material';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
-import { useRecentEmojis } from '../../hooks/useRecentEmojis';
+import { addRecentEmoji } from '../../services/reactionService';
 
 interface EmojiPickerButtonProps {
   onEmojiSelect: (emoji: string) => void;
@@ -20,7 +20,6 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
 }) => {
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const { addRecentEmoji } = useRecentEmojis();
 
   const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);

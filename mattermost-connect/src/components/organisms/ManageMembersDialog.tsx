@@ -22,7 +22,8 @@ import {
   PersonAdd as PersonAddIcon,
   KeyboardArrowDown as ArrowDownIcon,
 } from '@mui/icons-material';
-import { useLayout, usePermissions, useTeamMembers, useTeamDialogs } from '../../hooks';
+import { useLayout, useTeamMembers, useTeamDialogs } from '../../hooks';
+import { canManageTeam, canInviteUser, canAddUserToTeam } from '../../services/permissionService';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectTeamById, selectCurrentUserId } from '../../store/selectors';
 import { SearchInput } from '../atoms/SearchInput';
@@ -93,7 +94,6 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
   teamId,
 }) => {
   const { isMobile } = useLayout();
-  const { canManageTeam, canInviteUser, canAddUserToTeam } = usePermissions();
   const { openInvite, isInviteOpen, closeDialog } = useTeamDialogs();
   
   const team = useAppSelector(selectTeamById(teamId));

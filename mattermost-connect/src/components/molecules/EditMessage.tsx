@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { SxProps, Theme } from '@mui/material';
 import { MessageInput } from './MessageInput';
-import { useMessages } from '../../hooks/useMessages';
+import { updateMessage } from '../../services/messageService';
 
 interface EditMessageProps {
   postId: string;
@@ -18,7 +18,6 @@ export const EditMessage: React.FC<EditMessageProps> = ({
   onSave,
   sx,
 }) => {
-  const { updateMessage } = useMessages();
 
   const handleSave = useCallback(async (message: string) => {
     try {

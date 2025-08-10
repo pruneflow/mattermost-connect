@@ -17,7 +17,7 @@ import {
   Info as InfoIcon,
   ExitToApp as ExitToAppIcon,
 } from '@mui/icons-material';
-import { usePermissions } from '../../hooks';
+import { canManageTeam, canInviteUser, canAddUserToTeam } from '../../services/permissionService';
 import type { Team } from '../../api/types';
 
 export interface TeamMenuOptions {
@@ -55,7 +55,6 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
   onOpenInfo,
   onLeaveTeam,
 }) => {
-  const { canManageTeam, canInviteUser, canAddUserToTeam } = usePermissions();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
 
   const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {

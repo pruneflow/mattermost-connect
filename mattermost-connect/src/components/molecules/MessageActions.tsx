@@ -26,8 +26,9 @@ import {
   MoreVert as MoreVertIcon,
   MoreHoriz as MoreHorizIcon,
 } from '@mui/icons-material';
-import { useMessages, useReactionToggle } from '../../hooks/useMessages';
-import { useRecentEmojis } from '../../hooks/useRecentEmojis';
+import { deleteMessage, copyMessage } from '../../services/messageService';
+import { toggleReactionOnPost } from '../../services/reactionService';
+import { getRecentEmojis } from '../../services/reactionService';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
 import { Post } from '../../api/types';
 import { useAppSelector } from '../../hooks';
@@ -107,9 +108,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const currentUserId = useAppSelector(selectCurrentUserId);
 
-  const { deleteMessage, copyMessage } = useMessages();
-  const { toggleReaction } = useReactionToggle(post.id);
-  const { recentEmojis } = useRecentEmojis();
+  const recentEmojis = getRecentEmojis();
   
   const isOwnMessage = post.user_id === currentUserId;
   
@@ -161,15 +160,15 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       setSnackbarOpen(true);
     }
     handleMenuClose();
-  }, [post, copyMessage, handleMenuClose]);
+  }, [post, handleMenuClose]);
 
   const handleEmojiSelect = useCallback(async (emojiName: string) => {
     try {
-      await toggleReaction(emojiName);
+      await toggleReactionOnPost(post.id, emojiName);
     } catch (error) {
       console.error('Failed to toggle reaction:', error);
     }
-  }, [toggleReaction]);
+  }, [post.id]);
 
   const handleSnackbarClose = useCallback(() => {
     setSnackbarOpen(false);

@@ -1,5 +1,15 @@
 // Mattermost-compliant error handling utilities
 import type { ServerError } from '../api/types';
+import { store } from '../store';
+import { logoutUser } from '../store/slices/authSlice';
+
+export interface ErrorHandlerOptions {
+  showToast?: boolean;
+  logError?: boolean;
+  component?: string;
+  action?: string;
+  throwError?: boolean;
+}
 
 // Error ID patterns following Mattermost convention
 export const ErrorIds = {
@@ -211,3 +221,4 @@ export const logError = (error: ServerError, context?: { component?: string; act
     }
   }
 };
+

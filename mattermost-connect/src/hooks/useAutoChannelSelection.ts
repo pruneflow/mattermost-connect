@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppSelector } from './useAppSelector';
-import { useChannels } from './useChannels';
+import { switchToChannel } from '../services/channelService';
 import { 
   selectCurrentTeamId, 
   selectCurrentChannelId, 
@@ -23,7 +23,6 @@ export const useAutoChannelSelection = () => {
   const currentChannelId = useAppSelector(selectCurrentChannelId);
   const allChannels = useAppSelector(selectChannelsForCurrentTeam) as EnrichedChannel[];
   const lastVisitedChannels = useAppSelector(selectLastVisitedChannels);
-  const { switchToChannel } = useChannels();
 
   // Auto-select channel when team changes and channels are loaded
   useEffect(() => {

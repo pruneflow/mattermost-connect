@@ -10,7 +10,7 @@ import {
 } from '../store/slices/entitiesSlice';
 import { selectCurrentUserId } from '../store/selectors';
 import { client } from '../api/client';
-import { useErrorHandler } from './useErrorHandler';
+import { handleError } from '../services/errorService';
 
 /**
  * Hook for handling channel-related WebSocket events
@@ -18,7 +18,6 @@ import { useErrorHandler } from './useErrorHandler';
  */
 export const useChannelWebSocket = () => {
   const dispatch = useAppDispatch();
-  const { handleError } = useErrorHandler();
   const currentUserId = useAppSelector(selectCurrentUserId);
 
   // Handle incoming WebSocket events for channels

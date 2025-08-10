@@ -15,7 +15,7 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectTeams } from '../../store/selectors';
 import { useTeams } from '../../hooks/useTeams';
 import { useTeamCreation } from '../../hooks/useTeamCreation';
-import { usePermissions } from '../../hooks/usePermissions';
+import { canCreateTeam } from '../../services/permissionService';
 import type { Team } from '../../api/types';
 
 export interface TeamTabsProps {
@@ -51,7 +51,6 @@ export const TeamTabs: React.FC<TeamTabsProps> = ({
   // Get data
   const teams = useAppSelector(selectTeams);
   const { currentTeamId } = useTeams();
-  const { canCreateTeam } = usePermissions();
   
   // Check scroll position and update indicators
   const updateScrollIndicators = useCallback(() => {

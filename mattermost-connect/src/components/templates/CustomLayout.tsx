@@ -31,10 +31,24 @@ export const CustomLayout: React.FC<CustomLayoutProps> = ({
   sx,
   focusedPostId,
 }) => {
+  console.debug("🔄 CustomLayout re-render");
+  console.debug("🔍 CustomLayout props:", {
+    hasChildren: !!children,
+    sx: !!sx,
+    focusedPostId,
+    sxStringified: JSON.stringify(sx)
+  });
+  
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  console.debug("🔍 CustomLayout isMobile:", isMobile);
   
   const currentChannel = useAppSelector(selectCurrentChannel);
+  console.debug("🔍 CustomLayout currentChannel:", {
+    hasChannel: !!currentChannel,
+    channelId: currentChannel?.id,
+    channelName: currentChannel?.name
+  });
 
   return (
     <Box sx={{ display: "flex", flex: 1, flexDirection: "column", overflow: "hidden", ...sx }}>

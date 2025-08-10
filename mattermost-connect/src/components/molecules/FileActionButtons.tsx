@@ -2,7 +2,7 @@ import React from 'react';
 import { Box } from '@mui/material';
 import { FileDownloadButton } from './FileDownloadButton';
 import { FilePublicLinkButton } from './FilePublicLinkButton';
-import { useFileActions } from '../../hooks/useFileActions';
+import { canDownload } from '../../services/fileService';
 import { useServerConfig } from '../../hooks/useServerConfig';
 
 export interface FileActionButtonsProps {
@@ -22,7 +22,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   showPublicLink = true,
   showDownload = true
 }) => {
-  const { canDownload } = useFileActions(fileId);
+  const canDownloadFile = canDownload(fileId);
   const { config } = useServerConfig();
   
   // Check server configuration for public links like official Mattermost
@@ -45,7 +45,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         />
       )}
       
-      {showDownload && canDownload && (
+      {showDownload && canDownloadFile && (
         <FileDownloadButton 
           fileId={fileId} 
           size={size}

@@ -19,9 +19,8 @@ import { setPreferences } from "../store/slices/preferencesSlice";
 import { client } from "../api/client";
 import { store } from "../store";
 import { useWebSocket } from "./useWebSocket";
-import { useNavigation } from "./useNavigation";
+import { navigateToTeam, getLastVisited, initializeNavigation } from "../services/navigationService";
 import { useUserStatus } from "./useUserStatus";
-import { loadPreferences } from "../store/slices/preferencesSlice";
 
 const STATUS_INTERVAL = 60000;
 
@@ -33,7 +32,6 @@ export const useAppInitialization = () => {
   const dispatch = useAppDispatch();
   const { connect: connectWebSocket, disconnect: disconnectWebSocket } =
     useWebSocket();
-  const { navigateToTeam, getLastVisited } = useNavigation();
   
   // Initialize user status management (includes periodic polling)
   useUserStatus();
@@ -112,6 +110,9 @@ export const useAppInitialization = () => {
 
     try {
       console.log("🚀 Initializing app data (Mattermost pattern)...");
+
+      // Initialize navigation state from localStorage
+      initializeNavigation();
 
       // Configure client exactly like Mattermost
       client.setUrl(serverUrl);

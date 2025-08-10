@@ -1,6 +1,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { client } from '../api/client';
-import { useErrorHandler } from './useErrorHandler';
+import { handleError } from '../services/errorService';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
 import { setUsers } from '../store/slices/entitiesSlice';
@@ -34,7 +34,6 @@ export interface UserSearchOptions {
  * Supports filtering by team/channel membership with debouncing
  */
 export const useUserSearch = (debounceMs: number = 300) => {
-  const { handleError } = useErrorHandler();
   const dispatch = useAppDispatch();
   const enrichedChannels = useAppSelector(selectChannelsForCurrentTeam);
   const userProfiles = useAppSelector(selectUserProfiles);

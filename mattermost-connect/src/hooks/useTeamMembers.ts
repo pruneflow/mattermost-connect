@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
-import { useErrorHandler } from './useErrorHandler';
+import { handleError } from '../services/errorService';
 import { useTeamStats } from './useTeamStats';
 import { updateTeamMemberRoles, removeUserFromTeam } from '../store/slices/entitiesSlice';
 import { selectTeamMembers } from '../store/selectors';
@@ -15,7 +15,6 @@ import type { UserProfile, TeamMember } from '../api/types';
  */
 export const useTeamMembers = (teamId: string | null) => {
   const dispatch = useAppDispatch();
-  const { handleError } = useErrorHandler();
   const { stats, loading: statsLoading } = useTeamStats(teamId || '');
   
   // Watch Redux store for team member changes to trigger reload

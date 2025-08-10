@@ -7,13 +7,13 @@ import {
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectTeams } from "../../store/selectors";
 import {
-  usePermissions,
-  useErrorHandler,
-  useNavigation,
   useTeamCreation,
   useTeams,
   useTeamDialogs
 } from "../../hooks";
+import { handleError } from "../../services/errorService";
+import { canCreateTeam } from "../../services/permissionService";
+import { navigateToTeam } from "../../services/navigationService";
 import { CreateTeamDialog, type CreateTeamData } from "./CreateTeamDialog";
 import TeamSettingsDialog from "./TeamSettingsDialog";
 import ManageMembersDialog from "./ManageMembersDialog";
@@ -58,9 +58,6 @@ export const TeamList: React.FC<TeamListProps> = ({
   } = useTeamDialogs();
 
   // Hooks
-  const { canCreateTeam } = usePermissions();
-  const { handleError } = useErrorHandler();
-  const { navigateToTeam } = useNavigation();
   const { createTeam } = useTeamCreation();
   // UnreadCounts handled by TeamItem directly
 

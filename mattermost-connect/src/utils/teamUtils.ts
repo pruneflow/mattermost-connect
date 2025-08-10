@@ -1,5 +1,8 @@
 import ColorHash from 'color-hash';
 import { client } from '../api/client';
+import { store } from '../store';
+import { selectMyTeamMembers } from '../store/selectors';
+import { TeamRoles } from '../constants/permissions';
 import type { Team } from '../api/types';
 
 // Default color hash instance (same as Mattermost)
@@ -52,4 +55,12 @@ export const filterTeams = (teams: Team[], searchTerm: string): Team[] => {
       team.display_name.toLowerCase().includes(term) ||
       team.name.toLowerCase().includes(term),
   );
+};
+
+export const getUserTeamRoles = (teamId: string): string[] => {
+  const state = store.getState();
+  const myTeamMembers = selectMyTeamMembers(state);
+  const member = myTeamMembers[teamId];
+  if (!member?.roles) return [TeamRoles.TEAM_USER];
+  return member.roles.split(' ').filter(Boolean);
 };

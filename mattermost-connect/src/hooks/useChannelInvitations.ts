@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
 import { client } from '../api/client';
-import { useErrorHandler } from './useErrorHandler';
+import { handleError } from '../services/errorService';
 import { useAppSelector } from './useAppSelector';
 import { useAppDispatch } from './useAppDispatch';
-import { usePermissions } from './usePermissions';
+import { canAddUserToTeam, canManageChannelMembers } from '../services/permissionService';
 import { selectChannelById, selectCurrentTeamId, selectUserProfiles, selectTeamMembers, selectChannelMembers } from '../store/selectors';
 import { loadTeamMembers, loadChannelMembers, addUsersToTeam } from '../store/slices/entitiesSlice';
 
@@ -82,8 +82,6 @@ export interface ChannelInvitationResult {
  */
 export const useChannelInvitations = (channelId: string) => {
   const dispatch = useAppDispatch();
-  const { handleError } = useErrorHandler();
-  const { canAddUserToTeam, canManageChannelMembers } = usePermissions();
   
   // Get current state
   const currentTeamId = useAppSelector(selectCurrentTeamId);

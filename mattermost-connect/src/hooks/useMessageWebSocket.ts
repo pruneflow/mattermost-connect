@@ -12,7 +12,6 @@ import { Post } from '../api/types';
  * 
  * Responsibility: Handle posts data (posts.posts, posts.postsInChannel, posts.postsInThread)
  * and reactions (part of posts)
- * Does NOT handle: unread counts (useUnreadCounts), typing events (useTypingWebSocket)
  */
 export const useMessageWebSocket = () => {
   const dispatch = useAppDispatch();

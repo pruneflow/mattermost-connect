@@ -15,11 +15,10 @@ import {
 import { Sidebar } from './Sidebar';
 import { UserMenu } from './UserMenu';
 import { useLayout } from '../../hooks/useLayout';
-import { useAuth } from '../../hooks/useAuth';
+import { getAuthenticatedUser } from '../../services/authService';
 import { useTeams } from '../../hooks/useTeams';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentChannel } from '../../store/selectors';
-import { displayUsername } from '../../utils/userUtils';
 
 export interface AppBarProps {
   /**
@@ -47,7 +46,7 @@ export const AppBar: React.FC<AppBarProps> = ({
   
   // Use new hooks
   const { isMobile } = useLayout();
-  const { currentUser } = useAuth();
+  const currentUser = getAuthenticatedUser();
   const { currentTeam } = useTeams();
   const currentChannelData = useAppSelector(selectCurrentChannel);
 

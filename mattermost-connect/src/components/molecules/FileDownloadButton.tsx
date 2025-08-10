@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { IconButton, Tooltip, CircularProgress } from '@mui/material';
 import { Download as DownloadIcon } from '@mui/icons-material';
-import { useFileActions } from '../../hooks/useFileActions';
+import { download, isDownloading, canDownload } from '../../services/fileService';
 
 export interface FileDownloadButtonProps {
   fileId: string;
@@ -20,11 +20,13 @@ export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({
   tooltip = 'Download', 
   sx 
 }) => {
-  const { download, isDownloading, canDownload } = useFileActions(fileId);
+  const isFileDownloading = isDownloading(fileId);
+  const canDownloadFile = canDownload(fileId);
   
-  const handleDownloadClick = useCallback(() => {
-    download();
-  }, [download]);
+  const handleDownloadClick = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    download(fileId);
+  }, [fileId]);
   
   return (
     <Tooltip title={tooltip}>
@@ -32,7 +34,7 @@ export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({
         size={size} 
         onClick={handleDownloadClick}
         aria-label="download file"
-        disabled={!canDownload || isDownloading}
+        disabled={!canDownloadFile || isFileDownloading}
         sx={{ 
           p: { xs: 0.75, md: 0.5 },
           '&:hover': {
@@ -41,7 +43,7 @@ export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({
           ...sx
         }}
       >
-        {isDownloading ? (
+        {isFileDownloading ? (
           <CircularProgress size={size === 'small' ? 16 : 24} />
         ) : (
           <DownloadIcon fontSize={size} />

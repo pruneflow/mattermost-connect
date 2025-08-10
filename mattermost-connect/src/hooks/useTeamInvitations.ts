@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { client } from '../api/client';
-import { useErrorHandler } from './useErrorHandler';
+import { handleError } from '../services/errorService';
 import { useServerConfig } from './useServerConfig';
 import { useAppDispatch } from './useAppDispatch';
 import { addUsersToTeam } from '../store/slices/entitiesSlice';
@@ -23,7 +23,6 @@ export interface GuestInvitationParams {
  */
 export const useTeamInvitations = (teamId: string) => {
   const dispatch = useAppDispatch();
-  const { handleError } = useErrorHandler();
   const { canSendEmailInvitationsServerSide } = useServerConfig();
   
   // Loading states for different invitation types

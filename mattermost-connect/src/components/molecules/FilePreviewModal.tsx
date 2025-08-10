@@ -16,7 +16,6 @@ import {
   NavigateNext as NextIcon,
   NavigateBefore as PrevIcon,
 } from '@mui/icons-material';
-import { useFileActions } from '../../hooks/useFileActions';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectFileInfoById } from '../../store/selectors/filesSelectors';
 import { selectPostById } from '../../store/selectors/postsSelectors';

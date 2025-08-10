@@ -7,9 +7,12 @@ import {
 } from "@mui/material";
 import {
   LoginForm,
-  useAuth,
   AppProvider,
   AppLayout,
+  useAppSelector,
+  selectIsAuthenticated,
+  selectCurrentUser,
+  selectIsLoggingIn,
 } from "mattermost-connect";
 
 // Phase 3 Demo Component - Channels + Navigation with Layout Toggle
@@ -99,7 +102,9 @@ const Phase3Demo: React.FC = () => {
 
 // Auth status component
 const AuthStatus: React.FC = () => {
-  const { isAuthenticated, currentUser, isLoggingIn } = useAuth();
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const currentUser = useAppSelector(selectCurrentUser);
+  const isLoggingIn = useAppSelector(selectIsLoggingIn);
 
   if (isLoggingIn) {
     return (
@@ -270,7 +275,7 @@ const ReduxDemoContent: React.FC = () => {
               pl: 0.5,
             }}
           >
-            ✅ Hooks: useChannels, useChannelWebSocket, useNavigation
+            ✅ Hooks: useChannels, useChannelWebSocket
           </Typography>
           <Typography
             component="li"

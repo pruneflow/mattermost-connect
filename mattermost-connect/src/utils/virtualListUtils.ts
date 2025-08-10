@@ -19,18 +19,14 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
 };
 
 /**
- * Build complete virtual list with all separators and load buttons
+ * Build base virtual list with posts and date separators only
  * Single optimized pass through the posts
  */
 export const buildVirtualList = (
   postIds: string[],
   posts: Record<string, Post>,
-  lastViewedAt: number,
-  atOldestPost: boolean,
-  atLatestPost: boolean,
   currentUserId: string,
-  channelType: string,
-  unreadCount?: number
+  channelType: string
 ): VirtualListItem[] => {
   // Early return with stable empty array if no posts
   if (!postIds || postIds.length === 0) {
@@ -39,26 +35,10 @@ export const buildVirtualList = (
   
   const result: VirtualListItem[] = [];
   
-  // Add StartOfChannelDivider at the beginning if we've reached the oldest post
-  if (atOldestPost) {
-    result.push({
-      type: 'start-of-channel',
-      id: 'start-of-channel'
-    });
-  } else {
-    // Add LoadOlder button if we haven't reached the oldest post
-    result.push({
-      type: 'load-more',
-      id: 'load-older',
-      data: { loadDirection: 'older' }
-    });
-  }
-  
-  // Single pass through posts with all injection logic
+  // Single pass through posts with date separators only
   // Reverse the order so oldest posts are first (chat order)
   const orderedPostIds = [...postIds].reverse();
   let lastDate: Date | null = null;
-  let newMessagesSeparatorInserted = false;
   let lastPost: Post | null = null;
   
   orderedPostIds.forEach((postId) => {
@@ -77,20 +57,7 @@ export const buildVirtualList = (
       lastDate = postDate;
     }
     
-    // 2. Inject new messages separator if needed (before first unread post)
-    if (!newMessagesSeparatorInserted && 
-        lastViewedAt && 
-        post.create_at > lastViewedAt) {
-      
-      result.push({
-        type: 'new-messages-separator',
-        id: `new-messages-${lastViewedAt}`,
-        data: { unreadCount: unreadCount || 0 }
-      });
-      newMessagesSeparatorInserted = true;
-    }
-    
-    // 3. Calculate if this message should show header (not part of a group)
+    // 2. Calculate if this message should show header (not part of a group)
     // In Direct Messages (DM), never show headers
     const showHeader = channelType === 'D' 
       ? false
@@ -98,7 +65,7 @@ export const buildVirtualList = (
          lastPost.user_id !== post.user_id ||
          (post.create_at - lastPost.create_at) > 5 * 60 * 1000); // 5 minutes
     
-    // 4. Add the post itself with grouping and ownership info
+    // 3. Add the post itself with grouping and ownership info
     result.push({
       type: 'post',
       id: postId,
@@ -113,15 +80,46 @@ export const buildVirtualList = (
     lastPost = post;
   });
   
-  // Add LoadNewer button at the end if needed
-  if (!atLatestPost) {
-    result.push({
-      type: 'load-more',
-      id: 'load-newer',
-      data: { loadDirection: 'newer' }
+  return result;
+};
+
+/**
+ * Inject new messages separator at the correct position in virtual list
+ */
+export const injectNewMessagesSeparator = (
+  virtualItems: VirtualListItem[],
+  posts: Record<string, Post>,
+  lastViewedAt: number,
+  unreadCount: number = 0
+): VirtualListItem[] => {
+  if (!lastViewedAt || virtualItems.length === 0) {
+    return virtualItems;
+  }
+
+  const result = [...virtualItems];
+  let insertIndex = -1;
+
+  // Find the first unread post
+  for (let i = 0; i < result.length; i++) {
+    const item = result[i];
+    if (item.type === 'post' && item.data?.post) {
+      const post = posts[item.id];
+      if (post && post.create_at > lastViewedAt) {
+        insertIndex = i;
+        break;
+      }
+    }
+  }
+
+  // Insert separator before first unread post
+  if (insertIndex >= 0) {
+    result.splice(insertIndex, 0, {
+      type: 'new-messages-separator',
+      id: `new-messages-${lastViewedAt}`,
+      data: { unreadCount }
     });
   }
-  
+
   return result;
 };
 
