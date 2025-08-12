@@ -9,6 +9,10 @@ export type {
 } from '@mattermost/types/users';
 
 export type {
+  FileInfo
+} from "@mattermost/types/files"
+
+export type {
   Team,
   TeamMembership as TeamMember,
   TeamStats

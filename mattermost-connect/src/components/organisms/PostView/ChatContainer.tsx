@@ -77,11 +77,11 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
     channelId
   });
   
-  const handleSendMessage = useCallback(async (message: string) => {
-    if (!message.trim()) return;
+  const handleSendMessage = useCallback(async (message: string, fileIds?: string[]) => {
+    if (!message.trim() && (!fileIds || fileIds.length === 0)) return;
     
     try {
-      await sendMessage(channelId, message);
+      await sendMessage(channelId, message, '', fileIds);
       await markAsRead(channelId);
       scrollToBottom(scrollElementRef.current)
     } catch (error) {
@@ -117,6 +117,7 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
       <Box sx={inputContainerStyles}>
         <MessageInput
           placeholder="Type a message..."
+          channelId={channelId}
           onSend={handleSendMessage}
           autoFocus={false}
         />

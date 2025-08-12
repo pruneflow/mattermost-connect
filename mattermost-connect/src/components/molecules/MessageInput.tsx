@@ -20,11 +20,14 @@ import {
   Visibility as ShowFormattingIcon,
 } from '@mui/icons-material';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
+import { FilePreviewContainer } from './FilePreviewContainer';
+import { FileStatus } from './FileItem';
 
 interface MessageInputProps {
   placeholder?: string;
   initialValue?: string;
-  onSend: (message: string) => void;
+  channelId?: string;
+  onSend: (message: string, fileIds?: string[]) => void;
   onCancel?: () => void;
   mode?: 'default' | 'edit';
   autoFocus?: boolean;
@@ -83,6 +86,7 @@ const editButtonsStyles: SxProps<Theme> = {
 export const MessageInput: React.FC<MessageInputProps> = ({
   placeholder = "Type a message...",
   initialValue = "",
+  channelId,
   onSend,
   onCancel,
   mode = 'default',
@@ -91,25 +95,71 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 }) => {
   const [message, setMessage] = useState(initialValue);
   const [showFormatting, setShowFormatting] = useState(true);
+  const [files, setFiles] = useState<FileStatus[]>([]);
   const textFieldRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleMessageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
   }, []);
 
+  const canSend = React.useMemo(() => {
+    const hasMessage = message.trim().length > 0;
+    const hasFiles = files.length > 0;
+    const hasUploadingFiles = files.some(f => f.uploading);
+    
+    return (hasMessage || hasFiles) && !hasUploadingFiles;
+  }, [message, files]);
+
   const handleSend = useCallback(() => {
-    if (message.trim()) {
-      onSend(message.trim());
+    if (canSend) {
+      const uploadedFileIds = files
+        .filter(f => f.uploaded && f.fileId)
+        .map(f => f.fileId!);
+      
+      onSend(message.trim(), uploadedFileIds.length > 0 ? uploadedFileIds : undefined);
+      
       if (mode === 'default') {
         setMessage('');
+        setFiles([]);
       }
     }
-  }, [message, onSend, mode]);
+  }, [canSend, message, files, onSend, mode]);
 
   const handleCancel = useCallback(() => {
     setMessage(initialValue);
+    setFiles([]);
     onCancel?.();
   }, [initialValue, onCancel]);
+
+  const handleFileSelect = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    
+    const newFiles: FileStatus[] = selectedFiles.map(file => ({
+      file,
+      uploading: false,
+      uploaded: false,
+    }));
+
+    setFiles(prev => [...prev, ...newFiles]);
+    
+    // Clear input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleRemoveFile = useCallback((fileToRemove: File) => {
+    setFiles(prev => prev.filter(f => f.file !== fileToRemove));
+  }, []);
+
+  const handleFilesChange = useCallback((updatedFiles: FileStatus[]) => {
+    setFiles(updatedFiles);
+  }, []);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && mode === 'default') {
@@ -163,6 +213,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   return (
     <Box sx={{ ...containerStyles, ...sx }}>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="*/*"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+
       <TextField
         ref={textFieldRef}
         fullWidth
@@ -216,7 +276,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
           
           <Tooltip title="Attach file">
-            <IconButton size="small">
+            <IconButton size="small" onClick={handleFileSelect}>
               <AttachFileIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -229,7 +289,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 <IconButton 
                   size="small" 
                   onClick={handleSend}
-                  disabled={!message.trim()}
+                  disabled={!canSend}
                   color="primary"
                 >
                   <SendIcon fontSize="small" />
@@ -239,6 +299,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           )}
         </Box>
       </Box>
+      
+      {/* File previews */}
+      {files.length > 0 && channelId && (
+        <FilePreviewContainer
+          files={files}
+          channelId={channelId}
+          onRemove={handleRemoveFile}
+          onFilesChange={handleFilesChange}
+        />
+      )}
       
       {/* Edit mode buttons */}
       {mode === 'edit' && (
@@ -250,7 +320,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             size="small" 
             variant="contained" 
             onClick={handleSend}
-            disabled={!message.trim()}
+            disabled={!canSend}
           >
             Save
           </Button>

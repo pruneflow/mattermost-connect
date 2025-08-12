@@ -17,7 +17,7 @@ import { MessageActions } from "./MessageActions";
 import { UserAvatar } from "../atoms/UserAvatar";
 import { MessageReactions } from "./MessageReactions";
 import { EditMessage } from "./EditMessage";
-import { MessageAttachment } from "./MessageAttachment";
+import { FileAttachmentList } from "./FileAttachmentList";
 import { isSystemMessage } from "../../utils/messageUtils";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectUserProfiles } from "../../store/selectors";
@@ -314,7 +314,7 @@ export const Message: React.FC<MessageProps> = memo(
 
             {/* File attachments */}
             {post.file_ids && post.file_ids.length > 0 && (
-              <MessageAttachment postId={post.id} fileIds={post.file_ids} />
+              <FileAttachmentList postId={post.id} fileIds={post.file_ids} />
             )}
 
             {/* Timestamp in bottom right */}

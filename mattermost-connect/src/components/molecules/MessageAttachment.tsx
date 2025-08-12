@@ -20,8 +20,8 @@ interface AuthenticatedImagePreviewProps {
 }
 
 function AuthenticatedImagePreview({ fileId, onError }: AuthenticatedImagePreviewProps) {
-  // Utilisation directe de l'URL de preview avec authentification par cookie
-  const previewUrl = `${client.getUrl()}/api/v4/files/${fileId}/preview`;
+  // Utilisation directe de l'URL de thumbnail avec authentification par cookie
+  const previewUrl = `${client.getUrl()}/api/v4/files/${fileId}/thumbnail`;
   return (
     <Box
       component="img"
