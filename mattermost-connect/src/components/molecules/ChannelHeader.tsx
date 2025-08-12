@@ -1,10 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   Box,
   Typography,
   IconButton,
-  Menu,
-  MenuItem,
   Chip,
   Tooltip,
   SxProps,
@@ -12,19 +10,16 @@ import {
   alpha,
 } from '@mui/material';
 import {
-  MoreVert as MoreVertIcon,
   StarBorder as StarIcon,
   Star as StarFilledIcon,
   Notifications as NotificationsIcon,
   NotificationsOff as NotificationsOffIcon,
-  Info as InfoIcon,
-  PersonAdd as PersonAddIcon,
-  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { ChannelIcon } from '../atoms/ChannelIcon';
+import { ChannelMenu, type ChannelMenuOptions } from './ChannelMenu';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { isChannelFavorite } from '../../services/channelService';
-import { selectCurrentUserId, selectMyChannelMember } from '../../store/selectors';
+import { isChannelFavorite, toggleFavorite, muteChannel } from '../../services/channelService';
+import { selectCurrentUserId, selectIsChannelFavorite, selectMyChannelMember } from "../../store/selectors";
 import { displayUsername } from '../../utils/userUtils';
 import type { Channel, UserProfile } from '../../api/types';
 
@@ -35,11 +30,7 @@ export interface ChannelHeaderProps {
     otherUser?: UserProfile | null;
     otherUserId?: string;
   };
-  onChannelInfo?: () => void;
-  onAddMembers?: () => void;
-  onChannelSettings?: () => void;
-  onToggleFavorite?: () => void;
-  onToggleMute?: () => void;
+  menuOptions?: ChannelMenuOptions;
   sx?: SxProps<Theme>;
 }
 
@@ -49,42 +40,14 @@ export interface ChannelHeaderProps {
  */
 export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
   channel,
-  onChannelInfo,
-  onAddMembers,
-  onChannelSettings,
-  onToggleFavorite,
-  onToggleMute,
+  menuOptions,
   sx,
 }) => {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
 
-  const currentUserId = useAppSelector(selectCurrentUserId);
   const channelMember = useAppSelector(selectMyChannelMember(channel.id));
 
-  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  }, []);
+  const isFavorite = useAppSelector(state => selectIsChannelFavorite(state, channel.id));
 
-  const handleMenuClose = useCallback(() => {
-    setAnchorEl(null);
-  }, []);
-
-  // Stable handlers for menu items
-  const handleChannelInfo = useCallback(() => {
-    handleMenuClose();
-    if (onChannelInfo) onChannelInfo();
-  }, [onChannelInfo, handleMenuClose]);
-
-  const handleAddMembers = useCallback(() => {
-    handleMenuClose();
-    if (onAddMembers) onAddMembers();
-  }, [onAddMembers, handleMenuClose]);
-
-  const handleChannelSettings = useCallback(() => {
-    handleMenuClose();
-    if (onChannelSettings) onChannelSettings();
-  }, [onChannelSettings, handleMenuClose]);
 
   // Use enriched channel data directly from selectors
   const title = channel.computedDisplayName || channel.display_name || 'Channel';
@@ -92,7 +55,15 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
     ? (channel.otherUser?.username ? `@${channel.otherUser.username}` : 'Direct Message')
     : (channel.purpose || channel.header || (channel.type === 'G' ? 'Group Message' : 'Channel'));
   const isMuted = channelMember?.notify_props?.mark_unread === 'mention';
-  const isFavorite = isChannelFavorite(channel.id);
+
+  // Stable handlers for favorite and mute actions
+  const handleToggleFavorite = useCallback(() => {
+    toggleFavorite(channel.id, isFavorite);
+  }, [channel.id, isFavorite]);
+
+  const handleMuteChannel = useCallback(() => {
+    muteChannel(channel.id, !isMuted);
+  }, [channel.id, isMuted]);
 
   return (
     <Box
@@ -169,91 +140,52 @@ export const ChannelHeader: React.FC<ChannelHeaderProps> = ({
       {/* Quick Actions */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {/* Favorite Toggle */}
-        {onToggleFavorite && (
-          <Tooltip title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}>
-            <IconButton
-              onClick={onToggleFavorite}
-              size="small"
-              sx={{
-                color: isFavorite ? 'warning.main' : 'action.active',
-                '&:hover': {
-                  backgroundColor: alpha('#000', 0.04),
-                },
-              }}
-            >
-              {isFavorite ? <StarFilledIcon /> : <StarIcon />}
-            </IconButton>
-          </Tooltip>
-        )}
+        <Tooltip title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}>
+          <IconButton
+            onClick={handleToggleFavorite}
+            size="small"
+            sx={{
+              color: isFavorite ? 'warning.main' : 'action.active',
+              '&:hover': {
+                backgroundColor: alpha('#000', 0.04),
+              },
+            }}
+          >
+            {isFavorite ? <StarFilledIcon /> : <StarIcon />}
+          </IconButton>
+        </Tooltip>
 
         {/* Mute Toggle */}
-        {onToggleMute && (
-          <Tooltip title={isMuted ? 'Unmute channel' : 'Mute channel'}>
-            <IconButton
-              onClick={onToggleMute}
-              size="small"
-              sx={{
-                color: isMuted ? 'warning.main' : 'action.active',
-                '&:hover': {
-                  backgroundColor: alpha('#000', 0.04),
-                },
-              }}
-            >
-              {isMuted ? <NotificationsOffIcon /> : <NotificationsIcon />}
-            </IconButton>
-          </Tooltip>
-        )}
+        <Tooltip title={isMuted ? 'Unmute channel' : 'Mute channel'}>
+          <IconButton
+            onClick={handleMuteChannel}
+            size="small"
+            sx={{
+              color: isMuted ? 'warning.main' : 'action.active',
+              '&:hover': {
+                backgroundColor: alpha('#000', 0.04),
+              },
+            }}
+          >
+            {isMuted ? <NotificationsOffIcon /> : <NotificationsIcon />}
+          </IconButton>
+        </Tooltip>
 
         {/* More Actions Menu */}
-        <IconButton
-          onClick={handleMenuOpen}
+        <ChannelMenu 
+          channelId={channel.id}
           size="small"
+          options={menuOptions}
+          placement="left"
           sx={{
             color: 'action.active',
             '&:hover': {
               backgroundColor: alpha('#000', 0.04),
             },
           }}
-        >
-          <MoreVertIcon />
-        </IconButton>
+        />
       </Box>
 
-      {/* Actions Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={handleMenuClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-      >
-        {onChannelInfo && (
-          <MenuItem onClick={handleChannelInfo}>
-            <InfoIcon sx={{ mr: 1, fontSize: 20 }} />
-            Channel Info
-          </MenuItem>
-        )}
-        
-        {onAddMembers && channel.type !== 'D' && (
-          <MenuItem onClick={handleAddMembers}>
-            <PersonAddIcon sx={{ mr: 1, fontSize: 20 }} />
-            Add Members
-          </MenuItem>
-        )}
-        
-        {onChannelSettings && channel.type !== 'D' && (
-          <MenuItem onClick={handleChannelSettings}>
-            <SettingsIcon sx={{ mr: 1, fontSize: 20 }} />
-            Channel Settings
-          </MenuItem>
-        )}
-      </Menu>
     </Box>
   );
 };

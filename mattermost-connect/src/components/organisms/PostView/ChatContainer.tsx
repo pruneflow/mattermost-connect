@@ -1,12 +1,11 @@
 import React, {useState, useCallback, useRef, useEffect} from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
-import { VirtualizedMessageList } from './MessageList/VirtualizedMessageList';
 import { MessageInput } from '../../molecules/MessageInput';
 import { useAppSelector } from "../../../hooks";
 import { selectCurrentChannelId } from "../../../store/selectors";
 import { sendMessage, loadUnreadPosts } from "../../../services/messageService";
 import { selectChannelHasPosts, selectIsLoadingUnreads } from "../../../store/selectors/postsSelectors";
-import {useVirtualizedMessages} from "./hooks/useVirtualizedMessages";
+import { VirtualizedMessageContainer } from "./VirtualizedMessageContainer";
 import { scrollToBottom } from "../../../utils/scrollUtils";
 import { markAsRead } from "../../../services/channelService";
 
@@ -54,24 +53,6 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
   const [unreadChunkTimeStamp, setUnreadChunkTimeStamp] = useState<number | undefined>(lastViewedAt);
   const [shouldStartFromBottomWhenUnread, setShouldStartFromBottomWhenUnread] = useState(false);
   const scrollElementRef = useRef<HTMLDivElement>(null);
-
-
-  
-  // Use custom hooks
-  const { virtualizer, virtualItems, totalCount, isReady } =
-      useVirtualizedMessages({
-        channelId,
-        scrollElementRef,
-      });
-  console.debug("🔍 useVirtualizedMessages result:", {
-    hasVirtualizer: !!virtualizer,
-    virtualizerToString: virtualizer ? virtualizer.toString().slice(0, 50) : "null",
-    virtualItemsLength: virtualItems?.length || 0,
-    totalCount,
-    isReady
-  });
-
-
   
   // Initial load effect for channel messages
   const hasPosts = useAppSelector(state => selectChannelHasPosts(state, channelId));
@@ -121,7 +102,7 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
     <Box sx={{ ...containerStyles, ...sx }} role="main">
       {/* Message List */}
       <Box sx={messageListContainerStyles}>
-        <VirtualizedMessageList
+        <VirtualizedMessageContainer
           channelId={channelId}
           autoLoad={autoLoad}
           unreadChunkTimeStamp={unreadChunkTimeStamp}

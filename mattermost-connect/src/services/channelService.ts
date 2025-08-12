@@ -12,7 +12,7 @@ import {
   selectChannelsForCurrentTeam,
   selectCurrentChannel,
   selectCategoriesForCurrentTeam,
-  selectCurrentUserId,
+  selectCurrentUserId, selectIsChannelFavorite,
 } from "../store/selectors";
 import { selectChannelByRules } from "../utils/channelUtils";
 import type { EnrichedChannel } from "../api/types";
@@ -120,9 +120,7 @@ export const leaveChannel = async (channelId: string) => {
 
 export const isChannelFavorite = (channelId: string): boolean => {
   const state = store.getState();
-  const categories = selectCategoriesForCurrentTeam(state);
-  const favoritesCategory = categories.find((cat) => cat.type === "favorites");
-  return favoritesCategory?.channel_ids.includes(channelId) || false;
+  return selectIsChannelFavorite(state, channelId);
 };
 
 export const getChannelCategory = (channelId: string) => {

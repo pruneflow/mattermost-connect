@@ -14,7 +14,6 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { SearchInput } from "../atoms/SearchInput";
 import { TeamHeader } from "../molecules/TeamHeader";
 import { ChannelCategory } from "../molecules/ChannelCategory";
-import { AddChannelMembersDialog } from "./AddChannelMembersDialog";
 import { useChannelLoader } from "../../hooks/useChannelLoader";
 import { useAutoChannelSelection } from "../../hooks/useAutoChannelSelection";
 import { navigateToChannel } from "../../services/navigationService";
@@ -84,9 +83,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
   
-  // Add channel members dialog state  
-  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const isInviteOpen = Boolean(selectedChannelId);
 
   // Memoized container styles with custom sx
   const containerStyles = useMemo(() => ({
@@ -199,14 +195,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   }, [categories, dispatch]);
 
-  // Handle add channel members
-  const handleAddChannelMembers = useCallback((channelId: string) => {
-    setSelectedChannelId(channelId);
-  }, []);
-
-  const closeDialog = useCallback(() => {
-    setSelectedChannelId(null);
-  }, []);
 
   // Handle drag start
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -339,7 +327,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                 currentChannelId={currentChannelId}
                 onChannelSelect={handleChannelSelect}
                 onToggleCollapse={handleToggleCollapse}
-                onAddChannelMembers={handleAddChannelMembers}
                 compact={compact}
                 isDragging={draggedCategory === category.id}
               />
@@ -348,14 +335,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         </DndContext>
       </Box>
 
-      {/* Add Channel Members Dialog */}
-      {isInviteOpen && (
-        <AddChannelMembersDialog
-          open={true}
-          onClose={closeDialog}
-          channelId={selectedChannelId || ''}
-        />
-      )}
     </Box>
   );
 };

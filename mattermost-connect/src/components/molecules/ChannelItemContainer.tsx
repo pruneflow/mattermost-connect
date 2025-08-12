@@ -7,7 +7,6 @@ export interface ChannelItemContainerProps {
   channelId: string;
   isActive?: boolean;
   onClick?: (channelId: string) => void;
-  onAddChannelMembers?: (channelId: string) => void;
   compact?: boolean;
   draggable?: boolean;
 }
@@ -21,7 +20,6 @@ export const ChannelItemContainer: React.FC<ChannelItemContainerProps> = React.m
   channelId,
   isActive = false,
   onClick,
-  onAddChannelMembers,
   compact = false,
   draggable = true
 }) => {
@@ -36,7 +34,6 @@ export const ChannelItemContainer: React.FC<ChannelItemContainerProps> = React.m
       channel={channel}
       isActive={isActive}
       onClick={onClick}
-      onAddChannelMembers={onAddChannelMembers}
       compact={compact}
       draggable={draggable}
     />

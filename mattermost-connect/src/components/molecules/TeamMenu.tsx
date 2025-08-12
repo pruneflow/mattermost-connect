@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   IconButton,
   Menu,
@@ -18,6 +18,7 @@ import {
   ExitToApp as ExitToAppIcon,
 } from '@mui/icons-material';
 import { canManageTeam, canInviteUser, canAddUserToTeam } from '../../services/permissionService';
+import { useMenu } from '../../hooks';
 import type { Team } from '../../api/types';
 
 export interface TeamMenuOptions {
@@ -55,53 +56,43 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
   onOpenInfo,
   onLeaveTeam,
 }) => {
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-
-  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setMenuAnchor(event.currentTarget);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setMenuAnchor(null);
-  }, []);
+  const { anchorEl, isOpen, openMenu, closeMenu } = useMenu(`team-menu-${team?.id || 'unknown'}`);
 
   // Stable menu handlers
   const handleSettingsClick = useCallback(() => {
     if (team && onOpenSettings) {
       onOpenSettings(team);
     }
-    handleMenuClose();
-  }, [team, onOpenSettings, handleMenuClose]);
+    closeMenu();
+  }, [team, onOpenSettings, closeMenu]);
 
   const handleMembersClick = useCallback(() => {
     if (team && onOpenMembers) {
       onOpenMembers(team);
     }
-    handleMenuClose();
-  }, [team, onOpenMembers, handleMenuClose]);
+    closeMenu();
+  }, [team, onOpenMembers, closeMenu]);
 
   const handleInfoClick = useCallback(() => {
     if (team && onOpenInfo) {
       onOpenInfo(team);
     }
-    handleMenuClose();
-  }, [team, onOpenInfo, handleMenuClose]);
+    closeMenu();
+  }, [team, onOpenInfo, closeMenu]);
 
   const handleInviteClick = useCallback(() => {
     if (team && onOpenInvite) {
       onOpenInvite(team);
     }
-    handleMenuClose();
-  }, [team, onOpenInvite, handleMenuClose]);
+    closeMenu();
+  }, [team, onOpenInvite, closeMenu]);
 
   const handleLeaveClick = useCallback(() => {
     if (team && onLeaveTeam) {
       onLeaveTeam(team);
     }
-    handleMenuClose();
-  }, [team, onLeaveTeam, handleMenuClose]);
+    closeMenu();
+  }, [team, onLeaveTeam, closeMenu]);
 
   if (!team) return null;
 
@@ -112,7 +103,7 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
     <>
       <IconButton
         size={size}
-        onClick={handleMenuOpen}
+        onClick={openMenu}
         aria-label="team options"
         sx={{
           color: 'text.secondary',
@@ -127,19 +118,21 @@ export const TeamMenu: React.FC<TeamMenuProps> = ({
 
       {/* Team Menu */}
       <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
+        anchorEl={anchorEl}
+        open={isOpen}
+        onClose={closeMenu}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        PaperProps={{
-          sx: {
-            minWidth: 200,
-            '& .MuiMenuItem-root': {
-              px: 2,
-              py: 1,
+        slotProps={{
+          paper:{
+            sx: {
+              minWidth: 200,
+              '& .MuiMenuItem-root': {
+                px: 2,
+                py: 1,
+              },
             },
-          },
+          }
         }}
       >
         {/* Team Management Section */}

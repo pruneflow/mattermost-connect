@@ -75,11 +75,14 @@ export const CustomLayout: React.FC<CustomLayoutProps> = ({
                 {/* Channel Header */}
                 <ChannelHeader
                   channel={currentChannel}
-                  onChannelInfo={() => console.log('Channel info clicked')}
-                  onAddMembers={() => console.log('Add members clicked')}
-                  onChannelSettings={() => console.log('Channel settings clicked')}
-                  onToggleFavorite={() => console.log('Toggle favorite clicked')}
-                  onToggleMute={() => console.log('Toggle mute clicked')}
+                  menuOptions={{
+                    showMarkUnread: true,
+                    showToggleFavorite: false,
+                    showMute: false,
+                    showMoveTo: true,
+                    showAddMembers: true,
+                    showLeave: true
+                  }}
                 />
 
                 {/* Post List - EXACT Mattermost PostView usage */}

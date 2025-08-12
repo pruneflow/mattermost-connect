@@ -70,6 +70,7 @@ export const Menu: React.FC<MenuProps> = ({
             key={item.id}
             item={item}
             onClose={onClose}
+            placement={placement}
           />
         ))}
       </Box>

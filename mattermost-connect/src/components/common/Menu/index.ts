@@ -39,5 +39,4 @@
 
 export { Menu, type MenuProps } from './Menu';
 export { MenuItem, type MenuItemConfig } from './MenuItem';
-export { useMenu } from './useMenu';
 export { MENU_STYLES } from './Menu.styles';

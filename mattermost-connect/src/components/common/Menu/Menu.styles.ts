@@ -32,6 +32,10 @@ export const MENU_STYLES = {
     fontWeight: 500,
     cursor: "pointer",
     marginLeft: "-2px",
+    color: "text.primary", // Force la couleur du texte
+    "& .MuiSvgIcon-root": {
+      color: "action.active", // Force la couleur des icônes
+    },
   },
 
   menuItemHover: (theme: any) => ({
@@ -75,6 +79,12 @@ export const MENU_STYLES = {
   submenuPositioning: {
     // Desktop: à droite sans gap pour hover continu
     left: "100%",
+    top: 0,
+  },
+
+  submenuPositioningLeft: {
+    // Desktop: à gauche quand le menu principal s'ouvre à gauche
+    right: "100%",
     top: 0,
   },
 

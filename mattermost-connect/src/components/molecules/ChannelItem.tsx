@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -6,44 +6,18 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  IconButton,
   SxProps,
   Theme,
   useTheme,
   useMediaQuery,
   alpha,
 } from "@mui/material";
-import {
-  MoreVert,
-  Check,
-  MarkAsUnread,
-  Star,
-  StarBorder,
-  Notifications,
-  NotificationsOff,
-  DriveFileMove,
-  PersonAdd,
-  ExitToApp,
-} from "@mui/icons-material";
 import { ChannelIcon } from "../atoms/ChannelIcon";
 import { UserAvatar } from "../atoms/UserAvatar";
 import { GroupAvatar } from "../atoms/GroupAvatar";
 import { Tooltip } from "@mui/material";
 import { ChannelIndicator } from "./ChannelIndicator";
-import { Menu, useMenu, type MenuItemConfig } from "../common";
-import { LeaveChannelDialog } from "../organisms/LeaveChannelDialog";
-import {
-  markAsUnread,
-  toggleFavorite,
-  moveToCategory,
-  muteChannel,
-  leaveChannel,
-  isChannelFavorite,
-  getChannelCategory,
-  getCategories
-} from "../../services/channelService";
-import { canManageChannelMembers } from "../../services/permissionService";
-import useUserPreferences from "../../hooks/useUserPreferences";
+import { ChannelMenu, type ChannelMenuOptions } from "./ChannelMenu";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Channel, UserProfile } from "../../api/types";
@@ -140,9 +114,9 @@ export interface ChannelItemProps {
   };
   isActive?: boolean;
   onClick?: (channelId: string) => void;
-  onAddChannelMembers?: (channelId: string) => void;
   compact?: boolean;
   draggable?: boolean;
+  menuOptions?: ChannelMenuOptions;
   sx?: SxProps<Theme>;
 }
 
@@ -198,18 +172,11 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     channel,
     isActive = false,
     onClick,
-    onAddChannelMembers,
     compact = false,
     draggable = true,
+    menuOptions,
     sx,
   }) => {
-    // Menu state using generic hook with unique ID
-    const { anchorEl, isOpen, openMenu, closeMenu } = useMenu(
-      `channel-menu-${channel.id}`,
-    );
-
-    // Leave channel dialog state
-    const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -237,16 +204,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     }, [onClick, channel.id]);
 
 
-    // Get preferences actions for group channels
-    const { closeGroupConversation } = useUserPreferences();
-
-    // Get permissions
-
-    // Get current favorite status and category
-    const isFavorite = isChannelFavorite(channel.id);
-    const currentCategory = getChannelCategory(channel.id);
-    const categories = getCategories();
-    const canAddMembers = canManageChannelMembers(channel);
 
     // Default values for enriched properties
     const hasUnreads = channel.hasUnreads ?? false;
@@ -254,150 +211,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     const mentionCount = channel.mentionCount ?? 0;
     const isMuted = channel.isMuted ?? false;
 
-    // Stable menu action handlers
-    const handleMarkUnread = useCallback(() => {
-      closeMenu();
-      markAsUnread(channel.id);
-    }, [closeMenu, markAsUnread, channel.id]);
-
-    const handleToggleFavorite = useCallback(() => {
-      closeMenu();
-      toggleFavorite(channel.id, isFavorite);
-    }, [closeMenu, toggleFavorite, channel.id, isFavorite]);
-
-    const handleMuteChannel = useCallback(() => {
-      closeMenu();
-      muteChannel(channel.id, !isMuted);
-    }, [closeMenu, muteChannel, channel.id, isMuted]);
-
-    const handleMoveToCategory = useCallback(
-      (categoryId: string) => {
-        closeMenu();
-        if (currentCategory?.id === categoryId) {
-          // If same category, just close menu
-          return;
-        }
-        moveToCategory(channel.id, categoryId);
-      },
-      [closeMenu, moveToCategory, channel.id, currentCategory?.id],
-    );
-
-    const handleAddMembers = useCallback(() => {
-      closeMenu();
-      onAddChannelMembers?.(channel.id);
-    }, [closeMenu, channel.id, onAddChannelMembers]);
-
-    const handleLeaveChannel = useCallback(() => {
-      closeMenu();
-      if (channel.type === "G") {
-        // For group channels, close conversation instead of leaving
-        closeGroupConversation(channel.id);
-      } else {
-        // For other channels, show leave dialog
-        setIsLeaveDialogOpen(true);
-      }
-    }, [closeMenu, channel.type, channel.id, closeGroupConversation]);
-
-    const handleLeaveChannelConfirm = useCallback(() => {
-      leaveChannel(channel.id);
-    }, [leaveChannel, channel.id]);
-
-    const handleLeaveDialogClose = useCallback(() => {
-      setIsLeaveDialogOpen(false);
-    }, []);
-
-    // Create menu items configuration
-    const menuItems = useMemo((): MenuItemConfig[] => {
-      const items: MenuItemConfig[] = [
-        {
-          id: "mark-unread",
-          label: "Mark as unread",
-          icon: <MarkAsUnread fontSize="small" />,
-          onClick: handleMarkUnread,
-        },
-        {
-          id: "toggle-favorite",
-          label: isFavorite ? "Remove from favorites" : "Add to favorites",
-          icon: isFavorite ? (
-            <Star fontSize="small" />
-          ) : (
-            <StarBorder fontSize="small" />
-          ),
-          onClick: handleToggleFavorite,
-        },
-        {
-          id: "mute-channel",
-          label: isMuted ? "Unmute channel" : "Mute channel",
-          icon: isMuted ? (
-            <NotificationsOff fontSize="small" />
-          ) : (
-            <Notifications fontSize="small" />
-          ),
-          onClick: handleMuteChannel,
-        },
-        {
-          id: "divider-1",
-          type: "divider",
-        },
-        {
-          id: "move-to",
-          label: "Move to...",
-          icon: <DriveFileMove fontSize="small" />,
-          submenu: categories
-            .filter((category) => {
-              // If current channel is not a DM, don't show DM categories
-              return !(
-                channel.type !== "D" && category.type === "direct_messages"
-              );
-            })
-            .map((category) => ({
-              id: `move-to-${category.id}`,
-              label: category.display_name,
-              onClick: () => handleMoveToCategory(category.id),
-              icon:
-                currentCategory?.id === category.id ? (
-                  <Check fontSize="small" color="primary" />
-                ) : undefined,
-            })),
-        },
-        {
-          id: "divider-2",
-          type: "divider",
-        },
-      ];
-
-      // Add members option if user has permissions
-      if (canAddMembers) {
-        items.push({
-          id: "add-members",
-          label: "Add members",
-          icon: <PersonAdd fontSize="small" />,
-          onClick: handleAddMembers,
-        });
-      }
-
-      // Leave channel or close conversation option
-      items.push({
-        id: "leave-channel",
-        label: channel.type === "G" ? "Close conversation" : "Leave channel",
-        icon: <ExitToApp fontSize="small" />,
-        onClick: handleLeaveChannel,
-        variant: "danger",
-      });
-
-      return items;
-    }, [
-      isFavorite,
-      handleMarkUnread,
-      handleToggleFavorite,
-      handleMuteChannel,
-      channel.type,
-      currentCategory?.id,
-      handleMoveToCategory,
-      canAddMembers,
-      handleAddMembers,
-      handleLeaveChannel,
-    ]);
 
     // Get display name (computed by selector following Mattermost pattern)
     const displayName = channel.computedDisplayName || channel.display_name;
@@ -526,35 +339,17 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
               />
             </Box>
 
-            {/* Three Dots Menu Button (shown on hover) */}
-            <IconButton
+            {/* Channel Menu Button (shown on hover) */}
+            <ChannelMenu 
+              channelId={channel.id}
               size="small"
-              onClick={openMenu}
+              options={menuOptions}
               className={`menu-button ${isMobile ? "mobile-visible" : ""}`}
               sx={STATIC_STYLES.menuButton}
-            >
-              <MoreVert fontSize="small" />
-            </IconButton>
+            />
           </Box>
         </ListItemButton>
 
-        {/* Context Menu using generic Menu component */}
-        <Menu
-          open={isOpen}
-          anchorEl={anchorEl}
-          onClose={closeMenu}
-          items={menuItems}
-        />
-
-        {/* Leave Channel Confirmation Dialog */}
-        {isLeaveDialogOpen && (
-          <LeaveChannelDialog
-            open={isLeaveDialogOpen}
-            onClose={handleLeaveDialogClose}
-            onConfirm={handleLeaveChannelConfirm}
-            channel={channel}
-          />
-        )}
       </ListItem>
     );
 
