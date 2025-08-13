@@ -1,21 +1,21 @@
 import React, { useCallback, useMemo } from "react";
 import {
+  alpha,
   Box,
-  Typography,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   SxProps,
   Theme,
-  useTheme,
+  Tooltip,
+  Typography,
   useMediaQuery,
-  alpha,
+  useTheme
 } from "@mui/material";
 import { ChannelIcon } from "../atoms/ChannelIcon";
 import { UserAvatar } from "../atoms/UserAvatar";
 import { GroupAvatar } from "../atoms/GroupAvatar";
-import { Tooltip } from "@mui/material";
 import { ChannelIndicator } from "./ChannelIndicator";
 import { ChannelMenu, type ChannelMenuOptions } from "./ChannelMenu";
 import { useSortable } from "@dnd-kit/sortable";
@@ -276,7 +276,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       [compact, sx, isActive, hasUnreads, isMuted, mentionCount, draggable],
     );
 
-    const channelItemContent = (
+    return (
       <ListItem
         ref={setNodeRef}
         disablePadding
@@ -340,7 +340,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
             </Box>
 
             {/* Channel Menu Button (shown on hover) */}
-            <ChannelMenu 
+            <ChannelMenu
               channelId={channel.id}
               size="small"
               options={menuOptions}
@@ -352,8 +352,6 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
 
       </ListItem>
     );
-
-    return channelItemContent;
   },
 );
 

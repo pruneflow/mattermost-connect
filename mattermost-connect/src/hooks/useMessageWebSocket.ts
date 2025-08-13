@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import { useAppDispatch } from './useAppDispatch';
 import { useAppSelector } from './useAppSelector';
 import { client } from '../api/client';
-import { setPost, removePost, addReactionFromWebSocket, removeReactionFromWebSocket } from '../store/slices/postsSlice';
+import { setPost, storePostOnly, removePost, addReactionFromWebSocket, removeReactionFromWebSocket } from '../store/slices/postsSlice';
+import { addPostToThread } from '../store/slices/threadsSlice';
 import { selectCurrentUserId } from '../store/selectors';
 import { Post } from '../api/types';
 
@@ -28,7 +29,16 @@ export const useMessageWebSocket = () => {
             const post = typeof data.post === 'string' ? JSON.parse(data.post) : data.post;
             // Skip our own messages to avoid duplicates
             if (post.user_id !== currentUserId) {
-              dispatch(setPost(post));
+              
+              if (post.root_id) {
+                // Si c'est une réponse dans un thread, l'ajouter SEULEMENT au thread
+                // On ajoute quand même au store global des posts pour les fichiers
+                dispatch(storePostOnly(post));
+                dispatch(addPostToThread({ rootPostId: post.root_id, post }));
+              } else {
+                // Si ce n'est pas une réponse, l'ajouter au chat standard
+                dispatch(setPost(post));
+              }
             }
           } catch (error) {
             console.error('Error parsing posted message:', error);
@@ -44,7 +54,16 @@ export const useMessageWebSocket = () => {
             const post = typeof data.post === 'string' ? JSON.parse(data.post) : data.post;
             // Skip our own edited messages to avoid duplicates
             if (post.user_id !== currentUserId) {
-              dispatch(setPost(post));
+              
+              if (post.root_id) {
+                // Si c'est une réponse dans un thread, mettre à jour SEULEMENT le thread
+                // Mettre à jour aussi le store global pour les fichiers
+                dispatch(storePostOnly(post));
+                dispatch(addPostToThread({ rootPostId: post.root_id, post }));
+              } else {
+                // Si ce n'est pas une réponse, mettre à jour le chat standard
+                dispatch(setPost(post));
+              }
             }
           } catch (error) {
             console.error('Error parsing edited message:', error);

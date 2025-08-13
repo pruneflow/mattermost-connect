@@ -9,13 +9,17 @@ interface EmojiPickerButtonProps {
   onEmojiSelect: (emoji: string) => void;
   size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
+  openToLeft?: boolean; // Ouvrir vers la gauche (pour les messages de droite)
   sx?: SxProps<Theme>;
+  inThread?: boolean
 }
 
 export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
   onEmojiSelect,
   size = 'medium',
   disabled = false,
+  openToLeft = false,
+  inThread = false,
   sx,
 }) => {
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
@@ -61,6 +65,11 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
         transformOrigin={{
           vertical: 'top',
           horizontal: 'left',
+        }}
+        sx={{
+          '& .MuiPaper-root': {
+            transform: `translateX(-${inThread ? !openToLeft ? 200 : 350 : openToLeft ? 350 : 0}px) !important`,
+          }
         }}
       >
         <Box sx={{ p: 1 }}>

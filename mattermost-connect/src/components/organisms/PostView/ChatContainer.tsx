@@ -1,11 +1,16 @@
 import React, {useState, useCallback, useRef, useEffect} from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
 import { MessageInput } from '../../molecules/MessageInput';
+import { MessageReply } from '../../molecules/MessageReply';
 import { useAppSelector } from "../../../hooks";
+import { useAppDispatch } from "../../../hooks/useAppDispatch";
 import { selectCurrentChannelId } from "../../../store/selectors";
+import { selectReplyToPost } from "../../../store/selectors/messageUI";
+import { stopReply } from "../../../store/slices/messageUISlice";
 import { sendMessage, loadUnreadPosts } from "../../../services/messageService";
 import { selectChannelHasPosts, selectIsLoadingUnreads } from "../../../store/selectors/postsSelectors";
 import { VirtualizedMessageContainer } from "./VirtualizedMessageContainer";
+import { ThreadModal } from "../ThreadModal";
 import { scrollToBottom } from "../../../utils/scrollUtils";
 import { markAsRead } from "../../../services/channelService";
 
@@ -48,7 +53,9 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
     sxStringified: JSON.stringify(sx)
   });
 
+  const dispatch = useAppDispatch();
   const channelId = useAppSelector(selectCurrentChannelId);
+  const replyToPost = useAppSelector(selectReplyToPost);
   console.debug("🔍 channelId from selector:", channelId);
   const [unreadChunkTimeStamp, setUnreadChunkTimeStamp] = useState<number | undefined>(lastViewedAt);
   const [shouldStartFromBottomWhenUnread, setShouldStartFromBottomWhenUnread] = useState(false);
@@ -81,14 +88,22 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
     if (!message.trim() && (!fileIds || fileIds.length === 0)) return;
     
     try {
-      await sendMessage(channelId, message, '', fileIds);
+      // Si on répond à un message, utiliser son ID comme rootId
+      const rootId = replyToPost?.id;
+      await sendMessage(channelId, message, rootId, fileIds);
+      
+      // Fermer la réponse après envoi
+      if (replyToPost) {
+        dispatch(stopReply());
+      }
+      
       await markAsRead(channelId);
       scrollToBottom(scrollElementRef.current)
     } catch (error) {
       console.error('Failed to send message:', error);
       // TODO: Show error toast or notification
     }
-  }, [sendMessage, markAsRead, channelId]);
+  }, [sendMessage, markAsRead, channelId, replyToPost, dispatch]);
 
   const handleChangeUnreadChunkTimeStamp = useCallback((newTimestamp: number) => {
     setUnreadChunkTimeStamp(newTimestamp);
@@ -97,6 +112,10 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
   const handleToggleShouldStartFromBottomWhenUnread = useCallback(() => {
     setShouldStartFromBottomWhenUnread(prev => !prev);
   }, []);
+
+  const handleCloseReply = useCallback(() => {
+    dispatch(stopReply());
+  }, [dispatch]);
 
   return (
     <Box sx={{ ...containerStyles, ...sx }} role="main">
@@ -113,6 +132,14 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
         />
       </Box>
 
+      {/* Reply Context (if replying) */}
+      {replyToPost && (
+        <MessageReply
+          message={replyToPost.message}
+          onClose={handleCloseReply}
+        />
+      )}
+
       {/* Message Input */}
       <Box sx={inputContainerStyles}>
         <MessageInput
@@ -122,6 +149,9 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
           autoFocus={false}
         />
       </Box>
+
+      {/* Thread Modal */}
+      <ThreadModal />
     </Box>
   );
 };

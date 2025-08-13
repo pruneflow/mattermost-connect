@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Post } from '@mattermost/types/posts';
 import { client } from "../../api/client";
 import { PostList } from "../../api/types";
+import { loadThread } from './threadsSlice';
 
 // Loading states - only one operation at a time per channel
 export type LoadingState = 'none' | 'older' | 'newer' | 'unreads' | 'syncing';
@@ -38,6 +39,7 @@ const initialState: PostsState = {
   postsInChannel: {},
   channelMetadata: {},
 };
+
 
 // Async thunks
 export const loadOlderPosts = createAsyncThunk(
@@ -247,6 +249,13 @@ const postsSlice = createSlice({
       }
     },
 
+    // Store post in global posts without adding to channel (for thread replies)
+    storePostOnly: (state, action: PayloadAction<Post>) => {
+      const post = action.payload;
+      // Only store in global posts, don't add to any channel
+      state.posts[post.id] = post;
+    },
+
     // Remove a single post (used by WebSocket)
     removePost: (state, action: PayloadAction<string>) => {
       const postId = action.payload;
@@ -322,6 +331,7 @@ const postsSlice = createSlice({
           state.posts[post.id] = post;
         });
         
+        
         // Update posts in channel (add at the end = older)
         const existingPosts = state.postsInChannel[channelId] || [];
         state.postsInChannel[channelId] = [...existingPosts, ...order];
@@ -349,6 +359,7 @@ const postsSlice = createSlice({
           state.posts[post.id] = post;
         });
         
+        
         // Update posts in channel (add at the beginning = newer)
         const existingPosts = state.postsInChannel[channelId] || [];
         state.postsInChannel[channelId] = [...order, ...existingPosts];
@@ -375,6 +386,7 @@ const postsSlice = createSlice({
         Object.values(posts).forEach(post => {
           state.posts[post.id] = post;
         });
+        
         
         // Replace all posts in channel
         state.postsInChannel[channelId] = order;
@@ -407,6 +419,7 @@ const postsSlice = createSlice({
           state.posts[post.id] = post;
         });
         
+        
         // Merge with existing posts (newest first)
         const existingPosts = state.postsInChannel[channelId] || [];
         const mergedPosts = [...order, ...existingPosts.filter(id => !order.includes(id))];
@@ -434,6 +447,7 @@ const postsSlice = createSlice({
         
         // Add post to entities
         state.posts[post.id] = post;
+        
         
         // Add to channel posts (at the beginning = newest)
         if (!state.postsInChannel[channelId]) {
@@ -515,6 +529,17 @@ const postsSlice = createSlice({
         // Stocker le post dans les entités
         state.posts[post.id] = post;
         
+        // Si c'est une réponse (a un root_id), ne pas l'ajouter au canal principal
+        if (post.root_id) {
+          // Les réponses ne vont que dans le store des posts, pas dans postsInChannel
+          // Incrémenter le reply_count du post root
+          const rootPost = state.posts[post.root_id];
+          if (rootPost) {
+            rootPost.reply_count = (rootPost.reply_count || 0) + 1;
+          }
+          return;
+        }
+        
         // Initialiser le channel si nécessaire
         if (!state.postsInChannel[channelId]) {
           state.postsInChannel[channelId] = [];
@@ -526,6 +551,15 @@ const postsSlice = createSlice({
         // Nouveau message = toujours le plus récent, donc au début
         state.postsInChannel[channelId].unshift(post.id);
         state.channelMetadata[channelId].newestPostId = post.id;
+      })
+      // Écouter le chargement des threads pour ajouter tous les posts au store global
+      .addCase(loadThread.fulfilled, (state, action) => {
+        const { posts } = action.payload;
+        
+        // Ajouter tous les posts du thread au store global des posts
+        posts.forEach(post => {
+          state.posts[post.id] = post;
+        });
       });
   },
 });
@@ -661,7 +695,7 @@ export const toggleReaction = createAsyncThunk(
 export const updatePost = createAsyncThunk(
   'posts/updatePost',
   async (
-    { postId, message }: { postId: string; message: string },
+    { postId, message, fileIds }: { postId: string; message: string; fileIds?: string[] },
     { getState, rejectWithValue },
   ) => {
     try {
@@ -678,6 +712,10 @@ export const updatePost = createAsyncThunk(
         update_at: Date.now(),
         edit_at: Date.now(),
       };
+
+      if(fileIds) {
+        updatedPost.file_ids = fileIds
+      }
 
       const response = await client.updatePost(updatedPost);
       
@@ -792,6 +830,7 @@ export const createPostWithAutoLoad = createAsyncThunk(
 export const {
   setLoadingState,
   setPost,
+  storePostOnly,
   removePost,
   addReactionFromWebSocket,
   removeReactionFromWebSocket,

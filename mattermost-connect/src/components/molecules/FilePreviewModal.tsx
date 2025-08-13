@@ -20,6 +20,8 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectFileInfoById } from '../../store/selectors/filesSelectors';
 import { selectPostById } from '../../store/selectors/postsSelectors';
 import { selectUserById, selectChannelById } from '../../store/selectors';
+import { selectThreadPostId } from '../../store/selectors/messageUI';
+import { selectThread } from '../../store/selectors/threads';
 import { FileDownloadButton } from './FileDownloadButton';
 import { client } from '../../api/client';
 import FileActionButtons from './FileActionButtons';
@@ -47,7 +49,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   startIndex = 0,
   open,
   onClose,
-  postId
+  postId,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -211,26 +213,36 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return (
       <Box sx={{ 
         display: 'flex', 
-        flexDirection: 'column',
         justifyContent: 'center', 
         alignItems: 'center',
         height: '100%',
         width: '100%',
         p: 4,
-        textAlign: 'center'
-      }}
-      onClick={(e) => e.stopPropagation()}
-      >
-        <Typography variant="h5" gutterBottom sx={{ color: 'white', mb: 2 }}>
-          {name}
-        </Typography>
-        <Typography variant="body1" sx={{ color: 'rgba(255, 255, 255, 0.8)', mb: 1 }}>
-          Preview not available for this file type
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.6)', mb: 3 }}>
-          File size: {fileInfo.size ? formatFileSize(fileInfo.size) : 'Unknown'}
-        </Typography>
-        <FileDownloadButton fileId={currentFileId} size="large" />
+      }}>
+        {/* Carré blanc centré avec le contenu */}
+        <Box
+          sx={{
+            backgroundColor: 'white',
+            borderRadius: 2,
+            p: 4,
+            textAlign: 'center',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            maxWidth: 400,
+            width: '100%',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Typography variant="h5" gutterBottom sx={{ color: 'text.primary', mb: 2 }}>
+            {name}
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'text.secondary', mb: 1 }}>
+            Preview not available for this file type
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.disabled', mb: 3 }}>
+            File size: {fileInfo.size ? formatFileSize(fileInfo.size) : 'Unknown'}
+          </Typography>
+          <FileDownloadButton fileId={currentFileId} size="large" />
+        </Box>
       </Box>
     );
   };

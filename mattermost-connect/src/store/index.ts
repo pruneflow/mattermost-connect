@@ -10,6 +10,8 @@ import preferencesReducer from './slices/preferencesSlice';
 import websocketReducer from './slices/websocketSlice';
 import postsReducer from './slices/postsSlice'
 import filesReducer from './slices/filesSlice'
+import messageUIReducer from './slices/messageUISlice'
+import threadsReducer from './slices/threadsSlice'
 
 // Configure Client4 immediately before store creation if credentials exist
 const token = localStorage.getItem('mattermostToken');
@@ -35,7 +37,9 @@ export const store = configureStore({
     preferences: preferencesReducer,
     websocket: websocketReducer,
     posts: postsReducer,
-    files: filesReducer
+    files: filesReducer,
+    messageUI: messageUIReducer,
+    threads: threadsReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -71,3 +75,5 @@ export * from './slices/authSlice';
 export * from './slices/preferencesSlice';
 export * from './slices/postsSlice'
 export * from './slices/filesSlice'
+export * from './slices/messageUISlice'
+export * from './slices/threadsSlice'

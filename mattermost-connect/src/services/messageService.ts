@@ -88,9 +88,9 @@ export const syncPosts = async (channelId: string, since: number): Promise<void>
 };
 
 // Message management actions
-export const updateMessage = async (postId: string, message: string): Promise<boolean> => {
+export const updateMessage = async (postId: string, message: string, fileIds?: string[]): Promise<boolean> => {
   try {
-    await store.dispatch(updatePost({ postId, message })).unwrap();
+    await store.dispatch(updatePost({ postId, message, fileIds })).unwrap();
     return true;
   } catch (error) {
     console.error('Failed to update message:', error);

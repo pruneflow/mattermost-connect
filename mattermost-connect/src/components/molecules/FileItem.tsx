@@ -22,8 +22,8 @@ export interface FileStatus {
   error?: string;
 }
 
-// Type union pour les deux modes d'utilisation
-export type FileItemData = FileInfo | FileStatus;
+// Type union pour les deux modes d'utilisation - utilisation partielle de FileInfo
+export type FileItemData = Partial<FileInfo> & Pick<FileInfo, 'id' | 'name' | 'size' | 'mime_type'> | FileStatus;
 
 export interface FileItemProps {
   file: FileItemData;
@@ -145,8 +145,9 @@ export const FileItem: React.FC<FileItemProps> = ({
         borderRadius: 1,
         border: '1px solid',
         borderColor: hasError ? 'error.main' : 'divider',
-        padding: '6px 12px',
-        flexShrink: 0,
+        padding: '16px 20px',
+        minHeight: '80px',
+        flexShrink: { xs: 1, sm: 1, md: 0 }, // Empêche le rétrécissement en desktop
         transition: 'all 0.2s ease',
         cursor: showPreview && !uploading ? 'pointer' : 'default',
         position: 'relative',
@@ -173,7 +174,7 @@ export const FileItem: React.FC<FileItemProps> = ({
             zIndex: 2,
           }}
         >
-          <CircularProgress size={24} />
+          <CircularProgress size={32} />
         </Box>
       )}
 
@@ -184,12 +185,12 @@ export const FileItem: React.FC<FileItemProps> = ({
           onClick={handleRemove}
           sx={{
             position: 'absolute',
-            top: 6,
-            right: 6,
-            width: 16,
-            height: 16,
-            minWidth: 16,
-            minHeight: 16,
+            top: 8,
+            right: 8,
+            width: 20,
+            height: 20,
+            minWidth: 20,
+            minHeight: 20,
             padding: 0,
             color: 'text.secondary',
             transition: 'all 0.2s ease',
@@ -204,7 +205,7 @@ export const FileItem: React.FC<FileItemProps> = ({
             }
           }}
         >
-          <CloseIcon />
+          <CloseIcon fontSize="small" />
         </IconButton>
       )}
 
@@ -214,8 +215,8 @@ export const FileItem: React.FC<FileItemProps> = ({
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          height: { xs: 40, md: 36 },
-          width: { xs: 40, md: 36 },
+          height: { xs: 48, md: 48 },
+          width: { xs: 48, md: 48 },
           mr: 1.5,
           bgcolor: isDisplayableImage ? 'transparent' : 'background.default',
           borderRadius: 1,
@@ -228,9 +229,9 @@ export const FileItem: React.FC<FileItemProps> = ({
         {!isDisplayableImage && (
           <FileTypeIcon 
             mimeType={fileData.mimeType} 
-            size="medium"
+            size="large"
             sx={{ 
-              fontSize: { xs: '1.25rem', md: '1.1rem' }
+              fontSize: { xs: '1.5rem', md: '1.4rem' }
             }}
           />
         )}

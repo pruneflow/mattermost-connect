@@ -40,6 +40,7 @@ interface MessageActionsProps {
   onReply?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  inThread?: boolean; // Nouvelle prop pour savoir si on est dans un thread
   sx?: SxProps<Theme>;
 }
 
@@ -102,6 +103,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   onReply,
   onEdit,
   onDelete,
+  inThread = false,
   sx,
 }) => {
   const theme = useTheme();
@@ -208,10 +210,12 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
         <EmojiPickerButton
           onEmojiSelect={handleEmojiSelect}
           size="small"
+          openToLeft={isOwnMessage}
           sx={buttonStyles}
+          inThread={inThread}
         />
 
-        {!isMobile && (
+        {!isMobile && !inThread && (
           <Tooltip title="Reply">
             <IconButton
               size="small"
@@ -248,18 +252,24 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
           horizontal: isMobile ? 'left' : 'right' 
         }}
       >
-        <MenuItem onClick={handleReply}>
-          <ReplyIcon sx={{ mr: 1, fontSize: 18 }} />
-          Reply
-        </MenuItem>
-        <MenuItem onClick={handleEdit}>
-          <EditIcon sx={{ mr: 1, fontSize: 18 }} />
-          Edit
-        </MenuItem>
-        <MenuItem onClick={handleDeleteClick}>
-          <DeleteIcon sx={{ mr: 1, fontSize: 18 }} />
-          Delete
-        </MenuItem>
+        {!inThread && (
+          <MenuItem onClick={handleReply}>
+            <ReplyIcon sx={{ mr: 1, fontSize: 18 }} />
+            Reply
+          </MenuItem>
+        )}
+        {isOwnMessage && (
+          <MenuItem onClick={handleEdit}>
+            <EditIcon sx={{ mr: 1, fontSize: 18 }} />
+            Edit
+          </MenuItem>
+        )}
+        {isOwnMessage && (
+          <MenuItem onClick={handleDeleteClick}>
+            <DeleteIcon sx={{ mr: 1, fontSize: 18 }} />
+            Delete
+          </MenuItem>
+        )}
         <MenuItem onClick={handleCopy}>
           <CopyIcon sx={{ mr: 1, fontSize: 18 }} />
           Copy Text

@@ -224,6 +224,19 @@ const filesSlice = createSlice({
       }
     },
     
+    // Store FileInfos from post metadata
+    storeFileInfos: (state, action: PayloadAction<{ postId: string; fileInfos: any[] }>) => {
+      const { fileInfos } = action.payload;
+      
+      // Update each file state using the same pattern as fetchFileInfosForPost.fulfilled
+      fileInfos.forEach(fileInfo => {
+        const fileState = getOrCreateFileState(state, fileInfo.id);
+        fileState.info = fileInfo;
+        fileState.infoLoadingState = 'succeeded';
+        fileState.error = null;
+      });
+    },
+    
     // Clear all preview URLs (for cleanup on unmount)
     clearAllPreviewUrls: (state) => {
       Object.values(state.files).forEach(fileState => {
@@ -351,9 +364,65 @@ const filesSlice = createSlice({
         const fileState = getOrCreateFileState(state, fileId);
         fileState.error = action.payload as string;
       });
+
+    // Listen to posts actions to automatically store FileInfos from metadata
+    // Import posts actions dynamically to avoid circular dependencies
+    const postsActions = [
+      'posts/loadOlderPosts/fulfilled',
+      'posts/loadNewerPosts/fulfilled', 
+      'posts/loadUnreadPosts/fulfilled',
+      'posts/syncPostsInChannel/fulfilled',
+      'posts/addWebSocketPost/fulfilled',
+      'posts/updatePost/fulfilled',
+      'posts/createPost/fulfilled',
+      'posts/storePostOnly',  // Pour les posts WebSocket de threads
+      'threads/loadThread/fulfilled'  // Ajouter le chargement des threads
+    ];
+
+    postsActions.forEach(actionType => {
+      builder.addMatcher(
+        (action) => action.type === actionType,
+        (state, action: any) => {
+          let posts: any[] = [];
+          
+          // Extract posts from different action payload structures
+          if (action.payload.posts) {
+            // For loadOlder/Newer/Unread/sync actions and threads/loadThread
+            if (Array.isArray(action.payload.posts)) {
+              // For threads/loadThread/fulfilled - posts is an array
+              posts = action.payload.posts;
+            } else {
+              // For posts actions - posts is an object
+              posts = Object.values(action.payload.posts);
+            }
+          } else if (action.payload.post) {
+            // For single post actions (update, create, websocket)
+            posts = [action.payload.post];
+          } else if (action.payload.channel_id) {
+            // For direct post payload (websocket)
+            posts = [action.payload];
+          } else if (action.type === 'posts/storePostOnly') {
+            // For storePostOnly action - payload is directly the post
+            posts = [action.payload];
+          }
+          
+          // Store FileInfos from posts metadata
+          posts.forEach((post: any) => {
+            if (post?.metadata?.files && post.metadata.files.length > 0) {
+              post.metadata.files.forEach((fileInfo: any) => {
+                const fileState = getOrCreateFileState(state, fileInfo.id);
+                fileState.info = fileInfo;
+                fileState.infoLoadingState = 'succeeded';
+                fileState.error = null;
+              });
+            }
+          });
+        }
+      );
+    });
   },
 });
 
-export const { clearPreviewUrl, clearAllPreviewUrls, resetFileState, setPreviewLoadingState } = filesSlice.actions;
+export const { clearPreviewUrl, clearAllPreviewUrls, resetFileState, setPreviewLoadingState, storeFileInfos } = filesSlice.actions;
 
 export default filesSlice.reducer;

@@ -18,10 +18,19 @@ import { UserAvatar } from "../atoms/UserAvatar";
 import { MessageReactions } from "./MessageReactions";
 import { EditMessage } from "./EditMessage";
 import { FileAttachmentList } from "./FileAttachmentList";
+import { HorizontalFileContainer } from "../common/HorizontalFileContainer";
 import { isSystemMessage } from "../../utils/messageUtils";
 import { useAppSelector } from "../../hooks/useAppSelector";
+import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { selectUserProfiles } from "../../store/selectors";
-import {displayUsername} from "../../utils/userUtils";
+import { selectIsPostEditing } from "../../store/selectors/messageUI";
+import {
+  startEdit,
+  stopEdit,
+  startReply,
+  openThread,
+} from "../../store/slices/messageUISlice";
+import { displayUsername } from "../../utils/userUtils";
 
 interface MessageProps {
   post: Post;
@@ -29,6 +38,7 @@ interface MessageProps {
   isFocused?: boolean;
   showHeader?: boolean;
   isOwnMessage?: boolean;
+  inThread?: boolean; // Nouvelle prop pour savoir si on est dans un thread
   onReply?: (postId: string) => void;
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
@@ -50,45 +60,36 @@ const messageTextStyles: SxProps<Theme> = {
   lineHeight: 1.4,
 };
 
-const threadRepliesStyles: SxProps<Theme> = {
-  display: "flex",
-  alignItems: "center",
-  gap: 1,
-  px: 1,
-  py: 0.5,
-  borderRadius: 1,
-  cursor: "pointer",
-  "&:hover": {
-    bgcolor: "action.hover",
-  },
-};
-
 // Composant pour les avatars des répondants (style GroupAvatar amélioré)
-const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({ userIds = [] }) => {
+const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({
+  userIds = [],
+}) => {
   const userProfiles = useAppSelector(selectUserProfiles);
-  
+
   if (userIds.length === 0) return null;
-  
+
   const displayUsers = userIds.slice(0, 3);
   const avatarSize = 28;
-  
+
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+    <Box sx={{ display: "flex", alignItems: "center", mr: 1 }}>
       {displayUsers.map((userId, index) => {
         const user = userProfiles[userId];
-        const displayName = user ? displayUsername(user, "full_name_nickname", true) : 'Unknown User';
-        
+        const displayName = user
+          ? displayUsername(user, "full_name_nickname", true)
+          : "Unknown User";
+
         return (
           <Tooltip key={userId} title={displayName} arrow>
             <Box
               sx={{
-                position: 'relative',
+                position: "relative",
                 zIndex: displayUsers.length - index,
-                marginLeft: index > 0 ? '-10px' : 0,
-                transition: 'transform 0.2s ease, z-index 0.2s ease',
-                cursor: 'pointer',
-                '&:hover': {
-                  transform: 'scale(1.2)',
+                marginLeft: index > 0 ? "-10px" : 0,
+                transition: "transform 0.2s ease, z-index 0.2s ease",
+                cursor: "pointer",
+                "&:hover": {
+                  transform: "scale(1.2)",
                   zIndex: 999,
                 },
               }}
@@ -97,17 +98,13 @@ const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({ userIds = [] }
                 sx={{
                   width: avatarSize,
                   height: avatarSize,
-                  border: '2px solid',
-                  borderColor: 'background.paper',
-                  borderRadius: '50%',
-                  overflow: 'hidden',
+                  border: "2px solid",
+                  borderColor: "background.paper",
+                  borderRadius: "50%",
+                  overflow: "hidden",
                 }}
               >
-                <UserAvatar
-                  userId={userId}
-                  size="small"
-                  showStatus={false}
-                />
+                <UserAvatar userId={userId} size="small" showStatus={false} />
               </Box>
             </Box>
           </Tooltip>
@@ -119,22 +116,22 @@ const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({ userIds = [] }
             sx={{
               width: avatarSize,
               height: avatarSize,
-              borderRadius: '50%',
-              bgcolor: 'grey.400',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '10px',
-              fontWeight: 'bold',
-              color: 'white',
-              marginLeft: '-10px',
-              border: '2px solid',
-              borderColor: 'background.paper',
+              borderRadius: "50%",
+              bgcolor: "grey.400",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "10px",
+              fontWeight: "bold",
+              color: "white",
+              marginLeft: "-10px",
+              border: "2px solid",
+              borderColor: "background.paper",
               zIndex: 0,
-              transition: 'transform 0.2s ease, z-index 0.2s ease',
-              cursor: 'pointer',
-              '&:hover': {
-                transform: 'scale(1.2)',
+              transition: "transform 0.2s ease, z-index 0.2s ease",
+              cursor: "pointer",
+              "&:hover": {
+                transform: "scale(1.2)",
                 zIndex: 999,
               },
             }}
@@ -158,15 +155,17 @@ export const Message: React.FC<MessageProps> = memo(
     isFocused = false,
     showHeader = true,
     isOwnMessage = false,
+    inThread = false,
     onReply,
     onDelete,
     onOpenThread,
     sx,
   }) => {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+    const dispatch = useAppDispatch();
     const [isHovered, setIsHovered] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
+    const isEditing = useAppSelector(selectIsPostEditing(post.id));
     const isSystem = isSystemMessage(post);
     const handleMouseEnter = useCallback(() => {
       setIsHovered(true);
@@ -177,30 +176,30 @@ export const Message: React.FC<MessageProps> = memo(
     }, []);
 
     const handleReply = useCallback(() => {
+      dispatch(startReply(post));
       onReply?.(post.id);
-    }, [onReply, post.id]);
+    }, [dispatch, onReply, post]);
 
     const handleDelete = useCallback(() => {
       onDelete?.(post.id);
     }, [onDelete, post.id]);
 
     const handleStartEdit = useCallback(() => {
-      setIsEditing(true);
-    }, []);
+      dispatch(startEdit(post.id));
+    }, [dispatch, post.id]);
 
     const handleEditSave = useCallback(() => {
-      setIsEditing(false);
-    }, []);
+      dispatch(stopEdit());
+    }, [dispatch]);
 
     const handleEditCancel = useCallback(() => {
-      setIsEditing(false);
-    }, []);
+      dispatch(stopEdit());
+    }, [dispatch]);
 
     const handleOpenThread = useCallback(() => {
-      if (onOpenThread) {
-        onOpenThread(post.id);
-      }
-    }, [onOpenThread, post.id]);
+      dispatch(openThread(post.id));
+      onOpenThread?.(post.id);
+    }, [dispatch, onOpenThread, post.id]);
 
     if (isSystem) {
       return (
@@ -218,6 +217,7 @@ export const Message: React.FC<MessageProps> = memo(
       justifyContent: isOwnMessage ? "flex-end" : "flex-start",
       mb: 1.5,
       mx: 1,
+      ...(inThread && { position: "relative" }), // Position relative uniquement dans les threads
       ...sx,
     };
 
@@ -231,20 +231,20 @@ export const Message: React.FC<MessageProps> = memo(
 
     // Bubble styles - background and padding
     const bubbleStyles: SxProps<Theme> = {
-      backgroundColor: isOwnMessage 
-        ? theme.palette.success.main // Vert moderne pour mes messages
+      backgroundColor: isOwnMessage
+        ? theme.palette.primary.light // Bleu clair moderne pour mes messages
         : theme.palette.background.paper, // Blanc/dark selon le thème
       borderRadius: 2,
       p: 1.5,
       position: "relative",
-      border: isFocused 
-        ? `2px solid ${theme.palette.primary.main}` 
-        : isOwnMessage 
-          ? "none" 
+      border: isFocused
+        ? `2px solid ${theme.palette.primary.main}`
+        : isOwnMessage
+          ? "none"
           : `1px solid ${theme.palette.divider}`,
       "&:hover": {
-        backgroundColor: isOwnMessage 
-          ? theme.palette.success.dark 
+        backgroundColor: isOwnMessage
+          ? theme.palette.primary.main // Bleu plus foncé au hover
           : theme.palette.action.hover,
       },
       boxShadow: theme.shadows[1],
@@ -263,9 +263,13 @@ export const Message: React.FC<MessageProps> = memo(
       color: isOwnMessage ? "rgba(255,255,255,0.8)" : "text.secondary",
       pointerEvents: "none",
     };
-
+    if (post.message === "TEST") {
+      console.debug("isEditing", isEditing);
+      console.debug("file_ids", post.file_ids);
+      console.debug("metadata", post.metadata);
+    }
     return (
-      <Box 
+      <Box
         sx={bubbleContainerStyles}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -279,25 +283,26 @@ export const Message: React.FC<MessageProps> = memo(
               showAvatar={true}
             />
           )}
-          
-          <Paper
-            elevation={isFocused ? 2 : 1}
-            sx={bubbleStyles}
-          >
+
+          <Paper elevation={isFocused ? 2 : 1} sx={bubbleStyles}>
             {/* Message Text or Edit Mode */}
             {isEditing ? (
               <EditMessage
                 postId={post.id}
                 initialMessage={post.message}
+                files={post.metadata?.files}
                 onCancel={handleEditCancel}
                 onSave={handleEditSave}
-                sx={{ 
+                channelId={channelId}
+                sx={{
                   "& .MuiTextField-root": {
                     "& .MuiInputBase-input": {
                       color: messageTextColor,
                     },
                     "& .MuiOutlinedInput-notchedOutline": {
-                      borderColor: isOwnMessage ? "rgba(255,255,255,0.5)" : undefined,
+                      borderColor: isOwnMessage
+                        ? "rgba(255,255,255,0.5)"
+                        : undefined,
                     },
                   },
                 }}
@@ -313,9 +318,17 @@ export const Message: React.FC<MessageProps> = memo(
             )}
 
             {/* File attachments */}
-            {post.file_ids && post.file_ids.length > 0 && (
-              <FileAttachmentList postId={post.id} fileIds={post.file_ids} />
-            )}
+            {!isEditing &&
+              post.metadata &&
+              post.metadata.files &&
+              post.metadata.files.length > 0 && (
+                <HorizontalFileContainer>
+                  <FileAttachmentList
+                    postId={post.id}
+                    files={post.metadata.files}
+                  />
+                </HorizontalFileContainer>
+              )}
 
             {/* Timestamp in bottom right */}
             <Typography variant="caption" sx={timestampStyles}>
@@ -335,19 +348,23 @@ export const Message: React.FC<MessageProps> = memo(
           )}
 
           {/* Thread replies indicator - outside bubble, always aligned left */}
-          {post.reply_count > 0 && (
-            <Box sx={{ 
-              alignSelf: "flex-start", 
-              mt: 0.5,
-              display: "flex",
-              alignItems: "center",
-              gap: 1
-            }}>
+          {!inThread && post.reply_count > 0 && (
+            <Box
+              sx={{
+                alignSelf: "flex-start",
+                mt: 0.5,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+              }}
+            >
               {/* Group Avatars - séparé visuellement */}
-              <ThreadReplierAvatars userIds={post.participants?.map((user: User) => user.id)} />
-              
+              <ThreadReplierAvatars
+                userIds={post.participants?.map((user: User) => user.id)}
+              />
+
               {/* Reply Icon + Text - séparé visuellement mais aligné verticalement */}
-              <Box 
+              <Box
                 sx={{
                   display: "flex",
                   alignItems: "center",
@@ -358,7 +375,7 @@ export const Message: React.FC<MessageProps> = memo(
                       textDecoration: "underline",
                     },
                   },
-                }} 
+                }}
                 onClick={handleOpenThread}
               >
                 <ReplyIcon sx={{ fontSize: 14, color: "primary.main" }} />
@@ -378,11 +395,9 @@ export const Message: React.FC<MessageProps> = memo(
               onReply={handleReply}
               onEdit={handleStartEdit}
               onDelete={handleDelete}
+              inThread={inThread}
               sx={{
-                ...(showHeader
-                    ? { top: -10 }
-                    : { top: -30 }
-                ),
+                ...(showHeader ? { top: -10 } : { top: -30 }),
               }}
             />
           )}
