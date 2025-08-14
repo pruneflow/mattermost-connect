@@ -831,7 +831,6 @@ export function makeFilterPostsAndAddSeparators() {
             }
           } catch (error) {
             // Silently fail timezone conversion if moment-timezone fails
-            console.warn('Timezone conversion failed:', error);
           }
         }
 
@@ -929,7 +928,7 @@ export function makePreparePostIdsForPostList() {
     return postIds;
   };
 }
-// Factory pour créer un sélecteur memoized par channel
+// Factory to create a memoized selector per channel
 export const makeGetPostsAndMetadata = () => 
   createSelector(
     [

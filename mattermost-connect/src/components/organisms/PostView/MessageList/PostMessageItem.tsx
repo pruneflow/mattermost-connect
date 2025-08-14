@@ -1,3 +1,7 @@
+/**
+ * Post message item wrapper component for rendering individual post messages
+ * Connects post data from Redux store to Message component with display options
+ */
 import React from 'react';
 import { useAppSelector } from '../../../../hooks';
 import { selectPostById } from '../../../../store/selectors/postsSelectors';

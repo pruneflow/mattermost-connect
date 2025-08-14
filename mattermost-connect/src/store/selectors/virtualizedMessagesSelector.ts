@@ -19,7 +19,6 @@ const selectChannelSpecificPosts = createSelector(
     selectAllPosts,
   ],
   (postIds: string[] | null, allPosts: Record<string, Post>): Record<string, Post> => {
-    console.debug("🔍 selectChannelSpecificPosts recalculating", postIds?.length || 0);
     const result: Record<string, Post> = {};
     if (postIds && Array.isArray(postIds)) {
       for (const postId of postIds) {
@@ -103,16 +102,6 @@ export const selectVirtualizedMessagesData = createSelector(
   ) => {
     const postIds = Object.keys(channelPosts);
     
-    console.debug("🔍 selectVirtualizedMessagesData inputs:", {
-      postIds: postIds.length,
-      channelPosts: Object.keys(channelPosts).length,
-      atLatestPost,
-      atOldestPost,
-      currentUserId,
-      channelType,
-      unreadCount,
-      lastViewedAt
-    });
     
     return {
       postIds,

@@ -1,4 +1,7 @@
-// Atoms exports
+/**
+ * Atomic components following atomic design principles
+ * Basic building blocks for the Mattermost Connect UI
+ */
 export { default as Button } from './Button';
 export { default as TextInput } from './TextInput';
 export { default as UserAvatar } from './UserAvatar';

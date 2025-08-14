@@ -1,3 +1,7 @@
+/**
+ * Typed useSelector hook for the app store
+ * Provides type-safe access to the Redux store state
+ */
 import { useSelector, TypedUseSelectorHook } from 'react-redux';
 import { store } from '../store';
 

@@ -26,12 +26,11 @@ const STATIC_STYLES = {
     width: '100%',
     cursor: 'pointer',
     
-    // Focus states pour l'accessibilité
     '&:focus': {
       outline: 'none',
     },
     
-    // Animation shimmer pour les posts en attente
+    // Shimmer animation for pending posts
     '@keyframes shimmer': {
       '0%': {
         transform: 'translateX(-100%)',
@@ -131,7 +130,6 @@ export const PostWrapper: React.FC<PostWrapperProps> = memo(({
       ...STATIC_STYLES.hover,
     },
     
-    // Focus states pour l'accessibilité
     '&:focus': {
       ...STATIC_STYLES.base['&:focus'],
       backgroundColor: theme.palette.action.hover,

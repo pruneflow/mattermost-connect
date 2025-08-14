@@ -1,3 +1,7 @@
+/**
+ * Entities slice for managing normalized Mattermost data
+ * Handles users, teams, channels, categories, and their relationships following official Mattermost patterns
+ */
 import { createSlice, PayloadAction, createAsyncThunk } from "@reduxjs/toolkit";
 import {
   UserProfile,
@@ -28,7 +32,6 @@ const loadUsers = async (userIds: string[], dispatch: any, getState: any): Promi
   const missingUserIds = userIds.filter((id: string) => !profiles[id]);
   if (missingUserIds.length === 0) return [];
 
-  console.log(`Loading ${missingUserIds.length} missing users for direct channels`);
   
   // Use efficient batch loading (official Mattermost pattern)
   const users = await client.getProfilesByIds(missingUserIds);
@@ -78,7 +81,7 @@ export const updateTeamMemberRoles = createAsyncThunk(
     { dispatch, rejectWithValue },
   ) => {
     try {
-      // Utilise l'endpoint /schemeRoles comme Mattermost
+      // Use the /schemeRoles endpoint like Mattermost
       await client.updateTeamMemberSchemeRoles(
         teamId,
         userId,
@@ -115,7 +118,6 @@ export const loadTeamMembers = createAsyncThunk(
     try {
       // Always load fresh data (no cache check)
 
-      console.log(`Loading members for team ${teamId}`);
       const members = await client.getTeamMembers(teamId, 0, 200, {
         sort: "Username",
         exclude_deleted_users: true,
@@ -147,7 +149,6 @@ export const loadTeamUserProfiles = createAsyncThunk(
     { rejectWithValue },
   ) => {
     try {
-      console.log(`Loading user profiles for team ${teamId}, page ${page}`);
       const profiles = await client.getProfilesInTeam(
         teamId,
         page,
@@ -178,7 +179,6 @@ export const loadChannelMembers = createAsyncThunk(
   "entities/loadChannelMembers",
   async (channelId: string, { getState, dispatch, rejectWithValue }) => {
     try {
-      console.log(`Loading members for channel ${channelId}`);
       const members = await client.getChannelMembers(channelId, 0, 200);
 
       // Extract user IDs and load their profiles if needed
@@ -187,7 +187,6 @@ export const loadChannelMembers = createAsyncThunk(
       try {
         await loadUsers(userIds, dispatch, getState);
       } catch (userError) {
-        console.warn("Failed to load user profiles:", userError);
       }
 
       return { channelId, members: members || [], skipped: false };
@@ -214,7 +213,6 @@ export const loadUserStatuses = createAsyncThunk(
         return { statuses: [] };
       }
 
-      console.log(`Loading statuses for ${userIds.length} users`);
       const statuses = await client.getStatusesByIds(userIds);
 
       return { statuses: statuses || [] };
@@ -243,9 +241,6 @@ export const addUsersToTeam = createAsyncThunk(
       await client.addUsersToTeam(teamId, userIds);
 
       // Update store - increment team member count
-      console.log(
-        `Adding ${userIds.length} users to team ${teamId}, updating stats`,
-      );
       dispatch(adjustTeamMemberCount({ teamId, count: userIds.length }));
 
       // Optionally reload team members to get fresh data
@@ -278,9 +273,6 @@ export const removeUserFromTeam = createAsyncThunk(
       await client.removeFromTeam(teamId, userId);
 
       // Update store - remove user from team (WebSocket will handle stats)
-      console.log(
-        `Removing user ${userId} from team ${teamId}, WebSocket will update stats`,
-      );
       dispatch(removeUserFromTeamAction({ teamId, userId }));
       // Note: Don't decrement here - WebSocket 'leave_team' event will do it
 
@@ -1123,7 +1115,6 @@ export const markChannelAsRead = createAsyncThunk(
 
       return { channelId };
     } catch (error) {
-      console.error(`Failed to mark channel ${channelId} as read:`, error);
       return rejectWithValue(
         error instanceof Error ? error.message : "Unknown error",
       );
@@ -1213,7 +1204,6 @@ const entitiesSlice = createSlice({
             JSON.stringify(action.payload),
           );
         } catch (error) {
-          console.warn("Failed to update user in localStorage:", error);
         }
       }
     },
@@ -1582,7 +1572,6 @@ const entitiesSlice = createSlice({
         state.channels.channelsInTeam[teamId] = channelIds;
       })
       .addCase(loadChannelsForTeam.rejected, (state, action) => {
-        console.error("Failed to load channels for team:", action.payload);
       })
       // Add single channel thunk
       .addCase(addSingleChannelToTeam.fulfilled, (state, action) => {
@@ -1655,7 +1644,6 @@ const entitiesSlice = createSlice({
         }
       })
       .addCase(addSingleChannelToTeam.rejected, (state, action) => {
-        console.error("Failed to add single channel to team:", action.payload);
       })
       // Channel categories thunks
       .addCase(loadChannelCategories.fulfilled, (state, action) => {
@@ -1673,7 +1661,6 @@ const entitiesSlice = createSlice({
         state.channels.categoryOrder[teamId] = order;
       })
       .addCase(loadChannelCategories.rejected, (state, action) => {
-        console.error("Failed to load channel categories:", action.payload);
       })
       // Team members thunks
       .addCase(loadTeamMembers.fulfilled, (state, action) => {
@@ -1692,7 +1679,6 @@ const entitiesSlice = createSlice({
         state.teams.membersInTeam[teamId] = membersObj;
       })
       .addCase(loadTeamMembers.rejected, (state, action) => {
-        console.error("Failed to load team members:", action.payload);
       })
       // Team user profiles thunk
       .addCase(loadTeamUserProfiles.fulfilled, (state, action) => {
@@ -1704,7 +1690,6 @@ const entitiesSlice = createSlice({
         });
       })
       .addCase(loadTeamUserProfiles.rejected, (state, action) => {
-        console.error("Failed to load team user profiles:", action.payload);
       })
       // Channel members thunks
       .addCase(loadChannelMembers.fulfilled, (state, action) => {
@@ -1723,7 +1708,6 @@ const entitiesSlice = createSlice({
         state.channels.membersInChannel[channelId] = membersObj;
       })
       .addCase(loadChannelMembers.rejected, (state, action) => {
-        console.error("Failed to load channel members:", action.payload);
       })
       .addCase(updateChannelCategoriesAction.fulfilled, (state, action) => {
         const { categories } = action.payload;
@@ -1734,7 +1718,6 @@ const entitiesSlice = createSlice({
         });
       })
       .addCase(updateChannelCategoriesAction.rejected, (state, action) => {
-        console.error("Failed to update channel categories:", action.payload);
       })
       // Mute channel thunk
       .addCase(muteChannelAction.fulfilled, (state, action) => {
@@ -1767,7 +1750,6 @@ const entitiesSlice = createSlice({
         }
       })
       .addCase(muteChannelAction.rejected, (state, action) => {
-        console.error("Failed to mute channel:", action.payload);
       })
       // Leave channel thunk
       .addCase(leaveChannelAction.fulfilled, (state, action) => {
@@ -1800,7 +1782,6 @@ const entitiesSlice = createSlice({
         }
       })
       .addCase(leaveChannelAction.rejected, (state, action) => {
-        console.error("Failed to leave channel:", action.payload);
       });
   },
 });

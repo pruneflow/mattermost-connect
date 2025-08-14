@@ -3,9 +3,9 @@ import { Post } from '../../api/types';
 
 export interface MessageUIState {
   editingPostId: string | null;
-  replyToPost: Post | null; // Post entier pour affichage dans MessageReply
-  threadPostId: string | null; // ID du post root pour le modal Thread
-  threadExpanded: boolean; // Si le thread modal est agrandi
+  replyToPost: Post | null;
+  threadPostId: string | null;
+  threadExpanded: boolean;
 }
 
 const initialState: MessageUIState = {
@@ -16,9 +16,9 @@ const initialState: MessageUIState = {
 };
 
 /**
- * Slice Redux pour gérer l'état UI des messages
- * S'assure qu'un seul message peut être édité/répondu à la fois
- * Gère l'ouverture du modal Thread
+ * Redux slice to manage message UI state
+ * Ensures only one message can be edited/replied to at a time
+ * Manages Thread modal opening
  */
 const messageUISlice = createSlice({
   name: 'messageUI',
@@ -26,7 +26,7 @@ const messageUISlice = createSlice({
   reducers: {
     startEdit: (state, action: PayloadAction<string>) => {
       state.editingPostId = action.payload;
-      state.replyToPost = null; // Auto-annule une réponse en cours
+      state.replyToPost = null;
     },
     
     stopEdit: (state) => {
@@ -35,7 +35,7 @@ const messageUISlice = createSlice({
     
     startReply: (state, action: PayloadAction<Post>) => {
       state.replyToPost = action.payload;
-      state.editingPostId = null; // Auto-annule une édition en cours
+      state.editingPostId = null;
     },
     
     stopReply: (state) => {
@@ -44,7 +44,6 @@ const messageUISlice = createSlice({
     
     openThread: (state, action: PayloadAction<string>) => {
       state.threadPostId = action.payload;
-      // Optionnel: fermer edit/reply quand on ouvre un thread
       // state.editingPostId = null;
       // state.replyToPost = null;
     },

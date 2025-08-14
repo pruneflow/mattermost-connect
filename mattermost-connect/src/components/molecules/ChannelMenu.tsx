@@ -1,3 +1,7 @@
+/**
+ * Channel context menu component with comprehensive channel actions
+ * Provides favorites, mute, move, add members, and leave functionality
+ */
 import React, { useCallback, useMemo } from 'react';
 import {
   IconButton,

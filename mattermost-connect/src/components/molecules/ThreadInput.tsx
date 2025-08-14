@@ -1,3 +1,7 @@
+/**
+ * Thread input component for replying to thread messages
+ * Wraps MessageInput with thread-specific configuration and root post ID handling
+ */
 import React, { useCallback } from 'react';
 import { MessageInput } from './MessageInput';
 import { useAppSelector } from '../../hooks/useAppSelector';
@@ -8,10 +12,6 @@ interface ThreadInputProps {
   rootPostId: string;
 }
 
-/**
- * Input pour écrire dans un thread
- * Force le rootId - le nouveau message apparaîtra automatiquement via threadsSlice
- */
 export const ThreadInput: React.FC<ThreadInputProps> = ({
   rootPostId,
 }) => {
@@ -21,11 +21,10 @@ export const ThreadInput: React.FC<ThreadInputProps> = ({
     if (!message.trim() && (!fileIds || fileIds.length === 0)) return;
     
     try {
-      // Envoyer le message avec rootId forcé
-      // Le nouveau message sera automatiquement ajouté au thread via threadsSlice
+      // Send message with forced rootId
+      // New message will be automatically added to thread via threadsSlice
       await sendMessage(channelId, message, rootPostId, fileIds);
     } catch (error) {
-      console.error('Failed to send thread message:', error);
       // TODO: Show error toast or notification
     }
   }, [channelId, rootPostId]);

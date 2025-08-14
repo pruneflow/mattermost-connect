@@ -1,3 +1,7 @@
+/**
+ * Virtual item renderer component for efficient message list rendering
+ * Handles virtual scrolling with TanStack Virtual and optimized message item rendering
+ */
 import React, { useMemo, useCallback } from 'react';
 import { Box } from '@mui/material';
 import type { Virtualizer } from '@tanstack/react-virtual';

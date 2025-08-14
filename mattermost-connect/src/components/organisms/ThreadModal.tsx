@@ -1,3 +1,7 @@
+/**
+ * Thread modal component with responsive drawer layout
+ * Opens on right side with expandable width and thread message management
+ */
 import React, { useEffect } from 'react';
 import {
   Drawer,
@@ -36,10 +40,6 @@ const inputContainerStyles: SxProps<Theme> = {
   p: 2,
 };
 
-/**
- * Modal thread qui s'ouvre sur la droite
- * Taille responsive avec toggle entre compact/étendu en desktop
- */
 export const ThreadModal: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
@@ -49,7 +49,6 @@ export const ThreadModal: React.FC = () => {
   const threadPostId = useAppSelector(selectThreadPostId);
   const isExpanded = useAppSelector(selectIsThreadExpanded);
 
-  // Calcul des dimensions selon le breakpoint et l'état d'expansion
   const drawerWidth = React.useMemo(() => {
     if (isMobile) {
       return '100%';
@@ -57,7 +56,7 @@ export const ThreadModal: React.FC = () => {
     return isExpanded ? 'min(60vw, 96rem)' : '464px';
   }, [isMobile, isExpanded]);
 
-  // Charger le thread quand la modal s'ouvre
+  // Load thread when modal opens
   useEffect(() => {
     if (isOpen && threadPostId) {
       dispatch(loadThread({ rootPostId: threadPostId }));
@@ -85,23 +84,23 @@ export const ThreadModal: React.FC = () => {
         },
       }}
       ModalProps={{
-        keepMounted: false, // Fermer complètement quand non visible
+        keepMounted: false,
       }}
     >
       <Box sx={contentStyles}>
-        {/* Header fixe en haut */}
+        {/* Fixed header at top */}
         <ThreadHeader
           rootPostId={threadPostId}
           onClose={handleClose}
           showExpandButton={!isMobile}
         />
 
-        {/* Liste des messages - zone scrollable */}
+        {/* Message list - scrollable area */}
         <Box sx={messageListContainerStyles}>
           <ThreadMessageList rootPostId={threadPostId} />
         </Box>
 
-        {/* Input fixe en bas */}
+        {/* Fixed input at bottom */}
         <Box sx={inputContainerStyles}>
           <ThreadInput rootPostId={threadPostId} />
         </Box>

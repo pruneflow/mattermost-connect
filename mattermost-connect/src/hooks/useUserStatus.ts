@@ -71,7 +71,7 @@ export const useUserStatus = (): {
           }
         }));
       } catch (error) {
-        console.error('Failed to set away status:', error);
+        // Failed to set away status
       }
     }
   }, [currentUserId, statuses, dispatch]);
@@ -127,7 +127,6 @@ export const useUserStatus = (): {
       dispatch(setUsersStatus(statusRecord));
       return statuses;
     } catch (error) {
-      console.error('Failed to load users status:', error);
       throw error;
     }
   }, [dispatch]);
@@ -187,7 +186,6 @@ export const useUserStatus = (): {
       }
       
     } catch (error) {
-      console.error('Failed to update status:', error);
       throw error;
     }
   }, [currentUserId, dispatch, updateLastActivity]);

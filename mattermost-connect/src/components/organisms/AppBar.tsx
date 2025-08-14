@@ -1,3 +1,7 @@
+/**
+ * Application top bar with mobile drawer and user context
+ * Displays current channel/team name and provides navigation controls
+ */
 import React, { useState } from 'react';
 import {
   AppBar as MuiAppBar,

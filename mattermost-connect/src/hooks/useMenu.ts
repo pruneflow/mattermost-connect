@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 
-// Store global pour un seul menu ouvert à la fois
+// Global store for only one menu open at a time
 let globalMenuState: {
   currentMenuId: string | null;
   listeners: Set<(menuId: string | null) => void>;
@@ -32,7 +32,7 @@ export const useMenu = (menuId?: string) => {
   const [isOpen, setIsOpen] = useState(false);
   const finalMenuId = menuId || `menu-${Math.random().toString(36).substr(2, 9)}`;
 
-  // Écouter les changements globaux
+  // Listen to global changes
   useEffect(() => {
     const listener = (currentMenuId: string | null) => {
       if (currentMenuId !== finalMenuId) {
@@ -51,11 +51,11 @@ export const useMenu = (menuId?: string) => {
     event.stopPropagation();
     event.preventDefault();
     
-    // Fermer tous les autres menus
+    // Close all other menus
     globalMenuState.currentMenuId = finalMenuId;
     globalMenuState.listeners.forEach(listener => listener(finalMenuId));
     
-    // Ouvrir ce menu
+    // Open this menu
     setAnchorEl(event.currentTarget);
     setIsOpen(true);
   }, [finalMenuId]);

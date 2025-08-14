@@ -1,3 +1,7 @@
+/**
+ * Message component for displaying individual messages in channels and threads
+ * Supports bubble layout, reactions, file attachments, editing, and thread replies
+ */
 import React, { memo, useState, useCallback } from "react";
 import {
   Box,
@@ -38,7 +42,7 @@ interface MessageProps {
   isFocused?: boolean;
   showHeader?: boolean;
   isOwnMessage?: boolean;
-  inThread?: boolean; // Nouvelle prop pour savoir si on est dans un thread
+  inThread?: boolean;
   onReply?: (postId: string) => void;
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
@@ -60,7 +64,7 @@ const messageTextStyles: SxProps<Theme> = {
   lineHeight: 1.4,
 };
 
-// Composant pour les avatars des répondants (style GroupAvatar amélioré)
+// Component for thread replier avatars (improved GroupAvatar style)
 const ThreadReplierAvatars: React.FC<{ userIds?: string[] }> = ({
   userIds = [],
 }) => {
@@ -217,7 +221,7 @@ export const Message: React.FC<MessageProps> = memo(
       justifyContent: isOwnMessage ? "flex-end" : "flex-start",
       mb: 1.5,
       mx: 1,
-      ...(inThread && { position: "relative" }), // Position relative uniquement dans les threads
+      ...(inThread && { position: "relative" }), // Position relative only in threads
       ...sx,
     };
 
@@ -232,8 +236,8 @@ export const Message: React.FC<MessageProps> = memo(
     // Bubble styles - background and padding
     const bubbleStyles: SxProps<Theme> = {
       backgroundColor: isOwnMessage
-        ? theme.palette.primary.light // Bleu clair moderne pour mes messages
-        : theme.palette.background.paper, // Blanc/dark selon le thème
+        ? theme.palette.primary.light // Modern light blue for my messages
+        : theme.palette.background.paper, // White/dark according to theme
       borderRadius: 2,
       p: 1.5,
       position: "relative",
@@ -244,7 +248,7 @@ export const Message: React.FC<MessageProps> = memo(
           : `1px solid ${theme.palette.divider}`,
       "&:hover": {
         backgroundColor: isOwnMessage
-          ? theme.palette.primary.main // Bleu plus foncé au hover
+          ? theme.palette.primary.main // Darker blue on hover
           : theme.palette.action.hover,
       },
       boxShadow: theme.shadows[1],
@@ -263,11 +267,6 @@ export const Message: React.FC<MessageProps> = memo(
       color: isOwnMessage ? "rgba(255,255,255,0.8)" : "text.secondary",
       pointerEvents: "none",
     };
-    if (post.message === "TEST") {
-      console.debug("isEditing", isEditing);
-      console.debug("file_ids", post.file_ids);
-      console.debug("metadata", post.metadata);
-    }
     return (
       <Box
         sx={bubbleContainerStyles}
@@ -358,12 +357,12 @@ export const Message: React.FC<MessageProps> = memo(
                 gap: 1,
               }}
             >
-              {/* Group Avatars - séparé visuellement */}
+              {/* Group Avatars - visually separated */}
               <ThreadReplierAvatars
                 userIds={post.participants?.map((user: User) => user.id)}
               />
 
-              {/* Reply Icon + Text - séparé visuellement mais aligné verticalement */}
+              {/* Reply Icon + Text - visually separated but vertically aligned */}
               <Box
                 sx={{
                   display: "flex",

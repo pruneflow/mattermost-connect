@@ -1,3 +1,7 @@
+/**
+ * Login form component for Mattermost server authentication
+ * Provides server URL, username/email, and password input with validation
+ */
 import React, { useState } from 'react';
 import { Box, Card, Typography, Alert } from '@mui/material';
 import { Button, TextInput } from '../atoms';
@@ -10,6 +14,7 @@ export interface LoginFormProps {
   onSuccess?: () => void;
   className?: string;
 }
+
 
 const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const dispatch = useAppDispatch();

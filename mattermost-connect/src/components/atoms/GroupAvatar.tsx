@@ -1,3 +1,7 @@
+/**
+ * Group avatar component for displaying channel member avatars
+ * Shows overlapping user avatars or group icon with member count badge
+ */
 import React, { useMemo, useCallback } from 'react';
 import { Avatar, Badge, Box, Typography } from '@mui/material';
 import { Group as GroupIcon } from '@mui/icons-material';

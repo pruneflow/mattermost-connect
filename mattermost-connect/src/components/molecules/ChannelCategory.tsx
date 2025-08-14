@@ -1,3 +1,7 @@
+/**
+ * Channel category component with collapsible sections and drag & drop support
+ * Displays grouped channels following Mattermost sidebar organization patterns
+ */
 import React, { useCallback } from 'react';
 import {
   Box,

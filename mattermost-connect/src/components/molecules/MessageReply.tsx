@@ -1,3 +1,7 @@
+/**
+ * Message reply context component for showing reply preview
+ * Displays the original message content with close button in reply mode
+ */
 import React from "react";
 import { Box, IconButton, Typography } from "@mui/material";
 import { Close as CloseIcon } from '@mui/icons-material';
@@ -8,8 +12,8 @@ interface MessageReplyProps {
 }
 
 /**
- * Composant pour afficher le contexte de réponse à un message
- * Affiché au-dessus de MessageInput quand on répond à un message
+ * Component to display message reply context
+ * Shown above MessageInput when replying to a message
  */
 export const MessageReply: React.FC<MessageReplyProps> = ({ message, onClose }) => {
   if (!message) return null;

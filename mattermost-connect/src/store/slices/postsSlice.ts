@@ -123,7 +123,6 @@ export const loadUnreadPosts = createAsyncThunk(
     try {
       const state = getState() as { posts: PostsState, entities: { users: { currentUserId: string } } };
       const metadata = state.posts.channelMetadata[channelId];
-      console.debug("metadata dans loadUnread", metadata)
       
       // Only proceed if not loading
       if (metadata && metadata.loadingState !== 'none') {
@@ -526,13 +525,9 @@ const postsSlice = createSlice({
       .addCase(createPost.fulfilled, (state, action) => {
         const { post, channelId } = action.payload;
         
-        // Stocker le post dans les entités
         state.posts[post.id] = post;
         
-        // Si c'est une réponse (a un root_id), ne pas l'ajouter au canal principal
         if (post.root_id) {
-          // Les réponses ne vont que dans le store des posts, pas dans postsInChannel
-          // Incrémenter le reply_count du post root
           const rootPost = state.posts[post.root_id];
           if (rootPost) {
             rootPost.reply_count = (rootPost.reply_count || 0) + 1;
@@ -540,7 +535,6 @@ const postsSlice = createSlice({
           return;
         }
         
-        // Initialiser le channel si nécessaire
         if (!state.postsInChannel[channelId]) {
           state.postsInChannel[channelId] = [];
         }
@@ -548,15 +542,14 @@ const postsSlice = createSlice({
           state.channelMetadata[channelId] = { ...initialChannelMetadata };
         }
         
-        // Nouveau message = toujours le plus récent, donc au début
         state.postsInChannel[channelId].unshift(post.id);
         state.channelMetadata[channelId].newestPostId = post.id;
       })
-      // Écouter le chargement des threads pour ajouter tous les posts au store global
+      // Listen to thread loading to add all posts to global store
       .addCase(loadThread.fulfilled, (state, action) => {
         const { posts } = action.payload;
         
-        // Ajouter tous les posts du thread au store global des posts
+        // Add all thread posts to global posts store
         posts.forEach(post => {
           state.posts[post.id] = post;
         });
@@ -662,7 +655,6 @@ export const toggleReaction = createAsyncThunk(
       );
 
       if (userHasReacted) {
-        // Supprimer la réaction
         await dispatch(removeReaction({ postId, emojiName })).unwrap();
         return {
           postId,
@@ -671,7 +663,6 @@ export const toggleReaction = createAsyncThunk(
           action: "removed" as const,
         };
       } else {
-        // Ajouter la réaction
         await dispatch(addReaction({ postId, emojiName })).unwrap();
         return {
           postId,
@@ -784,7 +775,6 @@ export const createPost = createAsyncThunk(
   },
 );
 
-// Thunk récursif : créer un post et charger automatiquement tous les messages récents manquants
 export const createPostWithAutoLoad = createAsyncThunk(
   'posts/createPostWithAutoLoad',
   async (params: {
@@ -796,23 +786,18 @@ export const createPostWithAutoLoad = createAsyncThunk(
     try {
       const { channelId } = params;
       
-      // 1. Créer le post
       const createResult = await dispatch(createPost(params)).unwrap();
       
-      // 2. Vérifier si on a besoin de charger des messages récents
       let currentState = getState() as { posts: PostsState };
       let metadata = currentState.posts.channelMetadata[channelId];
       
-      // 3. Charger automatiquement tous les messages manquants
+      // 3. Automatically load all missing messages
       while (metadata && !metadata.hasLoadedLatestPost) {
         try {
           await dispatch(loadNewerPosts({ channelId })).unwrap();
-          // Rafraîchir l'état après chaque chargement
           currentState = getState() as { posts: PostsState };
           metadata = currentState.posts.channelMetadata[channelId];
         } catch (loadError) {
-          // Si le chargement échoue, on s'arrête mais on garde le post créé
-          console.warn('Failed to load newer posts during auto-load:', loadError);
           break;
         }
       }

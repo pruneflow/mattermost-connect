@@ -12,7 +12,6 @@ export const toggleReactionOnPost = async (postId: string, emojiName: string): P
     await store.dispatch(toggleReaction({ postId, emojiName })).unwrap();
     return true;
   } catch (error) {
-    console.error('Failed to toggle reaction:', error);
     throw error;
   }
 };
@@ -44,7 +43,6 @@ export const getRecentEmojis = (maxCount: number = 5): RecentEmoji[] => {
       .slice(0, maxCount)
       .map(([name]) => createEmojiFromName(name));
   } catch (error) {
-    console.error('Error parsing recent emojis:', error);
     return getDefaultEmojis();
   }
 };
@@ -58,6 +56,5 @@ export const addRecentEmoji = (emojiName: string): void => {
     
     localStorage.setItem('emoji-mart.frequently', JSON.stringify(frequently));
   } catch (error) {
-    console.error('Error adding recent emoji:', error);
   }
 };

@@ -31,17 +31,16 @@ export const useMessageWebSocket = () => {
             if (post.user_id !== currentUserId) {
               
               if (post.root_id) {
-                // Si c'est une réponse dans un thread, l'ajouter SEULEMENT au thread
-                // On ajoute quand même au store global des posts pour les fichiers
+                // If this is a thread reply, add ONLY to thread
+                // Still add to global posts store for file handling
                 dispatch(storePostOnly(post));
                 dispatch(addPostToThread({ rootPostId: post.root_id, post }));
               } else {
-                // Si ce n'est pas une réponse, l'ajouter au chat standard
+                // If not a reply, add to standard chat
                 dispatch(setPost(post));
               }
             }
           } catch (error) {
-            console.error('Error parsing posted message:', error);
           }
         }
         break;
@@ -56,17 +55,16 @@ export const useMessageWebSocket = () => {
             if (post.user_id !== currentUserId) {
               
               if (post.root_id) {
-                // Si c'est une réponse dans un thread, mettre à jour SEULEMENT le thread
-                // Mettre à jour aussi le store global pour les fichiers
+                // If this is a thread reply, update ONLY the thread
+                // Also update global store for file handling
                 dispatch(storePostOnly(post));
                 dispatch(addPostToThread({ rootPostId: post.root_id, post }));
               } else {
-                // Si ce n'est pas une réponse, mettre à jour le chat standard
+                // If not a reply, update standard chat
                 dispatch(setPost(post));
               }
             }
           } catch (error) {
-            console.error('Error parsing edited message:', error);
           }
         }
         break;
@@ -82,7 +80,6 @@ export const useMessageWebSocket = () => {
               dispatch(removePost(post.id));
             }
           } catch (error) {
-            console.error('Error parsing deleted message:', error);
           }
         }
         break;

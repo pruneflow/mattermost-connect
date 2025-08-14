@@ -1,4 +1,7 @@
-// Mattermost permission constants - following official pattern
+/**
+ * Mattermost permission constants and role definitions
+ * Following official Mattermost permission system patterns
+ */
 export const Permissions = {
   // System scope permissions
   MANAGE_SYSTEM: 'manage_system',

@@ -209,15 +209,14 @@ export const logError = (error: ServerError, context?: { component?: string; act
     timestamp: new Date().toISOString(),
   };
   
-  // Always log to console for debugging
-  console.error('[MattermostConnect Error]', logData);
+  // Error logged internally
   
   // Optional: let host app handle error tracking
   if (errorTracker) {
     try {
       errorTracker(error, logData);
     } catch (trackingError) {
-      console.error('[Error Tracking Failed]', trackingError);
+      // Error tracking failed
     }
   }
 };

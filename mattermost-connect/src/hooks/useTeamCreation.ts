@@ -30,7 +30,6 @@ export const useTeamCreation = () => {
 
       return newTeam;
     } catch (error) {
-      console.error('Failed to create team:', error);
       throw error;
     }
   }, [dispatch]);
@@ -59,7 +58,6 @@ export const useTeamCreation = () => {
         last_team_icon_update: Date.now() 
       }));
     } catch (error) {
-      console.error('Failed to upload team icon:', error);
       throw error;
     }
   }, []);

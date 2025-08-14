@@ -1,3 +1,7 @@
+/**
+ * Invitation results table component for displaying batch invitation outcomes
+ * Shows user information with success/error status and detailed messages
+ */
 import React from 'react';
 import {
   Box,

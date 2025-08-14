@@ -1,3 +1,7 @@
+/**
+ * Authentication slice for Mattermost login/logout
+ * Handles user authentication state and session management
+ */
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { UserProfile, LoginRequest, APIError } from '../../api/types';
 import { client } from '../../api/client';
@@ -62,7 +66,6 @@ export const loginUser = createAsyncThunk<
       
       // If we have a token, great. If not, continue anyway (cookie-based auth)
       if (!token) {
-        console.warn('No token in client.getToken(), using cookie-based authentication');
       }
 
       // Store credentials in localStorage exactly like Mattermost 
@@ -115,7 +118,6 @@ export const logoutUser = createAsyncThunk<
       await client.logout();
     } catch (error) {
       // Continue with logout even if API call fails (same as Mattermost)
-      console.warn('Logout API call failed:', error);
     } finally {
       // Clear localStorage exactly like Mattermost
       localStorage.removeItem('mattermostToken');
@@ -209,7 +211,6 @@ export const restoreAuthFromStorage = createAsyncThunk<
 
       return { user, token, serverUrl };
     } catch (error) {
-      console.error('Failed to restore auth from localStorage:', error);
       // Clear invalid state
       dispatch(logoutUser());
       return rejectWithValue('Failed to parse stored auth data');

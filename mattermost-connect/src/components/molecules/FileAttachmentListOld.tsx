@@ -1,3 +1,7 @@
+/**
+ * Legacy file attachment list component using Redux store pattern
+ * Alternative implementation with file ID fetching and state management
+ */
 import React, { useCallback, useState } from "react";
 import { Box } from "@mui/material";
 import { FileItem } from "./FileItem";
@@ -14,8 +18,8 @@ export interface FileAttachmentListProps {
 }
 
 /**
- * Composant pour l'affichage des pièces jointes dans les messages
- * Gère la prévisualisation, le téléchargement et la copie de lien
+ * Component for displaying file attachments in messages
+ * Handles preview, download and link copying
  */
 export const FileAttachmentList: React.FC<FileAttachmentListProps> = ({
   postId,
@@ -31,7 +35,7 @@ export const FileAttachmentList: React.FC<FileAttachmentListProps> = ({
     selectMultipleFileInfos(state, fileIds),
   );
 
-  // Chargement des fichiers
+  // File loading
   React.useEffect(() => {
     if (fileIds.length > 0) {
       void fetchAllFiles(postId, fileIds);
@@ -39,11 +43,7 @@ export const FileAttachmentList: React.FC<FileAttachmentListProps> = ({
   }, [postId, fileIds]);
 
   React.useEffect(() => {
-    if (postId === 'qcgtstnzepgc9mtp37hck1jptc') { // Remplacez par l'ID réel du post problématique
-      console.log('=== DEBUG FileAttachmentList ===');
-      console.log('fileIds:', fileIds);
-      console.log('fileInfos from store:', fileInfos);
-      console.log('validFiles:', validFiles);
+    if (postId === 'qcgtstnzepgc9mtp37hck1jptc') { // Replace with actual problematic post ID
     }
   }, [fileIds, fileInfos, postId]);
 

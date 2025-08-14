@@ -1,3 +1,7 @@
+/**
+ * Virtualized message container managing virtual list creation and state
+ * Orchestrates virtual list building, unread separators, and scroll position management
+ */
 import React, { useState, useEffect, useLayoutEffect, useRef, RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAppSelector } from "../../../hooks";
@@ -34,7 +38,6 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
   const [withLoaders, setWithLoaders] = useState<VirtualListItem[]>([]);
   const [virtualItems, setVirtualItems] = useState<VirtualListItem[]>([]);
   
-  // Refs pour sauvegarder la position et l'ID de l'élément ancre avant le prepend
   const prevTopRef = useRef<number | null>(null);
   const anchorIdRef = useRef<string | null>(null);
   
@@ -55,21 +58,10 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     lastViewedAt,
   } = messagesData;
 
-  console.debug("lastViewedAt", lastViewedAt, unreadCount);
   
-  // Debug logs to track what causes re-renders
-  console.debug("🔄 VirtualizedMessageContainer re-render", {
-    channelId,
-    scrollElement: !!scrollElementRef.current,
-    postCount: postIds?.length || 0,
-    unreadCount,
-    atLatestPost,
-    atOldestPost
-  });
 
   // Build core virtual list structure (posts, separators) without load buttons
   useEffect(() => {
-    console.debug("🔄 coreVirtualItems recalculating");
     const items = buildVirtualList(
       postIds as string[],
       channelPosts,
@@ -81,7 +73,6 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
 
   // Add load buttons based on atOldestPost/atLatestPost flags
   useEffect(() => {
-    console.debug("🔄 withLoaders recalculating");
     
     if (coreVirtualItems.length === 0) {
       setWithLoaders(coreVirtualItems);
@@ -118,7 +109,6 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
 
   // Add unread separator if needed
   useEffect(() => {
-    console.debug("🔄 virtualItems recalculating");
     
     if (!unreadCount || unreadCount === 0 || withLoaders.length === 0) {
       setVirtualItems(withLoaders);
@@ -138,13 +128,11 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     
     if (anchorItem && virtualItems[anchorItem.index]) {
       const anchorElement = virtualItems[anchorItem.index];
-      console.debug("anchorElement", anchorElement);
       const anchor = document.getElementById(anchorElement.id);
       
       if (anchor) {
         prevTopRef.current = anchor.getBoundingClientRect().top;
         anchorIdRef.current = anchorElement.id;
-        console.log('🔍 Anchor position measured for ID:', anchorElement.id, 'position:', prevTopRef.current);
       }
     }
   };
@@ -224,7 +212,6 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
       const diff = newTop - prevTopRef.current;
       scrollElement.scrollTop += diff;
       
-      console.log('✅ Scroll adjusted for ID:', anchorIdRef.current, 'diff:', diff, 'new scrollTop:', scrollElement.scrollTop);
     }
 
     // Reset for next time

@@ -4,7 +4,8 @@ import { ContentCopy as CopyIcon } from '@mui/icons-material';
 import { extractCodeBlocks, formatCodeForClipboard } from '../../utils/codeUtils';
 
 /**
- * Composant pour rendre les blocs de code avec syntax highlighting
+ * Code block renderer component with syntax highlighting and copy functionality
+ * Parses text for code blocks and renders them with proper formatting
  */
 
 interface CodeBlockRendererProps {
@@ -46,7 +47,7 @@ const CodeBlock: React.FC<CodeBlockProps> = memo(({
         overflow: 'hidden',
       }}
     >
-      {/* Header avec nom du langage et bouton copier */}
+      {/* Header with language name and copy button */}
       <Box
         sx={{
           display: 'flex',
@@ -79,7 +80,7 @@ const CodeBlock: React.FC<CodeBlockProps> = memo(({
         </Tooltip>
       </Box>
       
-      {/* Contenu du code */}
+      {/* Code content */}
       <Box
         component="pre"
         sx={{
@@ -114,12 +115,10 @@ export const CodeBlockRenderer: React.FC<CodeBlockRendererProps> = memo(({
   text,
   sx,
 }) => {
-  // Extraire les blocs de code du texte
   const codeBlocks = useMemo(() => {
     return extractCodeBlocks(text);
   }, [text]);
   
-  // Diviser le texte en parties avec et sans code
   const textParts = useMemo(() => {
     if (codeBlocks.length === 0) return [{ type: 'text' as const, content: text }];
     
@@ -127,7 +126,6 @@ export const CodeBlockRenderer: React.FC<CodeBlockRendererProps> = memo(({
     let lastIndex = 0;
     
     codeBlocks.forEach((block) => {
-      // Texte avant le bloc de code
       if (block.startIndex > lastIndex) {
         parts.push({
           type: 'text' as const,
@@ -135,7 +133,6 @@ export const CodeBlockRenderer: React.FC<CodeBlockRendererProps> = memo(({
         });
       }
       
-      // Bloc de code
       parts.push({
         type: 'code' as const,
         content: block.content,
@@ -146,7 +143,6 @@ export const CodeBlockRenderer: React.FC<CodeBlockRendererProps> = memo(({
       lastIndex = block.endIndex;
     });
     
-    // Texte après le dernier bloc de code
     if (lastIndex < text.length) {
       parts.push({
         type: 'text' as const,
@@ -158,8 +154,6 @@ export const CodeBlockRenderer: React.FC<CodeBlockRendererProps> = memo(({
   }, [text, codeBlocks]);
   
   const handleCopy = (code: string) => {
-    // Optionnel: notification ou callback
-    console.log('Code copied:', code);
   };
   
   return (

@@ -1,3 +1,7 @@
+/**
+ * Message header component displaying user info and timestamp
+ * Shows user avatar, display name, and formatted timestamp for messages
+ */
 import React, { memo } from 'react';
 import { Box, Typography, SxProps, Theme } from '@mui/material';
 import { useAppSelector } from '../../hooks/useAppSelector';

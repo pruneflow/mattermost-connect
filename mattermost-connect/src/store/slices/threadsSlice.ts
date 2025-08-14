@@ -2,10 +2,9 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { client } from "../../api/client";
 import { PaginatedPostList, Post } from "../../api/types";
 
-// Thread state pour un thread spécifique
 export interface ThreadData {
   posts: Post[];
-  postIds: string[]; // IDs ordonnés chronologiquement (plus ancien en premier)
+  postIds: string[];
   loading: boolean;
   hasNext: boolean;
   error: string | null;
@@ -20,7 +19,7 @@ const initialState: ThreadsState = {
   threads: {},
 };
 
-// Helper pour initialiser un thread vide
+// Helper to initialize an empty thread
 const createEmptyThread = (): ThreadData => ({
   posts: [],
   postIds: [],
@@ -31,7 +30,7 @@ const createEmptyThread = (): ThreadData => ({
 
 /**
  * Charge un thread complet avec tous ses messages
- * Fetch en boucle jusqu'à avoir tous les messages (has_next = false)
+ * Fetch in loop until all messages are retrieved (has_next = false)
  */
 export const loadThread = createAsyncThunk(
   "threads/loadThread",
@@ -43,7 +42,6 @@ export const loadThread = createAsyncThunk(
       let fromCreateAt: number | undefined;
       let fromPost: string | undefined;
 
-      // Paramètres de base pour tous les fetchs
       const baseParams = {
         skipFetchThreads: false,
         collapsedThreads: true,
@@ -63,7 +61,6 @@ export const loadThread = createAsyncThunk(
         throw new Error("No thread data received");
       }
 
-      // Ajouter les posts de la première réponse
       const posts = Object.values(response.posts);
       allPosts.push(...posts);
       allPostIds.push(...response.order);
@@ -71,16 +68,15 @@ export const loadThread = createAsyncThunk(
          allPostIds.push(...response.order);
          hasNext = response.has_next || false;
 
-         // Si il y a plus de messages, continuer le fetch
+         // If there are more messages, continue fetching
          while (hasNext && response.order && response.order.length > 0) {
-           // Récupérer le dernier post pour fromCreateAt et fromPost
            const lastPostId = response.order[response.order.length - 1];
            const lastPost = response.posts[lastPostId];
 
            fromCreateAt = lastPost.create_at;
            fromPost = lastPostId;
 
-           // Fetch suivant avec pagination
+           // Next fetch with pagination
            response = await client.getPaginatedPostThread(
              rootPostId,
              {
@@ -106,10 +102,9 @@ export const loadThread = createAsyncThunk(
         rootPostId,
         posts: allPosts,
         postIds: allPostIds,
-        hasNext: false, // Toujours false car on a tout récupéré
+        hasNext: false,
       };
     } catch (error) {
-      console.error("Failed to load thread:", error);
       return rejectWithValue({
         rootPostId,
         error: error instanceof Error ? error.message : "Failed to load thread",
@@ -119,7 +114,7 @@ export const loadThread = createAsyncThunk(
 );
 
 /**
- * Slice pour gérer les threads
+ * Slice to manage threads
  */
 const threadsSlice = createSlice({
   name: "threads",
@@ -131,12 +126,11 @@ const threadsSlice = createSlice({
       delete state.threads[rootPostId];
     },
 
-    // Nettoyer tous les threads
+    // Clear all threads
     clearAllThreads: (state) => {
       state.threads = {};
     },
 
-    // Ajouter un nouveau post à un thread existant (pour les nouveaux messages)
     addPostToThread: (
       state,
       action: PayloadAction<{ rootPostId: string; post: Post }>,
@@ -148,7 +142,6 @@ const threadsSlice = createSlice({
         thread.posts.push(post);
         thread.postIds.push(post.id);
 
-        // Trier par date de création (plus ancien en premier)
         thread.posts.sort((a, b) => a.create_at - b.create_at);
         thread.postIds.sort((a, b) => {
           const postA = thread.posts.find((p) => p.id === a);
@@ -171,7 +164,6 @@ const threadsSlice = createSlice({
       .addCase(loadThread.fulfilled, (state, action) => {
         const { rootPostId, posts, postIds, hasNext } = action.payload;
 
-        // Créer ou mettre à jour le thread
         state.threads[rootPostId] = {
           posts: posts.sort((a, b) => a.create_at - b.create_at), // Trier chronologiquement
           postIds: postIds,
@@ -191,7 +183,7 @@ const threadsSlice = createSlice({
           (action.payload as any)?.error || "Failed to load thread";
       });
       
-    // Écouter les actions des posts pour les propager aux threads (sans imports circulaires)
+    // Listen to post actions to propagate to threads (without circular imports)
     const postsActions = [
       'posts/createPost/fulfilled',
       'posts/addReaction/fulfilled', 
@@ -207,17 +199,14 @@ const threadsSlice = createSlice({
           if (actionType === 'posts/createPost/fulfilled') {
             const { post } = action.payload;
             
-            // Si c'est une réponse à un thread (a un root_id)
             if (post.root_id && state.threads[post.root_id]) {
               const thread = state.threads[post.root_id];
               
-              // Vérifier que le post n'existe pas déjà
               if (!thread.posts.find((p) => p.id === post.id)) {
                 thread.posts.push(post);
                 thread.postIds.push(post.id);
                 
-                // Trier par date de création (plus ancien en premier)
-                thread.posts.sort((a, b) => a.create_at - b.create_at);
+                        thread.posts.sort((a, b) => a.create_at - b.create_at);
                 thread.postIds.sort((a, b) => {
                   const postA = thread.posts.find((p) => p.id === a);
                   const postB = thread.posts.find((p) => p.id === b);
@@ -227,7 +216,6 @@ const threadsSlice = createSlice({
             }
           }
           
-          // Gestion des réactions
           else if (actionType === 'posts/addReaction/fulfilled') {
             const { postId, reaction } = action.payload;
             

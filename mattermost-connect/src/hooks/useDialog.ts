@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 
-// Store global pour un seul dialog ouvert à la fois
+// Global store for only one dialog open at a time
 let globalDialogState: {
   currentDialogId: string | null;
   listeners: Set<(dialogId: string | null) => void>;
@@ -31,7 +31,7 @@ export const useDialog = (dialogId?: string) => {
   const [isOpen, setIsOpen] = useState(false);
   const finalDialogId = dialogId || `dialog-${Math.random().toString(36).substr(2, 9)}`;
 
-  // Écouter les changements globaux
+  // Listen to global changes
   useEffect(() => {
     const listener = (currentDialogId: string | null) => {
       if (currentDialogId !== finalDialogId) {
@@ -46,11 +46,11 @@ export const useDialog = (dialogId?: string) => {
   }, [finalDialogId]);
 
   const openDialog = useCallback(() => {
-    // Fermer tous les autres dialogs
+    // Close all other dialogs
     globalDialogState.currentDialogId = finalDialogId;
     globalDialogState.listeners.forEach(listener => listener(finalDialogId));
     
-    // Ouvrir ce dialog
+    // Open this dialog
     setIsOpen(true);
   }, [finalDialogId]);
 

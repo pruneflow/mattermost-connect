@@ -1,3 +1,7 @@
+/**
+ * New message separator component for marking unread message boundaries
+ * Displays a styled divider with "New Messages" text following Mattermost patterns
+ */
 import React from "react";
 import Box from "@mui/material/Box";
 import Divider from '@mui/material/Divider';

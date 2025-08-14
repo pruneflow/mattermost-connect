@@ -1,3 +1,7 @@
+/**
+ * Team information dialog displaying team details and statistics
+ * Shows team avatar, description, member count, privacy settings, and creation date
+ */
 import React, { useCallback } from 'react';
 import {
   Dialog,

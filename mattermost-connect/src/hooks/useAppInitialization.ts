@@ -48,7 +48,6 @@ export const useAppInitialization = () => {
 
   // Periodic status polling function
   const startPeriodicStatusPolling = useCallback(() => {
-    console.log(`🚀 Starting periodic status polling`);
 
     const pollStatuses = async () => {
       try {
@@ -57,11 +56,9 @@ export const useAppInitialization = () => {
         const currentUserIds = Object.keys(selectUserProfiles(currentState));
         
         if (currentUserIds.length === 0) {
-          console.log('⏭️ No users to poll for status');
           return;
         }
 
-        console.log(`🔄 Polling statuses for ${currentUserIds.length} users`);
         const statuses = await client.getStatusesByIds(currentUserIds);
         
         if (statuses && Array.isArray(statuses)) {
@@ -72,10 +69,9 @@ export const useAppInitialization = () => {
           });
 
           dispatch(setUsersStatus(statusRecord));
-          console.log(`✅ Updated ${statuses.length} user statuses`);
         }
       } catch (error) {
-        console.error('❌ Failed to poll user statuses:', error);
+        // Failed to poll user statuses
       }
     };
 
@@ -90,17 +86,10 @@ export const useAppInitialization = () => {
   }, [dispatch]);
 
   const initializeApp = useCallback(async () => {
-    console.log("🔍 App initialization check:", { 
-      isAuthenticated, 
-      currentUserId, 
-      hasToken: !!token, 
-      hasServerUrl: !!serverUrl 
-    });
     
     // Mattermost pattern: only require authentication, userId and serverUrl
     // Token is optional (cookie-based authentication)
     if (!isAuthenticated || !currentUserId || !serverUrl) {
-      console.log("❌ Missing required data for initialization");
       setIsInitialized(false);
       return;
     }
@@ -109,7 +98,6 @@ export const useAppInitialization = () => {
     if (isInitialized) return;
 
     try {
-      console.log("🚀 Initializing app data (Mattermost pattern)...");
 
       // Initialize navigation state from localStorage
       initializeNavigation();
@@ -134,7 +122,6 @@ export const useAppInitialization = () => {
         client.getUserPreferences(currentUserId),
       ]);
 
-      console.log("✅ Initial data loaded:")
 
       // Update store with all data
       const teamsById = userTeams.reduce(
@@ -167,14 +154,12 @@ export const useAppInitialization = () => {
 
       // Mark as initialized (Mattermost pattern)
       setIsInitialized(true);
-      console.log("✅ App initialization completed");
 
       // Start periodic status polling after initialization
       setTimeout(() => {
         startPeriodicStatusPolling();
       }, STATUS_INTERVAL);
     } catch (error) {
-      console.error("❌ Failed to initialize app:", error);
       setIsInitialized(false);
     }
   }, [isAuthenticated, currentUserId, token, serverUrl, isInitialized, connectWebSocket]);
@@ -207,10 +192,6 @@ export const useAppInitialization = () => {
       navigateToTeam(lastVisited.teamId);
     } else {
       // Fallback: navigate to first team (will auto-select best channel)
-      console.log(
-        "🚀 No navigation to restore, navigating to first team:",
-        teams[0].id,
-      );
       navigateToTeam(teams[0].id);
     }
   }, [isInitialized]);

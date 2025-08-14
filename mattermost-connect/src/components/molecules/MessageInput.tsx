@@ -1,3 +1,7 @@
+/**
+ * Message input component for composing and editing messages
+ * Supports file attachments, emoji picker, and send/cancel actions
+ */
 import React, { useState, useCallback, useRef } from "react";
 import {
   Box,
@@ -97,7 +101,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [message, setMessage] = useState(initialValue);
   const [showFormatting, setShowFormatting] = useState(false);
   const [files, setFiles] = useState<FileStatus[]>([]);
-  const [editFiles, setEditFiles] = useState<FileInfo[]>(existingFiles); // Gérer la suppression des fichiers existants en mode édition
+  const [editFiles, setEditFiles] = useState<FileInfo[]>(existingFiles);
 
   const textFieldRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,14 +127,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         .filter((f) => f.uploaded && f.fileId)
         .map((f) => f.fileId!);
       if (mode === "edit") {
-        // Mode édition : utiliser directement editFileIds
         const editFileIds: string[] = editFiles.map((f: FileInfo) => f.id);
         const updatedFilesIds = [...uploadedFileIds, ...editFileIds];
         onSend(message.trim(), updatedFilesIds);
       } else {
         onSend(message.trim(), uploadedFileIds);
 
-        // Reset après envoi
         setMessage("");
         setFiles([]);
       }
@@ -260,7 +262,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setShowFormatting((prev) => !prev);
   }, []);
 
-  // Déterminer l'état d'affichage
   const hasFiles = files.length > 0 || editFiles.length > 0;
   const isCompact = !showFormatting && !hasFiles;
 
@@ -364,7 +365,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </HorizontalFileContainer>
       )}
 
-      {/* Toolbar (mode étendu) */}
       {!isCompact && (
         <Box sx={toolbarStyles}>
           {/* Left side - Formatting buttons */}

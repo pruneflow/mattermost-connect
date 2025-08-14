@@ -5,7 +5,8 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectUserProfiles } from '../../store/selectors';
 
 /**
- * Composant pour surligner les mentions dans un texte
+ * Component for highlighting mentions in text
+ * Processes @mentions and applies appropriate styling
  */
 
 interface MentionHighlighterProps {
@@ -23,7 +24,7 @@ export const MentionHighlighter: React.FC<MentionHighlighterProps> = memo(({
 }) => {
   const users = useAppSelector(selectUserProfiles);
   
-  // Extraire et traiter les mentions
+  // Extract and process mentions
   const processedText = useMemo(() => {
     if (!text) return '';
     

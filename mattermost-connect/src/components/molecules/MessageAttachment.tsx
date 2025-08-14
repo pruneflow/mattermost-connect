@@ -1,3 +1,7 @@
+/**
+ * Message attachment component for displaying file attachments in posts
+ * Handles image previews, file icons, and action buttons with modal preview support
+ */
 import React, { useState } from 'react';
 import {
   Box,
@@ -20,7 +24,7 @@ interface AuthenticatedImagePreviewProps {
 }
 
 function AuthenticatedImagePreview({ fileId, onError }: AuthenticatedImagePreviewProps) {
-  // Utilisation directe de l'URL de thumbnail avec authentification par cookie
+  // Direct use of thumbnail URL with cookie authentication
   const previewUrl = `${client.getUrl()}/api/v4/files/${fileId}/thumbnail`;
   return (
     <Box
@@ -56,7 +60,7 @@ export const MessageAttachment: React.FC<MessageAttachmentProps> = ({ postId, fi
   // Get file infos from Redux store
   const fileInfos = useAppSelector((state) => selectMultipleFileInfos(state, fileIds));
   
-  // Chargement centralisé : seulement les infos (les images utilisent les URLs directes)
+  // Centralized loading: only file infos (images use direct URLs)
   React.useEffect(() => {
     if (fileIds.length > 0) {
       fetchAllFiles(postId, fileIds);
@@ -147,7 +151,6 @@ export const MessageAttachment: React.FC<MessageAttachmentProps> = ({ postId, fi
                 <AuthenticatedImagePreview
                   fileId={file.id}
                   onError={() => {
-                    console.log(`Failed to load preview for file: ${file.id}`);
                   }}
                 />
               ) : (

@@ -5,7 +5,8 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentChannel } from '../../store/selectors';
 
 /**
- * Séparateur de début de canal exactement comme Mattermost
+ * Start of channel divider component showing channel beginning marker
+ * Displays channel icon, name, description following Mattermost patterns
  */
 
 interface StartOfChannelDividerProps {
@@ -160,12 +161,11 @@ export const StartOfChannelDivider: React.FC<StartOfChannelDividerProps> = memo(
       role="separator"
       aria-label={`Beginning of ${channel.display_name} channel`}
     >
-      {/* Icône du canal */}
       <Box sx={dynamicStyles.channelIcon}>
         {channelIcon}
       </Box>
       
-      {/* Nom du canal */}
+      {/* Channel name */}
       <Typography
         variant="h6"
         sx={dynamicStyles.channelName}
@@ -181,7 +181,6 @@ export const StartOfChannelDivider: React.FC<StartOfChannelDividerProps> = memo(
         {description}
       </Typography>
       
-      {/* Purpose du canal si défini */}
       {channel.purpose && (
         <Typography
           variant="body2"

@@ -11,7 +11,7 @@ export interface MenuItemConfig {
   onClick?: () => void;
   variant?: "default" | "danger";
   disabled?: boolean;
-  submenu?: MenuItemConfig[]; // Items du sous-menu
+  submenu?: MenuItemConfig[]; // Submenu items
 }
 
 interface MenuItemProps {
@@ -83,7 +83,7 @@ export const MenuItem: React.FC<MenuItemProps> = ({ item, onClose, placement = '
   const submenuStyles = {
     ...MENU_STYLES.submenu,
     display: isMobile ? (submenuOpen ? "block" : "none") : "none",
-    // Choisir le positionnement selon le placement du menu principal
+    // Choose positioning based on main menu placement
     ...(isMobile 
       ? MENU_STYLES.submenuPositioningMobile 
       : placement === 'left' 

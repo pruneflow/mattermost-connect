@@ -18,7 +18,6 @@ const AppInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) =
   
   // Restore auth state from localStorage on app startup (Mattermost pattern)
   useEffect(() => {
-    console.log('🔄 Restoring auth from localStorage on app startup...');
     dispatch(restoreAuthFromStorage());
   }, [dispatch]);
   

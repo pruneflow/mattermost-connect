@@ -18,13 +18,3 @@ export interface VirtualListItem {
     isOwnMessage?: boolean; // For bubble layout (own vs others)
   };
 }
-
-export type VirtualListItemType = VirtualListItem['type'];
-
-// Type guards for better type safety
-export const isPostItem = (item: VirtualListItem): boolean => item.type === 'post';
-export const isDateSeparator = (item: VirtualListItem): boolean => item.type === 'date-separator';
-export const isNewMessagesSeparator = (item: VirtualListItem): boolean => item.type === 'new-messages-separator';
-export const isLoadMoreItem = (item: VirtualListItem): boolean => item.type === 'load-more';
-export const isLoadingItem = (item: VirtualListItem): boolean => item.type === 'loading';
-export const isStartOfChannelItem = (item: VirtualListItem): boolean => item.type === 'start-of-channel';

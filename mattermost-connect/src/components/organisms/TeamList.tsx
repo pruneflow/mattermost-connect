@@ -1,3 +1,7 @@
+/**
+ * Team list component with multiple layout options and team management
+ * Supports vertical, horizontal, and tabs layouts with team dialogs and navigation
+ */
 import React, { useState, useCallback } from "react";
 import {
   Box,
@@ -241,7 +245,6 @@ export const TeamList: React.FC<TeamListProps> = ({
       )}
 
 
-      {/* Team dialogs - gérés par useTeamDialogs */}
       { isSettingsOpen && (
         <TeamSettingsDialog
           open={isSettingsOpen}
@@ -277,7 +280,7 @@ export const TeamList: React.FC<TeamListProps> = ({
       )}
 
       
-      {/* Conditional rendering pour performance */}
+      {/* Conditional rendering for performance */}
       {isInviteOpen && (
         <InvitePeopleDialog
           open={isInviteOpen}

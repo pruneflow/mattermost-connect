@@ -3,7 +3,8 @@ import { Box, SxProps, Theme } from '@mui/material';
 import { replaceCustomEmojis, extractCustomEmojis } from '../../utils/messageFormatUtils';
 
 /**
- * Composant pour rendre les emojis personnalisés dans un texte
+ * Emoji renderer component for processing and displaying custom emojis
+ * Replaces emoji syntax in text with actual emoji images
  */
 
 interface EmojiRendererProps {
@@ -17,7 +18,6 @@ export const EmojiRenderer: React.FC<EmojiRendererProps> = memo(({
   customEmojis = {},
   sx,
 }) => {
-  // Remplacer les emojis personnalisés par des images
   const processedText = useMemo(() => {
     if (!text) return '';
     

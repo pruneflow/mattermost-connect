@@ -1,3 +1,7 @@
+/**
+ * User profile component with editing capabilities and status management
+ * Provides profile viewing/editing, avatar upload, and status changes
+ */
 import React, { useState, useRef, useCallback } from 'react';
 import {
   Box,
@@ -119,7 +123,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
       
       setIsEditing(false);
     } catch (error) {
-      console.error('Failed to update profile:', error);
+      // Profile update failed
     }
   }, [dispatch, user, formData]);
 
@@ -137,7 +141,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
       await updateStatus(newStatus);
       handleStatusClose();
     } catch (error) {
-      console.error('Failed to update status:', error);
+      // Status update failed
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -168,7 +172,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({
         fileInputRef.current.value = '';
       }
     } catch (error) {
-      console.error('Failed to upload profile image:', error);
       alert('Failed to upload profile image');
     } finally {
       setIsUploadingImage(false);

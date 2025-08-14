@@ -1,3 +1,7 @@
+/**
+ * Team menu component with contextual team actions
+ * Provides settings, member management, invitations, and team information options
+ */
 import React, { useCallback } from 'react';
 import {
   IconButton,
@@ -33,7 +37,7 @@ export interface TeamMenuProps {
   team?: Team | null;
   size?: 'small' | 'medium' | 'large';
   sx?: SxProps<Theme>;
-  options?: TeamMenuOptions; // Contrôle de visibilité en plus des permissions
+  options?: TeamMenuOptions; // Visibility control in addition to permissions
   onOpenSettings?: (team: Team) => void;
   onOpenMembers?: (team: Team) => void;
   onOpenInvite?: (team: Team) => void;

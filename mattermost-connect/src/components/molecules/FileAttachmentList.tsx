@@ -1,3 +1,7 @@
+/**
+ * File attachment list component for displaying message file attachments
+ * Supports preview modal, download, and edit mode with file removal
+ */
 import React, { useCallback, useState } from "react";
 import { Box } from "@mui/material";
 import { FileItem } from "./FileItem";
@@ -12,8 +16,8 @@ export interface FileAttachmentListProps {
 }
 
 /**
- * Composant pour l'affichage des pièces jointes dans les messages
- * Gère la prévisualisation, le téléchargement et la copie de lien
+ * Component for displaying file attachments in messages
+ * Handles preview, download and link copying
  */
 export const FileAttachmentList: React.FC<FileAttachmentListProps> = ({
   postId,
@@ -39,7 +43,7 @@ export const FileAttachmentList: React.FC<FileAttachmentListProps> = ({
 
   return (
     <>
-      {/* File attachments - directement dans le flex parent */}
+      {/* File attachments - directly in the flex parent */}
       {files.map((file: FileInfo, index) => {
         const onPreview = () => handleFilePreview(index);
         const handleRemoveFile =

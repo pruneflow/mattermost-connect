@@ -1,3 +1,7 @@
+/**
+ * Message actions component providing contextual actions for messages
+ * Includes reactions, reply, edit, delete, and copy functionality
+ */
 import React, { useState, useCallback } from 'react';
 import {
   Box,
@@ -40,7 +44,7 @@ interface MessageActionsProps {
   onReply?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  inThread?: boolean; // Nouvelle prop pour savoir si on est dans un thread
+  inThread?: boolean; // New prop to know if we are in a thread
   sx?: SxProps<Theme>;
 }
 
@@ -145,7 +149,6 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       onDelete?.();
       setDeleteDialogOpen(false);
     } catch (error) {
-      console.error('Failed to delete message:', error);
     }
   }, [deleteMessage, post, onDelete]);
 
@@ -157,7 +160,6 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       setSnackbarMessage('Message copied to clipboard');
       setSnackbarOpen(true);
     } catch (error) {
-      console.error('Failed to copy message:', error);
       setSnackbarMessage('Failed to copy message');
       setSnackbarOpen(true);
     }
@@ -168,7 +170,6 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     try {
       await toggleReactionOnPost(post.id, emojiName);
     } catch (error) {
-      console.error('Failed to toggle reaction:', error);
     }
   }, [post.id]);
 

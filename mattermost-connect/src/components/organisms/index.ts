@@ -1,4 +1,7 @@
-// Organisms exports
+/**
+ * Organisms module exports - complex components combining multiple molecules/atoms
+ * Provides high-level UI components like dialogs, lists, and complex interactive elements
+ */
 export { default as LoginForm } from './LoginForm';
 export { default as TeamList } from './TeamList';
 export { default as UserMenu } from './UserMenu';

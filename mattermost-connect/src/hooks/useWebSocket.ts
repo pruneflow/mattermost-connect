@@ -112,10 +112,8 @@ export const useWebSocket = (): UseWebSocketReturn => {
     const baseUrl = serverUrl.replace(/^https?:\/\//, "");
     const wsUrl = `${wsProtocol}://${baseUrl}/api/v4/websocket`;
 
-    console.log('WebSocket: Connecting to:', wsUrl);
     // Set up event handlers using new API (non-deprecated)
     wsClient.addMessageListener((msg: any) => {
-      console.log('WebSocket message received:', msg);
       if (msg.event && msg.data) {
         // Route events to appropriate handlers
         handleTypingEvent(msg);
@@ -128,21 +126,17 @@ export const useWebSocket = (): UseWebSocketReturn => {
     });
 
     wsClient.addFirstConnectListener(() => {
-      console.log('WebSocket: First connection established');
       dispatch(setConnectionStatus('connected'));
     });
     wsClient.addReconnectListener(() => {
-      console.log('WebSocket: Reconnection established');
       dispatch(setConnectionStatus('connected'));
     });
 
     wsClient.addCloseListener(() => {
-      console.log('WebSocket: Connection closed');
       dispatch(setConnectionStatus('disconnected'));
     });
 
     wsClient.addErrorListener((error: any) => {
-      console.error('WebSocket: Error', error);
       dispatch(setConnectionError('WebSocket connection error'));
     });
 

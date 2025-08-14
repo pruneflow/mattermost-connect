@@ -6,39 +6,39 @@ import { selectIsMobile, selectSidebarWidth } from '../store/selectors';
 import { setIsMobile, setSidebarWidth } from '../store/slices/viewsSlice';
 
 /**
- * Hook pour gérer la logique de layout responsive
- * Synchronise le state isMobile avec les breakpoints Material-UI
+ * Hook to manage responsive layout logic
+ * Synchronizes isMobile state with Material-UI breakpoints
  */
 export const useLayout = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   
-  // Selector pour récupérer l'état du store
+  // Selector to get store state
   const isMobile = useAppSelector(selectIsMobile);
   const sidebarWidth = useAppSelector(selectSidebarWidth);
   
-  // Détecter les breakpoints Material-UI
+  // Detect Material-UI breakpoints
   const isMobileBreakpoint = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   
-  // Synchroniser le state Redux avec les media queries
+  // Synchronize Redux state with media queries
   useEffect(() => {
     if (isMobile !== isMobileBreakpoint) {
       dispatch(setIsMobile(isMobileBreakpoint));
     }
   }, [isMobileBreakpoint, isMobile, dispatch]);
   
-  // Ajuster la largeur de sidebar selon la taille d'écran
+  // Adjust sidebar width based on screen size
   useEffect(() => {
     let newSidebarWidth = 240; // Desktop default
     
     if (isMobileBreakpoint) {
-      newSidebarWidth = 0; // Pas de sidebar sur mobile (overlay)
+      newSidebarWidth = 0; // No sidebar on mobile (overlay)
     } else if (isTablet) {
-      newSidebarWidth = 200; // Sidebar réduite sur tablette
+      newSidebarWidth = 200; // Reduced sidebar on tablet
     } else if (isDesktop) {
-      newSidebarWidth = 260; // Sidebar large sur desktop
+      newSidebarWidth = 260; // Large sidebar on desktop
     }
     
     if (sidebarWidth !== newSidebarWidth) {

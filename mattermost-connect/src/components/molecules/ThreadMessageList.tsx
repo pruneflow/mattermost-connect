@@ -1,3 +1,7 @@
+/**
+ * Thread message list component displaying all messages in a thread conversation
+ * Auto-scrolls for user's own messages and shows reply count divider
+ */
 import React, { useRef, useEffect } from 'react';
 import {
   Box,
@@ -23,7 +27,7 @@ const containerStyles: SxProps<Theme> = {
   height: '100%',
   overflow: 'auto',
   p: 1,
-  pt: 2, // Padding-top pour éviter que le premier message soit masqué par le ThreadHeader
+  pt: 2, // Padding-top to prevent first message from being hidden by ThreadHeader
 };
 
 const loadingStyles: SxProps<Theme> = {
@@ -52,10 +56,6 @@ const emptyStyles: SxProps<Theme> = {
   color: 'text.secondary',
 };
 
-/**
- * Liste des messages dans un thread
- * Réutilise le composant Message existant mais sans possibilité de répondre
- */
 export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   rootPostId,
 }) => {
@@ -92,7 +92,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     previousPostCountRef.current = currentPostCount;
   }, [posts.length, posts, currentUser]);
 
-  // Affichage du loading
+  // Loading display
   if (isLoading && posts.length === 0) {
     return (
       <Box sx={loadingStyles}>
@@ -101,7 +101,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     );
   }
 
-  // Affichage des erreurs
+  // Error display
   if (error) {
     return (
       <Box sx={errorStyles}>
@@ -112,7 +112,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     );
   }
 
-  // Affichage si pas de messages
+  // Empty state display
   if (posts.length === 0) {
     return (
       <Box sx={emptyStyles}>
@@ -137,16 +137,12 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
               channelId={channelId}
               showHeader={showHeader}
               isOwnMessage={isOwnMessage}
-              inThread={true} // Nouvelle prop pour indiquer qu'on est dans un thread
-              // Pas de handlers pour reply/thread dans le mode thread
-              // onReply={undefined}
-              // onOpenThread={undefined}
-              // Garde les autres fonctionnalités (edit, delete)
+              inThread={true}
               sx={{
                 mb: 1,
               }}
             />
-            {/* Divider avec nombre de réponses après le premier message (root) */}
+            {/* Divider with number of replies after first message (root) */}
             {index === 0 && post.reply_count > 0 && (
               <Box
                 sx={{

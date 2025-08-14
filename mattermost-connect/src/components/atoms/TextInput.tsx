@@ -1,3 +1,7 @@
+/**
+ * Enhanced text input component with consistent styling
+ * Extends Material-UI TextField with custom variants and responsive sizing
+ */
 import React, { useMemo } from 'react';
 import { TextField } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
@@ -24,7 +28,7 @@ const VARIANT_MAP = {
 const SIZE_MAP = {
   sm: 'small' as const,
   md: 'medium' as const,
-  lg: 'medium' as const, // Material-UI n'a pas 'large' pour TextField
+  lg: 'medium' as const, // Material-UI doesn't have 'large' for TextField
 };
 
 export interface TextInputProps extends Omit<TextFieldProps, 'variant' | 'size'> {

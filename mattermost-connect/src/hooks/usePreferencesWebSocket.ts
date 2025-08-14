@@ -31,7 +31,6 @@ export const usePreferencesWebSocket = () => {
               );
               
               if (userPreferences.length > 0) {
-                console.log('📊 Updating preferences from WebSocket:', userPreferences.length);
                 
                 // Update each preference individually to maintain existing ones
                 const updates = userPreferences.map((pref: PreferenceType) => ({
@@ -47,7 +46,7 @@ export const usePreferencesWebSocket = () => {
               }
             }
           } catch (error) {
-            console.error('❌ Failed to parse preferences from WebSocket:', error);
+            // Failed to parse preferences from WebSocket
           }
         }
         break;

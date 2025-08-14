@@ -1,3 +1,7 @@
+/**
+ * File download button component with loading states and permissions
+ * Provides download functionality with progress indication and error handling
+ */
 import React, { useCallback } from 'react';
 import { IconButton, Tooltip, CircularProgress } from '@mui/material';
 import { Download as DownloadIcon } from '@mui/icons-material';

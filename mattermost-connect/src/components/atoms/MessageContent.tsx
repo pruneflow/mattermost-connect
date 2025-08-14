@@ -2,7 +2,8 @@ import React, { memo, useMemo } from 'react';
 import { Box, SxProps, Theme, useTheme } from '@mui/material';
 
 /**
- * Conteneur principal pour le contenu d'un message
+ * Message content container with markdown styling and theming
+ * Provides consistent styling for message text, mentions, links, and formatting
  */
 
 interface MessageContentProps {
@@ -116,14 +117,12 @@ export const MessageContent: React.FC<MessageContentProps> = memo(({
     ...STATIC_STYLES.base,
     ...STATIC_STYLES.markdown,
     
-    // Styles pour les messages système
     ...(isSystemMessage && {
       fontStyle: 'italic',
       color: theme.palette.text.secondary,
       fontSize: '0.875rem',
     }),
     
-    // Styles pour l'édition
     ...(isEditing && {
       backgroundColor: theme.palette.action.hover,
       border: `1px solid ${theme.palette.primary.main}`,
@@ -131,7 +130,6 @@ export const MessageContent: React.FC<MessageContentProps> = memo(({
       padding: theme.spacing(1),
     }),
     
-    // Styles dynamiques pour le contenu markdown
     '& p': {
       ...STATIC_STYLES.markdown['& p'],
       marginBottom: theme.spacing(0.5),
@@ -203,7 +201,6 @@ export const MessageContent: React.FC<MessageContentProps> = memo(({
       backgroundColor: theme.palette.action.hover,
     },
     
-    // Styles pour les mentions
     '& .mention': {
       backgroundColor: theme.palette.primary.main + '20',
       color: theme.palette.primary.main,

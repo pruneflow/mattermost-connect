@@ -1,3 +1,7 @@
+/**
+ * User search autocomplete component for selecting multiple users
+ * Provides searchable dropdown with user avatars and filtering
+ */
 import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   Autocomplete,

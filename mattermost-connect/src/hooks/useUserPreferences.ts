@@ -58,7 +58,7 @@ const useUserPreferences = () => {
           preferences: preferencesToSave 
         })).unwrap();
       } catch (error) {
-        console.error('Failed to save preferences:', error);
+        // Failed to save preferences
       }
     },
     [dispatch, currentUserId]
@@ -199,7 +199,7 @@ const useUserPreferences = () => {
           userId: currentUserId 
         })).unwrap();
       } catch (error) {
-        console.error('Failed to close group channel conversation:', error);
+        // Failed to close group channel conversation
       }
     },
     [dispatch, currentUserId]
@@ -215,7 +215,7 @@ const useUserPreferences = () => {
           userId: currentUserId 
         })).unwrap();
       } catch (error) {
-        console.error('Failed to open group channel conversation:', error);
+        // Failed to open group channel conversation
       }
     },
     [dispatch, currentUserId]

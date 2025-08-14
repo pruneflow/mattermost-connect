@@ -4,7 +4,8 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { displayUsername } from '../../utils/userUtils';
 
 /**
- * Composant pour afficher le nom d'utilisateur avec badges (bot, admin, invité)
+ * Username display component with role badges
+ * Shows user display name with colored badges for bot, admin, guest roles
  */
 
 interface UsernameBadgeProps {
@@ -44,17 +45,14 @@ const getUserBadges = (user: any): string[] => {
     badges.push('bot');
   }
   
-  // Admin système
   if (user.roles && user.roles.includes('system_admin')) {
     badges.push('system_admin');
   }
   
-  // Admin d'équipe
   if (user.roles && user.roles.includes('team_admin')) {
     badges.push('admin');
   }
   
-  // Invité
   if (user.roles && user.roles.includes('system_guest')) {
     badges.push('guest');
   }

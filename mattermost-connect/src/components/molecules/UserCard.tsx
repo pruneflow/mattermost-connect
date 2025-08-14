@@ -1,3 +1,7 @@
+/**
+ * User card component displaying user profile information with avatar and status
+ * Supports different sizes and optional click handling for user selection
+ */
 import React, { useMemo } from 'react';
 import { Box, Typography, ButtonBase } from '@mui/material';
 import { UserAvatar, StatusBadge } from '../atoms';

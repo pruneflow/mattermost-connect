@@ -3,13 +3,14 @@ import { Box, SxProps, Theme, useTheme } from '@mui/material';
 import { formatMessageTime } from '../../utils/dateUtils';
 
 /**
- * Composant pour gérer le groupage des posts selon la logique Mattermost
+ * Post grouping container component following Mattermost message grouping logic
+ * Handles grouped vs ungrouped post display with timestamp visibility
  */
 
 interface PostGroupingProps {
   isGrouped: boolean;
   showTimestamp?: boolean;
-  timestamp?: number; // Timestamp du post pour l'affichage au hover
+  timestamp?: number; // Post timestamp for hover display
   children: React.ReactNode;
   sx?: SxProps<Theme>;
 }
@@ -48,20 +49,17 @@ export const PostGrouping: React.FC<PostGroupingProps> = memo(({
       ...STATIC_STYLES.container,
       gap: theme.spacing(1),
       
-      // Espacement pour les posts groupés
       ...(isGrouped && {
-        paddingLeft: theme.spacing(5), // Aligner avec l'avatar (32px + 8px gap)
+        paddingLeft: theme.spacing(5),
         paddingTop: theme.spacing(0.25),
         paddingBottom: theme.spacing(0.25),
       }),
       
-      // Espacement pour les posts non groupés
       ...(!isGrouped && {
         paddingTop: theme.spacing(0.5),
         paddingBottom: theme.spacing(0.5),
       }),
       
-      // Zone de timestamp au hover pour les posts groupés
       ...(isGrouped && showTimestamp && {
         '&:hover': {
           '& .grouped-timestamp': {
@@ -94,7 +92,7 @@ export const PostGrouping: React.FC<PostGroupingProps> = memo(({
       className={`post-grouping ${isGrouped ? 'grouped' : 'standalone'}`}
       sx={dynamicStyles.container}
     >
-      {/* Timestamp au hover pour les posts groupés */}
+      {/* Hover timestamp for grouped posts */}
       {isGrouped && showTimestamp && timestamp && (
         <Box 
           className="grouped-timestamp"

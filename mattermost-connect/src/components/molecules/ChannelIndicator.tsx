@@ -1,3 +1,7 @@
+/**
+ * Channel indicator components for showing typing status and unread counts
+ * Manages priority display: typing indicators > unread badges > muted states
+ */
 import React, { useMemo } from "react";
 import { Box, SxProps, Theme } from '@mui/material';
 import { NotificationsOff } from '@mui/icons-material';

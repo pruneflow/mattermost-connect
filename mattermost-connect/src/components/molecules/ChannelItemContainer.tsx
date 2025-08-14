@@ -1,3 +1,7 @@
+/**
+ * Channel item container component with Redux data subscription
+ * Smart component that connects individual channels to the store using stable selectors
+ */
 import React from 'react';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectChannelById } from '../../store/selectors';

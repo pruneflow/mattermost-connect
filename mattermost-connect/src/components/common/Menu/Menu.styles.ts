@@ -32,9 +32,9 @@ export const MENU_STYLES = {
     fontWeight: 500,
     cursor: "pointer",
     marginLeft: "-2px",
-    color: "text.primary", // Force la couleur du texte
+    color: "text.primary",
     "& .MuiSvgIcon-root": {
-      color: "action.active", // Force la couleur des icônes
+      color: "action.active",
     },
   },
 
@@ -77,19 +77,16 @@ export const MENU_STYLES = {
   },
 
   submenuPositioning: {
-    // Desktop: à droite sans gap pour hover continu
     left: "100%",
     top: 0,
   },
 
   submenuPositioningLeft: {
-    // Desktop: à gauche quand le menu principal s'ouvre à gauche
     right: "100%",
     top: 0,
   },
 
   submenuPositioningMobile: {
-    // Mobile: en bas avec décalage
     left: "8px",
     top: "calc(100% + 4px)",
     width: "calc(100vw - 48px)",

@@ -1,3 +1,7 @@
+/**
+ * Message reactions component for displaying and managing emoji reactions on posts
+ * Groups reactions by emoji type and allows users to add/remove reactions
+ */
 import React, { memo, useCallback, useMemo } from 'react';
 import { Box, Chip, Tooltip, SxProps, Theme, useTheme } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
@@ -36,7 +40,7 @@ const addReactionButtonStyles: SxProps<Theme> = {
   border: '1px dashed',
   borderColor: 'divider',
   backgroundColor: 'transparent',
-  order: 999, // Toujours en dernier dans le flex
+  order: 999, // Always last in flex
   '&:hover': {
     backgroundColor: 'action.hover',
   },
@@ -126,7 +130,6 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
     try {
       await toggleReactionOnPost(postId, emojiName);
     } catch (error) {
-      console.error('Failed to toggle reaction:', error);
     }
   }, [postId]);
 
@@ -134,7 +137,6 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
     try {
       await toggleReactionOnPost(postId, emoji);
     } catch (error) {
-      console.error('Failed to add reaction:', error);
     }
   }, [postId]);
 
@@ -145,7 +147,6 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
 
   return (
     <Box sx={{ ...reactionsContainerStyles, ...sx }}>
-      {/* Réactions avec wrap multi-lignes */}
       {groupedReactions.map((reaction) => (
         <ReactionChip
           key={reaction.emojiName}
@@ -155,7 +156,7 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
         />
       ))}
 
-      {/* Bouton d'ajout */}
+      {/* Add reaction button */}
       <EmojiPickerButton
         onEmojiSelect={handleEmojiSelect}
         size="small"

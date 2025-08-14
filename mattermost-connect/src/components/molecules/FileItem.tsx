@@ -1,3 +1,7 @@
+/**
+ * File item component with upload status and action buttons
+ * Supports both uploaded files and files being uploaded with preview thumbnails
+ */
 import React from 'react';
 import {
   Box,
@@ -13,7 +17,7 @@ import { FileTypeIcon } from '../atoms/FileIcon';
 import { FileActionButtons } from './FileActionButtons';
 import { client } from '../../api/client';
 
-// Status pour les fichiers en cours d'upload (input mode)
+// Status for files being uploaded (input mode)
 export interface FileStatus {
   file: File;
   uploading: boolean;
@@ -22,7 +26,7 @@ export interface FileStatus {
   error?: string;
 }
 
-// Type union pour les deux modes d'utilisation - utilisation partielle de FileInfo
+// Union type for two usage modes - partial usage of FileInfo
 export type FileItemData = Partial<FileInfo> & Pick<FileInfo, 'id' | 'name' | 'size' | 'mime_type'> | FileStatus;
 
 export interface FileItemProps {
@@ -36,7 +40,6 @@ export interface FileItemProps {
   onPreview?: () => void;
 }
 
-// Type guard pour différencier FileInfo de FileStatus
 function isFileInfo(file: FileItemData): file is FileInfo {
   return 'id' in file && typeof file.id === 'string';
 }
@@ -46,8 +49,8 @@ function isFileStatus(file: FileItemData): file is FileStatus {
 }
 
 /**
- * Composant générique pour l'affichage d'un fichier
- * Utilisé dans les messages et dans l'input de composition
+ * Generic component for file display
+ * Used in messages and message input
  */
 export const FileItem: React.FC<FileItemProps> = ({
   file,
@@ -59,7 +62,6 @@ export const FileItem: React.FC<FileItemProps> = ({
   onRemove,
   onPreview,
 }) => {
-  // Extraction des propriétés selon le type
   const fileData = React.useMemo(() => {
     if (isFileInfo(file)) {
       return {
@@ -81,7 +83,6 @@ export const FileItem: React.FC<FileItemProps> = ({
     return null;
   }, [file]);
 
-  // URL du thumbnail (si le fichier est uploadé)
   const thumbnailUrl = React.useMemo(() => {
     if (fileData?.id) {
       return `${client.getUrl()}/api/v4/files/${fileData.id}/thumbnail`;
@@ -89,7 +90,7 @@ export const FileItem: React.FC<FileItemProps> = ({
     return null;
   }, [fileData?.id]);
 
-  // Preview local pour les nouvelles images
+  // Local preview for new images
   const localPreviewUrl = React.useMemo(() => {
     if (isFileStatus(file) && !file.uploaded && fileData?.mimeType?.startsWith('image/')) {
       return URL.createObjectURL(file.file);
@@ -106,17 +107,15 @@ export const FileItem: React.FC<FileItemProps> = ({
     };
   }, [localPreviewUrl]);
 
-  // Déterminer si c'est une image affichable
   const isDisplayableImage = React.useMemo(() => {
     return fileData?.mimeType?.startsWith('image/') && 
            !fileData.mimeType.includes('svg') && 
            !fileData.mimeType.includes('icon');
   }, [fileData?.mimeType]);
 
-  // URL à utiliser pour l'affichage
   const displayUrl = thumbnailUrl || localPreviewUrl;
 
-  // Gestion du clic
+  // Click handling
   const handleClick = React.useCallback(() => {
     if (showPreview && onPreview && !uploading) {
       onPreview();
@@ -147,7 +146,7 @@ export const FileItem: React.FC<FileItemProps> = ({
         borderColor: hasError ? 'error.main' : 'divider',
         padding: '16px 20px',
         minHeight: '80px',
-        flexShrink: { xs: 1, sm: 1, md: 0 }, // Empêche le rétrécissement en desktop
+        flexShrink: { xs: 1, sm: 1, md: 0 },
         transition: 'all 0.2s ease',
         cursor: showPreview && !uploading ? 'pointer' : 'default',
         position: 'relative',

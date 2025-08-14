@@ -1,3 +1,7 @@
+/**
+ * Settings dialog with notifications and display preferences
+ * Provides tabbed interface for user preference management with real-time updates
+ */
 import React, { useState, useCallback } from 'react';
 import {
   Dialog,
@@ -400,8 +404,8 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onClose })
                       disabled={isUpdating}
                     >
                       <MenuItem value="en">English</MenuItem>
-                      <MenuItem value="fr">Français</MenuItem>
-                      <MenuItem value="es">Español</MenuItem>
+                      <MenuItem value="fr">French</MenuItem>
+                      <MenuItem value="es">Spanish</MenuItem>
                       <MenuItem value="de">Deutsch</MenuItem>
                     </Select>
                   </FormControl>

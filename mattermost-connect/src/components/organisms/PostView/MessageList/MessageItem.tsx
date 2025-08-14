@@ -1,3 +1,7 @@
+/**
+ * Message item renderer component for virtual list items
+ * Handles rendering of different item types: posts, dividers, buttons, and loading states
+ */
 import React, { forwardRef } from 'react';
 import { DateDivider } from '../../../atoms/DateDivider';
 import { NewMessageSeparator } from '../../../molecules/NewMessageSeparator';

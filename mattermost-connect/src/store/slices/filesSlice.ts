@@ -151,10 +151,9 @@ export const downloadFile = createAsyncThunk(
   'files/downloadFile',
   async ({ fileId, fileName }: { fileId: string; fileName?: string }, { getState, rejectWithValue }) => {
     try {
-      // Utilisation de client.getFileUrl comme dans l'implémentation officielle
       const downloadUrl = client.getFileUrl(fileId, Date.now());
       
-      // Fetch avec credentials pour l'authentification par cookie
+      // Fetch with credentials for cookie authentication
       const response = await fetch(downloadUrl, {
         method: 'GET',
         credentials: 'include',
@@ -164,10 +163,8 @@ export const downloadFile = createAsyncThunk(
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      // Récupérer le blob pour forcer le téléchargement
       const blob = await response.blob();
       
-      // Créer un URL d'objet et déclencher le téléchargement
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
@@ -196,7 +193,6 @@ export const generatePublicLink = createAsyncThunk(
   'files/generatePublicLink',
   async ({ fileId }: { fileId: string }, { rejectWithValue }) => {
     try {
-      // Utilisation de client.getFilePublicLink comme dans l'implémentation officielle
       const result = await client.getFilePublicLink(fileId);
       return { fileId, publicLink: result.link };
     } catch (error) {

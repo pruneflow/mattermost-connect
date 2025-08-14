@@ -1,3 +1,7 @@
+/**
+ * Sidebar component combining team and channel lists in Mattermost layout
+ * Provides responsive drawer variants with team icons and channel navigation
+ */
 import React from 'react';
 import {
   Box,
@@ -18,10 +22,6 @@ export interface SidebarProps {
   sx?: SxProps<Theme>;
 }
 
-/**
- * Sidebar component following Mattermost layout patterns
- * Combines TeamList and ChannelList in a unified sidebar
- */
 export const Sidebar: React.FC<SidebarProps> = ({
   open = true,
   onClose,

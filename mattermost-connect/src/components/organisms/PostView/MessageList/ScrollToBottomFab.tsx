@@ -1,3 +1,7 @@
+/**
+ * Scroll to bottom floating action button with new message count badge
+ * Animated FAB that appears when user is scrolled up with optional message count indicator
+ */
 import React from 'react';
 import { Fab, Badge, SxProps, Theme } from '@mui/material';
 import { KeyboardArrowDown as ArrowDownIcon } from '@mui/icons-material';

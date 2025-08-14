@@ -3,7 +3,7 @@ import { createIdsSelector } from "./selectorsHelper";
 import { USER_ACTIVITY_POST_TYPES } from "../constants/posts";
 
 /**
- * Utilitaires généraux pour les posts Mattermost
+ * General utilities for Mattermost posts
  */
 
 /**
@@ -26,17 +26,17 @@ export const POST_TYPES = [
 ];
 
 /**
- * Vérifie si un post est un message système
+ * Checks if a post is a system message
  */
 export const isSystemPost = (post: Post): boolean => {
   return post.type.startsWith("system_");
 };
 
 /**
- * Vérifie si un post est en attente d'envoi
+ * Checks if a post is pending sending
  */
 export const isPostPending = (post: Post): boolean => {
-  // Un post est en attente s'il a un pending_post_id ou s'il n'a pas d'ID valide
+  // A post is pending if it has a pending_post_id or doesn't have a valid ID
   return (
     (post as any).pending_post_id !== undefined ||
     !post.id ||
@@ -46,28 +46,28 @@ export const isPostPending = (post: Post): boolean => {
 };
 
 /**
- * Vérifie si un post a échoué à l'envoi
+ * Checks if a post failed to send
  */
 export const isPostFailed = (post: Post): boolean => {
   return post.failed === true;
 };
 
 /**
- * Vérifie si un post est un webhook
+ * Checks if a post is a webhook
  */
 export const isWebhookPost = (post: Post): boolean => {
   return post.props && post.props.from_webhook === "true";
 };
 
 /**
- * Vérifie si un post est édité
+ * Checks if a post is edited
  */
 export const isPostEdited = (post: Post): boolean => {
   return post.edit_at > 0;
 };
 
 /**
- * Vérifie si un post a des réactions
+ * Checks if a post has reactions
  */
 export const hasReactions = (post: Post): boolean => {
   return !!(
@@ -78,48 +78,48 @@ export const hasReactions = (post: Post): boolean => {
 };
 
 /**
- * Vérifie si un post a des pièces jointes
+ * Checks if a post has attachments
  */
 export const hasAttachments = (post: Post): boolean => {
   return !!(post.file_ids && post.file_ids.length > 0);
 };
 
 /**
- * Vérifie si un post est dans un thread
+ * Checks if a post is in a thread
  */
 export const isThreadPost = (post: Post): boolean => {
   return post.root_id !== "";
 };
 
 /**
- * Vérifie si un post est le début d'un thread
+ * Checks if a post is the start of a thread
  */
 export const isThreadRoot = (post: Post): boolean => {
   return post.root_id === "" && post.reply_count > 0;
 };
 
 /**
- * Obtient l'ID du thread (root_id ou id si c'est la racine)
+ * Gets the thread ID (root_id or id if it's the root)
  */
 export const getThreadId = (post: Post): string => {
   return post.root_id || post.id;
 };
 
 /**
- * Vérifie si un post peut être édité
+ * Checks if a post can be edited
  */
 export const canEditPost = (post: Post, currentUserId: string): boolean => {
-  // Seul l'auteur peut éditer ses posts
+  // Only the author can edit their posts
   if (post.user_id !== currentUserId) {
     return false;
   }
 
-  // Pas d'édition pour les messages système
+  // No editing for system messages
   if (isSystemPost(post)) {
     return false;
   }
 
-  // Pas d'édition pour les posts en échec
+  // No editing for failed posts
   if (isPostFailed(post)) {
     return false;
   }
@@ -128,34 +128,34 @@ export const canEditPost = (post: Post, currentUserId: string): boolean => {
 };
 
 /**
- * Vérifie si un post peut être supprimé
+ * Checks if a post can be deleted
  */
 export const canDeletePost = (post: Post, currentUserId: string): boolean => {
-  // L'auteur peut toujours supprimer ses posts
+  // The author can always delete their posts
   if (post.user_id === currentUserId) {
     return true;
   }
 
-  // TODO: Vérifier les permissions admin/moderateur
+  // TODO: Check admin/moderator permissions
   return false;
 };
 
 /**
- * Génère un ID unique pour un post en attente
+ * Generates a unique ID for a pending post
  */
 export const generatePendingPostId = (): string => {
   return `pending_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
 /**
- * Formate la taille d'un post en caractères
+ * Formats post size in characters
  */
 export const getPostLength = (post: Post): number => {
   return post.message ? post.message.length : 0;
 };
 
 /**
- * Vérifie si un post est trop long
+ * Checks if a post is too long
  */
 export const isPostTooLong = (
   message: string,
@@ -181,14 +181,14 @@ export const extractUrls = (message: string): string[] => {
 };
 
 /**
- * Détermine si un post contient des mentions
+ * Determines if a post contains mentions
  */
 export const hasMentions = (message: string): boolean => {
   return /@[a-zA-Z0-9._-]+/.test(message);
 };
 
 /**
- * Détermine si un post contient des emojis
+ * Determines if a post contains emojis
  */
 export const hasEmojis = (message: string): boolean => {
   return /:[a-zA-Z0-9_+-]+:/.test(message);

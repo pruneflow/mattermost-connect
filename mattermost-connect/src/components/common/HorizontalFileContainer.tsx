@@ -1,3 +1,7 @@
+/**
+ * Horizontal file container component with responsive scrolling behavior
+ * Provides flexible layout for file attachments with desktop horizontal scrolling
+ */
 import React from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
 
@@ -7,10 +11,6 @@ export interface HorizontalFileContainerProps {
   sx?: SxProps<Theme>;
 }
 
-/**
- * Container réutilisable pour l'affichage horizontal des fichiers
- * avec scroll moderne en desktop et comportement responsive
- */
 export const HorizontalFileContainer: React.FC<HorizontalFileContainerProps> = ({
   children,
   showBorder = false,
@@ -22,30 +22,29 @@ export const HorizontalFileContainer: React.FC<HorizontalFileContainerProps> = (
         mt: 1,
         display: "flex",
         flexDirection: { xs: "column", sm: "row", md: "row" },
-        flexWrap: { xs: "wrap", sm: "wrap", md: "nowrap" }, // Pas de wrap en desktop
+        flexWrap: { xs: "wrap", sm: "wrap", md: "nowrap" }, // No wrap on desktop
         gap: 1,
         width: "100%",
-        // Padding pour laisser de l'espace pour la scrollbar
+        // Padding to leave space for scrollbar
         pb: { xs: 0, sm: 0, md: 2 },
-        // Scroll horizontal en desktop uniquement
+        // Desktop horizontal scrolling only
         overflowX: { xs: "visible", sm: "visible", md: "auto" },
         overflowY: "visible",
-        // Styling conditionnel pour le mode édition
         ...(showBorder && {
           p: 1,
-          pb: { xs: 1, sm: 1, md: 3 }, // Plus d'espace en bas pour la scrollbar
+          pb: { xs: 1, sm: 1, md: 3 },
           borderTop: 1,
           borderColor: "divider",
           bgcolor: "background.default",
         }),
-        // Scrollbar moderne et visible pour desktop
+        // Modern and visible scrollbar for desktop
         "&::-webkit-scrollbar": {
-          height: { xs: 0, sm: 0, md: 8 }, // Scrollbar un peu plus épaisse en desktop
+          height: { xs: 0, sm: 0, md: 8 },
         },
         "&::-webkit-scrollbar-track": {
           backgroundColor: { xs: "transparent", sm: "transparent", md: "rgba(0,0,0,0.08)" },
           borderRadius: 4,
-          margin: { xs: 0, sm: 0, md: "0 4px" }, // Marge pour ne pas toucher les bords
+          margin: { xs: 0, sm: 0, md: "0 4px" },
         },
         "&::-webkit-scrollbar-thumb": {
           backgroundColor: { xs: "transparent", sm: "transparent", md: "rgba(0,0,0,0.3)" },
@@ -57,7 +56,7 @@ export const HorizontalFileContainer: React.FC<HorizontalFileContainerProps> = (
             backgroundColor: { xs: "transparent", sm: "transparent", md: "rgba(0,0,0,0.6)" },
           },
         },
-        // Pour Firefox
+        // For Firefox
         scrollbarWidth: { xs: "none", sm: "none", md: "thin" },
         scrollbarColor: { xs: "transparent", sm: "transparent", md: "rgba(0,0,0,0.3) rgba(0,0,0,0.08)" },
         ...sx,

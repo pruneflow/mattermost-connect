@@ -36,14 +36,12 @@ export const handleError = (
 
   // Handle auth errors - logout if token invalid (store access)
   if (requiresReauth(serverError)) {
-    console.warn('Authentication error detected, logging out user');
     store.dispatch(logoutUser());
   }
 
   // Show user-friendly error message
   if (showToast) {
     const message = getErrorMessage(serverError);
-    console.error('User Error:', message);
   }
 
   // Throw if requested (useful for async operations)

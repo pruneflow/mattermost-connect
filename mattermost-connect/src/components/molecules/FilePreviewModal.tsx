@@ -1,3 +1,7 @@
+/**
+ * File preview modal with navigation and user context
+ * Displays images, PDFs, audio/video with keyboard navigation and action buttons
+ */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dialog,
@@ -219,7 +223,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         width: '100%',
         p: 4,
       }}>
-        {/* Carré blanc centré avec le contenu */}
+        {/* Centered white square with content */}
         <Box
           sx={{
             backgroundColor: 'white',
@@ -252,7 +256,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   }
 
   const handleBackdropClick = (event: React.MouseEvent) => {
-    // Fermer la modale quand on clique sur la zone de fond
+    // Close modal when clicking on backdrop area
     onClose();
   };
 
@@ -269,7 +273,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             margin: 0,
             maxHeight: '100vh',
             height: '100vh',
-            backgroundColor: 'rgba(0, 0, 0, 0.4)', // Background plus transparent
+            backgroundColor: 'rgba(0, 0, 0, 0.4)', // More transparent background
             backdropFilter: 'blur(4px)',
             display: 'flex',
             flexDirection: 'column'
@@ -277,7 +281,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         },
         backdrop: {
           sx: {
-            backgroundColor: 'rgba(0, 0, 0, 0.3)' // Backdrop plus transparent
+            backgroundColor: 'rgba(0, 0, 0, 0.3)' // More transparent backdrop
           }
         }
       }}

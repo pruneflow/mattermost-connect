@@ -1,3 +1,7 @@
+/**
+ * Status selector dropdown component for changing user presence status
+ * Provides online, away, DND, and offline options with status indicators
+ */
 import React from 'react';
 import { Dropdown, StatusBadge } from '../atoms';
 import { handleError } from '../../services/errorService';

@@ -1,3 +1,7 @@
+/**
+ * Add channel members dialog for inviting team members to channels
+ * Provides user search, member selection, and permission-based access control
+ */
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
@@ -136,7 +140,6 @@ export const AddChannelMembersDialog: React.FC<AddChannelMembersDialogProps> = (
   // Load team and channel members when dialog opens (always fresh data)
   useEffect(() => {
     if (open && channel && channel.type !== 'D' && teamId) {
-      console.log('🔄 Dialog opened - loading fresh team and channel members');
       dispatch(loadTeamMembers(teamId));
       dispatch(loadChannelMembers(channelId));
     }

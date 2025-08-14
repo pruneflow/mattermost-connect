@@ -183,7 +183,7 @@ export const useTeamInvitations = (teamId: string) => {
       await navigator.clipboard.writeText(link);
       return true;
     } catch (error) {
-      console.warn('Failed to copy to clipboard:', error);
+      // Failed to copy to clipboard
       return false;
     }
   }, [inviteLink, getInviteLink]);

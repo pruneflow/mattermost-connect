@@ -1,3 +1,7 @@
+/**
+ * Public link button for sharing files with external users
+ * Generates public links and provides clipboard copy functionality with success feedback
+ */
 import React, { useCallback, useState, useEffect } from 'react';
 import { IconButton, Tooltip } from '@mui/material';
 import { Link as LinkIcon, Check as CheckIcon } from '@mui/icons-material';
@@ -44,7 +48,7 @@ export const FilePublicLinkButton: React.FC<FilePublicLinkButtonProps> = ({
   }, [showSuccess]);
   
   return (
-    <Tooltip title={showSuccess ? 'Copié' : tooltip}>
+    <Tooltip title={showSuccess ? 'Copied' : tooltip}>
       <IconButton 
         size={size} 
         onClick={handleCopyLink}

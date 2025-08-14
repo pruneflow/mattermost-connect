@@ -1,3 +1,7 @@
+/**
+ * Unread badge component following Mattermost unread count patterns
+ * Shows different colors based on mentions vs regular unread messages
+ */
 import React, { useMemo } from 'react';
 import { Badge } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';

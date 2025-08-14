@@ -4,8 +4,8 @@ import type { Team } from '../api/types';
 export type TeamDialogType = 'settings' | 'members' | 'info' | 'leave' | 'invite';
 
 /**
- * Hook pour gérer l'état des dialogs d'équipe
- * Extrait la logique commune de TeamList et TeamHeader
+ * Hook to manage team dialog state
+ * Extracts common logic from TeamList and TeamHeader
  */
 export const useTeamDialogs = () => {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export const useTeamDialogs = () => {
   }, [openTeamDialog]);
 
   return {
-    // État
+    // State
     selectedTeamId,
     openDialog,
     
@@ -54,7 +54,7 @@ export const useTeamDialogs = () => {
     openInvite,
     closeDialog,
     
-    // État booléens pour les composants
+    // Boolean states for components
     isSettingsOpen: openDialog === 'settings',
     isMembersOpen: openDialog === 'members',
     isInfoOpen: openDialog === 'info',

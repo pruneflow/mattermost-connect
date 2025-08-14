@@ -1,3 +1,7 @@
+/**
+ * Main application layout switcher component
+ * Provides choice between Mattermost-style and custom layouts with configuration options
+ */
 import React from 'react';
 import { SxProps, Theme } from '@mui/material';
 import { MattermostLayout } from './MattermostLayout';
@@ -12,10 +16,6 @@ export interface AppLayoutProps {
   sx?: SxProps<Theme>;
 }
 
-/**
- * AppLayout component - Main layout switcher
- * Provides either Mattermost-style layout or custom layout based on props
- */
 export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
   layout = 'mattermost',

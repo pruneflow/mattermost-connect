@@ -1,3 +1,7 @@
+/**
+ * User menu component with avatar, status management, and user actions
+ * Provides dropdown menu with status options, profile access, settings, and logout
+ */
 import React, { useState, useCallback } from "react";
 import {
   Box,
@@ -71,7 +75,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         await updateStatus(newStatus);
         handleCloseMenu();
       } catch (error) {
-        console.error("Failed to update status:", error);
+        // Status update failed - UI will show current status
       } finally {
         setIsUpdatingStatus(false);
       }
@@ -146,11 +150,11 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           alignItems: "center",
           justifyContent: "center",
           "&:hover": {
-            transform: { xs: "none", sm: "scale(1.05)" }, // Pas de scale sur mobile
+            transform: { xs: "none", sm: "scale(1.05)" }, // No scale on mobile
             boxShadow: { xs: "none", sm: 4 },
           },
           "&:active": {
-            transform: { xs: "scale(0.95)", sm: "scale(1.05)" }, // Feedback tactile mobile
+            transform: { xs: "scale(0.95)", sm: "scale(1.05)" }, // Mobile tactile feedback
           },
         }}
         onClick={handleAvatarClick}

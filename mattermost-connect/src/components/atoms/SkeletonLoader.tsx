@@ -1,3 +1,7 @@
+/**
+ * Skeleton loading components for various UI elements
+ * Provides consistent loading states following Material-UI patterns
+ */
 import React from 'react';
 import { Box, Card, Skeleton } from '@mui/material';
 

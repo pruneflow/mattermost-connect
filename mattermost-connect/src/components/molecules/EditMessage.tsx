@@ -1,3 +1,7 @@
+/**
+ * Edit message component for in-place message editing
+ * Provides message input with save/cancel functionality for post updates
+ */
 import React, { useCallback } from "react";
 import { SxProps, Theme } from "@mui/material";
 import { MessageInput } from "./MessageInput";
@@ -26,11 +30,9 @@ export const EditMessage: React.FC<EditMessageProps> = ({
   const handleSave = useCallback(
     async (message: string, updatedFileIds?: string[]) => {
       try {
-        console.debug("updatedFileIds", updatedFileIds);
         await updateMessage(postId, message, updatedFileIds);
         onSave();
       } catch (error) {
-        console.error("Failed to update message:", error);
       }
     },
     [updateMessage, postId, onSave],

@@ -38,7 +38,6 @@ export const useTeamMembers = (teamId: string | null) => {
     
     setLoading(true);
     try {
-      console.log(`Loading team members for team ${teamId}, page ${page}`);
       
       // Run API calls in parallel for better performance
       const [profilesInTeam, membersInTeam] = await Promise.all([
@@ -65,7 +64,6 @@ export const useTeamMembers = (teamId: string | null) => {
       setTeamMembers(teamMembersById);
       setCurrentPage(page);
       
-      console.log(`Loaded ${profilesInTeam.length} users and ${membersInTeam.length} members for team ${teamId}, page ${page}`);
       
     } catch (error) {
       handleError(error, {
@@ -87,7 +85,6 @@ export const useTeamMembers = (teamId: string | null) => {
       
       // If member counts differ, Redux was updated - reload current page
       if (reduxMemberCount !== localMemberCount) {
-        console.log(`Team members changed in Redux (${localMemberCount} -> ${reduxMemberCount}), reloading page ${currentPage}`);
         setLastReduxUpdateTime(Date.now());
         loadTeamMembers(currentPage);
       }
@@ -123,13 +120,11 @@ export const useTeamMembers = (teamId: string | null) => {
     }
   }, [totalPages, loadTeamMembers]);
 
-  // Actions pour mettre à jour le store (comme les autres hooks)
   const updateMemberRole = useCallback(async (userId: string, isSchemeAdmin: boolean) => {
     if (!teamId) return;
     
     try {
       await dispatch(updateTeamMemberRoles({ teamId, userId, isSchemeAdmin })).unwrap();
-      // Mettre à jour l'état local pour refléter le changement immédiatement
       setTeamMembers(prev => {
         const updated = { ...prev };
         if (updated[userId]) {
@@ -155,7 +150,6 @@ export const useTeamMembers = (teamId: string | null) => {
     
     try {
       await dispatch(removeUserFromTeam({ teamId, userId })).unwrap();
-      // Supprimer de l'état local immédiatement
       setUsers(prev => prev.filter(user => user.id !== userId));
       setTeamMembers(prev => {
         const updated = { ...prev };

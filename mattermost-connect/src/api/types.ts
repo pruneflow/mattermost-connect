@@ -1,4 +1,7 @@
-// Import types directly from @mattermost/types (same as Client4)
+/**
+ * Type definitions for the Mattermost Connect library
+ * Re-exports official Mattermost types and adds custom extensions
+ */
 import type { UserProfile } from '@mattermost/types/users';
 
 export type {
@@ -74,28 +77,6 @@ export interface WebSocketEvent {
   };
   seq?: number;
 }
-
-// WebSocket message types
-export interface WebSocketMessage {
-  action: string;
-  seq: number;
-  data: Record<string, any>;
-}
-
-// Common WebSocket events
-export type WebSocketEventType = 
-  | 'typing'
-  | 'posted'
-  | 'channel_updated'
-  | 'channel_viewed'
-  | 'channel_created'
-  | 'channel_deleted'
-  | 'user_added'
-  | 'user_removed'
-  | 'user_updated'
-  | 'status_change'
-  | 'hello'
-  | 'authentication_challenge';
 
 // Auth types - keep our own for compatibility
 export interface LoginRequest {

@@ -3,11 +3,12 @@ import { Box, Typography, SxProps, Theme, useTheme } from '@mui/material';
 import { formatDate } from '../../utils/dateUtils';
 
 /**
- * Séparateur de date exactement comme Mattermost
+ * Date divider component that displays a date separator with horizontal line
+ * Exactly replicates Mattermost's date separator styling and behavior
  */
 
 interface DateDividerProps {
-  date: number; // timestamp
+  date: number;
   sx?: SxProps<Theme>;
 }
 
@@ -51,7 +52,6 @@ export const DateDivider: React.FC<DateDividerProps> = memo(({
       padding: theme.spacing(1.5, 2),
       margin: theme.spacing(1.5, 0),
       
-      // Responsive padding
       [theme.breakpoints.down('sm')]: {
         padding: theme.spacing(1, 1.5),
         margin: theme.spacing(1, 0),
@@ -73,7 +73,6 @@ export const DateDivider: React.FC<DateDividerProps> = memo(({
       border: `1px solid ${theme.palette.divider}`,
       color: theme.palette.text.secondary,
       
-      // Responsive font size
       [theme.breakpoints.down('sm')]: {
         fontSize: '0.8125rem',
         padding: theme.spacing(0.375, 1),

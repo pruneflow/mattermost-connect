@@ -1,3 +1,7 @@
+/**
+ * Team tabs component with horizontal scrolling and auto-centering
+ * Provides tab-style team navigation with smooth scrolling and active team centering
+ */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Box,
@@ -30,9 +34,6 @@ export interface TeamTabsProps {
   onLeaveTeam?: (team: Team) => void;
 }
 
-/**
- * Team tabs with smooth horizontal scrolling
- */
 export const TeamTabs: React.FC<TeamTabsProps> = ({
   onTeamSelect,
   showCreateButton = true,

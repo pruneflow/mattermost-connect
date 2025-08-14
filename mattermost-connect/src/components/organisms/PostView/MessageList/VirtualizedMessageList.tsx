@@ -1,3 +1,7 @@
+/**
+ * Virtualized message list component with auto-loading and scroll management
+ * Handles efficient rendering of large message lists with virtual scrolling and auto-loading
+ */
 import React, { useRef, useCallback, useEffect, RefObject } from "react";
 import { Box, SxProps, Theme } from "@mui/material";
 import { ScrollToBottomFab } from "./ScrollToBottomFab";
@@ -53,12 +57,6 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   isReady,
   measureAnchorPosition,
 }) => {
-  console.debug("🔄 VirtualizedMessageList re-render", {
-    channelId,
-    autoLoad,
-    unreadChunkTimeStamp,
-    shouldStartFromBottomWhenUnread,
-  });
 
   const lastReadPostIdRef = useRef<string | null>(null);
   const allowAutoLoadRef = useRef<boolean>(false);
@@ -76,21 +74,17 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
 
   // Wrapper functions with scroll preservation
   const handleLoadOlder = useCallback(async () => {
-    // Étape 1: Enregistrer la position avant le prepend
     measureAnchorPosition();
 
-    // Étape 2: Charger les posts plus anciens (ce qui déclenchera un nouveau render)
     await loadOlderPosts(channelId);
 
-    // Étape 3: La restauration se fait automatiquement via useLayoutEffect
   }, [measureAnchorPosition, channelId]);
 
   const handleLoadNewer = useCallback(async () => {
-    // Pour load newer, on garde généralement la position actuelle ou on va vers le bas
     await loadNewerPosts(channelId);
   }, [channelId]);
 
-  // Fonction pour marquer comme lu si on est en bas avec les derniers messages
+  // Function to mark as read if at bottom with latest messages
   const handleMarkAsReadIfAtBottom = useCallback(() => {
     if (
       !atLatestPost ||
@@ -102,7 +96,6 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
     const virtualItemsVisible = virtualizer.getVirtualItems();
     if (virtualItemsVisible.length === 0) return;
 
-    // Trouver le dernier élément virtuel visible qui est un post
     const lastVisibleVirtualItem =
       virtualItemsVisible[virtualItemsVisible.length - 1];
     const lastVisibleItem = virtualItems[lastVisibleVirtualItem.index];
@@ -111,14 +104,10 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
 
     const lastPostId = lastVisibleItem.id;
 
-    // Éviter les appels redondants
+    // Avoid redundant calls
     if (lastReadPostIdRef.current === lastPostId) return;
     lastReadPostIdRef.current = lastPostId;
     void markAsRead(channelId);
-    console.debug(
-      "[VirtualizedMessageList] Marked channel as read, lastPostId:",
-      lastPostId,
-    );
   }, [
     atLatestPost,
     virtualItems,
@@ -176,63 +165,43 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   // Reset lastReadPostId when changing channel
   useEffect(() => {
     lastReadPostIdRef.current = null;
-    // Désactiver l'auto-load temporairement lors du changement de channel
     allowAutoLoadRef.current = false;
   }, [channelId]);
 
-  // Ref pour tracker si on a déjà fait le scroll initial pour ce canal
   const hasInitialScrolledRef = useRef<Set<string>>(new Set());
 
-  // Scroll initial automatique : vers nouveaux messages ou vers le bas
-  // Seulement au changement de channel ET une seule fois par canal
   useEffect(() => {
     if (!isReady || virtualItems.length === 0) return;
 
 
-    // Délai pour éviter les scrolls trop fréquents lors des re-renders
     const timeoutId = setTimeout(() => {
-      // Chercher un séparateur "new-messages" dans virtualItems
       const newMessageIndex = virtualItems.findIndex(
         (item) => item.type === "new-messages-separator",
       );
-      console.debug(
-        "[VirtualizedMessageList] Initial scroll - found separator at index:",
-        newMessageIndex,
-        "for channel:",
-        channelId,
-      );
 
       if (newMessageIndex >= 0) {
-        // Marquer ce canal comme ayant eu son scroll initial SEULEMENT si on scroll vers le séparateur
         hasInitialScrolledRef.current.add(channelId);
         
-        // Scroll vers le séparateur de nouveaux messages
         virtualizer.scrollToIndex(newMessageIndex, { align: "start" });
-        console.debug("[VirtualizedMessageList] Scrolled to separator for channel:", channelId);
         
-        // Réactiver l'auto-load après 1 seconde
         setTimeout(() => {
           allowAutoLoadRef.current = true;
         }, 1000);
       } else {
         if (hasInitialScrolledRef.current.has(channelId)) return;
-        // Pas de nouveaux messages, scroll vers le bas
-        // Marquer ce canal comme ayant eu son scroll initial
         hasInitialScrolledRef.current.add(channelId);
 
         handleScrollToBottom();
         void markAsRead(channelId);
-        console.debug("[VirtualizedMessageList] Scrolled to bottom for channel:", channelId);
 
-        // Réactiver l'auto-load après 1 seconde
         setTimeout(() => {
           allowAutoLoadRef.current = true;
         }, 1000);
       }
-    }, 250); // Délai de 100ms pour éviter les scrolls trop fréquents
+    }, 250);
     
     return () => clearTimeout(timeoutId);
-  }, [channelId, isReady, virtualItems]); // Garder virtualItems pour détecter quand le séparateur apparaît
+  }, [channelId, isReady, virtualItems]);
 
   return (
     <Box sx={{ ...containerStyles, ...sx }}>

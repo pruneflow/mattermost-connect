@@ -2,7 +2,8 @@ import React, { memo, useMemo } from 'react';
 import { Box, SxProps, Theme, useTheme } from '@mui/material';
 
 /**
- * Layout principal d'un post avec zones définies selon Mattermost
+ * Post layout component with avatar, content, and actions zones
+ * Provides structured layout following Mattermost's post design patterns
  */
 
 interface PostLayoutProps {
@@ -32,7 +33,7 @@ const STATIC_STYLES = {
   
   contentZone: {
     flex: 1,
-    minWidth: 0, // Permet la troncature
+    minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
   } as const,
@@ -63,7 +64,6 @@ export const PostLayout: React.FC<PostLayoutProps> = memo(({
       ...STATIC_STYLES.layout,
       gap: theme.spacing(1),
       
-      // Espacement vertical selon le groupage
       ...(isGrouped ? {
         paddingTop: theme.spacing(0.125),
         paddingBottom: theme.spacing(0.125),
@@ -101,7 +101,7 @@ export const PostLayout: React.FC<PostLayoutProps> = memo(({
       className="post-layout"
       sx={dynamicStyles.layout}
     >
-      {/* Zone Avatar */}
+      {/* Avatar zone */}
       {avatarZone && (
         <Box 
           className="post-avatar-zone"
@@ -111,7 +111,7 @@ export const PostLayout: React.FC<PostLayoutProps> = memo(({
         </Box>
       )}
       
-      {/* Zone de contenu principal */}
+      {/* Main content zone */}
       <Box 
         className="post-content-zone"
         sx={dynamicStyles.contentZone}
@@ -119,7 +119,7 @@ export const PostLayout: React.FC<PostLayoutProps> = memo(({
         {contentZone}
       </Box>
       
-      {/* Zone d'actions (visible au hover) */}
+      {/* Actions zone (visible on hover) */}
       {actionsZone && (
         <Box 
           className="post-actions post-actions-zone"

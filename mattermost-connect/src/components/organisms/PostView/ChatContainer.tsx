@@ -1,3 +1,7 @@
+/**
+ * Chat container component managing message display and input for channels
+ * Integrates virtualized message list, reply context, input, and thread modal
+ */
 import React, {useState, useCallback, useRef, useEffect} from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
 import { MessageInput } from '../../molecules/MessageInput';
@@ -45,18 +49,10 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
   lastViewedAt,
   sx,
 }) => {
-  console.debug("🔄 ChatContainer re-render");
-  console.debug("🔍 ChatContainer props:", {
-    autoLoad,
-    lastViewedAt, 
-    sx: !!sx,
-    sxStringified: JSON.stringify(sx)
-  });
 
   const dispatch = useAppDispatch();
   const channelId = useAppSelector(selectCurrentChannelId);
   const replyToPost = useAppSelector(selectReplyToPost);
-  console.debug("🔍 channelId from selector:", channelId);
   const [unreadChunkTimeStamp, setUnreadChunkTimeStamp] = useState<number | undefined>(lastViewedAt);
   const [shouldStartFromBottomWhenUnread, setShouldStartFromBottomWhenUnread] = useState(false);
   const scrollElementRef = useRef<HTMLDivElement>(null);
@@ -73,26 +69,19 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
       !hasPosts && 
       !isLoadingUnreads
     ) {
-      console.log('Loading initial posts for channel:', channelId);
       loadedChannelsRef.current.add(channelId);
       void loadUnreadPosts(channelId);
     }
   }, [channelId, hasPosts, isLoadingUnreads]);
 
-  console.debug("🔍 sendMessage service:", {
-    sendMessageType: typeof sendMessage,
-    channelId
-  });
   
   const handleSendMessage = useCallback(async (message: string, fileIds?: string[]) => {
     if (!message.trim() && (!fileIds || fileIds.length === 0)) return;
     
     try {
-      // Si on répond à un message, utiliser son ID comme rootId
       const rootId = replyToPost?.id;
       await sendMessage(channelId, message, rootId, fileIds);
       
-      // Fermer la réponse après envoi
       if (replyToPost) {
         dispatch(stopReply());
       }
@@ -100,7 +89,6 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
       await markAsRead(channelId);
       scrollToBottom(scrollElementRef.current)
     } catch (error) {
-      console.error('Failed to send message:', error);
       // TODO: Show error toast or notification
     }
   }, [sendMessage, markAsRead, channelId, replyToPost, dispatch]);

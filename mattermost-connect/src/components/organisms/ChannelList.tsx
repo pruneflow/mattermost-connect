@@ -1,3 +1,7 @@
+/**
+ * Channel list component with categorized channel display and drag-and-drop
+ * Provides channel search, category management, and navigation following Mattermost patterns
+ */
 import React, { useCallback, useMemo, useState } from "react";
 import { Box, SxProps, Theme } from "@mui/material";
 import {

@@ -1,3 +1,7 @@
+/**
+ * Typed useDispatch hook for the app store
+ * Provides type-safe access to the Redux dispatch function
+ */
 import { useDispatch } from 'react-redux';
 import { store } from '../store';
 

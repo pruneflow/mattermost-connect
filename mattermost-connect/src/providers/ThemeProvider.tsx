@@ -41,7 +41,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       palette: {
         mode: resolvedTheme,
         primary: {
-          main: '#1976d2', // Couleur que tu aimes 
+          main: '#1976d2', // Primary brand color
         },
         secondary: {
           main: '#9c27b0',

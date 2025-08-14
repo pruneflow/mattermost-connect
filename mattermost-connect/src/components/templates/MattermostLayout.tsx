@@ -1,3 +1,7 @@
+/**
+ * Mattermost-style layout component with sidebar and responsive design
+ * Provides authentic Mattermost layout structure with teams and channels sidebar
+ */
 import React, { useState, useMemo } from 'react';
 import {
   Box,
@@ -81,10 +85,6 @@ export interface MattermostLayoutProps {
   sx?: SxProps<Theme>;
 }
 
-/**
- * MattermostLayout component following Mattermost application layout
- * Provides main layout structure with responsive sidebar
- */
 export const MattermostLayout: React.FC<MattermostLayoutProps> = ({
   children,
   showChannelHeader = true,

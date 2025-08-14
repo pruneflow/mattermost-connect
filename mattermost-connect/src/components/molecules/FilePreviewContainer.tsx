@@ -1,3 +1,7 @@
+/**
+ * File preview container for managing file uploads in message input
+ * Handles automatic file uploading to Mattermost with progress tracking
+ */
 import React, { useCallback, useEffect, useState } from "react";
 import { Box } from "@mui/material";
 import { FileItem, FileStatus } from "./FileItem";
@@ -11,8 +15,7 @@ export interface FilePreviewContainerProps {
 }
 
 /**
- * Conteneur pour la prévisualisation et gestion des fichiers
- * dans l'input de composition de message
+ * Container for file preview and management in message input
  */
 export const FilePreviewContainer: React.FC<FilePreviewContainerProps> = ({
   files,
@@ -22,7 +25,7 @@ export const FilePreviewContainer: React.FC<FilePreviewContainerProps> = ({
 }) => {
   const [uploadingFiles, setUploadingFiles] = useState<Set<File>>(new Set());
 
-  // Fonction d'upload vers Mattermost
+  // File upload function to Mattermost
   const uploadToMattermost = useCallback(
     async (file: File): Promise<string> => {
       try {
@@ -38,7 +41,6 @@ export const FilePreviewContainer: React.FC<FilePreviewContainerProps> = ({
 
         throw new Error("Upload failed: no file info returned");
       } catch (error) {
-        console.error("File upload error:", error);
         throw error;
       }
     },
@@ -64,7 +66,7 @@ export const FilePreviewContainer: React.FC<FilePreviewContainerProps> = ({
     });
   }, []);
 
-  // Auto-upload des nouveaux fichiers
+  // Auto-upload new files
   useEffect(() => {
     const newFiles = files.filter(
       (f) =>

@@ -1,3 +1,7 @@
+/**
+ * Custom layout component with app bar and team tabs
+ * Alternative to Mattermost layout with horizontal team navigation and responsive design
+ */
 import React from 'react';
 import {
   Box,
@@ -18,37 +22,19 @@ import {ChatContainer} from '../organisms/PostView';
 export interface CustomLayoutProps {
   children?: React.ReactNode;
   sx?: SxProps<Theme>;
-  focusedPostId?: string; // Optional focused post ID for permalinks (for external usage)
+  focusedPostId?: string;
 }
 
-/**
- * CustomLayout component - Alternative layout with AppBar and tabs
- * Provides a custom layout structure with teams tabs and channel sidebar
- * EXACT Mattermost pattern for library usage (no internal navigation)
- */
 export const CustomLayout: React.FC<CustomLayoutProps> = ({
   children,
   sx,
   focusedPostId,
 }) => {
-  console.debug("🔄 CustomLayout re-render");
-  console.debug("🔍 CustomLayout props:", {
-    hasChildren: !!children,
-    sx: !!sx,
-    focusedPostId,
-    sxStringified: JSON.stringify(sx)
-  });
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  console.debug("🔍 CustomLayout isMobile:", isMobile);
   
   const currentChannel = useAppSelector(selectCurrentChannel);
-  console.debug("🔍 CustomLayout currentChannel:", {
-    hasChannel: !!currentChannel,
-    channelId: currentChannel?.id,
-    channelName: currentChannel?.name
-  });
 
   return (
     <Box sx={{ display: "flex", flex: 1, flexDirection: "column", overflow: "hidden", ...sx }}>
@@ -85,7 +71,7 @@ export const CustomLayout: React.FC<CustomLayoutProps> = ({
                   }}
                 />
 
-                {/* Post List - EXACT Mattermost PostView usage */}
+                {/* Chat container with message list */}
                 <ChatContainer autoLoad={true}  />
               </>
             ) : (

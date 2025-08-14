@@ -1,3 +1,7 @@
+/**
+ * Search bar component with live channel filtering and results dropdown
+ * Provides real-time search functionality with relevance-based sorting
+ */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   Box,

@@ -1,3 +1,7 @@
+/**
+ * Message service for handling post operations
+ * Provides loading, sending, updating, and deleting messages
+ */
 import { store } from '../store';
 import { 
   updatePost, 
@@ -29,7 +33,6 @@ export const loadOlderPosts = async (channelId: string): Promise<void> => {
   try {
     await store.dispatch(loadOlderPostsThunk({ channelId })).unwrap();
   } catch (error) {
-    console.error('Failed to load older posts:', error);
     throw error;
   }
 };
@@ -47,7 +50,6 @@ export const loadNewerPosts = async (channelId: string): Promise<void> => {
   try {
     await store.dispatch(loadNewerPostsThunk({ channelId })).unwrap();
   } catch (error) {
-    console.error('Failed to load newer posts:', error);
     throw error;
   }
 };
@@ -63,7 +65,6 @@ export const loadUnreadPosts = async (channelId: string): Promise<void> => {
   try {
     await store.dispatch(loadUnreadPostsThunk({ channelId })).unwrap();
   } catch (error) {
-    console.error('Failed to load unread posts:', error);
     throw error;
   }
 };
@@ -82,7 +83,6 @@ export const syncPosts = async (channelId: string, since: number): Promise<void>
       since,
     })).unwrap();
   } catch (error) {
-    console.error('Failed to sync posts:', error);
     throw error;
   }
 };
@@ -93,7 +93,6 @@ export const updateMessage = async (postId: string, message: string, fileIds?: s
     await store.dispatch(updatePost({ postId, message, fileIds })).unwrap();
     return true;
   } catch (error) {
-    console.error('Failed to update message:', error);
     throw error;
   }
 };
@@ -103,7 +102,6 @@ export const deleteMessage = async (postId: string): Promise<boolean> => {
     await store.dispatch(deletePost({ postId })).unwrap();
     return true;
   } catch (error) {
-    console.error('Failed to delete message:', error);
     throw error;
   }
 };
@@ -113,7 +111,6 @@ export const copyMessage = async (message: string): Promise<boolean> => {
     await navigator.clipboard.writeText(message);
     return true;
   } catch (error) {
-    console.error('Failed to copy message:', error);
     throw error;
   }
 };
@@ -137,7 +134,6 @@ export const sendMessage = async (
     })).unwrap();
     return result.post;
   } catch (error) {
-    console.error('Failed to send message:', error);
     throw error;
   }
 };

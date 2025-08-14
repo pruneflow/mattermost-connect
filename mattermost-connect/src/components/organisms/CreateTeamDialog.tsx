@@ -1,3 +1,7 @@
+/**
+ * Create team dialog with form validation and URL generation
+ * Provides team creation form with auto-generated URL and validation following Mattermost rules
+ */
 import React, { useState } from 'react';
 import {
   Dialog,

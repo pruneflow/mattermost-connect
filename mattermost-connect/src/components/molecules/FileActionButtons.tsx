@@ -1,3 +1,7 @@
+/**
+ * File action buttons container with permission-based visibility
+ * Shows download and public link buttons based on server config and user permissions
+ */
 import React from 'react';
 import { Box } from '@mui/material';
 import { FileDownloadButton } from './FileDownloadButton';

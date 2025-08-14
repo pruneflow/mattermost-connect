@@ -1,3 +1,7 @@
+/**
+ * PDF preview component using react-pdf-viewer
+ * Displays PDF files with toolbar, navigation, and authentication
+ */
 import React from 'react';
 import { Box } from '@mui/material';
 
@@ -27,7 +31,6 @@ export const PDFPreview: React.FC<PDFPreviewProps> = ({
   // Create plugin instance like in the official docs
   const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
-  console.log('PDFPreview - fileUrl:', fileUrl);
 
   return (
     <Box

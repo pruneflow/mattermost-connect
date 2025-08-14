@@ -1,3 +1,7 @@
+/**
+ * Channel section component for organizing channels into grouped sections
+ * Renders titled sections with optimized channel lists using deep equality checking
+ */
 import React from 'react';
 import { Typography, List } from '@mui/material';
 import isEqual from 'react-fast-compare';

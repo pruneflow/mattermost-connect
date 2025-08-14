@@ -1,9 +1,13 @@
+/**
+ * Audio and video preview component with responsive player controls
+ * Provides media playback with download functionality following Mattermost patterns
+ */
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { formatFileSize } from '../../utils/formatters';
 import { FileDownloadButton } from './FileDownloadButton';
 
-// Constants similaires à Mattermost
+// Constants similar to Mattermost
 const WEB_VIDEO_WIDTH = 640;
 const WEB_VIDEO_HEIGHT = 480;
 const MOBILE_VIDEO_WIDTH = 320;
@@ -38,7 +42,6 @@ export const AudioVideoPreview: React.FC<AudioVideoPreviewProps> = ({
   const isAudio = mimeType.startsWith('audio/');
 
   const handleLoadError = useCallback(() => {
-    console.error('Error loading media file:', fileUrl);
     setCanPlay(false);
     setIsLoading(false);
   }, [fileUrl]);

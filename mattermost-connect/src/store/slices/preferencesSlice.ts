@@ -23,7 +23,6 @@ const loadStoredPreferences = (): Partial<PreferencesState> => {
       };
     }
   } catch (error) {
-    console.warn('Failed to load stored preferences:', error);
   }
   return { preferences: [] };
 };
@@ -36,7 +35,6 @@ const storePreferences = (state: PreferencesState) => {
       lastSynced: state.lastSynced,
     }));
   } catch (error) {
-    console.warn('Failed to store preferences:', error);
   }
 };
 
@@ -97,7 +95,6 @@ export const loadPreferences = createAsyncThunk<
     try {
       return await client.getUserPreferences(userId);
     } catch (error) {
-      console.warn('Failed to load preferences from server:', error);
       return rejectWithValue(error as ServerError);
     }
   }
@@ -113,7 +110,6 @@ export const savePreferences = createAsyncThunk<
     try {
       await client.savePreferences(userId, preferences);
     } catch (error) {
-      console.warn('Failed to save preferences to server:', error);
       return rejectWithValue(error as ServerError);
     }
   }
@@ -141,7 +137,6 @@ export const closeGroupChannelConversation = createAsyncThunk<
       // Save to server
       await client.savePreferences(userId, [preference]);
     } catch (error) {
-      console.warn('Failed to close group channel conversation:', error);
       return rejectWithValue(error as ServerError);
     }
   }
@@ -168,7 +163,6 @@ export const openGroupChannelConversation = createAsyncThunk<
       // Save to server
       await client.savePreferences(userId, [preference]);
     } catch (error) {
-      console.warn('Failed to open group channel conversation:', error);
       return rejectWithValue(error as ServerError);
     }
   }

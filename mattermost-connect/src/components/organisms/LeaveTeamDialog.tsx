@@ -1,3 +1,7 @@
+/**
+ * Leave team confirmation dialog with team information and confirmation input
+ * Requires typing team name for confirmation and shows clear consequences
+ */
 import React, { useState, useCallback } from 'react';
 import {
   Dialog,
@@ -23,7 +27,6 @@ import { handleError } from '../../services/errorService';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { selectTeamById, selectCurrentUserId } from '../../store/selectors';
-// Note: Team member removal handled by WebSocket events
 import { client } from '../../api/client';
 import { getTeamInitials, getTeamColor, getTeamIconUrl } from '../../utils/teamUtils';
 

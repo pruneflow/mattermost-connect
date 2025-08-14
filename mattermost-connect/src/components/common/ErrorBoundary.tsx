@@ -1,3 +1,7 @@
+/**
+ * Error boundary component for catching and displaying React errors gracefully
+ * Provides error recovery UI with reset functionality and optional custom fallback
+ */
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Box, Typography, Button, Alert } from '@mui/material';
 

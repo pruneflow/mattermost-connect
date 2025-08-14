@@ -1,12 +1,11 @@
 /**
- * Utilitaires pour la gestion des blocs de code et syntax highlighting
+ * Utilities for code block management and syntax highlighting
  */
 
 /**
- * Langages supportés pour le syntax highlighting
+ * Supported languages for syntax highlighting
  */
 export const SUPPORTED_LANGUAGES = {
-  // Langages principaux
   'javascript': 'JavaScript',
   'js': 'JavaScript',
   'typescript': 'TypeScript',
@@ -29,7 +28,6 @@ export const SUPPORTED_LANGUAGES = {
   'kt': 'Kotlin',
   'scala': 'Scala',
   
-  // Langages web
   'html': 'HTML',
   'css': 'CSS',
   'scss': 'SCSS',
@@ -40,7 +38,6 @@ export const SUPPORTED_LANGUAGES = {
   'jsx': 'JSX',
   'tsx': 'TSX',
   
-  // Langages de données
   'json': 'JSON',
   'xml': 'XML',
   'yaml': 'YAML',
@@ -48,7 +45,6 @@ export const SUPPORTED_LANGUAGES = {
   'toml': 'TOML',
   'csv': 'CSV',
   
-  // Langages de script
   'bash': 'Bash',
   'sh': 'Shell',
   'powershell': 'PowerShell',
@@ -56,19 +52,16 @@ export const SUPPORTED_LANGUAGES = {
   'batch': 'Batch',
   'bat': 'Batch',
   
-  // Langages de base de données
   'sql': 'SQL',
   'mysql': 'MySQL',
   'postgresql': 'PostgreSQL',
   'plsql': 'PL/SQL',
   
-  // Langages markup
   'markdown': 'Markdown',
   'md': 'Markdown',
   'latex': 'LaTeX',
   'tex': 'LaTeX',
   
-  // Autres
   'diff': 'Diff',
   'dockerfile': 'Dockerfile',
   'makefile': 'Makefile',
@@ -78,16 +71,14 @@ export const SUPPORTED_LANGUAGES = {
 } as const;
 
 /**
- * Détecte le langage d'un bloc de code
+ * Detects the language of a code block
  */
 export const detectLanguage = (code: string, hint?: string): string => {
-  // Utiliser l'indice fourni s'il est valide
   if (hint && SUPPORTED_LANGUAGES[hint.toLowerCase() as keyof typeof SUPPORTED_LANGUAGES]) {
     return hint.toLowerCase();
   }
   
-  // Détection basique par mots-clés
-  const codeLines = code.split('\n').slice(0, 10); // Première 10 lignes
+  const codeLines = code.split('\n').slice(0, 10);
   const codeText = codeLines.join(' ').toLowerCase();
   
   // JavaScript/TypeScript
@@ -147,7 +138,7 @@ export const detectLanguage = (code: string, hint?: string): string => {
 };
 
 /**
- * Formate un bloc de code pour l'affichage
+ * Formats a code block for display
  */
 export const formatCodeBlock = (code: string, language?: string): {
   code: string;
@@ -165,7 +156,7 @@ export const formatCodeBlock = (code: string, language?: string): {
 };
 
 /**
- * Extrait les blocs de code d'un message
+ * Extracts code blocks from a message
  */
 export const extractCodeBlocks = (message: string): Array<{
   content: string;
@@ -203,7 +194,7 @@ export const extractCodeBlocks = (message: string): Array<{
 };
 
 /**
- * Extrait le code inline d'un message
+ * Extracts inline code from a message
  */
 export const extractInlineCode = (message: string): Array<{
   content: string;
@@ -231,35 +222,35 @@ export const extractInlineCode = (message: string): Array<{
 };
 
 /**
- * Vérifie si un message contient du code
+ * Checks if a message contains code
  */
 export const hasCode = (message: string): boolean => {
   return /```[\s\S]*?```/.test(message) || /`[^`]+`/.test(message);
 };
 
 /**
- * Vérifie si un message contient des blocs de code
+ * Checks if a message contains code blocks
  */
 export const hasCodeBlocks = (message: string): boolean => {
   return /```[\s\S]*?```/.test(message);
 };
 
 /**
- * Vérifie si un message contient du code inline
+ * Checks if a message contains inline code
  */
 export const hasInlineCode = (message: string): boolean => {
   return /`[^`]+`/.test(message);
 };
 
 /**
- * Compte le nombre de lignes dans un bloc de code
+ * Counts the number of lines in a code block
  */
 export const countCodeLines = (code: string): number => {
   return code.split('\n').length;
 };
 
 /**
- * Ajoute les numéros de ligne à un bloc de code
+ * Adds line numbers to a code block
  */
 export const addLineNumbers = (code: string): string => {
   const lines = code.split('\n');
@@ -272,21 +263,21 @@ export const addLineNumbers = (code: string): string => {
 };
 
 /**
- * Formate un bloc de code pour le presse-papiers
+ * Formats a code block for clipboard
  */
 export const formatCodeForClipboard = (code: string, language: string): string => {
   return `\`\`\`${language}\n${code}\n\`\`\``;
 };
 
 /**
- * Vérifie si un langage supporte la coloration syntaxique
+ * Checks if a language supports syntax highlighting
  */
 export const supportsHighlighting = (language: string): boolean => {
   return language in SUPPORTED_LANGUAGES && language !== 'plaintext' && language !== 'text';
 };
 
 /**
- * Obtient la liste des langages suggérés pour l'autocomplétion
+ * Gets the list of suggested languages for autocompletion
  */
 export const getSuggestedLanguages = (input: string): string[] => {
   const normalizedInput = input.toLowerCase();
@@ -294,11 +285,9 @@ export const getSuggestedLanguages = (input: string): string[] => {
   return Object.keys(SUPPORTED_LANGUAGES)
     .filter(lang => lang.includes(normalizedInput))
     .sort((a, b) => {
-      // Priorité aux correspondances exactes
       if (a === normalizedInput) return -1;
       if (b === normalizedInput) return 1;
       
-      // Priorité aux correspondances qui commencent par l'input
       const aStarts = a.startsWith(normalizedInput);
       const bStarts = b.startsWith(normalizedInput);
       
@@ -307,11 +296,11 @@ export const getSuggestedLanguages = (input: string): string[] => {
       
       return a.localeCompare(b);
     })
-    .slice(0, 10); // Limiter à 10 suggestions
+    .slice(0, 10);
 };
 
 /**
- * Échappe les caractères spéciaux dans le code
+ * Escapes special characters in code
  */
 export const escapeCodeForHtml = (code: string): string => {
   return code
@@ -323,7 +312,7 @@ export const escapeCodeForHtml = (code: string): string => {
 };
 
 /**
- * Déséchappe les caractères spéciaux dans le code
+ * Unescapes special characters in code
  */
 export const unescapeCodeFromHtml = (code: string): string => {
   return code

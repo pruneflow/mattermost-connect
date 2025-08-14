@@ -1,3 +1,7 @@
+/**
+ * Dropdown component with icon support and custom styling
+ * Provides a reusable select component for form inputs
+ */
 import React from 'react';
 import { FormControl, Select, MenuItem, Box, SelectChangeEvent } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';

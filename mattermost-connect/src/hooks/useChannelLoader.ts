@@ -35,7 +35,6 @@ export const useChannelLoader = () => {
   // Auto-load channels when current team changes
   useEffect(() => {
     if (currentTeamId && !isTeamChannelsLoaded(currentTeamId)) {
-      console.log(`🔄 Loading channels for team: ${currentTeamId}`);
       loadTeamChannels(currentTeamId);
     }
   }, [currentTeamId, isTeamChannelsLoaded, loadTeamChannels]);

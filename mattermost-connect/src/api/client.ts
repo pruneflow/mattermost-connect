@@ -4,7 +4,10 @@ import { Client4 } from '@mattermost/client';
 // Create singleton client instance
 const client = new Client4();
 
-// Simple helpers for configuration
+/**
+ * Configure the default Mattermost client instance
+ * @param config Configuration object containing server URL
+ */
 export const setDefaultClient = (config: { serverUrl: string }): void => {
   client.setUrl(config.serverUrl);
   
@@ -18,6 +21,10 @@ export const setDefaultClient = (config: { serverUrl: string }): void => {
   }
 };
 
+/**
+ * Get the default Mattermost client instance
+ * @returns The configured Client4 instance
+ */
 export const getDefaultClient = () => {
   return client;
 };

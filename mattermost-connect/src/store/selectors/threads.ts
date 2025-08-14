@@ -1,6 +1,6 @@
 import { RootState } from '../index';
 
-// Selectors pour les threads
+// Selectors for threads
 export const selectThreads = (state: RootState) => state.threads.threads;
 
 export const selectThread = (rootPostId: string) => (state: RootState) =>

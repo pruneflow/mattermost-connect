@@ -1,3 +1,7 @@
+/**
+ * Invite people dialog with multiple invitation methods
+ * Supports adding existing users, sending email invitations, and sharing invite links
+ */
 import React, {
   useState,
   useCallback,
@@ -98,8 +102,9 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
   } | null>(null);
   const [isLoadingLink, setIsLoadingLink] = useState(false);
 
-  const handleCloseFeedback = useCallback(() =>  { console.debug("handleCloseFeedback recreated!");
-  setFeedback(null)}, []);
+  const handleCloseFeedback = useCallback(() => {
+    setFeedback(null);
+  }, []);
 
   const handleUserSelectionChange = useCallback(
     (userIds: string[]) => {

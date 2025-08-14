@@ -58,7 +58,7 @@ export function getUserPreferredSkinTone(): number {
       }
     }
   } catch (error) {
-    console.error('Error reading skin tone preference:', error);
+    // Error reading skin tone preference
   }
   
   return DEFAULT_SKIN_TONE;
@@ -202,7 +202,7 @@ export function findEmojiByName(emojiName: string, specificSkinTone?: number): E
       };
     }
   } catch (error) {
-    console.error('Error finding emoji by name:', error);
+    // Error finding emoji by name
   }
   
   return null;

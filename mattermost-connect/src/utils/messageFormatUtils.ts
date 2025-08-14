@@ -1,11 +1,11 @@
 import DOMPurify from 'dompurify';
 
 /**
- * Utilitaires pour le formatage et rendu des messages Mattermost
+ * Utilities for Mattermost message formatting and rendering
  */
 
 /**
- * Configuration DOMPurify pour la sécurité
+ * DOMPurify configuration for security
  */
 const PURIFY_CONFIG = {
   ALLOWED_TAGS: [
@@ -22,31 +22,25 @@ const PURIFY_CONFIG = {
 };
 
 /**
- * Expressions régulières pour le formatage Markdown
+ * Regular expressions for Markdown formatting
  */
 const MARKDOWN_PATTERNS = {
-  // Formatage de base
   BOLD: /\*\*(.*?)\*\*/g,
   ITALIC: /\*(.*?)\*/g,
   STRIKETHROUGH: /~~(.*?)~~/g,
   CODE_INLINE: /`([^`]+)`/g,
   CODE_BLOCK: /```(\w+)?\n([\s\S]*?)```/g,
   
-  // Liens
   LINK: /\[([^\]]+)\]\(([^)]+)\)/g,
   AUTO_LINK: /(https?:\/\/[^\s]+)/g,
   
-  // Listes
   UNORDERED_LIST: /^[-*+] (.+)$/gm,
   ORDERED_LIST: /^(\d+)\. (.+)$/gm,
   
-  // Titres
   HEADING: /^(#{1,6}) (.+)$/gm,
   
-  // Citations
   BLOCKQUOTE: /^> (.+)$/gm,
   
-  // Tableaux
   TABLE_ROW: /^\|(.+)\|$/gm,
   TABLE_SEPARATOR: /^\|[-: ]+\|$/gm,
 };
@@ -59,18 +53,15 @@ export const parseMarkdown = (text: string): string => {
   
   let html = text;
   
-  // Échapper les caractères HTML
   html = html.replace(/&/g, '&amp;')
              .replace(/</g, '&lt;')
              .replace(/>/g, '&gt;');
   
-  // Blocs de code (à traiter en premier pour éviter le formatage à l'intérieur)
   html = html.replace(MARKDOWN_PATTERNS.CODE_BLOCK, (match, language, code) => {
     const lang = language || 'text';
     return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
   });
   
-  // Code inline
   html = html.replace(MARKDOWN_PATTERNS.CODE_INLINE, '<code>$1</code>');
   
   // Formatage texte
@@ -78,20 +69,16 @@ export const parseMarkdown = (text: string): string => {
   html = html.replace(MARKDOWN_PATTERNS.ITALIC, '<em>$1</em>');
   html = html.replace(MARKDOWN_PATTERNS.STRIKETHROUGH, '<del>$1</del>');
   
-  // Liens
   html = html.replace(MARKDOWN_PATTERNS.LINK, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   html = html.replace(MARKDOWN_PATTERNS.AUTO_LINK, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
   
-  // Titres
   html = html.replace(MARKDOWN_PATTERNS.HEADING, (match, hashes, title) => {
     const level = hashes.length;
     return `<h${level}>${title}</h${level}>`;
   });
   
-  // Citations
   html = html.replace(MARKDOWN_PATTERNS.BLOCKQUOTE, '<blockquote>$1</blockquote>');
   
-  // Listes
   html = html.replace(MARKDOWN_PATTERNS.UNORDERED_LIST, '<li>$1</li>');
   html = html.replace(MARKDOWN_PATTERNS.ORDERED_LIST, '<li>$2</li>');
   
@@ -110,14 +97,14 @@ export const parseMarkdown = (text: string): string => {
 };
 
 /**
- * Nettoie et sécurise le HTML
+ * Cleans and secures HTML
  */
 export const sanitizeHtml = (html: string): string => {
   return DOMPurify.sanitize(html, PURIFY_CONFIG);
 };
 
 /**
- * Convertit le markdown en HTML sécurisé
+ * Converts markdown to secure HTML
  */
 export const formatMessage = (message: string): string => {
   if (!message) return '';
@@ -142,7 +129,7 @@ export const extractMentions = (message: string): string[] => {
 };
 
 /**
- * Extrait les mentions spéciales (@channel, @all, @here)
+ * Extracts special mentions (@channel, @all, @here)
  */
 export const extractSpecialMentions = (message: string): string[] => {
   const specialMentionRegex = /@(channel|all|here)/g;
@@ -172,7 +159,7 @@ export const extractHashtags = (message: string): string[] => {
 };
 
 /**
- * Extrait les emojis personnalisés d'un message
+ * Extracts custom emojis from a message
  */
 export const extractCustomEmojis = (message: string): string[] => {
   const emojiRegex = /:([a-zA-Z0-9_+-]+):/g;
@@ -187,7 +174,7 @@ export const extractCustomEmojis = (message: string): string[] => {
 };
 
 /**
- * Remplace les emojis personnalisés par des images
+ * Replaces custom emojis with images
  */
 export const replaceCustomEmojis = (message: string, emojiMap: Record<string, string>): string => {
   return message.replace(/:([a-zA-Z0-9_+-]+):/g, (match, emojiName) => {
@@ -208,14 +195,14 @@ export const countWords = (message: string): number => {
 };
 
 /**
- * Compte les caractères dans un message
+ * Counts characters in a message
  */
 export const countCharacters = (message: string): number => {
   return message ? message.length : 0;
 };
 
 /**
- * Vérifie si un message contient uniquement des emojis
+ * Checks if a message contains only emojis
  */
 export const isEmojiOnly = (message: string): boolean => {
   const cleanMessage = message.replace(/:[a-zA-Z0-9_+-]+:/g, '').trim();
@@ -232,7 +219,7 @@ export const extractPlainText = (html: string): string => {
 };
 
 /**
- * Prévisualise un message (premiers mots)
+ * Previews a message (first words)
  */
 export const previewMessage = (message: string, maxLength: number = 100): string => {
   const plainText = extractPlainText(message);
@@ -248,10 +235,8 @@ export const formatForSearch = (message: string): string => {
   return message
     .replace(/\*\*(.*?)\*\*/g, '$1')  // Gras
     .replace(/\*(.*?)\*/g, '$1')      // Italique
-    .replace(/~~(.*?)~~/g, '$1')      // Barré
-    .replace(/`([^`]+)`/g, '$1')      // Code inline
-    .replace(/```[\s\S]*?```/g, '')   // Blocs de code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // Liens
-    .toLowerCase()
+    .replace(/~~(.*?)~~/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')        .replace(/```[\s\S]*?```/g, '')   // Blocs de code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')    .toLowerCase()
     .trim();
 };

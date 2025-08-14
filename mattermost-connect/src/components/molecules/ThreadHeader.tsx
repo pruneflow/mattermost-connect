@@ -1,3 +1,7 @@
+/**
+ * Thread header component with channel context and expand/close actions
+ * Fixed header for thread modal showing channel name and control buttons
+ */
 import React from 'react';
 import {
   Box,
@@ -47,10 +51,6 @@ const actionsStyles: SxProps<Theme> = {
   gap: 0.5,
 };
 
-/**
- * Header fixe en haut de la modal Thread
- * Affiche le nom du canal, bouton toggle taille (desktop), et bouton fermer
- */
 export const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   rootPostId,
   onClose,
@@ -76,7 +76,7 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({
       </Box>
 
       <Box sx={actionsStyles}>
-        {/* Bouton toggle taille (desktop uniquement) */}
+        {/* Size toggle button (desktop only) */}
         {showExpandButton && (
           <IconButton
             onClick={handleToggleSize}
@@ -94,7 +94,7 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({
           </IconButton>
         )}
 
-        {/* Bouton fermer */}
+        {/* Close button */}
         <IconButton
           onClick={onClose}
           size="small"

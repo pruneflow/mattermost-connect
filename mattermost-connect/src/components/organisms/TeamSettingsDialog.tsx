@@ -1,3 +1,7 @@
+/**
+ * Team settings dialog for editing team information and uploading icons
+ * Provides form validation, permission checks, and real-time updates
+ */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Dialog,

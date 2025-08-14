@@ -41,6 +41,11 @@ export interface ButtonProps extends Omit<MuiButtonProps, 'variant' | 'size'> {
   loading?: boolean;
 }
 
+/**
+ * Custom Button component with Mattermost styling
+ * Supports loading state and consistent variant/size mapping
+ */
+
 const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',

@@ -1,3 +1,7 @@
+/**
+ * Loading divider component with animated progress indicator
+ * Displays loading state for older/newer/initial message loading with smooth animations
+ */
 import React from 'react';
 import { Box, CircularProgress, Typography, SxProps, Theme } from '@mui/material';
 import { motion } from 'framer-motion';

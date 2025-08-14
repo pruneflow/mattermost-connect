@@ -36,7 +36,6 @@ export const initializeNavigation = () => {
       store.dispatch(setLastVisited(parsedLastVisited));
     }
   } catch (error) {
-    console.warn('Failed to restore navigation state:', error);
   }
 };
 

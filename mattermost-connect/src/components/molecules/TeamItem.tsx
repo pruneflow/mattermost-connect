@@ -1,3 +1,7 @@
+/**
+ * Team item component with multiple layout variants and unread indicators
+ * Supports vertical list, horizontal avatar, tabs, and compact sidebar displays
+ */
 import React from 'react';
 import { 
   Box, 

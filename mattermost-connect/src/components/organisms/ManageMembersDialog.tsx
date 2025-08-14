@@ -1,3 +1,7 @@
+/**
+ * Manage team members dialog with search, pagination, and role management
+ * Provides member listing, role changes, and invitation functionality
+ */
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
@@ -128,7 +132,7 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
         user,
         chips: getRoleChips(user, teamMembers),
         canChange: canChangeRole(user, teamMembers, currentUserId || '', canManage),
-        isTeamAdmin: teamMember?.roles?.includes('team_admin') ?? false, // Pré-calculé
+        isTeamAdmin: teamMember?.roles?.includes('team_admin') ?? false,
       };
     });
   }, [activeMembers, teamMembers, currentUserId, canManage]);
@@ -336,21 +340,20 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
                         }
                       }}
                     >
-                      {/* Première ligne: Avatar + Info utilisateur (+ chips en desktop) */}
                       <Box sx={{ 
                         display: 'flex', 
                         alignItems: 'center', 
                         gap: 2,
                         width: '100%'
                       }}>
-                        {/* Avatar avec statut */}
+                        {/* Avatar with status */}
                         <UserAvatar 
                           userId={user.id} 
                           size="medium" 
                           showStatus={true}
                         />
                         
-                        {/* Informations utilisateur */}
+                        {/* User information */}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Typography variant="subtitle1" fontWeight={600} noWrap>
@@ -367,21 +370,20 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
                           )}
                         </Box>
                         
-                        {/* Role chips en desktop seulement */}
+                        {/* Role chips on desktop only */}
                         {!isMobile && renderRoleChips(chips, canChange, user, isMobile, isUpdating, handleRoleMenuOpen)}
                       </Box>
 
-                      {/* Deuxième ligne en mobile: Role chips */}
                       {isMobile && (
                         <Box sx={{ 
-                          ml: 6 // Alignement avec le contenu (avatar width + gap)
+                          ml: 6 // Align with content (avatar width + gap)
                         }}>
                           {renderRoleChips(chips, canChange, user, isMobile, isUpdating, handleRoleMenuOpen)}
                         </Box>
                       )}
                     </ListItem>
                     
-                    {/* Divider entre chaque membre sauf le dernier */}
+                    {/* Divider between each member except the last */}
                     {index < filteredMembers.length - 1 && (
                       <Divider sx={{ mx: 3 }} />
                     )}
@@ -446,7 +448,7 @@ export const ManageMembersDialog: React.FC<ManageMembersDialogProps> = ({
         })()}
       </Menu>
 
-      {/* Invite People Dialog - Conditional rendering pour performance */}
+      {/* Invite People Dialog - Conditional rendering for performance */}
       {team && isInviteOpen && (
         <InvitePeopleDialog
           open={isInviteOpen}

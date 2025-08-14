@@ -1,3 +1,7 @@
+/**
+ * Team header component for displaying team information and actions
+ * Shows team name with context menu and manages team-related dialogs
+ */
 import React from 'react';
 import {
   Box,
@@ -17,7 +21,7 @@ export interface TeamHeaderProps {
   team?: Team | null;
   compact?: boolean;
   sx?: SxProps<Theme>;
-  menuOptions?: TeamMenuOptions; // Contrôle de visibilité des options du menu
+  menuOptions?: TeamMenuOptions;
 }
 
 /**
@@ -98,7 +102,6 @@ export const TeamHeader: React.FC<TeamHeaderProps> = ({
         onLeaveTeam={openLeave}
       />
 
-      {/* Team dialogs - gérés par useTeamDialogs */}
       <TeamSettingsDialog
         open={isSettingsOpen}
         onClose={closeDialog}

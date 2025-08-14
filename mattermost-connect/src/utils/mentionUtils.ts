@@ -1,7 +1,7 @@
 import { UserProfile } from '../api/types';
 
 /**
- * Utilitaires pour la gestion des mentions dans les messages
+ * Utilities for handling mentions in messages
  */
 
 /**
@@ -17,7 +17,7 @@ export const MENTION_TYPES = {
 export type MentionType = typeof MENTION_TYPES[keyof typeof MENTION_TYPES];
 
 /**
- * Interface pour une mention
+ * Interface for a mention
  */
 export interface Mention {
   type: MentionType;
@@ -30,7 +30,7 @@ export interface Mention {
 }
 
 /**
- * Expressions régulières pour les mentions
+ * Regular expressions for mentions
  */
 const MENTION_PATTERNS = {
   USER: /@([a-zA-Z0-9._-]+)/g,
@@ -39,7 +39,7 @@ const MENTION_PATTERNS = {
 };
 
 /**
- * Extrait toutes les mentions d'un message
+ * Extracts all mentions from a message
  */
 export const extractMentions = (message: string): Mention[] => {
   const mentions: Mention[] = [];
@@ -67,7 +67,7 @@ export const extractMentions = (message: string): Mention[] => {
 };
 
 /**
- * Détermine le type d'une mention
+ * Determines the type of a mention
  */
 export const getMentionType = (mention: string): MentionType => {
   switch (mention.toLowerCase()) {
@@ -83,14 +83,14 @@ export const getMentionType = (mention: string): MentionType => {
 };
 
 /**
- * Vérifie si une mention est une mention spéciale
+ * Checks if a mention is a special mention
  */
 export const isSpecialMention = (mention: string): boolean => {
   return ['channel', 'all', 'here'].includes(mention.toLowerCase());
 };
 
 /**
- * Surligne les mentions dans un message HTML
+ * Highlights mentions in an HTML message
  */
 export const highlightMentions = (
   html: string,
@@ -101,7 +101,7 @@ export const highlightMentions = (
   const mentions = extractMentions(html);
   let highlightedHtml = html;
   
-  // Traiter les mentions en ordre inverse pour préserver les positions
+  // Process mentions in reverse order to preserve positions
   const sortedMentions = mentions.sort((a, b) => b.position.start - a.position.start);
   
   for (const mention of sortedMentions) {
@@ -116,7 +116,7 @@ export const highlightMentions = (
 };
 
 /**
- * Crée un élément HTML pour une mention
+ * Creates an HTML element for a mention
  */
 const createMentionElement = (
   mention: Mention,
@@ -131,7 +131,7 @@ const createMentionElement = (
   let className = 'mention';
   let title = mention.display;
   
-  // Classe CSS selon le type et l'état
+  // CSS class based on type and state
   if (isCurrentUser) {
     className += ' mention--current-user';
     title = 'You';
@@ -165,14 +165,14 @@ const createMentionElement = (
 };
 
 /**
- * Vérifie si un message contient des mentions
+ * Checks if a message contains mentions
  */
 export const hasMentions = (message: string): boolean => {
   return MENTION_PATTERNS.ALL_MENTIONS.test(message);
 };
 
 /**
- * Vérifie si un message mentionne un utilisateur spécifique
+ * Checks if a message mentions a specific user
  */
 export const mentionsUser = (message: string, username: string): boolean => {
   const mentions = extractMentions(message);
@@ -182,7 +182,7 @@ export const mentionsUser = (message: string, username: string): boolean => {
 };
 
 /**
- * Vérifie si un message contient des mentions spéciales
+ * Checks if a message contains special mentions
  */
 export const hasSpecialMentions = (message: string): boolean => {
   const mentions = extractMentions(message);
@@ -190,7 +190,7 @@ export const hasSpecialMentions = (message: string): boolean => {
 };
 
 /**
- * Filtre les mentions valides selon les utilisateurs du canal
+ * Filters valid mentions based on channel users
  */
 export const filterValidMentions = (
   mentions: Mention[],
@@ -199,7 +199,7 @@ export const filterValidMentions = (
 ): Mention[] => {
   return mentions.filter(mention => {
     if (mention.type !== MENTION_TYPES.USER) {
-      return true; // Les mentions spéciales sont toujours valides
+      return true; // Special mentions are always valid
     }
     
     const user = users[mention.value];
@@ -208,7 +208,7 @@ export const filterValidMentions = (
 };
 
 /**
- * Obtient la liste des utilisateurs mentionnés
+ * Gets the list of mentioned users
  */
 export const getMentionedUsers = (
   message: string,
@@ -230,7 +230,7 @@ export const getMentionedUsers = (
 };
 
 /**
- * Remplace les mentions par des noms d'affichage
+ * Replaces mentions with display names
  */
 export const replaceMentionsWithDisplayNames = (
   message: string,
@@ -249,7 +249,7 @@ export const replaceMentionsWithDisplayNames = (
 };
 
 /**
- * Suggère des mentions basées sur la saisie
+ * Suggests mentions based on input
  */
 export const suggestMentions = (
   input: string,
@@ -264,7 +264,7 @@ export const suggestMentions = (
   
   const searchTerm = input.slice(1).toLowerCase();
   
-  // Mentions spéciales
+  // Special mentions
   const specialMentions = ['channel', 'all', 'here'];
   for (const special of specialMentions) {
     if (special.includes(searchTerm)) {
@@ -276,7 +276,7 @@ export const suggestMentions = (
     }
   }
   
-  // Utilisateurs du canal
+  // Channel users
   const channelUsers = users.filter(user => channelMemberIds.includes(user.id));
   
   for (const user of channelUsers) {
@@ -300,7 +300,7 @@ export const suggestMentions = (
     }
   }
   
-  // Trier par pertinence
+  // Sort by relevance
   return suggestions.sort((a, b) => {
     if (a.type !== MENTION_TYPES.USER && b.type === MENTION_TYPES.USER) return -1;
     if (a.type === MENTION_TYPES.USER && b.type !== MENTION_TYPES.USER) return 1;

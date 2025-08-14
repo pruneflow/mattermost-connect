@@ -1,3 +1,7 @@
+/**
+ * Create team button component with multiple layout variants
+ * Supports vertical list, horizontal tabs, and compact sidebar displays
+ */
 import React from 'react';
 import { 
   Box, 

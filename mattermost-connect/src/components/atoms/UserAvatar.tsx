@@ -1,3 +1,7 @@
+/**
+ * User avatar component with optional status indicator
+ * Displays user profile images, initials, and online status following Mattermost patterns
+ */
 import React, { useMemo } from 'react';
 import { Avatar, Badge, Box } from '@mui/material';
 import { displayUsername, getProfileImageUrl } from '../../utils/userUtils';

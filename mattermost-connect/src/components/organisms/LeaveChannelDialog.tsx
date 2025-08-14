@@ -1,3 +1,7 @@
+/**
+ * Leave channel confirmation dialog with channel information and warnings
+ * Provides clear feedback about consequences of leaving different channel types
+ */
 import React, { useState, useCallback } from 'react';
 import {
   Dialog,
@@ -49,7 +53,7 @@ export const LeaveChannelDialog: React.FC<LeaveChannelDialogProps> = ({
       await onConfirm();
       onClose();
     } catch (error) {
-      console.error('Failed to leave channel:', error);
+      // Leave channel failed
     } finally {
       setIsLeaving(false);
     }

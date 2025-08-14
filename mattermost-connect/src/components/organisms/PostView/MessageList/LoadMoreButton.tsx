@@ -1,3 +1,7 @@
+/**
+ * Load more button component for loading older/newer messages
+ * Provides interactive button with loading state and directional indicators
+ */
 import React from 'react';
 import { Box, Button, CircularProgress, SxProps, Theme } from '@mui/material';
 import { KeyboardArrowUp as ArrowUpIcon, KeyboardArrowDown as ArrowDownIcon } from '@mui/icons-material';

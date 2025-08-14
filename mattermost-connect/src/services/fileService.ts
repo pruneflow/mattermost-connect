@@ -16,7 +16,6 @@ export const fetchAllFiles = async (postId: string, fileIds: string[], force = f
   try {
     await store.dispatch(fetchFileInfosForPost({ postId, fileIds, force })).unwrap();
   } catch (error) {
-    console.error('Error fetching file infos for post:', error);
   }
 };
 
@@ -40,7 +39,6 @@ export const download = async (fileId: string, fileName?: string): Promise<boole
     })).unwrap();
     return true;
   } catch (error) {
-    console.error('Download failed:', error);
     return false;
   }
 };
@@ -65,7 +63,6 @@ export const copyPublicLinkToClipboard = async (fileId: string): Promise<boolean
       const result = await store.dispatch(generatePublicLink({ fileId })).unwrap();
       publicLink = result.publicLink;
     } catch (error) {
-      console.error('Failed to generate public link:', error);
       return false;
     }
   }
@@ -74,7 +71,6 @@ export const copyPublicLinkToClipboard = async (fileId: string): Promise<boolean
     await navigator.clipboard.writeText(publicLink);
     return true;
   } catch (error) {
-    console.error('Failed to copy public link:', error);
     return false;
   }
 };

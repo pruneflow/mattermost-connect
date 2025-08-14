@@ -1,3 +1,7 @@
+/**
+ * Unread divider component with floating new message indicator
+ * Shows animated floating button with unread message count and scroll action
+ */
 import React from 'react';
 import { Box, Button, Typography, SxProps, Theme } from '@mui/material';
 import { KeyboardArrowDown as ArrowDownIcon } from '@mui/icons-material';

@@ -1,3 +1,7 @@
+/**
+ * Emoji picker button component with popover interface
+ * Provides emoji selection with recent emoji tracking and positioning options
+ */
 import React, { useState, useCallback, useRef } from 'react';
 import { IconButton, Popover, Box, SxProps, Theme } from '@mui/material';
 import { EmojiEmotions as EmojiIcon } from '@mui/icons-material';
@@ -9,7 +13,7 @@ interface EmojiPickerButtonProps {
   onEmojiSelect: (emoji: string) => void;
   size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
-  openToLeft?: boolean; // Ouvrir vers la gauche (pour les messages de droite)
+  openToLeft?: boolean;
   sx?: SxProps<Theme>;
   inThread?: boolean
 }
@@ -34,7 +38,7 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
   }, []);
 
   const handleEmojiSelect = useCallback((emoji: any) => {
-    const emojiName = emoji.id; // Use emoji name (id), not character (native)
+    const emojiName = emoji.id;
     onEmojiSelect(emojiName);
     addRecentEmoji(emojiName);
     handleClose();

@@ -1,3 +1,7 @@
+/**
+ * Status badge component for displaying user online status
+ * Shows colored dot indicator with optional text label
+ */
 import React, { useMemo } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
 import type { UserStatus } from '../../api/types';

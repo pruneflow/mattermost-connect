@@ -7,7 +7,8 @@ import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectUserProfiles } from '../../store/selectors';
 
 /**
- * Composant pour formater et rendre le contenu d'un message avec markdown, mentions, emojis
+ * Message formatter component for rendering message content
+ * Handles markdown, mentions, emojis, and other message formatting
  */
 
 interface MessageFormatterProps {
@@ -27,17 +28,15 @@ export const MessageFormatter: React.FC<MessageFormatterProps> = memo(({
 }) => {
   const users = useAppSelector(selectUserProfiles);
   
-  // Formatage du message en plusieurs étapes
   const formattedMessage = useMemo(() => {
     if (!message) return '';
     
-    // 1. Convertir le markdown en HTML
+    // 1. Convert markdown to HTML
     let html = formatMessage(message);
     
-    // 2. Remplacer les emojis personnalisés
     html = replaceCustomEmojis(html, customEmojis);
     
-    // 3. Surligner les mentions
+    // 3. Highlight mentions
     html = highlightMentions(html, currentUserId, users, channelMemberIds);
     
     return html;

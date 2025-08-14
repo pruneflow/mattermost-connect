@@ -1,3 +1,7 @@
+/**
+ * Channel item component for sidebar channel list display
+ * Supports drag & drop, unread indicators, and context menus following Mattermost patterns
+ */
 import React, { useCallback, useMemo } from "react";
 import {
   alpha,
@@ -119,6 +123,11 @@ export interface ChannelItemProps {
   menuOptions?: ChannelMenuOptions;
   sx?: SxProps<Theme>;
 }
+
+/**
+ * Channel item component for sidebar display
+ * Shows channel name, unread indicators, and context menu
+ */
 
 const ChannelName = ({
   name,

@@ -1,9 +1,9 @@
+/**
+ * Unread messages divider component matching Mattermost design
+ * Displays a divider line with message count for unread messages
+ */
 import React, { memo, useMemo } from 'react';
 import { Box, Typography, SxProps, Theme, useTheme } from '@mui/material';
-
-/**
- * Séparateur de messages non lus exactement comme Mattermost
- */
 
 interface UnreadDividerProps {
   count?: number;
