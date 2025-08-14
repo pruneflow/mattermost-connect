@@ -1,117 +1,172 @@
-# Configuration de l'application démo
+# Mattermost Connect Demo
 
-Pour résoudre l'erreur de résolution de module avec Vite, suivez ces étapes :
+Interactive demonstration of the Mattermost Connect React component library featuring complete Mattermost integration with Redux Toolkit, Material-UI theming, and real-time WebSocket communication.
 
-## 1. Mettre à jour les fichiers de configuration
+## 🚀 Features Demonstrated
 
-Assurez-vous que votre structure de dossiers est la suivante :
-- `mattermost-connect/` (dossier racine)
-    - `dist/` (dossier généré par le build)
-    - `examples/demo/` (application démo)
+### Phase 3 Implementation
+- **Complete Authentication Flow**: Login form with Mattermost server integration
+- **Team Management**: Team navigation sidebar with switching capabilities  
+- **Channel Navigation**: Channel list with categories, unread indicators, and joining
+- **Dual Layout Modes**: Toggle between Custom Layout and Mattermost Layout
+- **Real-time Communication**: WebSocket integration for live updates
+- **Responsive Design**: Mobile-first responsive interface
 
-## 2. Construire la bibliothèque principale
+### Core Components Showcased
+- `AppProvider` - Complete app setup with Redux store and Material-UI theme
+- `LoginForm` - Authentication interface with server connection
+- `AppLayout` - Switchable layout system (custom vs mattermost style)
+- `TeamList` - Team navigation with current team highlighting
+- `ChannelList` - Channel navigation with categories and unread counts
+- `ChatContainer` - Complete messaging interface with virtual scrolling
+- `UserMenu` - User profile management and logout functionality
 
-Avant de lancer l'application démo, vous devez construire la bibliothèque principale :
+## 🏁 Quick Start
 
+### Prerequisites
+- Node.js 16+ and pnpm
+- Access to a Mattermost server
+
+### Installation & Setup
+
+1. **Build the library** (from root directory):
 ```bash
-# À la racine du projet
 pnpm run build
 ```
 
-Cela générera les fichiers dans le dossier `dist/`.
-
-## 3. Configurer le dossier de la démo
-
-Créez ou mettez à jour les fichiers suivants dans le dossier `examples/demo/` :
-
-### vite.config.js
-
-Assurez-vous que ce fichier contient la configuration d'alias correcte :
-
-```javascript
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      'mattermost-connect': path.resolve(__dirname, '../../dist/index.esm.js'),
-    },
-  },
-  server: {
-    port: 3000,
-    open: true,
-  },
-});
-```
-
-### package.json
-
-Vérifiez que le package.json de la démo a toutes les dépendances requises :
-
-```json
-{
-  "name": "mattermost-connect-demo",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "start": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.11.1",
-    "@emotion/styled": "^11.11.0",
-    "@mui/icons-material": "^5.14.18",
-    "@mui/material": "^5.14.18",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.5.9",
-    "@types/react": "^18.2.21",
-    "@types/react-dom": "^18.2.7",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.10"
-  }
-}
-```
-
-## 4. Installer les dépendances de la démo
-
+2. **Install demo dependencies**:
 ```bash
 cd examples/demo
 pnpm install
 ```
 
-## 5. Workflow de développement
+3. **Configure your Mattermost server** in `src/main.jsx`:
+```javascript
+setDefaultClient({ 
+  serverUrl: 'https://your-mattermost-server.com' 
+});
+```
 
-Pour un workflow de développement efficace, utilisez deux terminaux :
-
-**Terminal 1 (bibliothèque principale)** :
+4. **Start development server**:
 ```bash
-# À la racine du projet
 pnpm run dev
 ```
 
-**Terminal 2 (application démo)** :
-```bash
-# Dans examples/demo
-pnpm start
+5. **Open demo**: Navigate to [http://localhost:5173](http://localhost:5173)
+
+## 🎮 Demo Usage
+
+### Authentication
+1. Enter your Mattermost server credentials in the login form
+2. The demo will authenticate and load your teams and channels
+3. Success message displays your user information
+
+### Layout Toggle
+- Use the toggle buttons at the top to switch between:
+  - **🎨 Custom Layout**: Flexible custom interface design
+  - **📋 Mattermost Layout**: Authentic Mattermost-style interface
+
+### Navigation
+- **Teams**: Click team icons in the left sidebar to switch teams
+- **Channels**: Navigate channels in the channel list with unread indicators
+- **Messages**: View and interact with messages in the main chat area
+
+## 🏗️ Technical Implementation
+
+### App Structure
+```tsx
+<AppProvider>  {/* Includes Redux store + Material-UI theme */}
+  <Box sx={{ height: "100vh" }}>
+    {/* Layout Mode Toggle */}
+    <ToggleButtonGroup />
+    
+    {/* Conditional Layout Rendering */}
+    <AppLayout layout={layoutMode} />
+  </Box>
+</AppProvider>
 ```
 
-Cette configuration permettra de recharger automatiquement l'application démo lorsque vous modifiez le code de la bibliothèque principale.
+### Key Implementation Details
+- **Single Provider**: `AppProvider` handles Redux store, theme, and initialization
+- **No Manual Store Setup**: Redux store is automatically configured
+- **Theme Integration**: Material-UI theme with Mattermost-specific colors
+- **WebSocket Management**: Automatic connection and event handling
+- **State Management**: Normalized entities with optimized selectors
 
-## Dépannage
+## 📱 Responsive Features
 
-Si vous rencontrez toujours des problèmes :
+- **Mobile-First Design**: Touch-friendly interface elements
+- **Adaptive Layouts**: Responsive breakpoints for all screen sizes
+- **Touch Interactions**: Optimized for mobile and tablet usage
+- **Progressive Web App**: PWA-ready with offline capabilities
 
-1. Vérifiez que le build a bien généré le fichier `dist/index.esm.js`
-2. Assurez-vous que le chemin relatif dans `vite.config.js` est correct
-3. Essayez d'utiliser un chemin absolu dans la configuration d'alias
-4. Vérifiez les importations dans vos fichiers React
+## 🔧 Development Workflow
 
-Avec cette configuration, l'erreur `Failed to resolve entry for package "mattermost-connect"` devrait être résolue.
+For active development, use two terminals:
+
+**Terminal 1 (Library - from root)**:
+```bash
+pnpm run dev  # Watch mode for library changes
+```
+
+**Terminal 2 (Demo)**:
+```bash
+cd examples/demo
+pnpm run dev  # Demo development server
+```
+
+This setup automatically reloads the demo when library code changes.
+
+### Available Scripts
+```bash
+pnpm run dev      # Start development server
+pnpm run build    # Build for production  
+pnpm run preview  # Preview production build
+```
+
+## 🔧 Configuration
+
+### Vite Configuration
+The demo uses Vite with library path resolution:
+```javascript
+// vite.config.js
+resolve: {
+  alias: {
+    'mattermost-connect': path.resolve(__dirname, '../../dist/index.esm.js'),
+  },
+}
+```
+
+### Dependencies
+```json
+{
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0", 
+    "@mui/icons-material": "^5.14.18",
+    "@mui/material": "^5.14.18",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
+```
+
+## 📚 Learning Resources
+
+This demo demonstrates:
+- **Authentication Flow**: How to integrate Mattermost login
+- **State Management**: Redux Toolkit with normalized entities
+- **Component Usage**: Proper usage of library components
+- **WebSocket Integration**: Real-time communication setup
+- **Theme System**: Material-UI theme customization
+- **Layout Flexibility**: Building custom vs standard layouts
+
+## 🔗 Related Documentation
+
+- [Mattermost Connect Library](../../README.md)
+- [Component Documentation](../../docs/components.md)
+- [API Reference](../../docs/api.md)
+
+---
+
+**Built with Mattermost Connect** - Showcasing the power of React + Mattermost integration.
