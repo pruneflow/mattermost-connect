@@ -55,6 +55,14 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
         error: {
           main: '#dc3545', // StatusBadge dnd
         },
+        // Custom colors for user messages
+        userMessage: {
+          main: resolvedTheme === 'light' ? '#f8fafc' : 'rgba(100, 116, 139, 0.15)',
+          border: resolvedTheme === 'light' ? '#e2e8f0' : 'rgba(100, 116, 139, 0.3)',
+          hover: resolvedTheme === 'light' ? '#f1f5f9' : 'rgba(100, 116, 139, 0.25)',
+          text: resolvedTheme === 'light' ? '#334155' : '#e2e8f0',
+          link: resolvedTheme === 'light' ? '#0f172a' : '#94a3b8',
+        },
         ...(resolvedTheme === 'light' ? {
           background: {
             default: '#fafafa',

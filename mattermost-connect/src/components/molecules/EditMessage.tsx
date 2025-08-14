@@ -15,6 +15,7 @@ interface EditMessageProps {
   onCancel: () => void;
   onSave: () => void;
   channelId: string;
+  inThread?: boolean;
   sx?: SxProps<Theme>;
 }
 
@@ -25,6 +26,7 @@ export const EditMessage: React.FC<EditMessageProps> = ({
   onCancel,
   onSave,
   channelId,
+  inThread = false,
   sx,
 }) => {
   const handleSave = useCallback(
@@ -49,6 +51,7 @@ export const EditMessage: React.FC<EditMessageProps> = ({
       onCancel={onCancel}
       placeholder="Edit your message..."
       autoFocus
+      inThread={inThread}
       sx={sx}
     />
   );

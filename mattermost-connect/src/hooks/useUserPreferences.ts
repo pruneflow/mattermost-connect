@@ -170,14 +170,14 @@ const useUserPreferences = () => {
       
       dispatch(updatePreference({ userId: currentUserId, category, name, value }));
       
-      const updatedPreferences = [
-        ...preferences.filter(p => !(p.category === category && p.name === name)),
+      // Send only the single preference that was changed
+      const singlePreference = [
         { user_id: currentUserId, category, name, value }
       ];
       
-      await savePreferencesToServer(updatedPreferences);
+      await savePreferencesToServer(singlePreference);
     },
-    [currentUserId, dispatch, preferences, savePreferencesToServer]
+    [currentUserId, dispatch, savePreferencesToServer]
   );
 
   // Get preference value

@@ -2,8 +2,9 @@
  * Virtualized message container managing virtual list creation and state
  * Orchestrates virtual list building, unread separators, and scroll position management
  */
-import React, { useState, useEffect, useLayoutEffect, useRef, RefObject } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, RefObject, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useTheme, useMediaQuery } from "@mui/material";
 import { useAppSelector } from "../../../hooks";
 import { VirtualListItem } from "../../../types/virtualList";
 import { buildVirtualList, injectNewMessagesSeparator } from "../../../utils/virtualListUtils";
@@ -11,6 +12,7 @@ import {
   selectVirtualizedMessagesData,
   DEFAULT_VIRTUALIZED_MESSAGES_DATA,
 } from "../../../store/selectors/virtualizedMessagesSelector";
+import { selectEditingPostId } from "../../../store/selectors/messageUI";
 import { VirtualizedMessageList } from "./MessageList/VirtualizedMessageList";
 
 interface VirtualizedMessageContainerProps {
@@ -34,6 +36,10 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
   onToggleShouldStartFromBottomWhenUnread,
   scrollElementRef,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const editingPostId = useAppSelector(selectEditingPostId);
+  
   const [coreVirtualItems, setCoreVirtualItems] = useState<VirtualListItem[]>([]);
   const [withLoaders, setWithLoaders] = useState<VirtualListItem[]>([]);
   const [virtualItems, setVirtualItems] = useState<VirtualListItem[]>([]);
@@ -138,7 +144,7 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
   };
 
   // Simple size estimator
-  const getItemSize = (index: number) => {
+  const getItemSize = (index: number, isMobile: boolean) => {
     const item = virtualItems[index];
     if (!item) return DEFAULT_ESTIMATED_HEIGHT;
 
@@ -158,6 +164,7 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
           const post = item.data.post;
           const showHeader = item.data.showHeader ?? true;
           const isOwnMessage = item.data.isOwnMessage ?? false;
+          const isEditing = editingPostId === post.id;
 
           let postSize = 50; // Base bubble height
           
@@ -165,22 +172,35 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
             postSize += 50; // Header height
           }
 
-          const messageLines = Math.ceil((post.message?.length || 0) / 70);
-          postSize += messageLines * 20;
+          if (isEditing) {
+            postSize += 300;
+          } else {
+            console.debug("post.message?.length", post.message?.length);
+            const messageLines = Math.ceil((post.message?.length || 0) / 140);
+            console.debug("messageLines", messageLines)
+            const brCount = (post.message?.match(/\n/g) || []).length;
+            let totalSize = (messageLines + (brCount > 0 ? brCount + 1 : 0));
+            if(messageLines > 1 || brCount > 0) totalSize = totalSize + 2;
+            postSize += totalSize * 20;
+          }
 
           if (post.metadata?.reactions?.length) {
-            postSize += 40;
+            postSize += 50;
           }
 
           if (post.reply_count && post.reply_count > 0) {
-            postSize += 25;
+            postSize += 40;
           }
 
-          if (post.file_ids?.length) {
-            postSize += post.file_ids.length * 60;
+          if (post.metadata?.files?.length || post.file_ids?.length) {
+            const fileCount = post.metadata?.files?.length || post.file_ids?.length || 0;
+            const filesHeight = isMobile 
+              ? fileCount * 88 + 8
+              : 80 + 8 + 16;
+            postSize += filesHeight;
           }
 
-          return Math.max(45, Math.min(postSize, 300));
+          return postSize
         }
         return DEFAULT_ESTIMATED_HEIGHT;
       default:
@@ -188,11 +208,13 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     }
   };
 
+  const getEstimatedSize = useCallback((index: number) => getItemSize(index, isMobile), [isMobile, editingPostId, virtualItems]);
+
   // Create virtualizer
   const virtualizer = useVirtualizer<HTMLDivElement, Element>({
     count: virtualItems.length,
     getScrollElement: () => scrollElementRef.current,
-    estimateSize: getItemSize,
+    estimateSize: getEstimatedSize,
     overscan: 100,
     getItemKey: (index: number) => virtualItems[index]?.id || index,
     measureElement: (element: Element) => {

@@ -23,6 +23,7 @@ import { MessageReactions } from "./MessageReactions";
 import { EditMessage } from "./EditMessage";
 import { FileAttachmentList } from "./FileAttachmentList";
 import { HorizontalFileContainer } from "../common/HorizontalFileContainer";
+import { MessageFormatter } from "../atoms/MessageFormatter";
 import { isSystemMessage } from "../../utils/messageUtils";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
@@ -208,9 +209,16 @@ export const Message: React.FC<MessageProps> = memo(
     if (isSystem) {
       return (
         <Box sx={systemMessageStyles}>
-          <Typography variant="body2" color="textSecondary">
-            {post.message}
-          </Typography>
+          <MessageFormatter
+            message={post.message}
+            sx={{
+              fontSize: theme.typography.body2.fontSize,
+              color: theme.palette.text.secondary,
+              "& a": {
+                color: theme.palette.primary.main,
+              },
+            }}
+          />
         </Box>
       );
     }
@@ -236,26 +244,28 @@ export const Message: React.FC<MessageProps> = memo(
     // Bubble styles - background and padding
     const bubbleStyles: SxProps<Theme> = {
       backgroundColor: isOwnMessage
-        ? theme.palette.primary.light // Modern light blue for my messages
-        : theme.palette.background.paper, // White/dark according to theme
+        ? theme.palette.userMessage.main
+        : theme.palette.background.paper,
       borderRadius: 2,
       p: 1.5,
       position: "relative",
       border: isFocused
         ? `2px solid ${theme.palette.primary.main}`
         : isOwnMessage
-          ? "none"
+          ? `1px solid ${theme.palette.userMessage.border}`
           : `1px solid ${theme.palette.divider}`,
       "&:hover": {
         backgroundColor: isOwnMessage
-          ? theme.palette.primary.main // Darker blue on hover
+          ? theme.palette.userMessage.hover
           : theme.palette.action.hover,
       },
       boxShadow: theme.shadows[1],
     };
 
     // Message text color based on bubble color
-    const messageTextColor = isOwnMessage ? "white" : "text.primary";
+    const messageTextColor = isOwnMessage
+      ? theme.palette.userMessage.text
+      : "text.primary";
 
     // Timestamp styles - bottom right of bubble
     const timestampStyles: SxProps<Theme> = {
@@ -264,7 +274,7 @@ export const Message: React.FC<MessageProps> = memo(
       right: 12,
       opacity: 0.7,
       fontSize: "0.7rem",
-      color: isOwnMessage ? "rgba(255,255,255,0.8)" : "text.secondary",
+      color: isOwnMessage ? theme.palette.userMessage.text : "text.secondary",
       pointerEvents: "none",
     };
     return (
@@ -293,6 +303,7 @@ export const Message: React.FC<MessageProps> = memo(
                 onCancel={handleEditCancel}
                 onSave={handleEditSave}
                 channelId={channelId}
+                inThread={inThread}
                 sx={{
                   "& .MuiTextField-root": {
                     "& .MuiInputBase-input": {
@@ -300,20 +311,25 @@ export const Message: React.FC<MessageProps> = memo(
                     },
                     "& .MuiOutlinedInput-notchedOutline": {
                       borderColor: isOwnMessage
-                        ? "rgba(255,255,255,0.5)"
+                        ? theme.palette.userMessage.border
                         : undefined,
                     },
                   },
                 }}
               />
             ) : (
-              <Typography
-                variant="body2"
-                color={messageTextColor}
-                sx={messageTextStyles}
-              >
-                {post.message}
-              </Typography>
+              <MessageFormatter
+                message={post.message}
+                sx={{
+                  ...messageTextStyles,
+                  color: messageTextColor,
+                  "& a": {
+                    color: isOwnMessage
+                      ? theme.palette.userMessage.link
+                      : theme.palette.primary.main,
+                  },
+                }}
+              />
             )}
 
             {/* File attachments */}
@@ -351,7 +367,7 @@ export const Message: React.FC<MessageProps> = memo(
             <Box
               sx={{
                 alignSelf: "flex-start",
-                mt: 0.5,
+                mt: 1,
                 display: "flex",
                 alignItems: "center",
                 gap: 1,

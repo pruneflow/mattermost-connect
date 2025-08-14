@@ -11,17 +11,21 @@ import {
   Tooltip,
   SxProps,
   Theme,
+  Popover,
 } from "@mui/material";
 import {
   FormatBold as BoldIcon,
   FormatItalic as ItalicIcon,
+  FormatStrikethrough as StrikethroughIcon,
   Code as CodeIcon,
+  Link as LinkIcon,
   AttachFile as AttachFileIcon,
   Send as SendIcon,
   FormatSize as ShowFormattingIcon,
   FormatClear as HideFormattingIcon,
   Close as CancelIcon,
   Check as SaveIcon,
+  MoreHoriz as MoreIcon,
 } from "@mui/icons-material";
 import { EmojiPickerButton } from "../common/EmojiPickerButton";
 import { HorizontalFileContainer } from "../common/HorizontalFileContainer";
@@ -29,6 +33,12 @@ import { FilePreviewContainer } from "./FilePreviewContainer";
 import { FileAttachmentList } from "./FileAttachmentList";
 import { FileStatus } from "./FileItem";
 import { FileInfo } from "../../api/types";
+import useUserPreferences from "../../hooks/useUserPreferences";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectShowAdvancedTextEditor } from "../../store/selectors";
+import { selectIsThreadExpanded } from "../../store/selectors/messageUI";
+import { useMenu } from "../../hooks/useMenu";
+import { useTheme, useMediaQuery } from "@mui/material";
 
 interface MessageInputProps {
   placeholder?: string;
@@ -40,6 +50,7 @@ interface MessageInputProps {
   onCancel?: () => void;
   mode?: "default" | "edit";
   autoFocus?: boolean;
+  inThread?: boolean;
   sx?: SxProps<Theme>;
 }
 
@@ -96,10 +107,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onCancel,
   mode = "default",
   autoFocus = false,
+  inThread = false,
   sx,
 }) => {
+  const { updatePreferenceValue } = useUserPreferences();
+  const showFormatting = useAppSelector(selectShowAdvancedTextEditor);
+  const isThreadExpanded = useAppSelector(selectIsThreadExpanded);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const moreMenu = useMenu('formatting-more-menu');
+  
   const [message, setMessage] = useState(initialValue);
-  const [showFormatting, setShowFormatting] = useState(false);
   const [files, setFiles] = useState<FileStatus[]>([]);
   const [editFiles, setEditFiles] = useState<FileInfo[]>(existingFiles);
 
@@ -235,10 +253,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         // Restore cursor position
         setTimeout(() => {
           textField.focus();
-          textField.setSelectionRange(
-            start + before.length,
-            end + before.length,
-          );
+          if (selectedText) {
+            // If text was selected, select the formatted text
+            textField.setSelectionRange(
+              start + before.length,
+              start + before.length + selectedText.length,
+            );
+          } else {
+            // If no text selected, position cursor between formatting tags
+            textField.setSelectionRange(
+              start + before.length,
+              start + before.length,
+            );
+          }
         }, 0);
       }
     },
@@ -253,17 +280,70 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     () => insertFormatting("*"),
     [insertFormatting],
   );
+  const handleStrikethrough = useCallback(
+    () => insertFormatting("~~"),
+    [insertFormatting],
+  );
   const handleCode = useCallback(
     () => insertFormatting("`"),
     [insertFormatting],
   );
+  const handleLink = useCallback(() => {
+    const textField = textFieldRef.current;
+    if (textField) {
+      const start = textField.selectionStart || 0;
+      const end = textField.selectionEnd || 0;
+      const selectedText = message.slice(start, end);
+      const linkText = selectedText || "link text";
+      const newMessage =
+        message.slice(0, start) +
+        `[${linkText}](url)` +
+        message.slice(end);
+      setMessage(newMessage);
+
+      setTimeout(() => {
+        textField.focus();
+        if (selectedText) {
+          // Select "url" part for easy replacement
+          const urlStart = start + linkText.length + 3; // "[text](" length
+          textField.setSelectionRange(urlStart, urlStart + 3);
+        } else {
+          // Select "link text" for easy replacement
+          textField.setSelectionRange(start + 1, start + 1 + linkText.length);
+        }
+      }, 0);
+    }
+  }, [message]);
 
   const toggleFormatting = useCallback(() => {
-    setShowFormatting((prev) => !prev);
-  }, []);
+    const newValue = !showFormatting;
+    // Inverted logic: 'false' means show advanced editor, 'true' means hide it
+    void updatePreferenceValue("advanced_text_editor", "post", (!newValue).toString());
+  }, [updatePreferenceValue, showFormatting]);
 
   const hasFiles = files.length > 0 || editFiles.length > 0;
   const isCompact = !showFormatting && !hasFiles;
+  const shouldUseMoreMenu = showFormatting && (isMobile || (inThread && !isThreadExpanded));
+
+  const handleMoreItalic = useCallback(() => {
+    handleItalic();
+    moreMenu.closeMenu();
+  }, [handleItalic, moreMenu.closeMenu]);
+
+  const handleMoreStrikethrough = useCallback(() => {
+    handleStrikethrough();
+    moreMenu.closeMenu();
+  }, [handleStrikethrough, moreMenu.closeMenu]);
+
+  const handleMoreLink = useCallback(() => {
+    handleLink();
+    moreMenu.closeMenu();
+  }, [handleLink, moreMenu.closeMenu]);
+
+  const handleMoreCode = useCallback(() => {
+    handleCode();
+    moreMenu.closeMenu();
+  }, [handleCode, moreMenu.closeMenu]);
 
   return (
     <Box sx={{ ...containerStyles, ...sx }}>
@@ -280,9 +360,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       {/* Input field */}
       <Box sx={{ display: "flex", alignItems: "flex-end", gap: 1 }}>
         <TextField
-          ref={textFieldRef}
+          inputRef={textFieldRef}
           multiline
-          minRows={1}
+          minRows={mode === "edit" ? 8 : 1}
           maxRows={8}
           value={message}
           onChange={handleMessageChange}
@@ -377,17 +457,41 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                   </IconButton>
                 </Tooltip>
 
-                <Tooltip title="Italic">
-                  <IconButton size="small" onClick={handleItalic}>
-                    <ItalicIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                {shouldUseMoreMenu ? (
+                  <Tooltip title="More formatting">
+                    <IconButton size="small" onClick={moreMenu.openMenu}>
+                      <MoreIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <>
+                    <Tooltip title="Italic">
+                      <IconButton size="small" onClick={handleItalic}>
+                        <ItalicIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
 
-                <Tooltip title="Code">
-                  <IconButton size="small" onClick={handleCode}>
-                    <CodeIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                    <Tooltip title="Strikethrough">
+                      <IconButton size="small" onClick={handleStrikethrough}>
+                        <StrikethroughIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+                    <Tooltip title="Link">
+                      <IconButton size="small" onClick={handleLink}>
+                        <LinkIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+
+                    <Tooltip title="Code">
+                      <IconButton size="small" onClick={handleCode}>
+                        <CodeIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
               </>
             )}
           </Box>
@@ -458,6 +562,53 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           </Box>
         </Box>
       )}
+
+      {/* More formatting menu */}
+      <Popover
+        open={moreMenu.isOpen}
+        anchorEl={moreMenu.anchorEl}
+        onClose={moreMenu.closeMenu}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        slotProps={{
+          paper: {
+            sx: {
+              p: 1,
+              bgcolor: 'background.paper',
+              boxShadow: 2,
+              borderRadius: 1,
+            }
+          }
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Tooltip title="Italic">
+            <IconButton size="small" onClick={handleMoreItalic}>
+              <ItalicIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Strikethrough">
+            <IconButton size="small" onClick={handleMoreStrikethrough}>
+              <StrikethroughIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+          <Tooltip title="Link">
+            <IconButton size="small" onClick={handleMoreLink}>
+              <LinkIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Code">
+            <IconButton size="small" onClick={handleMoreCode}>
+              <CodeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Popover>
     </Box>
   );
 };

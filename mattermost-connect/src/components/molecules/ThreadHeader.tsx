@@ -52,7 +52,6 @@ const actionsStyles: SxProps<Theme> = {
 };
 
 export const ThreadHeader: React.FC<ThreadHeaderProps> = ({
-  rootPostId,
   onClose,
   showExpandButton = true,
 }) => {
@@ -61,7 +60,7 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   const channel = useAppSelector(state => selectChannelById(state, channelId));
   const isExpanded = useAppSelector(selectIsThreadExpanded);
 
-  const channelDisplayName = channel?.display_name || channel?.name || 'Thread';
+  const channelDisplayName = channel?.computedDisplayName || channel?.display_name || '';
 
   const handleToggleSize = () => {
     dispatch(toggleThreadSize());

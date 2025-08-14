@@ -35,6 +35,7 @@ export const ThreadInput: React.FC<ThreadInputProps> = ({
       channelId={channelId}
       onSend={handleSendMessage}
       autoFocus={true}
+      inThread={true}
     />
   );
 };

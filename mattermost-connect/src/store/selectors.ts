@@ -1259,3 +1259,17 @@ export const selectPreferedChannelScrollPosition = createSelector(
     return preference;
   },
 );
+
+/**
+ * Selector for advanced text editor preference (show/hide formatting toolbar)
+ * Returns boolean indicating if formatting toolbar should be shown
+ */
+export const selectShowAdvancedTextEditor = createSelector(
+  [
+    (state: RootState) => state.preferences.preferences,
+  ],
+  (preferences): boolean => {
+    const preference = getPreference(preferences, 'advanced_text_editor', 'post', 'false');
+    return preference === 'false'; // Inverted logic: 'false' means show advanced editor
+  },
+);

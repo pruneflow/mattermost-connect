@@ -32,7 +32,7 @@ const MARKDOWN_PATTERNS = {
   CODE_BLOCK: /```(\w+)?\n([\s\S]*?)```/g,
   
   LINK: /\[([^\]]+)\]\(([^)]+)\)/g,
-  AUTO_LINK: /(https?:\/\/[^\s]+)/g,
+  AUTO_LINK: /(https?:\/\/[^\s]+|(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/g,
   
   UNORDERED_LIST: /^[-*+] (.+)$/gm,
   ORDERED_LIST: /^(\d+)\. (.+)$/gm,
@@ -69,8 +69,31 @@ export const parseMarkdown = (text: string): string => {
   html = html.replace(MARKDOWN_PATTERNS.ITALIC, '<em>$1</em>');
   html = html.replace(MARKDOWN_PATTERNS.STRIKETHROUGH, '<del>$1</del>');
   
-  html = html.replace(MARKDOWN_PATTERNS.LINK, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-  html = html.replace(MARKDOWN_PATTERNS.AUTO_LINK, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Process markdown links first - add https:// if missing
+  html = html.replace(MARKDOWN_PATTERNS.LINK, (match, text, url) => {
+    // Add https:// if URL doesn't start with http:// or https://
+    const finalUrl = url.match(/^https?:\/\//) ? url : `https://${url}`;
+    return `<a href="${finalUrl}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  });
+  
+  // Then auto-link URLs that are NOT already inside <a> tags
+  html = html.replace(MARKDOWN_PATTERNS.AUTO_LINK, (match, url) => {
+    // Check if this URL is already inside an <a> tag by looking backwards and forwards
+    const beforeMatch = html.substring(0, html.indexOf(match));
+    const afterMatch = html.substring(html.indexOf(match) + match.length);
+    
+    // If we find an unclosed <a> tag before this match, skip it
+    const lastOpenTag = beforeMatch.lastIndexOf('<a ');
+    const lastCloseTag = beforeMatch.lastIndexOf('</a>');
+    
+    if (lastOpenTag > lastCloseTag) {
+      return match; // Already inside a link, don't modify
+    }
+    
+    // Add https:// if URL doesn't start with http:// or https://
+    const finalUrl = url.match(/^https?:\/\//) ? url : `https://${url}`;
+    return `<a href="${finalUrl}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  });
   
   html = html.replace(MARKDOWN_PATTERNS.HEADING, (match, hashes, title) => {
     const level = hashes.length;
