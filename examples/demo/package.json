@@ -1,0 +1,32 @@
+{
+  "name": "mattermost-connect-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.0.1",
+    "@mui/material": "^7.0.1",
+    "@tailwindcss/forms": "^0.5.10",
+    "autoprefixer": "^10.4.21",
+    "mattermost-connect": "workspace:*",
+    "postcss": "^8.5.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "tailwindcss": "^4.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.9",
+    "@types/react": "^18.2.21",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.10"
+  }
+}
