@@ -1,3 +1,7 @@
+/**
+ * Context menu component with positioning and responsive behavior
+ * Provides flexible menu system with custom positioning and mobile adaptations
+ */
 import React from 'react';
 import { Box, ClickAwayListener, useTheme, useMediaQuery, alpha } from '@mui/material';
 import { MenuItem, type MenuItemConfig } from './MenuItem';
@@ -80,5 +84,4 @@ export const Menu: React.FC<MenuProps> = ({
 
 export default Menu;
 
-// Re-export types for convenience
 export type { MenuItemConfig };

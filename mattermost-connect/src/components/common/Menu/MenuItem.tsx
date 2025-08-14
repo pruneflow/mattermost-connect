@@ -1,3 +1,7 @@
+/**
+ * Menu item component with submenu support and responsive behavior
+ * Handles individual menu items with actions, variants, and nested submenu functionality
+ */
 import React, { useState, useCallback } from "react";
 import { Box, Divider, useTheme, useMediaQuery, alpha } from "@mui/material";
 import { ChevronRight } from "@mui/icons-material";
@@ -11,7 +15,7 @@ export interface MenuItemConfig {
   onClick?: () => void;
   variant?: "default" | "danger";
   disabled?: boolean;
-  submenu?: MenuItemConfig[]; // Submenu items
+  submenu?: MenuItemConfig[];
 }
 
 interface MenuItemProps {
@@ -25,7 +29,7 @@ export const MenuItem: React.FC<MenuItemProps> = ({ item, onClose, placement = '
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [submenuOpen, setSubmenuOpen] = useState(false);
 
-  // Si c'est un divider, on affiche juste le divider
+  // If it's a divider, just display the divider
   if (item.type === "divider") {
     return <Divider sx={MENU_STYLES.divider} />;
   }

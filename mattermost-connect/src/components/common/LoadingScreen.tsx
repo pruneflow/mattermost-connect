@@ -1,3 +1,7 @@
+/**
+ * Loading screen component with configurable positioning and centering
+ * Provides flexible loading indicator with optional message and positioning options
+ */
 import React from "react";
 import { Box, Typography, CircularProgress } from "@mui/material";
 import type { ReactNode, CSSProperties } from "react";
