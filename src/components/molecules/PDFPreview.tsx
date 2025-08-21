@@ -2,8 +2,9 @@
  * PDF preview component using react-pdf-viewer
  * Displays PDF files with toolbar, navigation, and authentication
  */
-import React from 'react';
-import { Box } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, CircularProgress } from '@mui/material';
+import { imageService } from '../../services/imageService';
 
 // Core viewer and worker
 import { Viewer, Worker } from '@react-pdf-viewer/core';
@@ -16,20 +17,78 @@ import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 
 export interface PDFPreviewProps {
-  fileUrl: string;
+  fileId: string;
   fileName: string;
   fileSize?: number;
+  updateAt?: number;
   onContentClick?: (e: React.MouseEvent) => void;
 }
 
 export const PDFPreview: React.FC<PDFPreviewProps> = ({
-  fileUrl,
+  fileId,
   fileName,
   fileSize,
+  updateAt,
   onContentClick
 }) => {
-  // Create plugin instance like in the official docs
+  const [fileUrl, setFileUrl] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<boolean>(false);
+  
+  // Create plugin instance at the top level to avoid hooks order issues
   const defaultLayoutPluginInstance = defaultLayoutPlugin();
+
+  useEffect(() => {
+    const loadUrl = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const url = await imageService.getFileUrl(fileId, updateAt);
+        setFileUrl(url);
+      } catch (err) {
+        console.error('Failed to load PDF URL:', err);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUrl();
+
+    return () => {
+      if (fileUrl.startsWith('blob:')) {
+        imageService.revokeBlobUrl(fileUrl);
+      }
+    };
+  }, [fileId, updateAt]);
+
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        height: '400px'
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error || !fileUrl) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        height: '400px',
+        bgcolor: 'grey.100',
+        color: 'text.secondary'
+      }}>
+        Failed to load PDF
+      </Box>
+    );
+  }
 
 
   return (

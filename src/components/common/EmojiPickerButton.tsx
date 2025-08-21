@@ -8,6 +8,10 @@ import { EmojiEmotions as EmojiIcon } from '@mui/icons-material';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import { addRecentEmoji } from '../../services/reactionService';
+import { useMediaQuery, useTheme } from "@mui/material";
+import { useAppDispatch } from '../../hooks';
+import { openEmojiPanel } from '../../store/slices/messageUISlice';
+import { createEmojiNameWithTone, getUserPreferredSkinTone } from '../../utils/emojiMartAdapter';
 
 interface EmojiPickerButtonProps {
   onEmojiSelect: (emoji: string) => void;
@@ -16,6 +20,7 @@ interface EmojiPickerButtonProps {
   openToLeft?: boolean;
   sx?: SxProps<Theme>;
   inThread?: boolean
+  onClick?: () => void
 }
 
 export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
@@ -25,22 +30,36 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
   openToLeft = false,
   inThread = false,
   sx,
+  onClick
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const dispatch = useAppDispatch();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    setAnchorEl(event.currentTarget);
-  }, []);
+    onClick && onClick();
+    if(isMobile) {
+      dispatch(openEmojiPanel());
+    }
+    else {
+      setAnchorEl(event.currentTarget);
+    }
+  }, [isMobile, dispatch]);
 
   const handleClose = useCallback(() => {
     setAnchorEl(null);
   }, []);
 
   const handleEmojiSelect = useCallback((emoji: any) => {
-    const emojiName = emoji.id;
-    onEmojiSelect(emojiName);
-    addRecentEmoji(emojiName);
+    // Créer le nom avec skin tone si applicable
+    const baseName = emoji.id || emoji.name;
+    const skinTone = emoji.skin || getUserPreferredSkinTone();
+    const emojiNameWithTone = createEmojiNameWithTone(baseName, skinTone);
+    
+    onEmojiSelect(emojiNameWithTone);
+    addRecentEmoji(baseName);
     handleClose();
   }, [onEmojiSelect, addRecentEmoji, handleClose]);
 
@@ -80,10 +99,9 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
           <Picker
             data={data}
             onEmojiSelect={handleEmojiSelect}
-            theme="light"
+            theme={theme.palette.mode}
             set="native"
             previewPosition="none"
-            skinTonePosition="none"
             emojiSize={20}
             perLine={8}
             maxFrequentRows={2}

@@ -175,12 +175,16 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
           if (isEditing) {
             postSize += 300;
           } else {
-            console.debug("post.message?.length", post.message?.length);
-            const messageLines = Math.ceil((post.message?.length || 0) / 140);
-            console.debug("messageLines", messageLines)
+            const divideBy = isMobile ? 26 : 140;
+            const messageLines = Math.ceil((post.message?.length || 0) / divideBy);
             const brCount = (post.message?.match(/\n/g) || []).length;
             let totalSize = (messageLines + (brCount > 0 ? brCount + 1 : 0));
-            if(messageLines > 1 || brCount > 0) totalSize = totalSize + 2;
+            if(!isMobile && (messageLines > 1 || brCount > 0)) {
+              totalSize = totalSize + 2
+            }
+            if(isMobile && messageLines > 20 || brCount > 10) {
+              totalSize = totalSize - 5
+            }
             postSize += totalSize * 20;
           }
 

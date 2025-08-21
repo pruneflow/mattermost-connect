@@ -27,7 +27,7 @@ import { selectUserById, selectChannelById } from '../../store/selectors';
 import { selectThreadPostId } from '../../store/selectors/messageUI';
 import { selectThread } from '../../store/selectors/threads';
 import { FileDownloadButton } from './FileDownloadButton';
-import { client } from '../../api/client';
+import { imageService } from '../../services/imageService';
 import FileActionButtons from './FileActionButtons';
 import { UserAvatar } from '../atoms/UserAvatar';
 import { formatFileSize } from '../../utils/formatters';
@@ -149,12 +149,8 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
     const { mime_type, name, update_at } = fileInfo;
 
-    // Image preview (using Mattermost's URL pattern)
+    // Image preview
     if (mime_type.startsWith('image/')) {
-      // Use getFilePreviewUrl for thumbnails/previews, getFileUrl for full resolution
-      const previewUrl = client.getFilePreviewUrl(currentFileId, update_at);
-      const fullUrl = client.getFileUrl(currentFileId, update_at);
-      
       return (
         <Box sx={{ 
           display: 'flex', 
@@ -166,9 +162,9 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           p: 2
         }}>
           <ImagePreview
-            src={fullUrl}
+            fileId={currentFileId}
             alt={name}
-            fallbackSrc={previewUrl}
+            updateAt={fileInfo.update_at}
             onContentClick={(e) => e.stopPropagation()}
           />
         </Box>
@@ -177,23 +173,20 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
     // Audio/Video preview
     if (mime_type.startsWith('video/') || mime_type.startsWith('audio/')) {
-      const mediaUrl = client.getFileUrl(currentFileId, update_at);
       return (
         <AudioVideoPreview
-          fileUrl={mediaUrl}
+          fileId={currentFileId}
           fileName={name}
           fileSize={fileInfo.size}
           mimeType={mime_type}
-          fileId={currentFileId}
+          updateAt={fileInfo.update_at}
           onContentClick={(e) => e.stopPropagation()}
         />
       );
     }
 
-    // PDF preview - Use canvas rendering like Mattermost
+    // PDF preview
     if (mime_type === 'application/pdf') {
-      const pdfUrl = client.getFileUrl(currentFileId, update_at);
-      
       return (
         <Box sx={{ 
           display: 'flex',
@@ -204,9 +197,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           p: 2
         }}>
           <PDFPreview
-            fileUrl={pdfUrl}
+            fileId={currentFileId}
             fileName={name}
             fileSize={fileInfo.size}
+            updateAt={fileInfo.update_at}
             onContentClick={(e) => e.stopPropagation()}
           />
         </Box>
@@ -255,8 +249,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return null;
   }
 
-  const handleBackdropClick = (event: React.MouseEvent) => {
-    // Close modal when clicking on backdrop area
+  const handleBackdropClick = () => {
     onClose();
   };
 

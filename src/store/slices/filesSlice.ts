@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { client } from '../../api/client';
+import { imageService } from '../../services/imageService';
 import { arraysEqual } from '../../utils/formatters';
 
 /**
@@ -133,10 +134,7 @@ export const fetchFilePreview = createAsyncThunk(
     dispatch(filesSlice.actions.setPreviewLoadingState({ fileId, loadingState: 'loading' }));
     
     try {
-      const filePreviewUrl = client.getFilePreviewUrl(fileId, Date.now());
-      const response = await fetch(filePreviewUrl);
-      const blob = await response.blob();
-      const previewUrl = URL.createObjectURL(blob);
+      const previewUrl = await imageService.getFilePreview(fileId);
       return { fileId, previewUrl };
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch file preview');
@@ -151,32 +149,22 @@ export const downloadFile = createAsyncThunk(
   'files/downloadFile',
   async ({ fileId, fileName }: { fileId: string; fileName?: string }, { getState, rejectWithValue }) => {
     try {
-      const downloadUrl = client.getFileUrl(fileId, Date.now());
+      const downloadUrl = await imageService.getFileUrl(fileId);
       
-      // Fetch with credentials for cookie authentication
-      const response = await fetch(downloadUrl, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      
-      const url = window.URL.createObjectURL(blob);
+      // Create download link
       const a = document.createElement('a');
       a.style.display = 'none';
-      a.href = url;
+      a.href = downloadUrl;
       a.download = fileName || `file-${fileId}`;
       document.body.appendChild(a);
       a.click();
       
-      // Nettoyer
+      // Cleanup
       setTimeout(() => {
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        if (downloadUrl.startsWith('blob:')) {
+          imageService.revokeBlobUrl(downloadUrl);
+        }
       }, 100);
       
       return { fileId, success: true };

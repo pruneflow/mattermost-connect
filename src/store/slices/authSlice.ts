@@ -3,8 +3,9 @@
  * Handles user authentication state and session management
  */
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { UserProfile, LoginRequest, APIError } from '../../api/types';
+import { UserProfile, LoginRequest, LoginWithTokenRequest, APIError } from '../../api/types';
 import { client } from '../../api/client';
+import { imageService } from '../../services/imageService';
 import { 
   setCurrentUserId, 
   setUser, 
@@ -29,55 +30,46 @@ export interface AuthState {
 }
 
 const initialState: AuthState = {
-  // Mattermost uses 'logged_in' flag, not just token presence
-  isAuthenticated: localStorage.getItem('logged_in') === 'true',
-  token: localStorage.getItem('mattermostToken'),
+  isAuthenticated: false,
+  token: null,
   serverUrl: localStorage.getItem('mattermostServerUrl'),
 };
 
 // Async thunks for auth actions
 export const loginUser = createAsyncThunk<
   { user: UserProfile; token: string; serverUrl: string },
-  LoginRequest & { serverUrl: string },
+  (LoginRequest & { serverUrl: string }) | (LoginWithTokenRequest & { serverUrl: string }),
   { rejectValue: APIError }
 >(
   'auth/login',
-  async ({ login_id, password, serverUrl }, { dispatch, rejectWithValue }) => {
+  async (credentials, { dispatch, rejectWithValue }) => {
+    const { serverUrl } = credentials;
     try {
       dispatch(setLoggingIn(true));
       dispatch(setLoginError(null));
       dispatch(setAuthError(null));
 
-      // Configure Client4 exactly like Mattermost
+      // Configure client
       client.setUrl(serverUrl);
       client.setIncludeCookies(true);
       
-      // Call login exactly like Mattermost does (loginId, password, token='', ldapOnly=false)
-      const user = await client.login(login_id, password, '', false);
+      if('token' in credentials) {
+        client.setToken(credentials.token);
+      }
+      // Use token authentication if token is provided, otherwise use login/password
+      const user = 'token' in credentials
+        ? await client.getMe()
+        : await client.login(credentials.login_id, credentials.password, '', false);
 
       // Get token exactly like Mattermost does
       const token = client.getToken();
-      
-      // Mattermost only throws error if user is not returned, not token
-      // Token might be in cookies only on some server configurations
+
       if (!user) {
         throw new Error('Login failed - no user returned');
       }
-      
-      // If we have a token, great. If not, continue anyway (cookie-based auth)
-      if (!token) {
-      }
 
-      // Store credentials in localStorage exactly like Mattermost 
-      if (token) {
-        localStorage.setItem('mattermostToken', token);
-      }
+      // Store minimal data in localStorage for reconnection
       localStorage.setItem('mattermostServerUrl', serverUrl);
-      
-      // Store login state like Mattermost does
-      localStorage.setItem('logged_in', 'true');
-      
-      // Store user for easier restore (same as Mattermost)
       localStorage.setItem('mattermostUser', JSON.stringify(user));
       
       // Cookies are set by server via Set-Cookie headers, not manually by client
@@ -119,17 +111,17 @@ export const logoutUser = createAsyncThunk<
     } catch (error) {
       // Continue with logout even if API call fails (same as Mattermost)
     } finally {
-      // Clear localStorage exactly like Mattermost
-      localStorage.removeItem('mattermostToken');
       localStorage.removeItem('mattermostServerUrl');
       localStorage.removeItem('mattermostUser');
-      localStorage.removeItem('logged_in'); // Mattermost also removes this
       
       // Cookies are cleared by server on logout, not manually by client
       // This is the exact Mattermost behavior
       
       // Clear client token (Mattermost doesn't clear URL on logout)
       client.setToken('');
+      
+      // Clear image cache to free memory
+      imageService.clearCache();
       
       // Clear all Redux state
       dispatch(clearCurrentUser());
@@ -180,36 +172,30 @@ export const restoreAuthFromStorage = createAsyncThunk<
   'auth/restoreFromStorage',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      // Check if user was logged in (Mattermost pattern)
-      const isLoggedIn = localStorage.getItem('logged_in') === 'true';
-      if (!isLoggedIn) {
-        return null; // Not logged in, nothing to restore
-      }
-
-      const token = localStorage.getItem('mattermostToken');
       const serverUrl = localStorage.getItem('mattermostServerUrl');
       const userJson = localStorage.getItem('mattermostUser');
 
       if (!userJson || !serverUrl) {
-        // Clear invalid state
-        dispatch(logoutUser());
-        return rejectWithValue('Invalid stored auth data');
+        return null;
       }
 
-      const user = JSON.parse(userJson) as UserProfile;
-
-      // Configure client exactly like Mattermost
+      // Configure client
       client.setUrl(serverUrl);
       client.setIncludeCookies(true);
-      if (token) {
-        client.setToken(token);
+
+      // Validate session by attempting to get current user
+      // This will use existing cookies or fail if session expired
+      try {
+        const currentUser = await client.getMe();
+        
+        dispatch(setCurrentUserId(currentUser.id));
+        dispatch(setUser(currentUser));
+        
+        return { user: currentUser, token: null, serverUrl };
+      } catch (sessionError) {
+        dispatch(logoutUser());
+        return rejectWithValue('Session expired or invalid');
       }
-
-      // Restore user state
-      dispatch(setCurrentUserId(user.id));
-      dispatch(setUser(user));
-
-      return { user, token, serverUrl };
     } catch (error) {
       // Clear invalid state
       dispatch(logoutUser());
@@ -232,11 +218,8 @@ const authSlice = createSlice({
       }
     },
     clearAuth: () => {
-      // Clear exactly like Mattermost logout
-      localStorage.removeItem('mattermostToken');
       localStorage.removeItem('mattermostServerUrl');
       localStorage.removeItem('mattermostUser');
-      localStorage.removeItem('logged_in');
       return {
         isAuthenticated: false,
         token: null,
@@ -261,7 +244,6 @@ const authSlice = createSlice({
       .addCase(logoutUser.fulfilled, (state) => {
         state.isAuthenticated = false;
         state.token = null;
-        state.serverUrl = null;
       })
       
       // Get current user

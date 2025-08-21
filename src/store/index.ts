@@ -13,19 +13,6 @@ import filesReducer from './slices/filesSlice'
 import messageUIReducer from './slices/messageUISlice'
 import threadsReducer from './slices/threadsSlice'
 
-// Configure Client4 immediately before store creation if credentials exist
-const token = localStorage.getItem('mattermostToken');
-const serverUrl = localStorage.getItem('mattermostServerUrl');
-
-if (token && serverUrl) {
-  client.setUrl(serverUrl);
-  client.setToken(token);
-  // NOTE: setIncludeCookies(false) to avoid CORS issues when server uses AllowCorsFrom: "*"
-  // If server is properly configured with specific origins, this can be set to true
-  client.setIncludeCookies(false);
-  client.setEnableLogging(true);
-}
-
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
   reducer: {
@@ -58,10 +45,10 @@ export const store = configureStore({
   devTools: process.env.NODE_ENV !== 'production',
 });
 
-// Auto-restore user if credentials exist - establishes auth state
+/*// Auto-restore user if credentials exist - establishes auth state
 if (token && serverUrl) {
   store.dispatch(getCurrentUser());
-}
+}*/
 
 // Export store type
 export type RootState = ReturnType<typeof store.getState>;

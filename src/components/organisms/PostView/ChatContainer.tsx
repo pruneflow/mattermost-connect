@@ -15,6 +15,7 @@ import { sendMessage, loadUnreadPosts } from "../../../services/messageService";
 import { selectChannelHasPosts, selectIsLoadingUnreads } from "../../../store/selectors/postsSelectors";
 import { VirtualizedMessageContainer } from "./VirtualizedMessageContainer";
 import { ThreadModal } from "../ThreadModal";
+import { MobileEmojiPanel } from "../../molecules/MobileEmojiPanel";
 import { scrollToBottom } from "../../../utils/scrollUtils";
 import { markAsRead } from "../../../services/channelService";
 
@@ -140,6 +141,9 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
 
       {/* Thread Modal */}
       <ThreadModal />
+
+      {/* Mobile Emoji Panel */}
+      <MobileEmojiPanel />
     </Box>
   );
 };

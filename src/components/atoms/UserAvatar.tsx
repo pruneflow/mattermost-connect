@@ -2,13 +2,14 @@
  * User avatar component with optional status indicator
  * Displays user profile images, initials, and online status following Mattermost patterns
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Avatar, Badge, Box } from '@mui/material';
-import { displayUsername, getProfileImageUrl } from '../../utils/userUtils';
+import { displayUsername } from '../../utils/userUtils';
 import { getStatusColor } from '../../utils/statusUtils';
 import { useUserStatus } from '../../hooks/useUserStatus';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectUserById } from '../../store/selectors';
+import { imageService } from '../../services/imageService';
 import type { UserProfile } from '../../api/types';
 
 // Static styles and configurations extracted for performance
@@ -111,8 +112,26 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
     return displayName.charAt(0).toUpperCase();
   };
 
-  // Profile image URL if user exists (with cache busting timestamp)
-  const profileImageUrl = user ? getProfileImageUrl(userId, (user as any).last_picture_update) : undefined;
+  // Profile image URL using image service (handles token/cookie authentication)
+  const [profileImageUrl, setProfileImageUrl] = React.useState<string | undefined>();
+
+  React.useEffect(() => {
+    if (!user) {
+      setProfileImageUrl(undefined);
+      return;
+    }
+
+    imageService.getUserAvatar(userId, (user as any).last_picture_update)
+      .then(url => setProfileImageUrl(url))
+      .catch(() => setProfileImageUrl(undefined));
+
+    // Cleanup function to revoke blob URLs on unmount/change
+    return () => {
+      if (profileImageUrl && profileImageUrl.startsWith('blob:')) {
+        imageService.revokeBlobUrl(profileImageUrl);
+      }
+    };
+  }, [user, userId]);
 
   const avatar = (
     <Avatar

@@ -6,7 +6,6 @@ export { store } from './store';
 
 // API types and client
 export * from './api/types';
-export { setDefaultClient, getDefaultClient } from './api/client';
 
 // Types will be available via * exports
 

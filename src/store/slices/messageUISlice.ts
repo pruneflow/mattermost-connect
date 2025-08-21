@@ -6,6 +6,9 @@ export interface MessageUIState {
   replyToPost: Post | null;
   threadPostId: string | null;
   threadExpanded: boolean;
+  selectedMessageId: string | null;
+  emojiPanelOpen: boolean;
+  emojiPanelExpanded: boolean;
 }
 
 const initialState: MessageUIState = {
@@ -13,6 +16,9 @@ const initialState: MessageUIState = {
   replyToPost: null,
   threadPostId: null,
   threadExpanded: false,
+  selectedMessageId: null,
+  emojiPanelOpen: false,
+  emojiPanelExpanded: false,
 };
 
 /**
@@ -57,11 +63,35 @@ const messageUISlice = createSlice({
       state.threadExpanded = !state.threadExpanded;
     },
     
+    selectMessage: (state, action: PayloadAction<string>) => {
+      state.selectedMessageId = action.payload;
+    },
+    
+    clearMessageSelection: (state) => {
+      state.selectedMessageId = null;
+    },
+    
+    openEmojiPanel: (state) => {
+      state.emojiPanelOpen = true;
+    },
+    
+    closeEmojiPanel: (state) => {
+      state.emojiPanelOpen = false;
+      state.selectedMessageId = null;
+    },
+    
+    toggleEmojiPanelSize: (state) => {
+      state.emojiPanelExpanded = !state.emojiPanelExpanded;
+    },
+    
     clearAll: (state) => {
       state.editingPostId = null;
       state.replyToPost = null;
       state.threadPostId = null;
       state.threadExpanded = false;
+      state.selectedMessageId = null;
+      state.emojiPanelOpen = false;
+      state.emojiPanelExpanded = false;
     },
   },
 });
@@ -74,6 +104,11 @@ export const {
   openThread,
   closeThread,
   toggleThreadSize,
+  selectMessage,
+  clearMessageSelection,
+  openEmojiPanel,
+  closeEmojiPanel,
+  toggleEmojiPanelSize,
   clearAll,
 } = messageUISlice.actions;
 

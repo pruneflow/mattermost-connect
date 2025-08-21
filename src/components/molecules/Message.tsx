@@ -28,12 +28,17 @@ import { isSystemMessage } from "../../utils/messageUtils";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { selectUserProfiles } from "../../store/selectors";
-import { selectIsPostEditing } from "../../store/selectors/messageUI";
+import {
+  selectIsPostEditing,
+  selectIsMessageSelected,
+  selectIsEmojiPanelOpen,
+} from "../../store/selectors/messageUI";
 import {
   startEdit,
   stopEdit,
   startReply,
   openThread,
+  selectMessage,
 } from "../../store/slices/messageUISlice";
 import { displayUsername } from "../../utils/userUtils";
 
@@ -170,15 +175,36 @@ export const Message: React.FC<MessageProps> = memo(
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const dispatch = useAppDispatch();
     const [isHovered, setIsHovered] = useState(false);
+    const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
+      null,
+    );
     const isEditing = useAppSelector(selectIsPostEditing(post.id));
+    const isSelected = useAppSelector(selectIsMessageSelected(post.id));
+    const isEmojiPanelOpen = useAppSelector(selectIsEmojiPanelOpen);
     const isSystem = isSystemMessage(post);
     const handleMouseEnter = useCallback(() => {
-      setIsHovered(true);
-    }, []);
+      if (!isMobile) setIsHovered(true);
+    }, [isMobile]);
 
     const handleMouseLeave = useCallback(() => {
-      setIsHovered(false);
-    }, []);
+      if (!isMobile) setIsHovered(false);
+    }, [isMobile]);
+
+    const handleTouchStart = useCallback(() => {
+      if (!isMobile) return;
+      const timer = setTimeout(() => {
+        dispatch(selectMessage(post.id));
+      }, 500);
+      setLongPressTimer(timer);
+    }, [isMobile, dispatch, post.id]);
+
+    const handleTouchEnd = useCallback(() => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        setLongPressTimer(null);
+      }
+    }, [longPressTimer]);
+
 
     const handleReply = useCallback(() => {
       dispatch(startReply(post));
@@ -243,9 +269,11 @@ export const Message: React.FC<MessageProps> = memo(
 
     // Bubble styles - background and padding
     const bubbleStyles: SxProps<Theme> = {
-      backgroundColor: isOwnMessage
-        ? theme.palette.userMessage.main
-        : theme.palette.background.paper,
+      backgroundColor: isSelected
+        ? theme.palette.action.selected
+        : isOwnMessage
+          ? theme.palette.userMessage.main
+          : theme.palette.background.paper,
       borderRadius: 2,
       p: 1.5,
       position: "relative",
@@ -282,6 +310,8 @@ export const Message: React.FC<MessageProps> = memo(
         sx={bubbleContainerStyles}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         <Box sx={bubbleWrapperStyles}>
           {/* Header with avatar, username (only when showing header and not own message) */}
@@ -403,10 +433,10 @@ export const Message: React.FC<MessageProps> = memo(
           )}
 
           {/* Message Actions - positioned relative to bubble */}
-          {(isHovered || isMobile) && (
+          {(isHovered || isSelected) && (
             <MessageActions
               post={post}
-              visible={isHovered || isMobile}
+              visible={isHovered || (isSelected && !isEmojiPanelOpen)}
               onReply={handleReply}
               onEdit={handleStartEdit}
               onDelete={handleDelete}

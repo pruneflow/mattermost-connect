@@ -102,15 +102,6 @@ export const useAppInitialization = () => {
       // Initialize navigation state from localStorage
       initializeNavigation();
 
-      // Configure client exactly like Mattermost
-      client.setUrl(serverUrl);
-      client.setIncludeCookies(true);
-      
-      // Set token only if we have one (cookie-based auth might not have token)
-      if (token && client.getToken() !== token) {
-        client.setToken(token);
-      }
-
       // Initialize WebSocket (use token if available, empty string otherwise)
       connectWebSocket(serverUrl, token || '');
 

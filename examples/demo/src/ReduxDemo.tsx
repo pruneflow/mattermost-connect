@@ -4,15 +4,34 @@ import {
   Typography,
   ToggleButton,
   ToggleButtonGroup,
+  TextField,
+  Card,
+  CardContent,
+  Switch,
+  FormControlLabel,
+  Chip,
+  IconButton,
+  Tooltip,
+  Collapse,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import {
+  ContentCopy,
+  Check,
+  ExpandMore,
+  ExpandLess,
+} from "@mui/icons-material";
 import {
   LoginForm,
   AppProvider,
   AppLayout,
   useAppSelector,
+  useAppDispatch,
   selectIsAuthenticated,
   selectCurrentUser,
   selectIsLoggingIn,
+  logoutUser,
 } from "mattermost-connect";
 
 // Phase 3 Demo Component - Channels + Navigation with Layout Toggle
@@ -98,7 +117,273 @@ const Phase3Demo: React.FC = () => {
   );
 };
 
+// Demo configuration component
+const DemoConfig: React.FC<{
+  onConfigChange: (config: {
+    serverUrl: string;
+    token: string;
+    useToken: boolean;
+  }) => void;
+  isAuthenticated: boolean;
+  currentConfig: { serverUrl: string; token: string; useToken: boolean };
+}> = ({ onConfigChange, isAuthenticated, currentConfig }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const dispatch = useAppDispatch();
+  const [serverUrl, setServerUrl] = useState(currentConfig.serverUrl);
+  const [token, setToken] = useState(currentConfig.token);
+  const [useToken, setUseToken] = useState(currentConfig.useToken);
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
+  // Synchroniser le state local avec les props reçues
+  React.useEffect(() => {
+    setServerUrl(currentConfig.serverUrl);
+    setToken(currentConfig.token);
+    setUseToken(currentConfig.useToken);
+  }, [currentConfig]);
+
+  const handleConfigChange = () => {
+    onConfigChange({ serverUrl, token, useToken });
+  };
+
+  React.useEffect(() => {
+    handleConfigChange();
+  }, [serverUrl, token, useToken]);
+
+  // Auto-collapse when authenticated
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      setExpanded(false);
+    }
+  }, [isAuthenticated]);
+
+  const handleTokenModeChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const newUseToken = event.target.checked;
+
+    // Changer le mode immédiatement pour éviter le double-clic
+    setUseToken(newUseToken);
+
+    // Si on est connecté, faire un logout propre pour supprimer les cookies HttpOnly
+    if (isAuthenticated) {
+      await dispatch(logoutUser());
+    }
+
+    // Supprimer manuellement les cookies non-HttpOnly (CSRF et USERID)
+    if (newUseToken) {
+      document.cookie =
+        "MMUSERID=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie =
+        "MMCSRF=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    }
+  };
+
+  const getCodePreview = () => {
+    if (useToken) {
+      return `<AppProvider 
+  serverUrl="${serverUrl}"
+  token="${token}"
+>
+  <MyApp /> {/* Auto-login with token */}
+</AppProvider>`;
+    } else {
+      return `<AppProvider serverUrl="${serverUrl}">
+  {!isAuthenticated ? (
+    <LoginForm /> {/* User enters email/password */}
+  ) : (
+    <MyApp />
+  )}
+</AppProvider>`;
+    }
+  };
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(getCodePreview());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy code:", err);
+    }
+  };
+
+  return (
+    <Box sx={{ p: { xs: 1, sm: 2 } }}>
+      {/* Configuration Card */}
+      <Card
+        sx={{
+          width: { xs: "100%", xl: "50%" },
+          height: "fit-content",
+          maxWidth: { xs: "100%", xl: "600px" },
+          margin: "0 auto",
+        }}
+      >
+        {/* Header avec bouton expand/collapse */}
+        <Box
+          sx={{
+            p: { xs: 2, sm: 3 },
+            pb: expanded ? 1 : { xs: 2, sm: 3 },
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="h6">⚙️ Demo Configuration</Typography>
+            <Chip
+              label={useToken ? "Token Mode" : "Login/Password Mode"}
+              color={useToken ? "primary" : "secondary"}
+              size="small"
+            />
+          </Box>
+          {expanded ? <ExpandLess /> : <ExpandMore />}
+        </Box>
+
+        <Collapse in={expanded}>
+          <CardContent sx={{ p: { xs: 2, sm: 3 }, pt: 0 }}>
+            {/* Server URL and Token fields */}
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  md: useToken ? "1fr 1fr" : "1fr",
+                },
+                gap: 2,
+                mb: 2,
+              }}
+            >
+              <TextField
+                fullWidth
+                label="Server URL"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                size="small"
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <Chip
+                        label="DEV"
+                        color="primary"
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                    ),
+                  },
+                }}
+              />
+
+              {useToken && (
+                <TextField
+                  fullWidth
+                  label="Personal Access Token"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  size="small"
+                  placeholder="Enter your token"
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <Chip
+                          label="DEV"
+                          color="primary"
+                          size="small"
+                          sx={{ mr: 1 }}
+                        />
+                      ),
+                    },
+                  }}
+                />
+              )}
+            </Box>
+
+            <FormControlLabel
+              control={
+                <Switch checked={useToken} onChange={handleTokenModeChange} />
+              }
+              label="Use authentication token"
+              sx={{ mb: 2 }}
+            />
+
+            {!isMobile && (
+              <Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ color: "text.secondary" }}
+                  >
+                    Code Preview:
+                  </Typography>
+                  <Tooltip title={copied ? "Copied!" : "Copy code"}>
+                    <IconButton
+                      size="small"
+                      onClick={handleCopyCode}
+                      sx={{
+                        p: 0.5,
+                        color: copied ? "success.main" : "text.secondary",
+                      }}
+                    >
+                      {copied ? (
+                        <Check fontSize="small" />
+                      ) : (
+                        <ContentCopy fontSize="small" />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Box
+                  sx={{
+                    bgcolor: "grey.100",
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    p: 2,
+                    fontFamily: "Monaco, Consolas, monospace",
+                    fontSize: { xs: "10px", sm: "12px" },
+                    overflowX: "auto",
+                    whiteSpace: "pre",
+                    minHeight: "100px",
+                    width: "100%",
+                    "&::-webkit-scrollbar": {
+                      height: "8px",
+                    },
+                    "&::-webkit-scrollbar-track": {
+                      backgroundColor: "rgba(0,0,0,0.1)",
+                      borderRadius: "4px",
+                    },
+                    "&::-webkit-scrollbar-thumb": {
+                      backgroundColor: "rgba(0,0,0,0.3)",
+                      borderRadius: "4px",
+                    },
+                  }}
+                >
+                  {getCodePreview()}
+                </Box>
+              </Box>
+            )}
+          </CardContent>
+        </Collapse>
+      </Card>
+    </Box>
+  );
+};
 
 // Auth status component
 const AuthStatus: React.FC = () => {
@@ -115,403 +400,78 @@ const AuthStatus: React.FC = () => {
   }
 
   if (isAuthenticated && currentUser) {
-    return (
-      <>
-        <Box
-          sx={{
-            p: 2.5,
-            bgcolor: "success.light",
-            border: 1,
-            borderColor: "success.main",
-            borderRadius: 2,
-            maxWidth: "100%",
-            margin: { xs: "10px", sm: "20px auto" },
-            textAlign: "center",
-            minWidth: 0,
-          }}
-        >
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 600,
-              color: "text.primary",
-              mb: 1.5,
-            }}
-          >
-            ✅ Successfully connected to Mattermost!
-          </Typography>
-          <Typography
-            sx={{ color: "text.secondary", my: 0.75, wordBreak: "break-word" }}
-          >
-            Welcome {currentUser.first_name} {currentUser.last_name} (@
-            {currentUser.username})
-          </Typography>
-        </Box>
-        <Phase3Demo />
-      </>
-    );
+    return <Phase3Demo />;
   }
 
   return (
-    <Box sx={{ maxWidth: "100%", margin: "40px auto" }}>
+    <Box sx={{ maxWidth: "100%" }}>
       <LoginForm onSuccess={() => console.log("Login successful!")} />
     </Box>
   );
 };
 
 // Main demo component
-const ReduxDemoContent: React.FC = () => {
+const ReduxDemoContent: React.FC<{
+  serverUrl: string;
+  token: string;
+  useToken: boolean;
+}> = () => {
   return (
     <Box
       sx={{
-        p: 2.5,
+        p: { xs: 1, sm: 2 },
         maxWidth: "100%",
         margin: "0",
         fontFamily: "system-ui, -apple-system, sans-serif",
       }}
     >
-      <Box
-        component="header"
-        sx={{
-          textAlign: "center",
-          mb: 5,
-        }}
-      >
-        <Typography
-          variant="h3"
-          component="h1"
-          sx={{
-            fontSize: "32px",
-            fontWeight: "bold",
-            color: "text.primary",
-            mb: 1,
-          }}
-        >
-          MattermostConnect Redux
-        </Typography>
-        <Typography
-          sx={{
-            color: "text.secondary",
-            fontSize: "16px",
-            m: 0,
-          }}
-        >
-          Phase 3: Channels + Navigation + Custom Layout (Built on Redux +
-          Client4)
-        </Typography>
-      </Box>
-
       <AuthStatus />
-
-      <Box
-        sx={{
-          mt: 5,
-          p: 3,
-          bgcolor: "background.paper",
-          border: 1,
-          borderColor: "divider",
-          borderRadius: 2,
-          boxShadow: 1,
-        }}
-      >
-        <Typography
-          variant="h6"
-          sx={{
-            fontSize: "18px",
-            fontWeight: 600,
-            mb: 2,
-            color: "text.primary",
-          }}
-        >
-          ✅ Phase 3 Features Implemented
-        </Typography>
-        <Box
-          component="ul"
-          sx={{
-            listStyle: "none",
-            p: 0,
-            m: 0,
-          }}
-        >
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Atoms: ChannelIcon, SearchInput, TypingDots
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Molecules: ChannelItem, ChannelHeader, SearchBar
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Organisms: ChannelList, Sidebar, AppLayout
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Hooks: useChannels, useChannelWebSocket
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Redux channels management with optimized selectors
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Channel navigation and WebSocket events
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Dual layout modes: AppLayout vs Custom Layout
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Teams sidebar with channels navigation
-          </Typography>
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          mt: 5,
-          p: 3,
-          bgcolor: "background.paper",
-          border: 1,
-          borderColor: "divider",
-          borderRadius: 2,
-          boxShadow: 1,
-        }}
-      >
-        <Typography
-          variant="h6"
-          sx={{
-            fontSize: "18px",
-            fontWeight: 600,
-            mb: 2,
-            color: "text.primary",
-          }}
-        >
-          🚀 Simple Integration
-        </Typography>
-        <Typography sx={{ color: "#666", mb: 1.5 }}>
-          Just 3 lines to integrate in your React app:
-        </Typography>
-        <Box
-          sx={{
-            bgcolor: "action.hover",
-            border: 1,
-            borderColor: "divider",
-            borderRadius: 1,
-            p: 2,
-            fontFamily: "Monaco, Consolas, monospace",
-            fontSize: "13px",
-            mt: 2,
-            overflow: "auto",
-          }}
-        >
-          {`import { 
-  store, 
-  setDefaultClient, 
-  LoginForm,
-  TeamList,
-  ChannelList,
-  AppLayout,
-  UserMenu,
-  UserAvatar,
-  useTeams,
-  useChannels,
-  useUsers 
-} from 'mattermost-connect';
-import { Provider } from 'react-redux';
-
-// Setup Client4
-setDefaultClient({ 
-  serverUrl: 'https://your-mattermost.com' 
-});
-
-// Use AppLayout for Mattermost-style UI
-<Provider store={store}>
-  <AppLayout />
-</Provider>
-
-// Or build custom layout with components
-<Provider store={store}>
-  <LoginForm />
-  <TeamList teams={teams} />
-  <ChannelList />
-  <UserMenu user={user} onLogout={logout} />
-</Provider>`}
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          mt: 5,
-          p: 3,
-          bgcolor: "background.paper",
-          border: 1,
-          borderColor: "divider",
-          borderRadius: 2,
-          boxShadow: 1,
-        }}
-      >
-        <Typography
-          variant="h6"
-          sx={{
-            fontSize: "18px",
-            fontWeight: 600,
-            mb: 2,
-            color: "text.primary",
-          }}
-        >
-          🏗️ Next Phases
-        </Typography>
-        <Box
-          component="ul"
-          sx={{
-            listStyle: "none",
-            p: 0,
-            m: 0,
-          }}
-        >
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Phase 1: Redux Toolkit + RTK Query + Authentication
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Phase 2: Teams + User Management
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ✅ Phase 3: Channels + Navigation + Custom Layouts
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ⏳ Phase 4: Messages + Core Chat
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ⏳ Phase 5: Threads + WebSocket Real-time
-          </Typography>
-          <Typography
-            component="li"
-            sx={{
-              color: "text.secondary",
-              mb: 1,
-              fontSize: "14px",
-              pl: 0.5,
-            }}
-          >
-            ⏳ Phase 6: Polish + Performance + Mobile
-          </Typography>
-        </Box>
-      </Box>
     </Box>
   );
 };
 
 // Redux demo with AppProvider (includes store + theme + initialization)
 const ReduxDemo: React.FC = () => {
+  const [config, setConfig] = useState({
+    serverUrl: "http://localhost:8065",
+    token: "",
+    useToken: false,
+  });
+
   return (
-    <AppProvider>
-      <Box
-        sx={{
-          minHeight: "100vh",
-          bgcolor: "background.default",
-        }}
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+      <AppProvider
+        serverUrl={config.serverUrl}
+        token={config.useToken && config.token ? config.token : undefined}
       >
-        <ReduxDemoContent />
-      </Box>
-    </AppProvider>
+        <DemoConfigWrapper onConfigChange={setConfig} currentConfig={config} />
+        <ReduxDemoContent
+          serverUrl={config.serverUrl}
+          token={config.token}
+          useToken={config.useToken}
+        />
+      </AppProvider>
+    </Box>
+  );
+};
+
+// Wrapper to access isAuthenticated inside AppProvider
+const DemoConfigWrapper: React.FC<{
+  onConfigChange: (config: {
+    serverUrl: string;
+    token: string;
+    useToken: boolean;
+  }) => void;
+  currentConfig: { serverUrl: string; token: string; useToken: boolean };
+}> = ({ onConfigChange, currentConfig }) => {
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+
+  return (
+    <DemoConfig
+      onConfigChange={onConfigChange}
+      isAuthenticated={isAuthenticated}
+      currentConfig={currentConfig}
+    />
   );
 };
 

@@ -2,7 +2,7 @@
  * Message input component for composing and editing messages
  * Supports file attachments, emoji picker, and send/cancel actions
  */
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   Box,
   TextField,
@@ -39,6 +39,7 @@ import { selectShowAdvancedTextEditor } from "../../store/selectors";
 import { selectIsThreadExpanded } from "../../store/selectors/messageUI";
 import { useMenu } from "../../hooks/useMenu";
 import { useTheme, useMediaQuery } from "@mui/material";
+import { emojiEvents, EMOJI_EVENTS } from "../../services/emojiEvents";
 
 interface MessageInputProps {
   placeholder?: string;
@@ -235,6 +236,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     [message],
   );
 
+  // Listen to emoji selection events from MobileEmojiPanel
+  useEffect(() => {
+    emojiEvents.on(EMOJI_EVENTS.EMOJI_SELECTED, handleEmojiSelect);
+    return () => {
+      emojiEvents.off(EMOJI_EVENTS.EMOJI_SELECTED, handleEmojiSelect);
+    };
+  }, [handleEmojiSelect]);
+
   const insertFormatting = useCallback(
     (before: string, after: string = before) => {
       const textField = textFieldRef.current;
@@ -401,7 +410,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               </IconButton>
             </Tooltip>
 
-            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" />
+            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" openToLeft={true} inThread={inThread} />
 
             {mode === "default" && (
               <Tooltip title="Send message">
@@ -518,7 +527,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               </IconButton>
             </Tooltip>
 
-            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" />
+            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" openToLeft={true} inThread={inThread} />
 
             {mode === "edit" && (
               <>

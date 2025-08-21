@@ -3,9 +3,10 @@
  * Provides media playback with download functionality following Mattermost patterns
  */
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, useTheme, useMediaQuery, CircularProgress } from '@mui/material';
 import { formatFileSize } from '../../utils/formatters';
 import { FileDownloadButton } from './FileDownloadButton';
+import { imageService } from '../../services/imageService';
 
 // Constants similar to Mattermost
 const WEB_VIDEO_WIDTH = 640;
@@ -14,26 +15,47 @@ const MOBILE_VIDEO_WIDTH = 320;
 const MOBILE_VIDEO_HEIGHT = 240;
 
 export interface AudioVideoPreviewProps {
-  fileUrl: string;
+  fileId: string;
   fileName: string;
   fileSize?: number;
   mimeType: string;
-  fileId: string;
+  updateAt?: number;
   onContentClick?: (e: React.MouseEvent) => void;
 }
 
 export const AudioVideoPreview: React.FC<AudioVideoPreviewProps> = ({
-  fileUrl,
+  fileId,
   fileName,
   fileSize,
   mimeType,
-  fileId,
+  updateAt,
   onContentClick
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [canPlay, setCanPlay] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [fileUrl, setFileUrl] = useState<string>('');
+
+  useEffect(() => {
+    const loadUrl = async () => {
+      try {
+        const url = await imageService.getFileUrl(fileId, updateAt);
+        setFileUrl(url);
+      } catch (error) {
+        console.error('Failed to load media URL:', error);
+        setCanPlay(false);
+      }
+    };
+
+    loadUrl();
+
+    return () => {
+      if (fileUrl.startsWith('blob:')) {
+        imageService.revokeBlobUrl(fileUrl);
+      }
+    };
+  }, [fileId, updateAt]);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
