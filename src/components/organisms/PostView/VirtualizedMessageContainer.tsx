@@ -3,7 +3,7 @@
  * Orchestrates virtual list building, unread separators, and scroll position management
  */
 import React, { useState, useEffect, useLayoutEffect, useRef, RefObject, useCallback } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer, Range } from "@tanstack/react-virtual";
 import { useTheme, useMediaQuery } from "@mui/material";
 import { useAppSelector } from "../../../hooks";
 import { VirtualListItem } from "../../../types/virtualList";
@@ -18,10 +18,6 @@ import { VirtualizedMessageList } from "./MessageList/VirtualizedMessageList";
 interface VirtualizedMessageContainerProps {
   channelId: string;
   autoLoad?: boolean;
-  unreadChunkTimeStamp?: number;
-  shouldStartFromBottomWhenUnread: boolean;
-  onChangeUnreadChunkTimeStamp: (timestamp: number) => void;
-  onToggleShouldStartFromBottomWhenUnread: () => void;
   scrollElementRef: RefObject<HTMLDivElement>;
 }
 
@@ -30,10 +26,6 @@ const DEFAULT_ESTIMATED_HEIGHT = 60;
 export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerProps> = ({
   channelId,
   autoLoad = false,
-  unreadChunkTimeStamp,
-  shouldStartFromBottomWhenUnread,
-  onChangeUnreadChunkTimeStamp,
-  onToggleShouldStartFromBottomWhenUnread,
   scrollElementRef,
 }) => {
   const theme = useTheme();
@@ -46,6 +38,7 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
   
   const prevTopRef = useRef<number | null>(null);
   const anchorIdRef = useRef<string | null>(null);
+  const visibleRangeRef = React.useRef([0, 0]);
   
   // Use single optimized selector call - eliminates multiple useAppSelector calls
   const messagesData = useAppSelector(state => 
@@ -128,10 +121,23 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
   const measureAnchorPosition = () => {
     const scrollElement = scrollElementRef.current;
     if (!scrollElement || !virtualizer || virtualItems.length === 0) return;
-
+    const visibleRange = visibleRangeRef.current;
     const visibleItems = virtualizer.getVirtualItems();
-    const anchorItem = visibleItems[2]; // Second element to avoid date separator issues
-    
+    let anchorItem = visibleItems[2];
+    if(virtualizer.scrollDirection === "forward") {
+      anchorItem = visibleItems[visibleItems.length - 2]
+    }
+    if(visibleRange) {
+      const firstVisibleIndex = visibleRange[0];
+      const lastVisibleIndex = visibleRange[1];
+      if(virtualizer.scrollDirection === "forward") {
+        anchorItem = visibleItems[firstVisibleIndex]
+      }
+      else {
+        anchorItem = visibleItems[lastVisibleIndex]
+      }
+    }
+
     if (anchorItem && virtualItems[anchorItem.index]) {
       const anchorElement = virtualItems[anchorItem.index];
       const anchor = document.getElementById(anchorElement.id);
@@ -179,12 +185,6 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
             const messageLines = Math.ceil((post.message?.length || 0) / divideBy);
             const brCount = (post.message?.match(/\n/g) || []).length;
             let totalSize = (messageLines + (brCount > 0 ? brCount + 1 : 0));
-            if(!isMobile && (messageLines > 1 || brCount > 0)) {
-              totalSize = totalSize + 2
-            }
-            if(isMobile && messageLines > 20 || brCount > 10) {
-              totalSize = totalSize - 5
-            }
             postSize += totalSize * 20;
           }
 
@@ -221,28 +221,45 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     estimateSize: getEstimatedSize,
     overscan: 100,
     getItemKey: (index: number) => virtualItems[index]?.id || index,
+    rangeExtractor: React.useCallback((range: Range) => {
+      visibleRangeRef.current = [range.startIndex, range.endIndex]
+
+      return defaultRangeExtractor(range)
+    }, []),
     measureElement: (element: Element) => {
-      return element?.getBoundingClientRect().height ?? DEFAULT_ESTIMATED_HEIGHT;
+      // Measure actual height of rendered element
+      return element.getBoundingClientRect().height;
     },
   });
 
-  // Scroll adjustment after render
+  // Scroll adjustment after render - immediate but with overflow hidden to prevent flash
   useLayoutEffect(() => {
     const scrollElement = scrollElementRef.current;
     if (prevTopRef.current === null || !anchorIdRef.current || !scrollElement) return;
 
-    const anchor = document.getElementById(anchorIdRef.current);
+    // Temporarily hide overflow to prevent visual flash during adjustment
+    const originalOverflow = scrollElement.style.overflow;
+    scrollElement.style.overflow = 'hidden';
 
-    if (anchor) {
-      const newTop = anchor.getBoundingClientRect().top;
-      const diff = newTop - prevTopRef.current;
-      scrollElement.scrollTop += diff;
-      
-    }
+    // Use a single requestAnimationFrame for measurement after DOM update
+    requestAnimationFrame(() => {
+      const anchor = anchorIdRef.current ? document.getElementById(anchorIdRef.current) : null;
 
-    // Reset for next time
-    prevTopRef.current = null;
-    anchorIdRef.current = null;
+      if (anchor && prevTopRef.current !== null) {
+        const newTop = anchor.getBoundingClientRect().top;
+        const diff = newTop - prevTopRef.current;
+        
+        scrollElement.scrollTop += diff;
+
+      }
+
+      // Restore overflow after adjustment
+      scrollElement.style.overflow = originalOverflow;
+
+      // Reset for next time
+      prevTopRef.current = null;
+      anchorIdRef.current = null;
+    });
   }, [virtualItems, scrollElementRef]);
 
   const isReady = virtualItems.length > 0 && !!scrollElementRef.current;
@@ -251,10 +268,6 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     <VirtualizedMessageList
       channelId={channelId}
       autoLoad={autoLoad}
-      unreadChunkTimeStamp={unreadChunkTimeStamp}
-      shouldStartFromBottomWhenUnread={shouldStartFromBottomWhenUnread}
-      onChangeUnreadChunkTimeStamp={onChangeUnreadChunkTimeStamp}
-      onToggleShouldStartFromBottomWhenUnread={onToggleShouldStartFromBottomWhenUnread}
       scrollElementRef={scrollElementRef}
       virtualizer={virtualizer}
       virtualItems={virtualItems}

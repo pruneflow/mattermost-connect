@@ -37,7 +37,6 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
         setPreviewUrl(preview);
         setFullUrl(full);
       } catch (err) {
-        console.error('Failed to load image URLs:', err);
         setError(true);
       } finally {
         setLoading(false);

@@ -43,7 +43,6 @@ export const AudioVideoPreview: React.FC<AudioVideoPreviewProps> = ({
         const url = await imageService.getFileUrl(fileId, updateAt);
         setFileUrl(url);
       } catch (error) {
-        console.error('Failed to load media URL:', error);
         setCanPlay(false);
       }
     };

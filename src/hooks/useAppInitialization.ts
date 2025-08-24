@@ -21,6 +21,7 @@ import { store } from "../store";
 import { useWebSocket } from "./useWebSocket";
 import { navigateToTeam, getLastVisited, initializeNavigation } from "../services/navigationService";
 import { useUserStatus } from "./useUserStatus";
+import { initConfig } from "../services/configService";
 
 const STATUS_INTERVAL = 60000;
 
@@ -111,6 +112,7 @@ export const useAppInitialization = () => {
         client.getMyTeamUnreads(),
         client.getStatus(currentUserId),
         client.getUserPreferences(currentUserId),
+        initConfig(), // Initialize server configuration
       ]);
 
 

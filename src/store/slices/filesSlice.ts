@@ -2,23 +2,8 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { client } from '../../api/client';
 import { imageService } from '../../services/imageService';
 import { arraysEqual } from '../../utils/formatters';
+import { FileInfo } from '../../api/types'
 
-/**
- * File information interface
- */
-export interface FileInfo {
-  id: string;
-  name: string;
-  size: number;
-  mime_type: string;
-  extension: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-  has_preview_image: boolean;
-  width?: number;
-  height?: number;
-}
 
 /**
  * Loading states for file operations
@@ -147,8 +132,10 @@ export const fetchFilePreview = createAsyncThunk(
  */
 export const downloadFile = createAsyncThunk(
   'files/downloadFile',
-  async ({ fileId, fileName }: { fileId: string; fileName?: string }, { getState, rejectWithValue }) => {
+  async ({ fileId, fileName }: { fileId: string; fileName?: string }, { rejectWithValue }) => {
+    
     try {
+      
       const downloadUrl = await imageService.getFileUrl(fileId);
       
       // Create download link
@@ -157,15 +144,19 @@ export const downloadFile = createAsyncThunk(
       a.href = downloadUrl;
       a.download = fileName || `file-${fileId}`;
       document.body.appendChild(a);
+      
       a.click();
       
       // Cleanup
       setTimeout(() => {
+        
         document.body.removeChild(a);
+        
         if (downloadUrl.startsWith('blob:')) {
           imageService.revokeBlobUrl(downloadUrl);
         }
       }, 100);
+
       
       return { fileId, success: true };
     } catch (error) {
@@ -252,7 +243,7 @@ const filesSlice = createSlice({
     // Fetch file infos for post
     builder
       .addCase(fetchFileInfosForPost.pending, (state, action) => {
-        const { postId, fileIds } = action.meta.arg;
+        const { fileIds } = action.meta.arg;
         
         // Mark all files as loading
         fileIds.forEach(fileId => {
@@ -276,7 +267,7 @@ const filesSlice = createSlice({
         });
       })
       .addCase(fetchFileInfosForPost.rejected, (state, action) => {
-        const { postId, fileIds } = action.meta.arg;
+        const { fileIds } = action.meta.arg;
         const error = action.payload as string;
         
         // Mark all files as failed
@@ -406,7 +397,5 @@ const filesSlice = createSlice({
     });
   },
 });
-
-export const { clearPreviewUrl, clearAllPreviewUrls, resetFileState, setPreviewLoadingState, storeFileInfos } = filesSlice.actions;
 
 export default filesSlice.reducer;

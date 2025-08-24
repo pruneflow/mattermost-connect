@@ -47,10 +47,11 @@ interface MessageActionsProps {
   onEdit?: () => void;
   onDelete?: () => void;
   inThread?: boolean; // New prop to know if we are in a thread
+  isLongPress?: React.RefObject<boolean>; // Ref to track if we're in a long press
   sx?: SxProps<Theme>;
 }
 
-const getActionsStyles = (isOwnMessage: boolean): SxProps<Theme> => ({
+const getActionsStyles = (isOwnMessage: boolean, isMobile: boolean): SxProps<Theme> => ({
   display: "flex",
   gap: 0.5,
   alignItems: "center",
@@ -63,7 +64,7 @@ const getActionsStyles = (isOwnMessage: boolean): SxProps<Theme> => ({
   transition: "opacity 0.2s ease",
   position: "absolute",
   top: -30,
-  ...(isOwnMessage ? { right: 8 } : { left: 100 }),
+  ...((isOwnMessage || isMobile) ? { right: 8 } : { left: 100 }),
   zIndex: 10,
 });
 
@@ -101,6 +102,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   onEdit,
   onDelete,
   inThread = false,
+  isLongPress,
   sx,
 }) => {
   const theme = useTheme();
@@ -182,18 +184,29 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   }, [handleMenuClose]);
 
   const handleClickAway = useCallback(() => {
-    if (isMobile) {
-      dispatch(clearMessageSelection());
-    }
-  }, [isMobile, dispatch]);
+    // Delay the check to allow touchend to finish processing
+    setTimeout(() => {
+      const isCurrentlyLongPress = isLongPress?.current || false;
+      
+      // If we're in a long press, don't close the actions
+      if (isCurrentlyLongPress) {
+        return;
+      }
+      
+      if (isMobile) {
+        dispatch(clearMessageSelection());
+      }
+    }, 50); // Small delay to let touchend complete
+  }, [isMobile, isLongPress, dispatch]);
 
   if (!post) return null;
 
-  const baseStyles = getActionsStyles(isOwnMessage);
+  const baseStyles = getActionsStyles(isOwnMessage, isMobile);
 
   const actionsBox = (
     <div>
       <Box
+        data-message-actions
         sx={[
           baseStyles,
           { opacity: visible ? 1 : 0 },

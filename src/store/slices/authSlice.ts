@@ -81,6 +81,7 @@ export const loginUser = createAsyncThunk<
 
       return { user, token: token || '', serverUrl };
     } catch (error) {
+      
       // Serialize error for Redux (avoid non-serializable values)
       const serializedError = {
         message: error instanceof Error ? error.message : 'Unknown error',

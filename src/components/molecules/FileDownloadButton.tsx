@@ -29,7 +29,8 @@ export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({
   
   const handleDownloadClick = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
-    download(fileId);
+    
+    download(fileId)
   }, [fileId]);
   
   return (

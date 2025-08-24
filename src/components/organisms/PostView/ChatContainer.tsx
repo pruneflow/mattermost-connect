@@ -113,10 +113,6 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
         <VirtualizedMessageContainer
           channelId={channelId}
           autoLoad={autoLoad}
-          unreadChunkTimeStamp={unreadChunkTimeStamp}
-          shouldStartFromBottomWhenUnread={shouldStartFromBottomWhenUnread}
-          onChangeUnreadChunkTimeStamp={handleChangeUnreadChunkTimeStamp}
-          onToggleShouldStartFromBottomWhenUnread={handleToggleShouldStartFromBottomWhenUnread}
           scrollElementRef={scrollElementRef}
         />
       </Box>

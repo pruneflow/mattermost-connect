@@ -46,7 +46,6 @@ export const PDFPreview: React.FC<PDFPreviewProps> = ({
         const url = await imageService.getFileUrl(fileId, updateAt);
         setFileUrl(url);
       } catch (err) {
-        console.error('Failed to load PDF URL:', err);
         setError(true);
       } finally {
         setLoading(false);

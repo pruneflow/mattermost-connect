@@ -19,6 +19,7 @@ interface MessageItemProps {
   isOlderLoading: boolean;
   isNewerLoading: boolean;
   virtualStyles?: React.CSSProperties;
+  isLongPress?: React.RefObject<boolean>;
 }
 
 export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
@@ -28,6 +29,7 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
   onLoadNewer,
   isOlderLoading,
   isNewerLoading,
+  isLongPress,
 }, ref) => {
   const renderContent = () => {
     switch (item.type) {
@@ -38,6 +40,7 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
             channelId={channelId} 
             showHeader={item.data?.showHeader ?? true}
             isOwnMessage={item.data?.isOwnMessage ?? false}
+            isLongPress={isLongPress}
           />
         );
         
@@ -84,7 +87,11 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   return (
-    <div id={item.id} ref={ref}>
+    <div 
+      id={item.id} 
+      ref={ref} 
+      data-post-id={item.type === 'post' ? item.id : undefined}
+    >
       {renderContent()}
     </div>
   );

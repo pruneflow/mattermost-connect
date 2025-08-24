@@ -2,7 +2,7 @@
  * Thread message list component displaying all messages in a thread conversation
  * Auto-scrolls for user's own messages and shows reply count divider
  */
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   CircularProgress,
@@ -18,17 +18,25 @@ import {
   selectThreadError,
 } from '../../store/selectors/threads';
 import { Message } from './Message';
+import { useScrollDetection } from '../../hooks/useScrollDetection';
+import { useLongPress } from '../../hooks/useLongPress';
+import { selectMessage } from '../../store/slices/messageUISlice';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
 
 interface ThreadMessageListProps {
   rootPostId: string;
 }
 
-const containerStyles: SxProps<Theme> = {
+const getContainerStyles = (isLongPress: boolean): SxProps<Theme> => ({
   height: '100%',
   overflow: 'auto',
   p: 1,
   pt: 2, // Padding-top to prevent first message from being hidden by ThreadHeader
-};
+  // Prevent text selection on mobile to avoid conflicts with long press
+  userSelect: "none",
+  WebkitUserSelect: "none",
+  WebkitTouchCallout: "none",
+});
 
 const loadingStyles: SxProps<Theme> = {
   display: 'flex',
@@ -59,6 +67,7 @@ const emptyStyles: SxProps<Theme> = {
 export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   rootPostId,
 }) => {
+  const dispatch = useAppDispatch();
   const channelId = useAppSelector(selectCurrentChannelId);
   const currentUser = useAppSelector(selectCurrentUser);
   const posts = useAppSelector(selectThreadPosts(rootPostId));
@@ -67,6 +76,24 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   
   const containerRef = useRef<HTMLDivElement>(null);
   const previousPostCountRef = useRef(posts.length);
+  const isScrolling = useScrollDetection(containerRef);
+
+  // Long press handling
+  const handleLongPress = useCallback((target: EventTarget) => {
+    const element = target as HTMLElement;
+    const messageElement = element.closest('[data-post-id]');
+    if (messageElement) {
+      const postId = messageElement.getAttribute('data-post-id');
+      if (postId) {
+        dispatch(selectMessage(postId));
+      }
+    }
+  }, [dispatch]);
+
+  const { isLongPress, handlers } = useLongPress({
+    onLongPress: handleLongPress,
+    isScrolling
+  });
   
   // Auto-scroll when new posts are added (only for user's own messages)
   useEffect(() => {
@@ -124,20 +151,20 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   }
 
   return (
-    <Box ref={containerRef} sx={containerStyles}>
+    <Box ref={containerRef} sx={getContainerStyles(isLongPress.current)} {...handlers}>
       {posts.map((post, index) => {
         const isOwnMessage = currentUser ? currentUser.id === post.user_id : false;
         const showHeader = index === 0 || posts[index - 1]?.user_id !== post.user_id;
 
         return (
-          <>
+          <div key={post.id} data-post-id={post.id}>
             <Message
-              key={post.id}
               post={post}
               channelId={channelId}
               showHeader={showHeader}
               isOwnMessage={isOwnMessage}
               inThread={true}
+              isLongPress={isLongPress}
               sx={{
                 mb: 1,
               }}
@@ -166,7 +193,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                 <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
               </Box>
             )}
-          </>
+          </div>
         );
       })}
     </Box>

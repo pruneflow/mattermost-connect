@@ -38,7 +38,6 @@ import {
   stopEdit,
   startReply,
   openThread,
-  selectMessage,
 } from "../../store/slices/messageUISlice";
 import { displayUsername } from "../../utils/userUtils";
 
@@ -53,6 +52,7 @@ interface MessageProps {
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
   sx?: SxProps<Theme>;
+  isLongPress?: React.RefObject<boolean>;
 }
 
 const systemMessageStyles: SxProps<Theme> = {
@@ -170,14 +170,12 @@ export const Message: React.FC<MessageProps> = memo(
     onDelete,
     onOpenThread,
     sx,
+    isLongPress,
   }) => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const dispatch = useAppDispatch();
     const [isHovered, setIsHovered] = useState(false);
-    const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
-      null,
-    );
     const isEditing = useAppSelector(selectIsPostEditing(post.id));
     const isSelected = useAppSelector(selectIsMessageSelected(post.id));
     const isEmojiPanelOpen = useAppSelector(selectIsEmojiPanelOpen);
@@ -189,22 +187,6 @@ export const Message: React.FC<MessageProps> = memo(
     const handleMouseLeave = useCallback(() => {
       if (!isMobile) setIsHovered(false);
     }, [isMobile]);
-
-    const handleTouchStart = useCallback(() => {
-      if (!isMobile) return;
-      const timer = setTimeout(() => {
-        dispatch(selectMessage(post.id));
-      }, 500);
-      setLongPressTimer(timer);
-    }, [isMobile, dispatch, post.id]);
-
-    const handleTouchEnd = useCallback(() => {
-      if (longPressTimer) {
-        clearTimeout(longPressTimer);
-        setLongPressTimer(null);
-      }
-    }, [longPressTimer]);
-
 
     const handleReply = useCallback(() => {
       dispatch(startReply(post));
@@ -256,13 +238,16 @@ export const Message: React.FC<MessageProps> = memo(
       mb: 1.5,
       mx: 1,
       ...(inThread && { position: "relative" }), // Position relative only in threads
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      WebkitTouchCallout: "none",
       ...sx,
     };
 
     // Bubble wrapper styles - max width and responsive
     const bubbleWrapperStyles: SxProps<Theme> = {
-      maxWidth: isMobile ? "85%" : "70%",
-      minWidth: isMobile ? "85%" : "70%",
+      maxWidth: isMobile && isEditing ? "95%" : isMobile ? "85%" : "70%",
+      minWidth: isMobile && isEditing ? "95%" : isMobile ? "85%" : "70%",
       display: "flex",
       flexDirection: "column",
     };
@@ -275,7 +260,9 @@ export const Message: React.FC<MessageProps> = memo(
           ? theme.palette.userMessage.main
           : theme.palette.background.paper,
       borderRadius: 2,
-      p: 1.5,
+      px: 1.5, // horizontal padding
+      pt: 1.5, // top padding
+      pb: isMobile || isEditing ? 4 : 1.5,   // bottom padding - more space for timestamp
       position: "relative",
       border: isFocused
         ? `2px solid ${theme.palette.primary.main}`
@@ -310,8 +297,6 @@ export const Message: React.FC<MessageProps> = memo(
         sx={bubbleContainerStyles}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
         <Box sx={bubbleWrapperStyles}>
           {/* Header with avatar, username (only when showing header and not own message) */}
@@ -441,6 +426,7 @@ export const Message: React.FC<MessageProps> = memo(
               onEdit={handleStartEdit}
               onDelete={handleDelete}
               inThread={inThread}
+              isLongPress={isLongPress}
               sx={{
                 ...(showHeader ? { top: -10 } : { top: -30 }),
               }}

@@ -27,15 +27,21 @@ export const canDownload = (fileId: string): boolean => {
 };
 
 export const download = async (fileId: string, fileName?: string): Promise<boolean> => {
+  
   const state = store.getState();
   const fileInfo = selectFileInfoById(state, fileId);
   
-  if (!fileInfo) return false;
+  if (!fileInfo) {
+    console.warn('📥 fileService.download: No fileInfo found for fileId:', fileId);
+    return false;
+  }
   
   try {
-    await store.dispatch(downloadFile({ 
+    const finalFileName = fileName || fileInfo.name;
+    
+    const result = await store.dispatch(downloadFile({ 
       fileId, 
-      fileName: fileName || fileInfo.name 
+      fileName: finalFileName 
     })).unwrap();
     return true;
   } catch (error) {
@@ -55,11 +61,13 @@ export const hasPublicLink = (fileId: string): boolean => {
 };
 
 export const copyPublicLinkToClipboard = async (fileId: string): Promise<boolean> => {
+  
   const state = store.getState();
   let publicLink = selectFilePublicLinkById(state, fileId);
   
   if (!publicLink) {
     try {
+      
       const result = await store.dispatch(generatePublicLink({ fileId })).unwrap();
       publicLink = result.publicLink;
     } catch (error) {
@@ -68,7 +76,9 @@ export const copyPublicLinkToClipboard = async (fileId: string): Promise<boolean
   }
   
   try {
+    
     await navigator.clipboard.writeText(publicLink);
+
     return true;
   } catch (error) {
     return false;

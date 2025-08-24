@@ -12,6 +12,7 @@ import postsReducer from './slices/postsSlice'
 import filesReducer from './slices/filesSlice'
 import messageUIReducer from './slices/messageUISlice'
 import threadsReducer from './slices/threadsSlice'
+import configReducer from './slices/configSlice'
 
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
@@ -26,7 +27,8 @@ export const store = configureStore({
     posts: postsReducer,
     files: filesReducer,
     messageUI: messageUIReducer,
-    threads: threadsReducer
+    threads: threadsReducer,
+    config: configReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -64,3 +66,5 @@ export * from './slices/postsSlice'
 export * from './slices/filesSlice'
 export * from './slices/messageUISlice'
 export * from './slices/threadsSlice'
+// Export config slice actions individually to avoid clearError conflict
+export { fetchServerConfig, updateConfig, resetConfig } from './slices/configSlice'

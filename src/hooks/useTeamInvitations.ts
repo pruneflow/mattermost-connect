@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { client } from '../api/client';
 import { handleError } from '../services/errorService';
-import { useServerConfig } from './useServerConfig';
-import { useAppDispatch } from './useAppDispatch';
+import { useAppDispatch, useAppSelector } from './index';
+import { selectCanSendEmailInvitationsServerSide } from '../store/selectors/configSelectors';
 import { addUsersToTeam } from '../store/slices/entitiesSlice';
 
 export interface InvitationResult {
@@ -23,7 +23,7 @@ export interface GuestInvitationParams {
  */
 export const useTeamInvitations = (teamId: string) => {
   const dispatch = useAppDispatch();
-  const { canSendEmailInvitationsServerSide } = useServerConfig();
+  const canSendEmailInvitationsServerSide = useAppSelector(selectCanSendEmailInvitationsServerSide);
   
   // Loading states for different invitation types
   const [isEmailInviting, setIsEmailInviting] = useState(false);
@@ -46,7 +46,7 @@ export const useTeamInvitations = (teamId: string) => {
     }
 
     // STEP 1: Check server-side email invitations capability
-    if (!canSendEmailInvitationsServerSide()) {
+    if (!canSendEmailInvitationsServerSide) {
       return { 
         success: false, 
         message: 'Email invitations are disabled on this server or SMTP is not configured' 
@@ -88,7 +88,7 @@ export const useTeamInvitations = (teamId: string) => {
     }
 
     // STEP 1: Check server-side email invitations capability
-    if (!canSendEmailInvitationsServerSide()) {
+    if (!canSendEmailInvitationsServerSide) {
       return { 
         success: false, 
         message: 'Email invitations are disabled on this server or SMTP is not configured' 

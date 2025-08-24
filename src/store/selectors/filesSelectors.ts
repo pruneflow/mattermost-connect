@@ -1,7 +1,7 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '../index';
-import type { FileState, FileInfo } from '../slices/filesSlice';
-
+import type { FileState } from '../slices/filesSlice';
+import { FileInfo } from '../../api/types'
 // ================================================================================
 // BASE SELECTORS
 // ================================================================================

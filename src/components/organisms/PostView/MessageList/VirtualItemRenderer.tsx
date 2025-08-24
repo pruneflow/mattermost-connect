@@ -10,7 +10,6 @@ import { MessageItem } from './MessageItem';
 
 interface VirtualItemRendererProps {
   totalSize: number;
-  measureElement: (element: Element) => void;
   visibleItems: any[]; // VirtualItem[] from @tanstack/react-virtual - what to render and where
   dataItems: VirtualListItem[]; // Our data - posts, separators, load buttons
   channelId: string;
@@ -18,6 +17,8 @@ interface VirtualItemRendererProps {
   onLoadNewer: () => Promise<void>;
   isOlderLoading: boolean;
   isNewerLoading: boolean;
+  isLongPress?: React.RefObject<boolean>;
+  measureElement?: (element: Element) => void;
 }
 
 interface VirtualItemComponentProps {
@@ -28,7 +29,8 @@ interface VirtualItemComponentProps {
   onLoadNewer: () => Promise<void>;
   isOlderLoading: boolean;
   isNewerLoading: boolean;
-  measureElement: (element: Element) => void;
+  isLongPress?: React.RefObject<boolean>;
+  measureElement?: (element: Element) => void;
 }
 
 // Memoized individual virtual item component
@@ -40,6 +42,7 @@ const VirtualItemComponent = React.memo<VirtualItemComponentProps>(({
   onLoadNewer,
   isOlderLoading,
   isNewerLoading,
+  isLongPress,
   measureElement,
 }) => {
   return (
@@ -52,7 +55,7 @@ const VirtualItemComponent = React.memo<VirtualItemComponentProps>(({
         top: 0,
         left: 0,
         width: "100%",
-        height: virtualItem.size,
+        minHeight: virtualItem.size, // Changed from height to minHeight
         transform: `translateY(${virtualItem.start}px)`,
       }}
     >
@@ -63,6 +66,7 @@ const VirtualItemComponent = React.memo<VirtualItemComponentProps>(({
         onLoadNewer={onLoadNewer}
         isOlderLoading={isOlderLoading}
         isNewerLoading={isNewerLoading}
+        isLongPress={isLongPress}
       />
     </Box>
   );
@@ -72,7 +76,6 @@ VirtualItemComponent.displayName = 'VirtualItemComponent';
 
 export const VirtualItemRenderer: React.FC<VirtualItemRendererProps> = React.memo(({
   totalSize,
-  measureElement,
   visibleItems,
   dataItems,
   channelId,
@@ -80,6 +83,8 @@ export const VirtualItemRenderer: React.FC<VirtualItemRendererProps> = React.mem
   onLoadNewer,
   isOlderLoading,
   isNewerLoading,
+  isLongPress,
+  measureElement
 }) => {
   // Memoized render function to prevent recreation
   const renderVirtualItems = useCallback(() => {
@@ -97,6 +102,7 @@ export const VirtualItemRenderer: React.FC<VirtualItemRendererProps> = React.mem
           onLoadNewer={onLoadNewer}
           isOlderLoading={isOlderLoading}
           isNewerLoading={isNewerLoading}
+          isLongPress={isLongPress}
           measureElement={measureElement}
         />
       );

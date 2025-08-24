@@ -12,9 +12,10 @@ interface PostMessageItemProps {
   channelId: string;
   showHeader: boolean;
   isOwnMessage?: boolean;
+  isLongPress?: React.RefObject<boolean>;
 }
 
-export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHeader, channelId, isOwnMessage }) => {
+export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHeader, channelId, isOwnMessage, isLongPress }) => {
   const post = useAppSelector(state => selectPostById(state, postId));
 
   if (!post) {
@@ -27,6 +28,7 @@ export const PostMessageItem: React.FC<PostMessageItemProps> = ({ postId, showHe
       showHeader={showHeader}
       channelId={channelId}
       isOwnMessage={isOwnMessage}
+      isLongPress={isLongPress}
     />
   );
 };

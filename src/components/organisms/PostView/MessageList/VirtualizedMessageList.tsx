@@ -7,23 +7,24 @@ import { Box, SxProps, Theme } from "@mui/material";
 import { ScrollToBottomFab } from "./ScrollToBottomFab";
 import { VirtualItemRenderer } from "./VirtualItemRenderer";
 import { scrollToBottom, isAtBottom } from "../../../../utils/scrollUtils";
-import type { Virtualizer } from '@tanstack/react-virtual';
+import type { Virtualizer } from "@tanstack/react-virtual";
 import { VirtualListItem } from "../../../../types/virtualList";
-import { loadOlderPosts, loadNewerPosts } from "../../../../services/messageService";
+import {
+  loadOlderPosts,
+  loadNewerPosts,
+} from "../../../../services/messageService";
 import { markAsRead } from "../../../../services/channelService";
-import { useAppSelector } from "../../../../hooks/useAppSelector";
+import { useAppSelector, useAppDispatch } from "../../../../hooks";
+import { selectMessage } from "../../../../store/slices/messageUISlice";
+import { useLongPress } from "../../../../hooks/useLongPress";
 import {
   selectIsLoadingNewerPosts,
   selectIsLoadingOlderPosts,
-  selectHasLoadedLatestPost
+  selectHasLoadedLatestPost,
 } from "../../../../store/selectors/postsSelectors";
 export interface MessageListProps {
   channelId: string;
   autoLoad?: boolean;
-  unreadChunkTimeStamp?: number;
-  shouldStartFromBottomWhenUnread: boolean;
-  onChangeUnreadChunkTimeStamp: (timestamp: number) => void;
-  onToggleShouldStartFromBottomWhenUnread: () => void;
   sx?: SxProps<Theme>;
   scrollElementRef: RefObject<HTMLDivElement>;
   virtualizer: Virtualizer<HTMLDivElement, Element>;
@@ -39,17 +40,19 @@ const containerStyles: SxProps<Theme> = {
   overflow: "hidden",
 };
 
-const scrollContainerStyles: SxProps<Theme> = {
+const scrollContainerStyles = {
   height: "100%",
   width: "100%",
   overflow: "auto",
+  // Prevent text selection on mobile to avoid conflicts with long press
+  userSelect: "none",
+  WebkitUserSelect: "none",
+  WebkitTouchCallout: "none",
 };
 
 const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   channelId,
   autoLoad = false,
-  unreadChunkTimeStamp,
-  shouldStartFromBottomWhenUnread,
   sx,
   scrollElementRef,
   virtualizer,
@@ -57,14 +60,43 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   isReady,
   measureAnchorPosition,
 }) => {
-
+  const dispatch = useAppDispatch();
   const lastReadPostIdRef = useRef<string | null>(null);
   const allowAutoLoadRef = useRef<boolean>(false);
+  const lastLoadOlderTimeRef = useRef<number>(0);
+  const lastLoadNewerTimeRef = useRef<number>(0);
+  const LOAD_COOLDOWN = 1000; // 1 second cooldown between loads
 
   // Message loading states
-  const isLoadingOlder = useAppSelector(state => selectIsLoadingOlderPosts(state, channelId));
-  const isLoadingNewer = useAppSelector(state => selectIsLoadingNewerPosts(state, channelId));
-  const atLatestPost = useAppSelector(state => selectHasLoadedLatestPost(state, channelId));
+  const isLoadingOlder = useAppSelector((state) =>
+    selectIsLoadingOlderPosts(state, channelId),
+  );
+  const isLoadingNewer = useAppSelector((state) =>
+    selectIsLoadingNewerPosts(state, channelId),
+  );
+  const atLatestPost = useAppSelector((state) =>
+    selectHasLoadedLatestPost(state, channelId),
+  );
+
+  // Long press handling
+  const handleLongPress = useCallback(
+    (target: EventTarget) => {
+      const element = target as HTMLElement;
+      const messageElement = element.closest("[data-post-id]");
+      if (messageElement) {
+        const postId = messageElement.getAttribute("data-post-id");
+        if (postId) {
+          dispatch(selectMessage(postId));
+        }
+      }
+    },
+    [dispatch],
+  );
+
+  const { isLongPress, handlers } = useLongPress({
+    onLongPress: handleLongPress,
+    isScrolling: virtualizer.isScrolling,
+  });
 
   // No auto-scroll hook needed - using direct functions
 
@@ -77,7 +109,6 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
     measureAnchorPosition();
 
     await loadOlderPosts(channelId);
-
   }, [measureAnchorPosition, channelId]);
 
   const handleLoadNewer = useCallback(async () => {
@@ -108,13 +139,7 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
     if (lastReadPostIdRef.current === lastPostId) return;
     lastReadPostIdRef.current = lastPostId;
     void markAsRead(channelId);
-  }, [
-    atLatestPost,
-    virtualItems,
-    virtualizer,
-    channelId,
-    isAtBottom,
-  ]);
+  }, [atLatestPost, virtualItems, virtualizer, channelId, isAtBottom]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
@@ -128,11 +153,15 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
       if (scrollDirection === "backward") {
         // Scrolling up: check first visible item for load-older
         const firstVisibleItem = virtualItems[virtualItemsVisible[0].index];
+        const now = Date.now();
+        
         if (
           firstVisibleItem?.type === "load-more" &&
           firstVisibleItem.data?.loadDirection === "older" &&
-          !isLoadingOlder
+          !isLoadingOlder &&
+          (now - lastLoadOlderTimeRef.current) > LOAD_COOLDOWN // Cooldown check
         ) {
+          lastLoadOlderTimeRef.current = now;
           void handleLoadOlder();
         }
       } else if (scrollDirection === "forward") {
@@ -141,11 +170,15 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
           virtualItems[
             virtualItemsVisible[virtualItemsVisible.length - 1].index
           ];
+        const now = Date.now();
+        
         if (
           lastVisibleItem?.type === "load-more" &&
           lastVisibleItem.data?.loadDirection === "newer" &&
-          !isLoadingNewer
+          !isLoadingNewer &&
+          (now - lastLoadNewerTimeRef.current) > LOAD_COOLDOWN // Cooldown check
         ) {
+          lastLoadNewerTimeRef.current = now;
           void handleLoadNewer();
         }
       }
@@ -166,13 +199,14 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   useEffect(() => {
     lastReadPostIdRef.current = null;
     allowAutoLoadRef.current = false;
+    lastLoadOlderTimeRef.current = 0;
+    lastLoadNewerTimeRef.current = 0;
   }, [channelId]);
 
   const hasInitialScrolledRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isReady || virtualItems.length === 0) return;
-
 
     const timeoutId = setTimeout(() => {
       const newMessageIndex = virtualItems.findIndex(
@@ -181,9 +215,9 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
 
       if (newMessageIndex >= 0) {
         hasInitialScrolledRef.current.add(channelId);
-        
+
         virtualizer.scrollToIndex(newMessageIndex, { align: "start" });
-        
+
         setTimeout(() => {
           allowAutoLoadRef.current = true;
         }, 1000);
@@ -199,7 +233,7 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
         }, 1000);
       }
     }, 250);
-    
+
     return () => clearTimeout(timeoutId);
   }, [channelId, isReady, virtualItems]);
 
@@ -211,10 +245,10 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
         onScroll={handleScroll}
         role="log"
         aria-label="Message list"
+        {...handlers}
       >
         <VirtualItemRenderer
           totalSize={virtualizer.getTotalSize()}
-          measureElement={virtualizer.measureElement}
           visibleItems={virtualizer.getVirtualItems()}
           dataItems={virtualItems}
           channelId={channelId}
@@ -222,6 +256,8 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
           onLoadNewer={handleLoadNewer}
           isOlderLoading={isLoadingOlder}
           isNewerLoading={isLoadingNewer}
+          isLongPress={isLongPress}
+          measureElement={virtualizer.measureElement}
         />
       </Box>
 
@@ -229,20 +265,7 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
       <ScrollToBottomFab
         visible={!isAtBottom(scrollElementRef.current)}
         onClick={handleScrollToBottom}
-        /*newMessagesCount={newMessagesCount}*/
       />
-
-      {/* Unread divider - positioned absolutely */}
-      {/*{unreadChunkTimeStamp && newMessagesCount > 0 && (
-        <UnreadDivider
-          newMessagesCount={newMessagesCount}
-          onScrollToUnread={() => {
-            if (newMessageIndex >= 0) {
-              scrollToIndex(newMessageIndex);
-            }
-          }}
-        />
-      )}*/}
     </Box>
   );
 };

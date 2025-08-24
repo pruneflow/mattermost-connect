@@ -33,6 +33,7 @@ import {
   selectIsLoggingIn,
   logoutUser,
 } from "mattermost-connect";
+import { MobileDebugConsole } from "../../../src/components/common/MobileDebugConsole";
 
 // Phase 3 Demo Component - Channels + Navigation with Layout Toggle
 const Phase3Demo: React.FC = () => {
@@ -123,9 +124,10 @@ const DemoConfig: React.FC<{
     serverUrl: string;
     token: string;
     useToken: boolean;
+    showDebugConsole: boolean;
   }) => void;
   isAuthenticated: boolean;
-  currentConfig: { serverUrl: string; token: string; useToken: boolean };
+  currentConfig: { serverUrl: string; token: string; useToken: boolean; showDebugConsole: boolean };
 }> = ({ onConfigChange, isAuthenticated, currentConfig }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -133,6 +135,7 @@ const DemoConfig: React.FC<{
   const [serverUrl, setServerUrl] = useState(currentConfig.serverUrl);
   const [token, setToken] = useState(currentConfig.token);
   const [useToken, setUseToken] = useState(currentConfig.useToken);
+  const [showDebugConsole, setShowDebugConsole] = useState(currentConfig.showDebugConsole || false);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
@@ -141,15 +144,16 @@ const DemoConfig: React.FC<{
     setServerUrl(currentConfig.serverUrl);
     setToken(currentConfig.token);
     setUseToken(currentConfig.useToken);
+    setShowDebugConsole(currentConfig.showDebugConsole || false);
   }, [currentConfig]);
 
   const handleConfigChange = () => {
-    onConfigChange({ serverUrl, token, useToken });
+    onConfigChange({ serverUrl, token, useToken, showDebugConsole });
   };
 
   React.useEffect(() => {
     handleConfigChange();
-  }, [serverUrl, token, useToken]);
+  }, [serverUrl, token, useToken, showDebugConsole]);
 
   // Auto-collapse when authenticated
   React.useEffect(() => {
@@ -315,6 +319,17 @@ const DemoConfig: React.FC<{
               label="Use authentication token"
               sx={{ mb: 2 }}
             />
+            
+            <FormControlLabel
+              control={
+                <Switch 
+                  checked={showDebugConsole} 
+                  onChange={(e) => setShowDebugConsole(e.target.checked)} 
+                />
+              }
+              label="Show mobile debug console"
+              sx={{ mb: 2 }}
+            />
 
             {!isMobile && (
               <Box>
@@ -415,7 +430,8 @@ const ReduxDemoContent: React.FC<{
   serverUrl: string;
   token: string;
   useToken: boolean;
-}> = () => {
+  showDebugConsole: boolean;
+}> = ({ showDebugConsole }) => {
   return (
     <Box
       sx={{
@@ -426,6 +442,7 @@ const ReduxDemoContent: React.FC<{
       }}
     >
       <AuthStatus />
+      {showDebugConsole && <MobileDebugConsole />}
     </Box>
   );
 };
@@ -433,9 +450,10 @@ const ReduxDemoContent: React.FC<{
 // Redux demo with AppProvider (includes store + theme + initialization)
 const ReduxDemo: React.FC = () => {
   const [config, setConfig] = useState({
-    serverUrl: "http://localhost:8065",
+    serverUrl: "http://192.168.1.75:8065",
     token: "",
     useToken: false,
+    showDebugConsole: false,
   });
 
   return (
@@ -449,6 +467,7 @@ const ReduxDemo: React.FC = () => {
           serverUrl={config.serverUrl}
           token={config.token}
           useToken={config.useToken}
+          showDebugConsole={config.showDebugConsole}
         />
       </AppProvider>
     </Box>
@@ -461,8 +480,9 @@ const DemoConfigWrapper: React.FC<{
     serverUrl: string;
     token: string;
     useToken: boolean;
+    showDebugConsole: boolean;
   }) => void;
-  currentConfig: { serverUrl: string; token: string; useToken: boolean };
+  currentConfig: { serverUrl: string; token: string; useToken: boolean; showDebugConsole: boolean };
 }> = ({ onConfigChange, currentConfig }) => {
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
 

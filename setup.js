@@ -23,10 +23,12 @@ const __dirname = path.dirname(__filename);
 // Options de commande
 const command = process.argv[2] || "demo";
 const validCommands = ["demo", "build", "dev"];
+const isSecure = process.argv.includes("--secure");
 
 if (!validCommands.includes(command)) {
   console.error(`Commande invalide: ${command}`);
   console.error(`Commandes valides: ${validCommands.join(", ")}`);
+  console.error(`Options: --secure (pour HTTPS)`);
   process.exit(1);
 }
 
@@ -68,8 +70,14 @@ if (command === "demo") {
   // Installer les dépendances dans le projet de démonstration
   console.log("Installation des dépendances de la démo...");
   run("pnpm build && cd examples/demo && pnpm install");
-  console.log("Lancement de l'application démo...");
-  run("pnpm --filter mattermost-connect-demo start --host");
+  
+  if (isSecure) {
+    console.log("Lancement de l'application démo en mode HTTPS...");
+    run("VITE_HTTPS=true pnpm --filter mattermost-connect-demo start --host");
+  } else {
+    console.log("Lancement de l'application démo...");
+    run("pnpm --filter mattermost-connect-demo start --host");
+  }
 } else if (command === "dev") {
   console.log("Lancement du mode développement...");
   run("pnpm dev");
