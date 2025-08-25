@@ -20,7 +20,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
   layout = 'mattermost',
   showChannelHeader = true,
-  sidebarWidth = 320,
+  sidebarWidth = 300,
   focusedPostId,
   sx,
 }) => {

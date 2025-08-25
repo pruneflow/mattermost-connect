@@ -2,56 +2,53 @@
  * Sidebar component combining team and channel lists in Mattermost layout
  * Provides responsive drawer variants with team icons and channel navigation
  */
-import React from 'react';
-import {
-  Box,
-  Drawer,
-  Divider,
-  SxProps,
-  Theme,
-} from '@mui/material';
-import { TeamList } from './TeamList';
-import { ChannelList } from './ChannelList';
+import React from "react";
+import { Box, Drawer, Divider, SxProps, Theme } from "@mui/material";
+import { TeamList } from "./TeamList";
+import { ChannelList } from "./ChannelList";
+import { setSidebarWidth } from "../../store";
 
 export interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
-  variant?: 'temporary' | 'persistent' | 'permanent';
+  variant?: "temporary" | "persistent" | "permanent";
   width?: number;
   compact?: boolean;
   sx?: SxProps<Theme>;
+  showMenu?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   open = true,
   onClose,
-  variant = 'permanent',
+  variant = "permanent",
   width = 320,
   compact = false,
+  showMenu = false,
   sx,
 }) => {
   const sidebarContent = (
     <Box
       sx={{
         width: width,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'row', // Side by side: teams | channels
-        backgroundColor: 'background.paper',
+        height: "100%",
+        display: "flex",
+        flexDirection: "row",
+        backgroundColor: "background.paper",
         borderRight: 1,
-        borderColor: 'divider',
+        borderColor: "divider",
       }}
     >
       {/* Teams Sidebar - Left side with icons */}
       <Box
         sx={{
           width: 72,
-          height: '100%',
-          backgroundColor: 'grey.100', // Light grey instead of dark
+          height: "100%",
+          backgroundColor: "grey.100", // Light grey instead of dark
           borderRight: 1,
-          borderColor: 'divider',
-          display: 'flex',
-          flexDirection: 'column',
+          borderColor: "divider",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         <TeamList
@@ -66,24 +63,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <Box
         sx={{
           flex: 1,
-          height: '100%',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: 'background.paper', // Same as teams for fluid design
+          height: "100%",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          backgroundColor: "background.paper", // Same as teams for fluid design
         }}
       >
         <ChannelList
+          showMenu={showMenu}
           showSearch={!compact}
           compact={compact}
           showTeamHeader={true}
           onChannelSelect={onClose}
+          sx={{ borderRight: "none" }}
+          width={width - 72}
         />
       </Box>
     </Box>
   );
 
-  if (variant === 'temporary') {
+  if (variant === "temporary") {
     return (
       <Drawer
         open={open}
@@ -93,9 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           keepMounted: true, // Better mobile performance
         }}
         sx={{
-          '& .MuiDrawer-paper': {
+          "& .MuiDrawer-paper": {
             width: width,
-            boxSizing: 'border-box',
+            boxSizing: "border-box",
           },
           ...sx,
         }}
@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     );
   }
 
-  if (variant === 'persistent') {
+  if (variant === "persistent") {
     return (
       <Drawer
         open={open}
@@ -113,9 +113,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         sx={{
           width: open ? width : 0,
           flexShrink: 0,
-          '& .MuiDrawer-paper': {
+          "& .MuiDrawer-paper": {
             width: width,
-            boxSizing: 'border-box',
+            boxSizing: "border-box",
           },
           ...sx,
         }}

@@ -42,6 +42,9 @@ const Phase3Demo: React.FC = () => {
     "custom",
   );
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   // Handle layout mode change
   const handleLayoutModeChange = (
     _event: React.MouseEvent<HTMLElement>,
@@ -113,7 +116,7 @@ const Phase3Demo: React.FC = () => {
       </Box>
 
       {/* Conditional Layout Rendering */}
-      <AppLayout layout={layoutMode} />
+      <AppLayout layout={layoutMode} sidebarWidth={isMobile ? 300 : 400} />
     </Box>
   );
 };
