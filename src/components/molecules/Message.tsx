@@ -30,8 +30,8 @@ import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { selectUserProfiles } from "../../store/selectors";
 import {
   selectIsPostEditing,
-  selectIsMessageSelected,
   selectIsEmojiPanelOpen,
+  selectIsMessageSelectedForActions,
 } from "../../store/selectors/messageUI";
 import {
   startEdit,
@@ -55,11 +55,15 @@ interface MessageProps {
   isLongPress?: React.RefObject<boolean>;
 }
 
-const systemMessageStyles: SxProps<Theme> = {
-  display: "flex",
-  justifyContent: "center",
-  my: 1,
-  opacity: 0.7,
+const getSystemMessageStyles: SxProps<Theme> = (theme: Theme) => {
+  return {
+    display: "flex",
+    justifyContent: "center",
+    my: 1,
+    opacity: 0.7,
+    fontSize: theme.typography.body2.fontSize,
+    color: theme.palette.text.secondary,
+  };
 };
 
 // Styles will be applied dynamically based on showHeader
@@ -177,7 +181,9 @@ export const Message: React.FC<MessageProps> = memo(
     const dispatch = useAppDispatch();
     const [isHovered, setIsHovered] = useState(false);
     const isEditing = useAppSelector(selectIsPostEditing(post.id));
-    const isSelected = useAppSelector(selectIsMessageSelected(post.id));
+    const isSelected = useAppSelector(
+      selectIsMessageSelectedForActions(post.id),
+    );
     const isEmojiPanelOpen = useAppSelector(selectIsEmojiPanelOpen);
     const isSystem = isSystemMessage(post);
     const handleMouseEnter = useCallback(() => {
@@ -215,20 +221,7 @@ export const Message: React.FC<MessageProps> = memo(
     }, [dispatch, onOpenThread, post.id]);
 
     if (isSystem) {
-      return (
-        <Box sx={systemMessageStyles}>
-          <MessageFormatter
-            message={post.message}
-            sx={{
-              fontSize: theme.typography.body2.fontSize,
-              color: theme.palette.text.secondary,
-              "& a": {
-                color: theme.palette.primary.main,
-              },
-            }}
-          />
-        </Box>
-      );
+      return <Box sx={getSystemMessageStyles(theme)}>{post.message}</Box>;
     }
 
     // Bubble container styles - flexbox for alignment
@@ -262,7 +255,7 @@ export const Message: React.FC<MessageProps> = memo(
       borderRadius: 2,
       px: 1.5, // horizontal padding
       pt: 1.5, // top padding
-      pb: isMobile || isEditing ? 4 : 1.5,   // bottom padding - more space for timestamp
+      pb: isMobile || isEditing ? 4 : 1.5, // bottom padding - more space for timestamp
       position: "relative",
       border: isFocused
         ? `2px solid ${theme.palette.primary.main}`
@@ -373,6 +366,7 @@ export const Message: React.FC<MessageProps> = memo(
                 postId={post.id}
                 reactions={post.metadata.reactions}
                 sx={reactionStyles}
+                inThread={inThread}
               />
             </Box>
           )}

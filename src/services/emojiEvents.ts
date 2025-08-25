@@ -35,12 +35,45 @@ class EmojiEventService {
     const callbacks = this.listeners.get(event) || [];
     callbacks.forEach(callback => callback(data));
   }
+
+  /**
+   * Emit an emoji selection event for a specific input
+   */
+  emitToInput(inputId: string, data: any) {
+    const event = `${EMOJI_EVENTS.EMOJI_SELECTED}_${inputId}`;
+    const callbacks = this.listeners.get(event) || [];
+    callbacks.forEach(callback => callback(data));
+  }
+
+  /**
+   * Subscribe to emoji events for a specific input
+   */
+  onForInput(inputId: string, callback: Function) {
+    const event = `${EMOJI_EVENTS.EMOJI_SELECTED}_${inputId}`;
+    this.on(event, callback);
+  }
+
+  /**
+   * Unsubscribe from emoji events for a specific input
+   */
+  offForInput(inputId: string, callback: Function) {
+    const event = `${EMOJI_EVENTS.EMOJI_SELECTED}_${inputId}`;
+    this.off(event, callback);
+  }
   
   /**
    * Clear all listeners (useful for cleanup)
    */
   clear() {
     this.listeners.clear();
+  }
+
+  /**
+   * Clear listeners for a specific input
+   */
+  clearForInput(inputId: string) {
+    const event = `${EMOJI_EVENTS.EMOJI_SELECTED}_${inputId}`;
+    this.listeners.delete(event);
   }
 }
 

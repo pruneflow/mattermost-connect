@@ -19,8 +19,9 @@ interface EmojiPickerButtonProps {
   disabled?: boolean;
   openToLeft?: boolean;
   sx?: SxProps<Theme>;
-  inThread?: boolean
-  onClick?: () => void
+  inThread?: boolean;
+  inputId?: string;
+  onClick?: () => void;
 }
 
 export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
@@ -29,6 +30,7 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
   disabled = false,
   openToLeft = false,
   inThread = false,
+  inputId,
   sx,
   onClick
 }) => {
@@ -41,12 +43,12 @@ export const EmojiPickerButton: React.FC<EmojiPickerButtonProps> = ({
   const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     onClick && onClick();
     if(isMobile) {
-      dispatch(openEmojiPanel());
+      dispatch(openEmojiPanel(inputId));
     }
     else {
       setAnchorEl(event.currentTarget);
     }
-  }, [isMobile, dispatch]);
+  }, [isMobile, dispatch, onClick, inputId]);
 
   const handleClose = useCallback(() => {
     setAnchorEl(null);

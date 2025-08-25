@@ -49,7 +49,9 @@ const VirtualItemComponent = React.memo<VirtualItemComponentProps>(({
     <Box
       key={virtualItem.key}
       ref={measureElement}
+      id={item.id}
       data-index={virtualItem.index}
+      data-post-id={item.type === 'post' ? item.id : undefined}
       style={{
         position: "absolute",
         top: 0,

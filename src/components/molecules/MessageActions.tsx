@@ -31,13 +31,13 @@ import {
   MoreHoriz as MoreHorizIcon,
 } from "@mui/icons-material";
 import { deleteMessage, copyMessage } from "../../services/messageService";
-import { addRecentEmoji, toggleReactionOnPost } from "../../services/reactionService";
+import { toggleReactionOnPost } from "../../services/reactionService";
 import { getRecentEmojis } from "../../services/reactionService";
 import { EmojiPickerButton } from "../common/EmojiPickerButton";
 import { Post } from "../../api/types";
 import { useAppSelector, useAppDispatch } from "../../hooks";
 import { selectCurrentUserId } from "../../store/selectors";
-import { clearMessageSelection } from "../../store/slices/messageUISlice";
+import { clearMessageActionSelection } from "../../store/slices/messageUISlice";
 import { createEmojiNameWithTone, getUserPreferredSkinTone } from "../../utils/emojiMartAdapter";
 
 interface MessageActionsProps {
@@ -194,7 +194,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       }
       
       if (isMobile) {
-        dispatch(clearMessageSelection());
+        dispatch(clearMessageActionSelection());
       }
     }, 50); // Small delay to let touchend complete
   }, [isMobile, isLongPress, dispatch]);

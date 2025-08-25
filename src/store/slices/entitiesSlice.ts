@@ -1098,7 +1098,6 @@ export const markChannelAsRead = createAsyncThunk(
 
       // Call API to mark channel as read
       const response = await client.viewMyChannel(channelId);
-
       // Update channel member's last_viewed_at with the value returned by API
       const channelMember = state.entities.channels.myMembers[channelId];
       if (channelMember && response.last_viewed_at_times?.[channelId]) {

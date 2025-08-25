@@ -2,7 +2,7 @@
  * Chat container component managing message display and input for channels
  * Integrates virtualized message list, reply context, input, and thread modal
  */
-import React, {useState, useCallback, useRef, useEffect} from 'react';
+import React, {useCallback, useRef, useEffect} from 'react';
 import { Box, SxProps, Theme } from '@mui/material';
 import { MessageInput } from '../../molecules/MessageInput';
 import { MessageReply } from '../../molecules/MessageReply';
@@ -21,7 +21,6 @@ import { markAsRead } from "../../../services/channelService";
 
 export interface ChatContainerProps {
   autoLoad?: boolean;
-  lastViewedAt?: number;
   sx?: SxProps<Theme>;
 }
 
@@ -47,22 +46,25 @@ const inputContainerStyles: SxProps<Theme> = {
 
 const ChatContainerComponent: React.FC<ChatContainerProps> = ({
   autoLoad = false,
-  lastViewedAt,
   sx,
 }) => {
 
   const dispatch = useAppDispatch();
   const channelId = useAppSelector(selectCurrentChannelId);
   const replyToPost = useAppSelector(selectReplyToPost);
-  const [unreadChunkTimeStamp, setUnreadChunkTimeStamp] = useState<number | undefined>(lastViewedAt);
-  const [shouldStartFromBottomWhenUnread, setShouldStartFromBottomWhenUnread] = useState(false);
   const scrollElementRef = useRef<HTMLDivElement>(null);
   
   // Initial load effect for channel messages
   const hasPosts = useAppSelector(state => selectChannelHasPosts(state, channelId));
   const isLoadingUnreads = useAppSelector(state => selectIsLoadingUnreads(state, channelId));
   const loadedChannelsRef = useRef<Set<string>>(new Set());
-  
+
+
+
+  const handleCloseReply = useCallback(() => {
+    dispatch(stopReply());
+  }, [dispatch]);
+
   useEffect(() => {
     if (
       channelId && 
@@ -74,6 +76,10 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
       void loadUnreadPosts(channelId);
     }
   }, [channelId, hasPosts, isLoadingUnreads]);
+
+  useEffect(() => {
+    handleCloseReply()
+  }, [channelId]);
 
   
   const handleSendMessage = useCallback(async (message: string, fileIds?: string[]) => {
@@ -94,17 +100,6 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
     }
   }, [sendMessage, markAsRead, channelId, replyToPost, dispatch]);
 
-  const handleChangeUnreadChunkTimeStamp = useCallback((newTimestamp: number) => {
-    setUnreadChunkTimeStamp(newTimestamp);
-  }, []);
-
-  const handleToggleShouldStartFromBottomWhenUnread = useCallback(() => {
-    setShouldStartFromBottomWhenUnread(prev => !prev);
-  }, []);
-
-  const handleCloseReply = useCallback(() => {
-    dispatch(stopReply());
-  }, [dispatch]);
 
   return (
     <Box sx={{ ...containerStyles, ...sx }} role="main">
@@ -120,7 +115,7 @@ const ChatContainerComponent: React.FC<ChatContainerProps> = ({
       {/* Reply Context (if replying) */}
       {replyToPost && (
         <MessageReply
-          message={replyToPost.message}
+          postId={replyToPost.id}
           onClose={handleCloseReply}
         />
       )}

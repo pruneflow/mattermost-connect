@@ -32,14 +32,12 @@ export const download = async (fileId: string, fileName?: string): Promise<boole
   const fileInfo = selectFileInfoById(state, fileId);
   
   if (!fileInfo) {
-    console.warn('📥 fileService.download: No fileInfo found for fileId:', fileId);
     return false;
   }
-  
   try {
     const finalFileName = fileName || fileInfo.name;
     
-    const result = await store.dispatch(downloadFile({ 
+    await store.dispatch(downloadFile({
       fileId, 
       fileName: finalFileName 
     })).unwrap();

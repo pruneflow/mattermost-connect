@@ -24,8 +24,9 @@ import { useAppSelector, useAppDispatch } from '../../hooks';
 import {
   selectIsEmojiPanelOpen,
   selectIsEmojiPanelExpanded,
-  selectSelectedMessageId,
-} from '../../store/selectors/messageUI';
+  selectSelectedMessageIdForReactions,
+  selectEmojiPanelInputId, selectSelectedMessageIdForActions
+} from "../../store/selectors/messageUI";
 import {
   closeEmojiPanel,
   toggleEmojiPanelSize,
@@ -44,7 +45,10 @@ export const MobileEmojiPanel: React.FC = () => {
   
   const isOpen = useAppSelector(selectIsEmojiPanelOpen);
   const isExpanded = useAppSelector(selectIsEmojiPanelExpanded);
-  const selectedPostId = useAppSelector(selectSelectedMessageId);
+  const selectedPostIdForReactions = useAppSelector(selectSelectedMessageIdForReactions);
+  const selectedPostIdForActions = useAppSelector(selectSelectedMessageIdForActions);
+  const inputId = useAppSelector(selectEmojiPanelInputId);
+
 
   // Inject styles into Shadow DOM
   useEffect(() => {
@@ -96,18 +100,25 @@ export const MobileEmojiPanel: React.FC = () => {
     const baseName = emoji.id || emoji.name;
     const skinTone = emoji.skin || getUserPreferredSkinTone();
     const emojiNameWithTone = createEmojiNameWithTone(baseName, skinTone);
-    
-    if (selectedPostId) {
+
+    if (selectedPostIdForActions) {
       //Add the reaction directly
-      void toggleReactionOnPost(selectedPostId, emojiNameWithTone);
+      void toggleReactionOnPost(selectedPostIdForActions, emojiNameWithTone);
+    } else if (selectedPostIdForReactions) {
+      //Add the reaction directly
+      void toggleReactionOnPost(selectedPostIdForReactions, emojiNameWithTone);
     } else {
-      // JUst emit the event if we don't have any post id selected
-      emojiEvents.emit(EMOJI_EVENTS.EMOJI_SELECTED, emojiNameWithTone);
+      // Send to specific input if available, otherwise use global event
+      if (inputId) {
+        emojiEvents.emitToInput(inputId, emojiNameWithTone);
+      } else {
+        emojiEvents.emit(EMOJI_EVENTS.EMOJI_SELECTED, emojiNameWithTone);
+      }
     }
     
     addRecentEmoji(emojiNameWithTone);
     dispatch(closeEmojiPanel());
-  }, [selectedPostId, dispatch]);
+  }, [selectedPostIdForReactions, selectedPostIdForActions, inputId, dispatch]);
 
   const panelHeight = isExpanded ? PANEL_HEIGHT_EXPANDED : PANEL_HEIGHT_COMPACT;
   const pickerHeight = panelHeight - 60; // Subtract header height

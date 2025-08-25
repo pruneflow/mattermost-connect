@@ -2,15 +2,16 @@
  * Virtualized message container managing virtual list creation and state
  * Orchestrates virtual list building, unread separators, and scroll position management
  */
-import React, { useState, useEffect, useLayoutEffect, useRef, RefObject, useCallback } from "react";
-import { defaultRangeExtractor, useVirtualizer, Range } from "@tanstack/react-virtual";
-import { useTheme, useMediaQuery } from "@mui/material";
+import React, { RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
+import type { Range } from '@tanstack/react-virtual'
+import { useMediaQuery, useTheme } from "@mui/material";
 import { useAppSelector } from "../../../hooks";
 import { VirtualListItem } from "../../../types/virtualList";
 import { buildVirtualList, injectNewMessagesSeparator } from "../../../utils/virtualListUtils";
 import {
-  selectVirtualizedMessagesData,
   DEFAULT_VIRTUALIZED_MESSAGES_DATA,
+  selectVirtualizedMessagesData
 } from "../../../store/selectors/virtualizedMessagesSelector";
 import { selectEditingPostId } from "../../../store/selectors/messageUI";
 import { VirtualizedMessageList } from "./MessageList/VirtualizedMessageList";
@@ -123,19 +124,20 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     if (!scrollElement || !virtualizer || virtualItems.length === 0) return;
     const visibleRange = visibleRangeRef.current;
     const visibleItems = virtualizer.getVirtualItems();
+
     let anchorItem = visibleItems[2];
-    if(virtualizer.scrollDirection === "forward") {
-      anchorItem = visibleItems[visibleItems.length - 2]
-    }
-    if(visibleRange) {
-      const firstVisibleIndex = visibleRange[0];
-      const lastVisibleIndex = visibleRange[1];
-      if(virtualizer.scrollDirection === "forward") {
-        anchorItem = visibleItems[firstVisibleIndex]
+    
+    if (visibleRange && visibleRange.length >= 2) {
+      // Take the middle index of the visible range for more natural scrolling
+      const [startIndex, endIndex] = visibleRange;
+      const middleRangeIndex = Math.floor((startIndex + endIndex) / 2);
+      anchorItem = visibleItems[middleRangeIndex];
+      /*if(virtualizer.scrollDirection === "backward") {
+        anchorItem = visibleItems[startIndex]
       }
       else {
-        anchorItem = visibleItems[lastVisibleIndex]
-      }
+        anchorItem = visibleItems[endIndex]
+      }*/
     }
 
     if (anchorItem && virtualItems[anchorItem.index]) {
@@ -143,11 +145,13 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
       const anchor = document.getElementById(anchorElement.id);
       
       if (anchor) {
+        // Store both the ID and the exact position relative to viewport
         prevTopRef.current = anchor.getBoundingClientRect().top;
         anchorIdRef.current = anchorElement.id;
       }
     }
   };
+
 
   // Simple size estimator
   const getItemSize = (index: number, isMobile: boolean) => {
@@ -173,7 +177,7 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
           const isEditing = editingPostId === post.id;
 
           let postSize = 50; // Base bubble height
-          
+
           if (showHeader && !isOwnMessage) {
             postSize += 50; // Header height
           }
@@ -198,7 +202,7 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
 
           if (post.metadata?.files?.length || post.file_ids?.length) {
             const fileCount = post.metadata?.files?.length || post.file_ids?.length || 0;
-            const filesHeight = isMobile 
+            const filesHeight = isMobile
               ? fileCount * 88 + 8
               : 80 + 8 + 16;
             postSize += filesHeight;
@@ -219,48 +223,44 @@ export const VirtualizedMessageContainer: React.FC<VirtualizedMessageContainerPr
     count: virtualItems.length,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: getEstimatedSize,
-    overscan: 100,
+    overscan: 90,
     getItemKey: (index: number) => virtualItems[index]?.id || index,
+/*    scrollToFn: scrollToFn,*/
     rangeExtractor: React.useCallback((range: Range) => {
       visibleRangeRef.current = [range.startIndex, range.endIndex]
 
       return defaultRangeExtractor(range)
     }, []),
-    measureElement: (element: Element) => {
-      // Measure actual height of rendered element
+    measureElement: (element) => {
       return element.getBoundingClientRect().height;
-    },
+    }
   });
 
-  // Scroll adjustment after render - immediate but with overflow hidden to prevent flash
+  // Scroll back to anchor using element ID to find new index
   useLayoutEffect(() => {
-    const scrollElement = scrollElementRef.current;
-    if (prevTopRef.current === null || !anchorIdRef.current || !scrollElement) return;
-
-    // Temporarily hide overflow to prevent visual flash during adjustment
-    const originalOverflow = scrollElement.style.overflow;
-    scrollElement.style.overflow = 'hidden';
-
-    // Use a single requestAnimationFrame for measurement after DOM update
-    requestAnimationFrame(() => {
-      const anchor = anchorIdRef.current ? document.getElementById(anchorIdRef.current) : null;
-
-      if (anchor && prevTopRef.current !== null) {
-        const newTop = anchor.getBoundingClientRect().top;
-        const diff = newTop - prevTopRef.current;
-        
-        scrollElement.scrollTop += diff;
-
+    if (anchorIdRef.current !== null) {
+      // Find the element by ID
+      const anchorElement = document.getElementById(anchorIdRef.current);
+      if (anchorElement) {
+        // Get the new index from data-index attribute
+        const dataIndex = anchorElement.getAttribute('data-index');
+        if (dataIndex) {
+          const newIndex = parseInt(dataIndex);
+          // Use TanStack Virtual's scroll to the new index
+          virtualizer.scrollToIndex(newIndex, { 
+            align: 'end',  // Use 'start' instead of 'center' for more precise positioning
+            behavior: 'auto'  // Use 'auto' to avoid animation conflicts
+          });
+        }
       }
-
-      // Restore overflow after adjustment
-      scrollElement.style.overflow = originalOverflow;
-
-      // Reset for next time
-      prevTopRef.current = null;
+      
+      // Reset anchor
       anchorIdRef.current = null;
-    });
-  }, [virtualItems, scrollElementRef]);
+    }
+  }, [virtualItems, virtualizer]);
+
+
+
 
   const isReady = virtualItems.length > 0 && !!scrollElementRef.current;
 

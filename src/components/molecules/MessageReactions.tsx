@@ -10,13 +10,15 @@ import { toggleReactionOnPost } from '../../services/reactionService';
 import { selectCurrentUserId } from '../../store/selectors';
 import { EmojiPickerButton } from '../common/EmojiPickerButton';
 import { findEmojiByName } from '../../utils/emojiMartAdapter';
-import { selectMessage } from "../../store";
+import { selectMessageForReactions } from "../../store/slices/messageUISlice";
 import { useAppDispatch } from "../../hooks";
+import { selectPostById } from "../../store/selectors/postsSelectors";
 
 interface MessageReactionsProps {
   postId: string;
   reactions: Reaction[];
   sx?: SxProps<Theme>;
+  inThread?: boolean
 }
 
 interface GroupedReaction {
@@ -95,11 +97,14 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
   postId,
   reactions,
   sx,
+  inThread = false
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const currentUserId = useAppSelector(selectCurrentUserId);
   const dispatch = useAppDispatch();
+  const post = useAppSelector(state => selectPostById(state, postId));
+  const isOwnMessage = post.user_id === currentUserId;
   // Group reactions by emoji name
   const groupedReactions = React.useMemo((): GroupedReaction[] => {
     const groups = new Map<string, GroupedReaction>();
@@ -128,7 +133,7 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
   }, [reactions, currentUserId]);
 
   const handleSelectMessage = useCallback(() => {
-    if(isMobile) dispatch(selectMessage(postId));
+    if(isMobile) dispatch(selectMessageForReactions(postId));
   }, [dispatch, postId]);
 
   const handleReactionToggle = useCallback(async (emojiName: string) => {
@@ -167,6 +172,8 @@ export const MessageReactions: React.FC<MessageReactionsProps> = memo(({
         onEmojiSelect={handleEmojiSelect}
         size="small"
         sx={addReactionButtonStyles}
+        inThread={inThread}
+        openToLeft={isOwnMessage}
       />
     </Box>
   );

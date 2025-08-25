@@ -20,7 +20,7 @@ import {
 import { Message } from './Message';
 import { useScrollDetection } from '../../hooks/useScrollDetection';
 import { useLongPress } from '../../hooks/useLongPress';
-import { selectMessage } from '../../store/slices/messageUISlice';
+import { selectMessageForActions } from '../../store/slices/messageUISlice';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 
 interface ThreadMessageListProps {
@@ -85,7 +85,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     if (messageElement) {
       const postId = messageElement.getAttribute('data-post-id');
       if (postId) {
-        dispatch(selectMessage(postId));
+        dispatch(selectMessageForActions(postId));
       }
     }
   }, [dispatch]);

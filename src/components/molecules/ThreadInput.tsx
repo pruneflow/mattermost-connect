@@ -36,6 +36,7 @@ export const ThreadInput: React.FC<ThreadInputProps> = ({
       onSend={handleSendMessage}
       autoFocus={true}
       inThread={true}
+      inputId={`thread-${rootPostId}`}
     />
   );
 };

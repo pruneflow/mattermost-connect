@@ -40,6 +40,7 @@ import { selectIsThreadExpanded } from "../../store/selectors/messageUI";
 import { useMenu } from "../../hooks/useMenu";
 import { useTheme, useMediaQuery } from "@mui/material";
 import { emojiEvents, EMOJI_EVENTS } from "../../services/emojiEvents";
+import { findEmojiByName } from "../../utils/emojiMartAdapter";
 
 interface MessageInputProps {
   placeholder?: string;
@@ -52,6 +53,7 @@ interface MessageInputProps {
   mode?: "default" | "edit";
   autoFocus?: boolean;
   inThread?: boolean;
+  inputId?: string; // ID unique pour cet input
   sx?: SxProps<Theme>;
 }
 
@@ -109,6 +111,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   mode = "default",
   autoFocus = false,
   inThread = false,
+  inputId,
   sx,
 }) => {
   const { updatePreferenceValue } = useUserPreferences();
@@ -213,12 +216,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleEmojiSelect = useCallback(
     (emoji: string) => {
+      const emojiData = findEmojiByName(emoji);
+      if(!emojiData || !emojiData.emoji) return;
       const textField = textFieldRef.current;
       if (textField) {
         const start = textField.selectionStart || 0;
         const end = textField.selectionEnd || 0;
         const newMessage =
-          message.slice(0, start) + `:${emoji}:` + message.slice(end);
+          message.slice(0, start) + `${emojiData.emoji}` + message.slice(end);
         setMessage(newMessage);
 
         // Restore cursor position
@@ -230,7 +235,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           );
         }, 0);
       } else {
-        setMessage((prev) => prev + `:${emoji}:`);
+        setMessage((prev) => prev + `${emojiData.emoji}`);
       }
     },
     [message],
@@ -238,11 +243,20 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   // Listen to emoji selection events from MobileEmojiPanel
   useEffect(() => {
-    emojiEvents.on(EMOJI_EVENTS.EMOJI_SELECTED, handleEmojiSelect);
-    return () => {
-      emojiEvents.off(EMOJI_EVENTS.EMOJI_SELECTED, handleEmojiSelect);
-    };
-  }, [handleEmojiSelect]);
+    if (inputId) {
+      // Listen to events specific to this input
+      emojiEvents.onForInput(inputId, handleEmojiSelect);
+      return () => {
+        emojiEvents.offForInput(inputId, handleEmojiSelect);
+      };
+    } else {
+      // Use global events (current behavior)
+      emojiEvents.on(EMOJI_EVENTS.EMOJI_SELECTED, handleEmojiSelect);
+      return () => {
+        emojiEvents.off(EMOJI_EVENTS.EMOJI_SELECTED, handleEmojiSelect);
+      };
+    }
+  }, [handleEmojiSelect, inputId]);
 
   const insertFormatting = useCallback(
     (before: string, after: string = before) => {
@@ -410,7 +424,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               </IconButton>
             </Tooltip>
 
-            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" openToLeft={true} inThread={inThread} />
+            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" openToLeft={true} inThread={inThread} inputId={inputId} />
 
             {mode === "default" && (
               <Tooltip title="Send message">
@@ -527,7 +541,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               </IconButton>
             </Tooltip>
 
-            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" openToLeft={true} inThread={inThread} />
+            <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="small" openToLeft={true} inThread={inThread} inputId={inputId} />
 
             {mode === "edit" && (
               <>

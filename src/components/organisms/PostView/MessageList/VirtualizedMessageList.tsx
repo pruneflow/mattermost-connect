@@ -15,7 +15,7 @@ import {
 } from "../../../../services/messageService";
 import { markAsRead } from "../../../../services/channelService";
 import { useAppSelector, useAppDispatch } from "../../../../hooks";
-import { selectMessage } from "../../../../store/slices/messageUISlice";
+import { selectMessageForActions } from "../../../../store/slices/messageUISlice";
 import { useLongPress } from "../../../../hooks/useLongPress";
 import {
   selectIsLoadingNewerPosts,
@@ -86,7 +86,7 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
       if (messageElement) {
         const postId = messageElement.getAttribute("data-post-id");
         if (postId) {
-          dispatch(selectMessage(postId));
+          dispatch(selectMessageForActions(postId));
         }
       }
     },
@@ -112,6 +112,8 @@ const VirtualizedMessageListComponent: React.FC<MessageListProps> = ({
   }, [measureAnchorPosition, channelId]);
 
   const handleLoadNewer = useCallback(async () => {
+    measureAnchorPosition();
+
     await loadNewerPosts(channelId);
   }, [channelId]);
 
