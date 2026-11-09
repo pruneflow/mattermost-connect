@@ -19,6 +19,7 @@ import { loadThread } from '../../store/slices/threadsSlice';
 import { ThreadHeader } from '../molecules/ThreadHeader';
 import { ThreadMessageList } from '../molecules/ThreadMessageList';
 import { ThreadInput } from '../molecules/ThreadInput';
+import { emojiEvents } from '../../services/emojiEvents';
 
 const contentStyles: SxProps<Theme> = {
   display: 'flex',
@@ -64,6 +65,10 @@ export const ThreadModal: React.FC = () => {
   }, [dispatch, isOpen, threadPostId]);
 
   const handleClose = () => {
+    // Clear pending emoji events for this thread's input
+    if (threadPostId) {
+      emojiEvents.clearForInput(`thread-${threadPostId}`);
+    }
     dispatch(closeThread());
   };
 

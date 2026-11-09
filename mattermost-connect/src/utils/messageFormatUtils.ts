@@ -1,4 +1,5 @@
 import DOMPurify from 'dompurify';
+import { findEmojiByName } from './emojiMartAdapter';
 
 /**
  * Utilities for Mattermost message formatting and rendering

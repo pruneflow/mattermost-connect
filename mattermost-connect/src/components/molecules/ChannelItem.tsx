@@ -15,7 +15,7 @@ import {
   Tooltip,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
 } from "@mui/material";
 import { ChannelIcon } from "../atoms/ChannelIcon";
 import { UserAvatar } from "../atoms/UserAvatar";
@@ -122,6 +122,7 @@ export interface ChannelItemProps {
   draggable?: boolean;
   menuOptions?: ChannelMenuOptions;
   sx?: SxProps<Theme>;
+  showMenu?: boolean;
 }
 
 /**
@@ -185,6 +186,7 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
     draggable = true,
     menuOptions,
     sx,
+    showMenu = true,
   }) => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -212,14 +214,11 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
       }
     }, [onClick, channel.id]);
 
-
-
     // Default values for enriched properties
     const hasUnreads = channel.hasUnreads ?? false;
     const unreadCount = channel.unreadCount ?? 0;
     const mentionCount = channel.mentionCount ?? 0;
     const isMuted = channel.isMuted ?? false;
-
 
     // Get display name (computed by selector following Mattermost pattern)
     const displayName = channel.computedDisplayName || channel.display_name;
@@ -349,16 +348,17 @@ export const ChannelItem: React.FC<ChannelItemProps> = React.memo(
             </Box>
 
             {/* Channel Menu Button (shown on hover) */}
-            <ChannelMenu
-              channelId={channel.id}
-              size="small"
-              options={menuOptions}
-              className={`menu-button ${isMobile ? "mobile-visible" : ""}`}
-              sx={STATIC_STYLES.menuButton}
-            />
+            {showMenu && (
+              <ChannelMenu
+                channelId={channel.id}
+                size="small"
+                options={menuOptions}
+                className={`menu-button ${isMobile ? "mobile-visible" : ""}`}
+                sx={STATIC_STYLES.menuButton}
+              />
+            )}
           </Box>
         </ListItemButton>
-
       </ListItem>
     );
   },

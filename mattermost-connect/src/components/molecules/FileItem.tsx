@@ -15,7 +15,7 @@ import { FileInfo } from '../../api/types';
 import { formatFileSize } from '../../utils/formatters';
 import { FileTypeIcon } from '../atoms/FileIcon';
 import { FileActionButtons } from './FileActionButtons';
-import { client } from '../../api/client';
+import { imageService } from '../../services/imageService';
 
 // Status for files being uploaded (input mode)
 export interface FileStatus {
@@ -83,11 +83,23 @@ export const FileItem: React.FC<FileItemProps> = ({
     return null;
   }, [file]);
 
-  const thumbnailUrl = React.useMemo(() => {
+  const [thumbnailUrl, setThumbnailUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
     if (fileData?.id) {
-      return `${client.getUrl()}/api/v4/files/${fileData.id}/thumbnail`;
+      imageService.getFileThumbnail(fileData.id)
+        .then(url => setThumbnailUrl(url))
+        .catch(() => setThumbnailUrl(null));
+    } else {
+      setThumbnailUrl(null);
     }
-    return null;
+
+    // Cleanup function
+    return () => {
+      if (thumbnailUrl && thumbnailUrl.startsWith('blob:')) {
+        imageService.revokeBlobUrl(thumbnailUrl);
+      }
+    };
   }, [fileData?.id]);
 
   // Local preview for new images

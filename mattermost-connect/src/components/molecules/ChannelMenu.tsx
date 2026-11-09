@@ -12,6 +12,7 @@ import {
   MoreVert,
   Check,
   MarkAsUnread,
+  MarkChatRead,
   Star,
   StarBorder,
   Notifications,
@@ -26,6 +27,7 @@ import { LeaveChannelDialog } from '../organisms/LeaveChannelDialog';
 import { AddChannelMembersDialog } from '../organisms/AddChannelMembersDialog';
 import {
   markAsUnread,
+  markAsRead,
   toggleFavorite,
   moveToCategory,
   muteChannel,
@@ -38,9 +40,10 @@ import { canManageChannelMembers } from '../../services/permissionService';
 import useUserPreferences from '../../hooks/useUserPreferences';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectChannelById } from '../../store/selectors';
+import { EnrichedChannel } from "../../api/types";
 
 export interface ChannelMenuOptions {
-  showMarkUnread?: boolean;
+  showManageRead?: boolean;
   showToggleFavorite?: boolean;
   showMute?: boolean;
   showMoveTo?: boolean;
@@ -61,7 +64,7 @@ export interface ChannelMenuProps {
  * Create submenu items for "Move to..." option
  */
 export const createMoveToSubmenu = (
-  channel: any, // Channel object passed from component
+  channel: EnrichedChannel,
   currentCategoryId?: string,
   onMoveToCategory?: (categoryId: string) => void
 ) => {
@@ -94,7 +97,7 @@ export const ChannelMenu: React.FC<ChannelMenuProps> = ({
   size = 'small',
   sx,
   options = { 
-    showMarkUnread: true, 
+    showManageRead: true, 
     showToggleFavorite: true, 
     showMute: true, 
     showMoveTo: true, 
@@ -122,14 +125,21 @@ export const ChannelMenu: React.FC<ChannelMenuProps> = ({
   const currentCategory = getChannelCategory(channelId);
   const canAddMembers = canManageChannelMembers(channel);
   
+  // Check if channel has unread messages
+  const hasUnreadMessages = (channel.unreadCount ?? 0) > 0 || (channel.mentionCount ?? 0) > 0;
+  
   // Default values for enriched properties
   const isMuted = channel.isMuted ?? false;
 
   // Stable menu action handlers
-  const handleMarkUnread = useCallback(() => {
+  const handleManageRead = useCallback(() => {
     closeMenu();
-    void markAsUnread(channelId);
-  }, [closeMenu, channelId]);
+    if (hasUnreadMessages) {
+      void markAsRead(channelId);
+    } else {
+      void markAsUnread(channelId);
+    }
+  }, [closeMenu, channelId, hasUnreadMessages]);
 
   const handleToggleFavorite = useCallback(() => {
     closeMenu();
@@ -178,13 +188,17 @@ export const ChannelMenu: React.FC<ChannelMenuProps> = ({
   const menuItems = useMemo((): MenuItemConfig[] => {
     const items: MenuItemConfig[] = [];
 
-    // Mark as unread
-    if (options.showMarkUnread) {
+    // Manage read status
+    if (options.showManageRead) {
       items.push({
-        id: "mark-unread",
-        label: "Mark as unread",
-        icon: <MarkAsUnread fontSize="small" />,
-        onClick: handleMarkUnread,
+        id: "manage-read",
+        label: hasUnreadMessages ? "Mark as read" : "Mark as unread",
+        icon: hasUnreadMessages ? (
+          <MarkChatRead fontSize="small" />
+        ) : (
+          <MarkAsUnread fontSize="small" />
+        ),
+        onClick: handleManageRead,
       });
     }
 
@@ -217,7 +231,7 @@ export const ChannelMenu: React.FC<ChannelMenuProps> = ({
     }
 
     // First divider if we have basic actions
-    if ((options.showMarkUnread || options.showToggleFavorite || options.showMute) && 
+    if ((options.showManageRead || options.showToggleFavorite || options.showMute) && 
         (options.showMoveTo || options.showAddMembers || options.showLeave)) {
       items.push({
         id: "divider-1",
@@ -267,13 +281,14 @@ export const ChannelMenu: React.FC<ChannelMenuProps> = ({
     return items;
   }, [
     options,
+    hasUnreadMessages,
     isFavorite,
     isMuted,
     channelId,
     currentCategory?.id,
     canAddMembers,
     channel.type,
-    handleMarkUnread,
+    handleManageRead,
     handleToggleFavorite,
     handleMuteChannel,
     handleMoveToCategory,

@@ -1,23 +1,9 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { client } from '../../api/client';
+import { imageService } from '../../services/imageService';
 import { arraysEqual } from '../../utils/formatters';
+import { FileInfo } from '../../api/types'
 
-/**
- * File information interface
- */
-export interface FileInfo {
-  id: string;
-  name: string;
-  size: number;
-  mime_type: string;
-  extension: string;
-  create_at: number;
-  update_at: number;
-  delete_at: number;
-  has_preview_image: boolean;
-  width?: number;
-  height?: number;
-}
 
 /**
  * Loading states for file operations
@@ -133,10 +119,7 @@ export const fetchFilePreview = createAsyncThunk(
     dispatch(filesSlice.actions.setPreviewLoadingState({ fileId, loadingState: 'loading' }));
     
     try {
-      const filePreviewUrl = client.getFilePreviewUrl(fileId, Date.now());
-      const response = await fetch(filePreviewUrl);
-      const blob = await response.blob();
-      const previewUrl = URL.createObjectURL(blob);
+      const previewUrl = await imageService.getFilePreview(fileId);
       return { fileId, previewUrl };
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch file preview');
@@ -149,35 +132,31 @@ export const fetchFilePreview = createAsyncThunk(
  */
 export const downloadFile = createAsyncThunk(
   'files/downloadFile',
-  async ({ fileId, fileName }: { fileId: string; fileName?: string }, { getState, rejectWithValue }) => {
+  async ({ fileId, fileName }: { fileId: string; fileName?: string }, { rejectWithValue }) => {
+    
     try {
-      const downloadUrl = client.getFileUrl(fileId, Date.now());
       
-      // Fetch with credentials for cookie authentication
-      const response = await fetch(downloadUrl, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const downloadUrl = await imageService.getFileUrl(fileId);
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      
-      const url = window.URL.createObjectURL(blob);
+      // Create download link
       const a = document.createElement('a');
       a.style.display = 'none';
-      a.href = url;
+      a.href = downloadUrl;
       a.download = fileName || `file-${fileId}`;
       document.body.appendChild(a);
+      
       a.click();
       
-      // Nettoyer
+      // Cleanup
       setTimeout(() => {
+        
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        
+        if (downloadUrl.startsWith('blob:')) {
+          imageService.revokeBlobUrl(downloadUrl);
+        }
       }, 100);
+
       
       return { fileId, success: true };
     } catch (error) {
@@ -264,7 +243,7 @@ const filesSlice = createSlice({
     // Fetch file infos for post
     builder
       .addCase(fetchFileInfosForPost.pending, (state, action) => {
-        const { postId, fileIds } = action.meta.arg;
+        const { fileIds } = action.meta.arg;
         
         // Mark all files as loading
         fileIds.forEach(fileId => {
@@ -288,7 +267,7 @@ const filesSlice = createSlice({
         });
       })
       .addCase(fetchFileInfosForPost.rejected, (state, action) => {
-        const { postId, fileIds } = action.meta.arg;
+        const { fileIds } = action.meta.arg;
         const error = action.payload as string;
         
         // Mark all files as failed
@@ -418,7 +397,5 @@ const filesSlice = createSlice({
     });
   },
 });
-
-export const { clearPreviewUrl, clearAllPreviewUrls, resetFileState, setPreviewLoadingState, storeFileInfos } = filesSlice.actions;
 
 export default filesSlice.reducer;

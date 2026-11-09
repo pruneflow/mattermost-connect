@@ -21,6 +21,7 @@ import { store } from "../store";
 import { useWebSocket } from "./useWebSocket";
 import { navigateToTeam, getLastVisited, initializeNavigation } from "../services/navigationService";
 import { useUserStatus } from "./useUserStatus";
+import { initConfig } from "../services/configService";
 
 const STATUS_INTERVAL = 60000;
 
@@ -102,15 +103,6 @@ export const useAppInitialization = () => {
       // Initialize navigation state from localStorage
       initializeNavigation();
 
-      // Configure client exactly like Mattermost
-      client.setUrl(serverUrl);
-      client.setIncludeCookies(true);
-      
-      // Set token only if we have one (cookie-based auth might not have token)
-      if (token && client.getToken() !== token) {
-        client.setToken(token);
-      }
-
       // Initialize WebSocket (use token if available, empty string otherwise)
       connectWebSocket(serverUrl, token || '');
 
@@ -120,6 +112,7 @@ export const useAppInitialization = () => {
         client.getMyTeamUnreads(),
         client.getStatus(currentUserId),
         client.getUserPreferences(currentUserId),
+        initConfig(), // Initialize server configuration
       ]);
 
 

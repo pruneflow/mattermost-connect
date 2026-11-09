@@ -6,6 +6,7 @@ import React from 'react';
 import {
   Box,
   Typography,
+  Divider,
   SxProps,
   Theme,
 } from '@mui/material';
@@ -48,59 +49,64 @@ export const TeamHeader: React.FC<TeamHeaderProps> = ({
   } = useTeamDialogs();
   if (!team) {
     return (
-      <Box
-        sx={{
-          p: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-          ...sx,
-        }}
-      >
-        <Typography variant="h6" color="text.secondary">
-          No Team Selected
-        </Typography>
+      <Box sx={sx}>
+        <Box
+          sx={{
+            p: 2,
+          }}
+        >
+          <Typography variant="h6" color="text.secondary">
+            No Team Selected
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', px: 2 }}>
+          <Divider sx={{ width: '100%' }} />
+        </Box>
       </Box>
     );
   }
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        p: compact ? 1 : 2,
-        borderBottom: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
-        minHeight: compact ? 48 : 56, // Ensure consistent height
-        ...sx,
-      }}
-    >
-      <Typography
-        variant={compact ? 'subtitle1' : 'h6'}
+    <Box sx={sx}>
+      <Box
         sx={{
-          fontWeight: 600,
-          color: 'text.primary',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          flex: 1,
-          mr: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: compact ? 1 : 2,
+          bgcolor: 'background.paper',
+          minHeight: compact ? 48 : 56,
         }}
       >
-        {team.display_name || team.name}
-      </Typography>
+        <Typography
+          variant={compact ? 'subtitle1' : 'h6'}
+          sx={{
+            fontWeight: 600,
+            color: 'text.primary',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            mr: 1,
+          }}
+        >
+          {team.display_name || team.name}
+        </Typography>
 
-      <TeamMenu 
-        team={team} 
-        size="small" 
-        options={menuOptions}
-        onOpenSettings={openSettings}
-        onOpenMembers={openMembers}
-        onOpenInfo={openInfo}
-        onLeaveTeam={openLeave}
-      />
+        <TeamMenu 
+          team={team} 
+          size="small" 
+          options={menuOptions}
+          onOpenSettings={openSettings}
+          onOpenMembers={openMembers}
+          onOpenInfo={openInfo}
+          onLeaveTeam={openLeave}
+        />
+      </Box>
+      
+      <Box sx={{ display: 'flex', justifyContent: 'center', px: 2 }}>
+        <Divider sx={{ width: '100%' }} />
+      </Box>
 
       <TeamSettingsDialog
         open={isSettingsOpen}

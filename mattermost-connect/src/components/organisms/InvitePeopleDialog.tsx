@@ -84,7 +84,7 @@ export const InvitePeopleDialog = memo<InvitePeopleDialogProps>(({
   // STEP 1: Server config check + STEP 2: User permissions check
   const permissions = useMemo(
     () => ({
-      canSendEmailInvitations: canSendEmailInvitationsServerSide() && canInviteUser(teamId),
+      canSendEmailInvitations: canSendEmailInvitationsServerSide && canInviteUser(teamId),
       canAddExistingUsers: canAddUserToTeam(teamId),
       canInviteGuestUsers: canInviteGuest(),
     }),

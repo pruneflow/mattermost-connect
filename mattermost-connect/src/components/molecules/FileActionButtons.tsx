@@ -7,7 +7,8 @@ import { Box } from '@mui/material';
 import { FileDownloadButton } from './FileDownloadButton';
 import { FilePublicLinkButton } from './FilePublicLinkButton';
 import { canDownload } from '../../services/fileService';
-import { useServerConfig } from '../../hooks/useServerConfig';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectPublicLinksEnabled } from '../../store/selectors/configSelectors';
 
 export interface FileActionButtonsProps {
   fileId: string;
@@ -27,10 +28,12 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   showDownload = true
 }) => {
   const canDownloadFile = canDownload(fileId);
-  const { config } = useServerConfig();
   
   // Check server configuration for public links like official Mattermost
-  const enablePublicLink = config?.EnablePublicLink === 'true';
+  const enablePublicLink = useAppSelector(selectPublicLinksEnabled);
+  
+  // Check if clipboard API is available (HTTPS or localhost required)
+  const isClipboardAvailable = !!(navigator.clipboard && navigator.clipboard.writeText);
 
   return (
     <Box sx={{ 
@@ -38,7 +41,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
       flexShrink: 0,
       gap: { xs: 1, md: 0.5 } 
     }}>
-      {showPublicLink && enablePublicLink && (
+      {showPublicLink && enablePublicLink && isClipboardAvailable && (
         <FilePublicLinkButton 
           fileId={fileId} 
           size={size}

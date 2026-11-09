@@ -2,7 +2,7 @@
  * Message item renderer component for virtual list items
  * Handles rendering of different item types: posts, dividers, buttons, and loading states
  */
-import React, { forwardRef } from 'react';
+import React from 'react';
 import { DateDivider } from '../../../atoms/DateDivider';
 import { NewMessageSeparator } from '../../../molecules/NewMessageSeparator';
 import { StartOfChannelDivider } from '../../../atoms/StartOfChannelDivider';
@@ -19,16 +19,18 @@ interface MessageItemProps {
   isOlderLoading: boolean;
   isNewerLoading: boolean;
   virtualStyles?: React.CSSProperties;
+  isLongPress?: React.RefObject<boolean>;
 }
 
-export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
+export const MessageItem: React.FC<MessageItemProps> = ({
   item,
   channelId,
   onLoadOlder,
   onLoadNewer,
   isOlderLoading,
   isNewerLoading,
-}, ref) => {
+  isLongPress,
+}) => {
   const renderContent = () => {
     switch (item.type) {
       case 'post':
@@ -38,6 +40,7 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
             channelId={channelId} 
             showHeader={item.data?.showHeader ?? true}
             isOwnMessage={item.data?.isOwnMessage ?? false}
+            isLongPress={isLongPress}
           />
         );
         
@@ -84,8 +87,8 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   return (
-    <div id={item.id} ref={ref}>
+    <div>
       {renderContent()}
     </div>
   );
-});
+};

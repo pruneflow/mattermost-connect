@@ -28,7 +28,11 @@ import { isSystemMessage } from "../../utils/messageUtils";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { selectUserProfiles } from "../../store/selectors";
-import { selectIsPostEditing } from "../../store/selectors/messageUI";
+import {
+  selectIsPostEditing,
+  selectIsEmojiPanelOpen,
+  selectIsMessageSelectedForActions,
+} from "../../store/selectors/messageUI";
 import {
   startEdit,
   stopEdit,
@@ -48,13 +52,18 @@ interface MessageProps {
   onDelete?: (postId: string) => void;
   onOpenThread?: (postId: string) => void;
   sx?: SxProps<Theme>;
+  isLongPress?: React.RefObject<boolean>;
 }
 
-const systemMessageStyles: SxProps<Theme> = {
-  display: "flex",
-  justifyContent: "center",
-  my: 1,
-  opacity: 0.7,
+const getSystemMessageStyles: SxProps<Theme> = (theme: Theme) => {
+  return {
+    display: "flex",
+    justifyContent: "center",
+    my: 1,
+    opacity: 0.7,
+    fontSize: theme.typography.body2.fontSize,
+    color: theme.palette.text.secondary,
+  };
 };
 
 // Styles will be applied dynamically based on showHeader
@@ -165,20 +174,25 @@ export const Message: React.FC<MessageProps> = memo(
     onDelete,
     onOpenThread,
     sx,
+    isLongPress,
   }) => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const dispatch = useAppDispatch();
     const [isHovered, setIsHovered] = useState(false);
     const isEditing = useAppSelector(selectIsPostEditing(post.id));
+    const isSelected = useAppSelector(
+      selectIsMessageSelectedForActions(post.id),
+    );
+    const isEmojiPanelOpen = useAppSelector(selectIsEmojiPanelOpen);
     const isSystem = isSystemMessage(post);
     const handleMouseEnter = useCallback(() => {
-      setIsHovered(true);
-    }, []);
+      if (!isMobile) setIsHovered(true);
+    }, [isMobile]);
 
     const handleMouseLeave = useCallback(() => {
-      setIsHovered(false);
-    }, []);
+      if (!isMobile) setIsHovered(false);
+    }, [isMobile]);
 
     const handleReply = useCallback(() => {
       dispatch(startReply(post));
@@ -207,20 +221,7 @@ export const Message: React.FC<MessageProps> = memo(
     }, [dispatch, onOpenThread, post.id]);
 
     if (isSystem) {
-      return (
-        <Box sx={systemMessageStyles}>
-          <MessageFormatter
-            message={post.message}
-            sx={{
-              fontSize: theme.typography.body2.fontSize,
-              color: theme.palette.text.secondary,
-              "& a": {
-                color: theme.palette.primary.main,
-              },
-            }}
-          />
-        </Box>
-      );
+      return <Box sx={getSystemMessageStyles(theme)}>{post.message}</Box>;
     }
 
     // Bubble container styles - flexbox for alignment
@@ -230,24 +231,31 @@ export const Message: React.FC<MessageProps> = memo(
       mb: 1.5,
       mx: 1,
       ...(inThread && { position: "relative" }), // Position relative only in threads
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      WebkitTouchCallout: "none",
       ...sx,
     };
 
     // Bubble wrapper styles - max width and responsive
     const bubbleWrapperStyles: SxProps<Theme> = {
-      maxWidth: isMobile ? "85%" : "70%",
-      minWidth: isMobile ? "85%" : "70%",
+      maxWidth: isMobile && isEditing ? "95%" : isMobile ? "85%" : "70%",
+      minWidth: isMobile && isEditing ? "95%" : isMobile ? "85%" : "70%",
       display: "flex",
       flexDirection: "column",
     };
 
     // Bubble styles - background and padding
     const bubbleStyles: SxProps<Theme> = {
-      backgroundColor: isOwnMessage
-        ? theme.palette.userMessage.main
-        : theme.palette.background.paper,
+      backgroundColor: isSelected
+        ? theme.palette.action.selected
+        : isOwnMessage
+          ? theme.palette.userMessage.main
+          : theme.palette.background.paper,
       borderRadius: 2,
-      p: 1.5,
+      px: 1.5, // horizontal padding
+      pt: 1.5, // top padding
+      pb: isMobile || isEditing ? 4 : 1.5, // bottom padding - more space for timestamp
       position: "relative",
       border: isFocused
         ? `2px solid ${theme.palette.primary.main}`
@@ -358,6 +366,7 @@ export const Message: React.FC<MessageProps> = memo(
                 postId={post.id}
                 reactions={post.metadata.reactions}
                 sx={reactionStyles}
+                inThread={inThread}
               />
             </Box>
           )}
@@ -403,14 +412,15 @@ export const Message: React.FC<MessageProps> = memo(
           )}
 
           {/* Message Actions - positioned relative to bubble */}
-          {(isHovered || isMobile) && (
+          {(isHovered || isSelected) && (
             <MessageActions
               post={post}
-              visible={isHovered || isMobile}
+              visible={isHovered || (isSelected && !isEmojiPanelOpen)}
               onReply={handleReply}
               onEdit={handleStartEdit}
               onDelete={handleDelete}
               inThread={inThread}
+              isLongPress={isLongPress}
               sx={{
                 ...(showHeader ? { top: -10 } : { top: -30 }),
               }}

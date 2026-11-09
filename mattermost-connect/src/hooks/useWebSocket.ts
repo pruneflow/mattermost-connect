@@ -11,6 +11,7 @@ import { useTeamWebSocket } from './useTeamWebSocket';
 import { useTypingWebSocket } from './useTypingWebSocket';
 import { usePreferencesWebSocket } from './usePreferencesWebSocket';
 import { useMessageWebSocket } from './useMessageWebSocket';
+import { useConfigWebSocket } from './useConfigWebSocket';
 import { WebSocketClient } from '@mattermost/client';
 
 interface UseWebSocketReturn {
@@ -92,6 +93,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const { handleTypingEvent } = useTypingWebSocket();
   const { handlePreferencesEvent } = usePreferencesWebSocket();
   const { handleMessageEvent } = useMessageWebSocket();
+  const { handleConfigEvent } = useConfigWebSocket();
 
   const connect = useCallback((serverUrl: string, token: string) => {
     if (wsClientRef.current) {
@@ -122,6 +124,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
         handleTeamEvent(msg.event, msg.data);
         handlePreferencesEvent(msg.event, msg.data);
         handleMessageEvent(msg.event, msg.data, msg.broadcast);
+        handleConfigEvent(msg.event, msg.data);
       }
     });
 

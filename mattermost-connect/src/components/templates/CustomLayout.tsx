@@ -62,7 +62,7 @@ export const CustomLayout: React.FC<CustomLayoutProps> = ({
                 <ChannelHeader
                   channel={currentChannel}
                   menuOptions={{
-                    showMarkUnread: true,
+                    showManageRead: true,
                     showToggleFavorite: false,
                     showMute: false,
                     showMoveTo: true,

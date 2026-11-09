@@ -217,9 +217,8 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/mattermost-connect/issues)
-- **Documentation**: [GitHub Wiki](https://github.com/yourusername/mattermost-connect/wiki)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/mattermost-connect/discussions)
+- **Issues**: [GitHub Issues](https://github.com/pruneflow/mattermost-connect/issues)
+- **Documentation**: [GitHub Wiki](https://github.com/pruneflow/mattermost-connect/wiki)
 
 ---
 

@@ -1,6 +1,6 @@
 import { store } from '../store';
 import { toggleReaction } from '../store/slices/postsSlice';
-import { findEmojiByName } from '../utils/emojiMartAdapter';
+import { findEmojiByName, createEmojiNameWithTone, getUserPreferredSkinTone } from '../utils/emojiMartAdapter';
 
 interface RecentEmoji {
   name: string;
@@ -18,7 +18,7 @@ export const toggleReactionOnPost = async (postId: string, emojiName: string): P
 
 // Recent emojis functions
 const createEmojiFromName = (name: string): RecentEmoji => {
-  const emojiData = findEmojiByName(name);
+  const emojiData = findEmojiByName(name, getUserPreferredSkinTone());
   return {
     name,
     character: emojiData?.emoji || '😊',

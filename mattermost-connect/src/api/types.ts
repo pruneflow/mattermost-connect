@@ -84,6 +84,10 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface LoginWithTokenRequest {
+  token: string;
+}
+
 // Error types - use official Mattermost types  
 export type {
   ServerError as APIError,

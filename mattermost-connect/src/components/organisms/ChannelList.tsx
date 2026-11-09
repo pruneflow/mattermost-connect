@@ -69,6 +69,7 @@ export interface ChannelListProps {
   showTeamHeader?: boolean; // Show team name and menu at top
   width?: number;
   sx?: SxProps<Theme>;
+  showMenu?: boolean
 }
 
 /**
@@ -80,6 +81,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   onChannelSelect,
   compact = false,
   showTeamHeader = false,
+  showMenu = true,
   width = 320,
   sx,
 }) => {
@@ -333,6 +335,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                 onToggleCollapse={handleToggleCollapse}
                 compact={compact}
                 isDragging={draggedCategory === category.id}
+                showMenu={showMenu}
               />
             ))}
           </SortableContext>

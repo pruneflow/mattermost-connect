@@ -120,12 +120,12 @@ export const AppBar: React.FC<AppBarProps> = ({
             display: { xs: 'block', md: 'none' },
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
-              width: 280,
+              width: 300,
             },
           }}
         >
           <Sidebar 
-            width={280} 
+            width={300}
             onClose={handleDrawerClose}
             compact={false}
           />

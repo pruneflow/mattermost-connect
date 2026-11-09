@@ -3,10 +3,8 @@
  * Uses emoji-mart as the single source of truth for emoji data and operations
  */
 
-import { client } from '../api/client';
-import data from '@emoji-mart/data';
-import { init, SearchIndex } from 'emoji-mart';
-
+import data from "@emoji-mart/data";
+import { init } from "emoji-mart";
 // Initialize emoji-mart with data
 init({ data });
 
@@ -30,6 +28,15 @@ export const SKIN_TONE_NAME_TO_INDEX: Record<string, number> = {
   'medium_skin_tone': 4,
   'medium_dark_skin_tone': 5,
   'dark_skin_tone': 6
+};
+
+// Mapping from skin tone indices to unified codes (used in emoji-mart data)
+export const SKIN_TONE_UNIFIED_MAP: Record<number, string> = {
+  2: '1f3fb', // light skin tone
+  3: '1f3fc', // medium light skin tone  
+  4: '1f3fd', // medium skin tone
+  5: '1f3fe', // medium dark skin tone
+  6: '1f3ff'  // dark skin tone
 };
 
 /**
@@ -69,7 +76,8 @@ export function getUserPreferredSkinTone(): number {
  * @param skinTone The skin tone preference (1-6)
  * @returns The index in the skins array (0-5)
  */
-export function getSkinIndex(skinTone: number): number {
+export function getSkinIndex(skinTone?: number): number {
+  if(!skinTone) return 0;
   // emoji-mart uses 1-based indexing for skin tone preferences
   // but array is 0-based, so we subtract 1
   return Math.min(Math.max(skinTone - 1, 0), 5);
@@ -111,11 +119,53 @@ export function createEmojiNameWithTone(baseName: string, skinTone: number = 1):
   if (skinTone === 1 || skinTone < 1 || skinTone > 6) {
     return baseName;
   }
+
+  // Direct access to emoji-mart data for synchronous operation
+  const emojiMartData = (data as any).emojis;
+  // Try to find emoji directly by its base name
+  let emojiData = emojiMartData[baseName];
   
-  // Add appropriate skin tone modifier
-  const toneName = SKIN_TONE_MAP[skinTone];
-  if (toneName) {
-    return `${baseName}_${toneName}`;
+  // If direct lookup failed, try searching by common aliases
+  if (!emojiData) {
+    // Try with underscores replaced by dashes (common difference)
+    const normalizedName = baseName.replace(/_/g, '-');
+    emojiData = emojiMartData[normalizedName];
+    
+    // If still not found, look through aliases
+    if (!emojiData) {
+      for (const id in emojiMartData) {
+        const emoji = emojiMartData[id];
+        if (emoji.aliases && emoji.aliases.includes(baseName)) {
+          emojiData = emoji;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!emojiData) {
+    return baseName;
+  }
+
+  // Check if emoji has skins and if the requested skin exists
+  const hasSkins = Array.isArray(emojiData.skins) && emojiData.skins.length > 0;
+  
+  if (hasSkins) {
+    const targetUnified = SKIN_TONE_UNIFIED_MAP[skinTone];
+    if (targetUnified) {
+      // Look for a skin that contains the target unified code
+      const skinExists = emojiData.skins.some((skin: any) => 
+        skin.unified && skin.unified.includes(targetUnified)
+      );
+      
+      if (skinExists) {
+        // Add appropriate skin tone modifier
+        const toneName = SKIN_TONE_MAP[skinTone];
+        if (toneName) {
+          return `${baseName}_${toneName}`;
+        }
+      }
+    }
   }
   
   return baseName;
@@ -124,22 +174,19 @@ export function createEmojiNameWithTone(baseName: string, skinTone: number = 1):
 /**
  * Get skin data for an emoji based on user preference
  * @param emojiData The emoji data from emoji-mart
- * @param specificSkinTone Optional specific skin tone to use instead of user preference
+ * @param skinTone Optional specific skin tone to use instead of user preference
  * @returns The appropriate skin data for the emoji
  */
-function getAppropriateSkin(emojiData: any, specificSkinTone?: number): any | null {
+function getAppropriateSkin(emojiData: any, skinTone?: number): any | null {
   if (!emojiData) return null;
-  
-  // Use the specified skin tone or user preference
-  const skinTone = specificSkinTone || getUserPreferredSkinTone();
+
   const skinIndex = getSkinIndex(skinTone);
   
   // Check if emoji has skins and if the requested skin exists
   const hasSkins = Array.isArray(emojiData.skins) && emojiData.skins.length > 0;
   
   if (hasSkins) {
-    const selectedSkin = emojiData.skins[Math.min(skinIndex, emojiData.skins.length - 1)];
-    return selectedSkin;
+    return emojiData.skins[Math.min(skinIndex, emojiData.skins.length - 1)];
   }
   
   return null;
@@ -158,11 +205,10 @@ export function findEmojiByName(emojiName: string, specificSkinTone?: number): E
     const { baseName, skinTone: embeddedTone } = extractEmojiBaseNameAndTone(emojiName);
     
     // Use the embedded tone if present, otherwise use the specific or default
-    const skinTone = embeddedTone || specificSkinTone || getUserPreferredSkinTone();
+    const skinTone = embeddedTone || specificSkinTone;
     
     // Direct access to emoji-mart data for synchronous operation
     const emojiMartData = (data as any).emojis;
-    
     // Try to find emoji directly by its base name
     let emojiData = emojiMartData[baseName];
     
@@ -183,7 +229,6 @@ export function findEmojiByName(emojiName: string, specificSkinTone?: number): E
         }
       }
     }
-    
     if (emojiData) {
       // Get the appropriate skin data
       const skin = getAppropriateSkin(emojiData, skinTone);

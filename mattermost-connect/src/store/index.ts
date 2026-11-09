@@ -12,19 +12,7 @@ import postsReducer from './slices/postsSlice'
 import filesReducer from './slices/filesSlice'
 import messageUIReducer from './slices/messageUISlice'
 import threadsReducer from './slices/threadsSlice'
-
-// Configure Client4 immediately before store creation if credentials exist
-const token = localStorage.getItem('mattermostToken');
-const serverUrl = localStorage.getItem('mattermostServerUrl');
-
-if (token && serverUrl) {
-  client.setUrl(serverUrl);
-  client.setToken(token);
-  // NOTE: setIncludeCookies(false) to avoid CORS issues when server uses AllowCorsFrom: "*"
-  // If server is properly configured with specific origins, this can be set to true
-  client.setIncludeCookies(false);
-  client.setEnableLogging(true);
-}
+import configReducer from './slices/configSlice'
 
 // Configure store inspired by Mattermost configureServiceStore()
 export const store = configureStore({
@@ -39,7 +27,8 @@ export const store = configureStore({
     posts: postsReducer,
     files: filesReducer,
     messageUI: messageUIReducer,
-    threads: threadsReducer
+    threads: threadsReducer,
+    config: configReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -58,10 +47,10 @@ export const store = configureStore({
   devTools: process.env.NODE_ENV !== 'production',
 });
 
-// Auto-restore user if credentials exist - establishes auth state
+/*// Auto-restore user if credentials exist - establishes auth state
 if (token && serverUrl) {
   store.dispatch(getCurrentUser());
-}
+}*/
 
 // Export store type
 export type RootState = ReturnType<typeof store.getState>;
@@ -77,3 +66,5 @@ export * from './slices/postsSlice'
 export * from './slices/filesSlice'
 export * from './slices/messageUISlice'
 export * from './slices/threadsSlice'
+// Export config slice actions individually to avoid clearError conflict
+export { fetchServerConfig, updateConfig, resetConfig } from './slices/configSlice'
